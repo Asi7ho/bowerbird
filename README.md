@@ -40,20 +40,20 @@ Your board is stored as one JSON file and auto-saved on every change:
 
 ## How the "quick reveal" works in v0.2
 
-One window, always alive: the board itself. The window is frameless,
-so the toolbar carries macOS traffic lights (close, minimise,
-full screen) above the board tools. Pressing `h` while the board is
-focused minimises it; it stays alive in the Dock / taskbar, which is
-what brings it back. There is no second handle window.
+One window, always alive: the board itself. The window is frameless
+and the toolbar carries no window controls — close it the usual way
+for your system (Cmd+Q on a Mac); pressing `h` while the board is
+focused minimises it, and it stays alive in the Dock / taskbar, which
+is what brings it back. There is no second handle window.
 
 - **Vertical toolbar, left side:** a frosted vertical bar, centred on
-  the left edge — traffic lights, then Select, Pen, Arrow
-  (connectors), the pen palette (only while Pen is active), zoom out
-  and zoom in, Delete, and Settings. There is no zoom percentage
-  readout: zoom is `+`/`-`, `Ctrl` + scroll, or the toolbar buttons.
-  Delete is dimmed while nothing is selected. The bar itself is the
-  window drag region; its buttons are not. A fresh board starts clear
-  of the bar, so the welcome board is never hidden behind it.
+  the left edge — Select, Pen, Arrow (connectors), the pen palette
+  (only while Pen is active), zoom out and zoom in, Delete, and
+  Settings. There is no zoom percentage readout: zoom is `+`/`-`,
+  `Ctrl` + scroll, or the toolbar buttons. Delete is dimmed while
+  nothing is selected. The bar itself is the window drag region; its
+  buttons are not. A fresh board starts clear of the bar, so the
+  welcome board is never hidden behind it.
 - **Settings (?):** a panel listing every keyboard shortcut, plus the
   canvas background (White, Paper, Sage, Sky, Ink) and grid
   (Dots, Lines, Off). While settings are open, embedded pages are
@@ -123,14 +123,15 @@ Linux). Those are the next step, not something v0.2 pretends to do.
   Decoding video frames inside the canvas is a planned follow-up.
 - **Links — simple or embedded:** a link card starts simple (domain,
   title/description when the fetch succeeds — Open Graph
-  title/description preferred, `<title>` as fallback). Press
-  **Embed page** and the card grows into a real, interactive page:
-  a header (drag grip, domain, Open, Simple) with the live page below
-  it in its own Chromium view, following the card on pan, zoom, move
-  and resize. Press **Simple** to go back to a preview card (the page
-  view is destroyed). A page that blocks framing is not faked with a
-  screenshot — it stays a simple card with an Open button. Direct
-  file/video URLs stay simple; ordinary pages are embeddable.
+  title/description preferred, `<title>` as fallback). Click its
+  title or URL and Bowerbird decides for itself: an ordinary page
+  grows into a real, interactive page in place — a header (drag grip
+  and domain only) with the live page below it in its own Chromium
+  view, following the card on pan, zoom, move and resize — while a
+  direct file/video URL opens outside instead. Double-click an
+  embedded page's header to go back to a simple card (the page view
+  is destroyed). A page that blocks framing is not faked with a
+  screenshot. There are no Open or Embed buttons on link cards.
   Because an embedded page is a native view, it always paints above
   the board DOM: a page under the left toolbar can cover toolbar
   pixels, so drag such a card by its header to move it out from under

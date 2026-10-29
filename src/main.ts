@@ -54,7 +54,10 @@ const SHORTCUTS: Array<[string, string]> = [
   ["Esc", "Close settings, commit a note, or clear the selection"],
   ["Double-click empty space", "New note"],
   ["Double-click a note", "Edit it in place"],
-  ["Double-click a link, PDF or picture", "Open it outside Bowerbird"],
+  ["Click a link title or URL", "Embed the page here, or open it outside if it can't embed"],
+  ["Double-click a link", "Same as clicking its title"],
+  ["Double-click an embedded page header", "Back to a simple card"],
+  ["Double-click a PDF or picture", "Open it outside Bowerbird"],
   ["Click a play tile", "Play or pause audio / open a video"],
   ["Drag a card corner", "Resize the card"],
   ["Shift + click", "Add to the selection"],
@@ -129,6 +132,28 @@ function isEmbedded(item: Item): boolean {
 }
 function openExternal(target: string): void {
   api.openExternal(target).catch((e) => toast(`Could not open ${target}: ${String(e)}`));
+}
+
+// Clicking a link decides for itself: an ordinary page embeds in place
+// on the board; a file, video or otherwise unembeddable URL opens
+// outside instead. There are no Open / Embed buttons to choose between.
+function openLinkCard(item: Item): void {
+  if (!("UrlCard" in item.kind)) return;
+  if (shouldEmbedUrl(item.kind.UrlCard.url)) {
+    if (item.kind.UrlCard.embed) return;
+    item.kind.UrlCard.embed = true;
+    item.size = { w: Math.max(item.size.w, 480), h: Math.max(item.size.h, 360) };
+    save(); render();
+  } else {
+    openExternal(item.kind.UrlCard.url);
+  }
+}
+
+function collapseEmbed(item: Item): void {
+  if (!("UrlCard" in item.kind)) return;
+  item.kind.UrlCard.embed = false;
+  item.size = { w: 300, h: 108 };
+  save(); render();
 }
 
 function bringToFront(ids: number[]): void {
@@ -254,17 +279,15 @@ function cardHtml(item: Item, screen: Pt, w: number, h: number): string {
     const initial = (domain[0] ?? "?").toUpperCase();
     if (isEmbedded(item)) {
       return `<div class="${cls}" data-id="${item.id}" style="${style}">
-        <div class="embed-header" data-embed-header="${item.id}"><span class="drag" aria-hidden="true"><svg width="10" height="14" viewBox="0 0 10 14"><circle cx="2.5" cy="2.5" r="1.3" fill="#aeaeb2"/><circle cx="7.5" cy="2.5" r="1.3" fill="#aeaeb2"/><circle cx="2.5" cy="7" r="1.3" fill="#aeaeb2"/><circle cx="7.5" cy="7" r="1.3" fill="#aeaeb2"/><circle cx="2.5" cy="11.5" r="1.3" fill="#aeaeb2"/><circle cx="7.5" cy="11.5" r="1.3" fill="#aeaeb2"/></svg></span><span class="domain">${head}</span><button data-action="open-url" data-id="${item.id}">Open</button><button data-action="to-simple" data-id="${item.id}">Simple</button></div>
-        <div class="embed-body-note">This page lives in its own webview below this header. Drag the header to move the card.</div>
+        <div class="embed-header" data-embed-header="${item.id}"><span class="drag" aria-hidden="true"><svg width="10" height="14" viewBox="0 0 10 14"><circle cx="2.5" cy="2.5" r="1.3" fill="#aeaeb2"/><circle cx="7.5" cy="2.5" r="1.3" fill="#aeaeb2"/><circle cx="2.5" cy="7" r="1.3" fill="#aeaeb2"/><circle cx="7.5" cy="7" r="1.3" fill="#aeaeb2"/><circle cx="2.5" cy="11.5" r="1.3" fill="#aeaeb2"/><circle cx="7.5" cy="11.5" r="1.3" fill="#aeaeb2"/></svg></span><span class="domain">${head}</span></div>
       </div>`;
     }
     return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner row" style="padding:16px">
       <div class="tile" style="background:${tint(tile, 0.85)};color:${tile};font-size:24px">${initial}</div>
       <div class="col">
-        <div class="title" style="font-size:${14 * Math.max(cam.zoom, 0.7)}px">${elide(head, w - 100, 14, true)}</div>
-        <div class="sub" style="font-size:12px;color:#2e86ab">${elide(url, w - 100, 12, false)}</div>
+        <a class="title link-open" data-action="open-link" data-id="${item.id}" style="font-size:${14 * Math.max(cam.zoom, 0.7)}px">${elide(head, w - 100, 14, true)}</a>
+        <a class="sub link-open url" data-action="open-link" data-id="${item.id}" style="font-size:12px">${elide(url, w - 100, 12, false)}</a>
         ${description ? `<div class="desc" style="font-size:12px">${elide(description, (w - 100) * 2, 12, false)}</div>` : ""}
-        <div class="simple-actions"><button data-action="open-url" data-id="${item.id}">Open</button><button data-action="to-embed" data-id="${item.id}">Embed page</button></div>
       </div></div></div>`;
   }
   if ("PdfCard" in item.kind) {
@@ -508,9 +531,16 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
   if (spaceDown) { drag = { kind: "pan", last: winPt }; return; }
   // Embedded card header drag: the header is DOM, the page below it is
   // a native webview, so the header is the card's drag handle.
+  // Double-clicking it is the way back to a simple card — there are
+  // no header buttons any more.
   const header = target.closest("[data-embed-header]") as HTMLElement | null;
   if (header) {
     const id = Number(header.dataset.embedHeader);
+    if (e.detail === 2) {
+      const it = boardGet(board, id);
+      if (it) collapseEmbed(it);
+      return;
+    }
     selected = select(board, selected, id, e.shiftKey);
     bringToFront(selected);
     applyStacking();
@@ -539,7 +569,12 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
     if (hit !== null) {
       const it = boardGet(board, hit);
       if (it && "Text" in it.kind) { startTextEdit(hit); return; }
-      if (it && "UrlCard" in it.kind) { openExternal(it.kind.UrlCard.url); return; }
+      if (it && "UrlCard" in it.kind) {
+        // An embedded card collapses back to simple on double-click;
+        // a simple card opens automatically (embed or outside).
+        if (isEmbedded(it)) { collapseEmbed(it); return; }
+        openLinkCard(it); return;
+      }
       if (it && "PdfCard" in it.kind) { openExternal(it.kind.PdfCard.path); return; }
       if (it && "Image" in it.kind) { openExternal(it.kind.Image.path); return; }
     } else {
@@ -685,17 +720,7 @@ cardsEl.addEventListener("click", (e: MouseEvent) => {
   const action = btn.dataset.action;
   const it = boardGet(board, id);
   if (!it) return;
-  if (action === "open-url" && "UrlCard" in it.kind) openExternal(it.kind.UrlCard.url);
-  if (action === "to-embed" && "UrlCard" in it.kind) {
-    it.kind.UrlCard.embed = true;
-    it.size = { w: Math.max(it.size.w, 480), h: Math.max(it.size.h, 360) };
-    save(); render();
-  }
-  if (action === "to-simple" && "UrlCard" in it.kind) {
-    it.kind.UrlCard.embed = false;
-    it.size = { w: 300, h: 108 };
-    save(); render();
-  }
+  if (action === "open-link" && "UrlCard" in it.kind) openLinkCard(it);
   if (action === "play-audio" && "Audio" in it.kind) toggleAudio(id, it.kind.Audio.path);
   if (action === "play-video" && "Video" in it.kind) openExternal(it.kind.Video.source);
 });
@@ -775,9 +800,7 @@ document.getElementById("btn-delete")?.addEventListener("click", () => {
   selected = [];
   save(); render();
 });
-document.getElementById("btn-minimise")?.addEventListener("click", () => api.minimise().catch(() => undefined));
-document.getElementById("btn-close")?.addEventListener("click", () => api.closeWindow().catch(() => undefined));
-document.getElementById("btn-fullscreen")?.addEventListener("click", () => api.fullscreen().catch(() => undefined));
+
 document.getElementById("btn-settings")?.addEventListener("click", () => setSettings(!settingsOpen));
 document.getElementById("settings-close")?.addEventListener("click", () => setSettings(false));
 document.getElementById("settings-backdrop")?.addEventListener("click", (e) => {

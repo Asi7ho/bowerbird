@@ -85,23 +85,23 @@ button { font-family: inherit; }
   color: var(--grey); display: -webkit-box; -webkit-line-clamp: 2;
   -webkit-box-orient: vertical; overflow: hidden; font-size: 12px; line-height: 1.45;
 }
-/* Small macOS buttons inside cards: white, hairline border, 13px medium. */
+/* Embedded card header: grip + title only, no buttons. A simple link
+   card's title and URL are themselves the link: clicking either opens
+   the page automatically (embedded here if it can be, outside if not). */
 .card .embed-header {
   display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px;
   background: rgba(246, 246, 248, 0.95); border-bottom: 1px solid var(--hairline);
-  font-size: 13px; font-weight: 500;
+  font-size: 13px; font-weight: 500; pointer-events: auto;
 }
 .card .embed-header .drag { cursor: grab; flex: none; display: flex; align-items: center; }
 .card .embed-header .domain { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card .embed-header button, .card .simple-actions button {
-  border: 1px solid var(--separator); background: #fff; border-radius: 7px;
-  padding: 3px 10px; font-size: 12px; font-weight: 500; color: var(--ink);
-  cursor: pointer; box-shadow: var(--shadow-sm);
-}
-.card .embed-header button:hover, .card .simple-actions button:hover { background: var(--bg-system); }
-.card .embed-header button:active, .card .simple-actions button:active { background: #e8e8ed; }
 .card .embed-body-note { padding: 10px 12px; color: var(--grey); font-size: 13px; }
-.card .simple-actions { display: flex; gap: 6px; padding: 0 12px 10px; }
+.card a.link-open {
+  display: block; color: inherit; text-decoration: none; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.card a.link-open:hover { text-decoration: underline; }
+.card a.link-open.url { color: #2e86ab; }
 .card .swatch-pill {
   position: absolute; right: 10px; bottom: 10px;
   background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(8px);
@@ -140,6 +140,10 @@ button { font-family: inherit; }
   display: flex; flex-direction: column; background: var(--fill);
   border-radius: 10px; padding: 2px; gap: 2px; width: 100%;
 }
+/* The seg is 40px wide including its 2px padding, so its buttons must
+   fill the remaining 36px — a fixed 40px button overflowed the grey
+   container by 2px on each side and sat off-centre. */
+#toolbar .seg button { width: 100%; height: 40px; }
 #toolbar button {
   border: none; background: transparent; border-radius: 9px;
   width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
@@ -157,7 +161,7 @@ button { font-family: inherit; }
 #toolbar button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 #toolbar .divider { width: 32px; height: 1px; background: var(--separator); flex: none; }
 #toolbar .zoom-group { display: flex; flex-direction: column; gap: 2px; width: 100%; }
-#toolbar .zoom-group button { width: 40px; }
+#toolbar .zoom-group button { width: 100%; }
 #toolbar .palette { display: flex; flex-direction: column; gap: 6px; align-items: center; }
 #toolbar .swatch {
   width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.12);
@@ -169,27 +173,6 @@ button { font-family: inherit; }
   width: 26px; height: 26px;
   box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent);
 }
-/* macOS traffic lights: red close, yellow minimise, green full screen.
-   The glyph only appears on hover, exactly like a real Mac window. */
-#toolbar .traffic {
-  display: flex; gap: 7px; align-items: center; justify-content: center;
-  padding: 2px 0 4px; -webkit-app-region: no-drag;
-}
-#toolbar .traffic-btn {
-  width: 12px !important; height: 12px !important; min-width: 12px;
-  border-radius: 50%; padding: 0; flex: none;
-  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.15);
-}
-#toolbar .traffic-btn span {
-  opacity: 0; font-size: 9px; font-weight: 700; line-height: 1;
-  color: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center;
-}
-#toolbar .traffic:hover .traffic-btn span { opacity: 1; }
-#toolbar .traffic-btn:hover { background: inherit; filter: brightness(0.92); }
-#toolbar .traffic-btn.close { background: #ff5f57; }
-#toolbar .traffic-btn.minimise { background: #febc2e; }
-#toolbar .traffic-btn.fullscreen { background: #28c840; }
-
 /* Settings: a centred macOS sheet — frosted, 14px radius, soft shadow. */
 #settings-backdrop {
   position: absolute; inset: 0; background: rgba(0, 0, 0, 0.22);
