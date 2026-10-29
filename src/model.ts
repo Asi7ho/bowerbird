@@ -105,8 +105,24 @@ function itemHit(board: Board, item: Item, world: Pt): boolean {
 }
 
 export function hitTest(board: Board, world: Pt): number | null {
-  for (let i = board.items.length - 1; i >= 0; i--) {
-    if (itemHit(board, board.items[i], world)) return board.items[i].id;
+  // Cards first, then strokes, then connectors — in that order, each
+  // pass topmost-first. Strokes and connectors live in the SVG layer
+  // UNDER the cards, and a connector's hit line runs centre-to-centre
+  // through the cards it joins, so the old single-pass order let a
+  // connector steal clicks from the very card it was attached to:
+  // clicking a photo's centre selected the connector, not the photo,
+  // which broke shift-click grouping and could start a connector
+  // drag from a connector itself. A stroke or connector is only
+  // selectable in open space, where no card covers it — exactly
+  // where it is actually visible.
+  const isCard = (it: Item) => !("Stroke" in it.kind) && !("Connector" in it.kind);
+  const isStroke = (it: Item) => "Stroke" in it.kind;
+  for (const pass of [isCard, isStroke, (it: Item) => "Connector" in it.kind]) {
+    for (let i = board.items.length - 1; i >= 0; i--) {
+      const it = board.items[i];
+      if (!pass(it)) continue;
+      if (itemHit(board, it, world)) return it.id;
+    }
   }
   return null;
 }

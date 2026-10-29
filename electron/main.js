@@ -266,21 +266,27 @@ function iconPath() {
 }
 
 function createWindow() {
-  // Default size: one third of the screen, centred in the work
-  // area (so it never sits under the menu bar or the Dock).
+  // Default size: 800x600, centred in the work area (so it never
+  // sits under the menu bar or the Dock). 800x600 is also the
+  // minimum size: the window cannot be resized smaller than this.
   const wa0 = screen.getPrimaryDisplay().workArea;
   // Screenshot override (not a user setting): BOWERBIRD_WINDOW_SIZE
   // e.g. 1440x900 makes the window fill the frame for App Store
-  // screenshots, which the 1/3 default would otherwise make tiny.
-  // Used only by screenshots/README.md recapture instructions.
+  // screenshots. Used only by screenshots/README.md recapture
+  // instructions. The 800x600 minimum still applies to it.
   const sizeOverride = /^([0-9]+)x([0-9]+)$/.exec(process.env.BOWERBIRD_WINDOW_SIZE || "");
-  const defaultWidth = sizeOverride ? Number(sizeOverride[1]) : Math.round(wa0.width / 3);
-  const defaultHeight = sizeOverride ? Number(sizeOverride[2]) : Math.round(wa0.height / 3);
+  // The minimum applies to the initial size too, not just to
+  // later resizing: an override smaller than 800x600 still opens
+  // at 800x600.
+  const defaultWidth = Math.max(sizeOverride ? Number(sizeOverride[1]) : 800, 800);
+  const defaultHeight = Math.max(sizeOverride ? Number(sizeOverride[2]) : 600, 600);
   const defaultX = wa0.x + Math.round((wa0.width - defaultWidth) / 2);
   const defaultY = wa0.y + Math.round((wa0.height - defaultHeight) / 2);
   win = new BaseWindow({
     width: defaultWidth,
     height: defaultHeight,
+    minWidth: 800,
+    minHeight: 600,
     frame: false,
     title: 'Bowerbird',
     backgroundColor: '#ffffff',
@@ -304,6 +310,15 @@ function createWindow() {
   win.on('resize', () => {
     if (!win || !boardView) return;
     const b = win.getContentBounds();
+    // Enforce the minimum in code, not just via minWidth/minHeight:
+    // a programmatic resize (and, on bare X11, a window-manager
+    // resize) can bypass the option, but it cannot bypass this.
+    // Clamping triggers one more resize event, which then passes
+    // this check and updates the board view.
+    if (b.width < 800 || b.height < 600) {
+      win.setBounds({ x: b.x, y: b.y, width: Math.max(b.width, 800), height: Math.max(b.height, 600) });
+      return;
+    }
     boardView.setBounds({ x: 0, y: 0, width: b.width, height: b.height });
   });
   win.on('closed', () => {

@@ -321,6 +321,20 @@ function renderStrokesAndConnectors(): void {
   // rebuild every card.
 }
 
+// Markdown is a per-character regex walk, so re-parsing every note
+// on every render is the most expensive part of a rebuild for a
+// text-heavy board. Cache it per item object, invalidated by the
+// text and size themselves — an edit changes the text, so the
+// cache misses exactly when it should.
+const mdCache = new WeakMap<object, { text: string; size: number; html: string }>();
+function cachedMarkdown(item: Item, text: string, size: number): string {
+  const hit = mdCache.get(item);
+  if (hit && hit.text === text && hit.size === size) return hit.html;
+  const html = renderMarkdownHtml(text, size);
+  mdCache.set(item, { text, size, html });
+  return html;
+}
+
 function cardHtml(item: Item): string {
   const sel = selected.includes(item.id);
   const cls = sel ? "card selected" : "card";
@@ -335,7 +349,7 @@ function cardHtml(item: Item): string {
   if ("Text" in item.kind) {
     if (editingId === item.id) return ""; // the editor DOM is managed separately
     const { text, size, color } = item.kind.Text;
-    return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner note-body" style="font-size:${size}px;color:${color}">${renderMarkdownHtml(text, size)}</div></div>`;
+    return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner note-body" style="font-size:${size}px;color:${color}">${cachedMarkdown(item, text, size)}</div></div>`;
   }
   if ("Image" in item.kind) {
     const { path } = item.kind.Image;
@@ -457,6 +471,18 @@ function isVisibleItem(item: Item, v: { x0: number; y0: number; x1: number; y1: 
 
 function render(): void {
   boardEl.style.background = board.bg;
+  // A playing (or paused mid-way) video used to restart from 0 on
+  // every render, because render() rebuilds the card DOM and the
+  // <video> node with it. Capture position and playing state first,
+  // and restore them onto the rebuilt nodes below.
+  const videoState = new Map<number, { t: number; playing: boolean }>();
+  for (const v of Array.from(cardsEl.querySelectorAll("video"))) {
+    const card = v.closest(".card") as HTMLElement | null;
+    if (!card || !card.dataset.id) continue;
+    if (!v.paused || (isFinite(v.currentTime) && v.currentTime > 0)) {
+      videoState.set(Number(card.dataset.id), { t: v.currentTime, playing: !v.paused });
+    }
+  }
   worldEl.innerHTML = "";
   renderStrokesAndConnectors();
   // Cards: rebuild, except the note being edited (its textarea stays).
@@ -473,6 +499,16 @@ function render(): void {
   }
   cardsEl.innerHTML = html;
   applyStacking();
+  for (const [id, st] of videoState) {
+    const v = cardsEl.querySelector(`[data-id="${id}"] video`) as HTMLVideoElement | null;
+    if (!v) continue;
+    const restore = () => {
+      try { v.currentTime = st.t; } catch { /* not ready yet */ }
+      if (st.playing) v.play().catch(() => undefined);
+    };
+    if (v.readyState >= 1) restore();
+    else v.addEventListener("loadedmetadata", restore, { once: true });
+  }
   if (editingHtml) cardsEl.insertAdjacentHTML("beforeend", editingHtml);
   updateToolbar();
   lastContentKey = visibleKey();
@@ -646,7 +682,9 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
   }
   if (tool === "connector") {
     const hit = hitTest(board, world);
-    drag = { kind: "connector", from: hit !== null ? { Item: hit } : { Point: world }, current: world };
+    const hitItem = hit !== null ? boardGet(board, hit) : null;
+    const anchorable = hitItem && !("Stroke" in hitItem.kind) && !("Connector" in hitItem.kind);
+    drag = { kind: "connector", from: hitItem && anchorable ? { Item: hitItem.id } : { Point: world }, current: world };
     return;
   }
   // Select tool.
@@ -833,7 +871,9 @@ window.addEventListener("mouseup", (e: MouseEvent) => {
     }
   } else if (d.kind === "connector") {
     const to = hitTest(board, world);
-    const toAnchor: Anchor = to !== null ? { Item: to } : { Point: world };
+    const toItem = to !== null ? boardGet(board, to) : null;
+    const toAnchorable = toItem && !("Stroke" in toItem.kind) && !("Connector" in toItem.kind);
+    const toAnchor: Anchor = toItem && toAnchorable ? { Item: toItem.id } : { Point: world };
     const a = anchorPoint(board, d.from);
     const degenerate = a !== null && "Point" in toAnchor && Math.hypot(a.x - toAnchor.Point.x, a.y - toAnchor.Point.y) < 4;
     if (!degenerate) {
@@ -1001,6 +1041,12 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
     if (input) { input.focus(); input.select(); }
     return;
   }
+  // Settings open means the board is not listening: without this,
+  // Delete deleted the selected card behind the sheet, v/p/a
+  // switched tools, and +/- zoomed, all while the user thought
+  // they were in Settings. Esc still closes the sheet (handled
+  // below), and Tab keeps its normal focus job in the sheet.
+  if (settingsOpen && e.key !== "Escape" && e.key !== "Tab") return;
   // Tab cycles elements, unless Settings is open, where Tab keeps
   // its normal job of moving focus around the sheet.
   if (e.key === "Tab" && !settingsOpen) {
@@ -1094,9 +1140,11 @@ function updateSearch(): void {
   const query = input.value.trim().toLowerCase();
   clearEl.style.display = query === "" ? "none" : "flex";
   if (query === "") {
+    const hadMatches = searchMatches.length > 0;
     searchMatches = [];
     searchIndex = -1;
     countEl.textContent = "";
+    if (!hadMatches) return;
     for (const child of Array.from(cardsEl.children)) {
       (child as HTMLElement).classList.remove("search-match", "search-dim");
     }

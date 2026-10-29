@@ -31,4 +31,4 @@ renders in SF Pro natively. To recapture: resize the window to
 app window (on macOS, Cmd+Shift+4, then Space, then click the
 window). On Linux, `BOWERBIRD_WINDOW_SIZE=1440x900` forces the
 window to that size for a full-bleed shot, since the default
-window is one third of the screen.
+window is 800x600.

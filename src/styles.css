@@ -251,7 +251,10 @@ button { font-family: inherit; }
   width: 26px; height: 26px;
   box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent);
 }
-/* Settings: a centred macOS sheet — frosted, 14px radius, soft shadow. */
+/* Settings: a centred macOS sheet — opaque, 14px radius, soft shadow.
+   It used to be frosted (white at 0.92 over a blurred board), so board
+   content showed through the text and made it harder to read. Opaque
+   also drops a full-board backdrop blur while Settings is open. */
 #settings-backdrop {
   position: absolute; inset: 0; background: rgba(0, 0, 0, 0.22);
   backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
@@ -261,8 +264,7 @@ button { font-family: inherit; }
 #settings {
   width: min(560px, 92vw); max-height: calc(100% - 48px); overflow: auto;
   scrollbar-width: none;
-  background: rgba(255, 255, 255, 0.92);
-  backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%);
+  background: #ffffff;
   border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 14px;
   padding: 22px 24px; box-shadow: var(--shadow-lg);
 }
