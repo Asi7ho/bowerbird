@@ -106,7 +106,10 @@ it stays on top.
   instead), and `.url`/`.webloc` shortcut files (become link preview
   cards; a video link becomes a video card). Drop several at once and
   they fan out from the drop point. Double-click empty space to start
-  a note right there.
+  a note right there. QuickBoard keeps its own copy of every dropped
+  file in an `assets` folder next to your board file, so deleting the
+  original later never breaks the card — and boards from before this
+  change get their surviving files copied in on the next launch.
 - **Audio:** an audio file lands as a mini-player card — a pastel tile
   with a play button, the file name, and a waveform strip. Click the
   play button to play or pause it (the tile turns into pause bars while

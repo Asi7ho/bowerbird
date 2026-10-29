@@ -42,7 +42,14 @@ fn main() {
     // A missing board file means a first run: show the showcase board.
     // (A corrupt file still falls back to the plain welcome board.)
     let board = if store::board_path().exists() {
-        store::load()
+        let mut board = store::load();
+        // Boards from before embedded copies get migrated: surviving
+        // originals are copied into the board's assets folder and the
+        // items repointed, so deleting an original later is safe.
+        if store::embed_board_files(&mut board, &store::board_path()) > 0 {
+            let _ = store::save(&board);
+        }
+        board
     } else if let Some((image_path, pdf_path, pdf_bytes)) = install_showcase_assets() {
         quickboard::model::Board::welcome_showcase(&image_path, &pdf_path, pdf_bytes)
     } else {

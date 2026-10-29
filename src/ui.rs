@@ -897,12 +897,12 @@ impl BoardView {
         let mut at = self.window_to_world(at_window);
         let mut added = 0usize;
         let mut skipped = 0usize;
+        let mut embed_failures: Vec<String> = Vec::new();
         for path in paths {
             let ext = path
                 .extension()
                 .map(|e| e.to_string_lossy().to_string())
                 .unwrap_or_default();
-            let path_str = path.to_string_lossy().to_string();
             match drop_kind_for_ext(&ext) {
                 DropKind::Image => {
                     let (w, h) = image::image_dimensions(path).unwrap_or((320, 240));
@@ -912,24 +912,28 @@ impl BoardView {
                     } else {
                         (w as f32, h as f32)
                     };
-                    self.shared.board.borrow_mut().add_image(at, &path_str, w, h);
+                    let stored = self.embed_or_original(path, &mut embed_failures);
+                    self.shared.board.borrow_mut().add_image(at, &stored, w, h);
                     added += 1;
                 }
                 DropKind::Pdf => {
                     let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
-                    self.shared.board.borrow_mut().add_pdf(at, &path_str, size);
+                    let stored = self.embed_or_original(path, &mut embed_failures);
+                    self.shared.board.borrow_mut().add_pdf(at, &stored, size);
                     added += 1;
                 }
                 DropKind::Audio => {
-                    self.shared.board.borrow_mut().add_audio(at, &path_str);
+                    let stored = self.embed_or_original(path, &mut embed_failures);
+                    self.shared.board.borrow_mut().add_audio(at, &stored);
                     added += 1;
                 }
                 DropKind::Video => {
                     let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+                    let stored = self.embed_or_original(path, &mut embed_failures);
                     self.shared
                         .board
                         .borrow_mut()
-                        .add_video(at, &path_str, false, size);
+                        .add_video(at, &stored, false, size);
                     added += 1;
                 }
                 DropKind::Text => {
@@ -974,9 +978,38 @@ impl BoardView {
         }
         if added > 0 {
             self._status = format!("Dropped {} item(s) onto the board.", added);
+            if !embed_failures.is_empty() {
+                self._status.push_str(&format!(
+                    " Could not copy {} into the board — deleting the original will break {}.",
+                    embed_failures.join(", "),
+                    if embed_failures.len() == 1 { "it" } else { "them" },
+                ));
+            }
             self.save();
         } else if skipped > 0 {
             self._status = "That file type is not dropped as a board item yet.".to_string();
+        }
+    }
+
+    /// Copy a dropped file into the board's assets folder so the card
+    /// survives the original being deleted. Returns the stored path, or
+    /// the original when the copy fails (and records the failure for
+    /// the final status line).
+    fn embed_or_original(
+        &mut self,
+        path: &std::path::Path,
+        failures: &mut Vec<String>,
+    ) -> String {
+        match store::embed_file(&store::board_path(), path) {
+            Ok(stored) => stored.to_string_lossy().to_string(),
+            Err(_) => {
+                failures.push(
+                    path.file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_else(|| "file".to_string()),
+                );
+                path.to_string_lossy().to_string()
+            }
         }
     }
 
