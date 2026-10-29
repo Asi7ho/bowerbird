@@ -85,23 +85,27 @@ it stays on top.
   (MP4/MOV/WebM/MKV/AVI), and `.txt`/`.md` files become board items at
   the drop point. You can also use the image / PDF / audio / video
   icons and type or paste a file path.
-- **Audio:** an audio file lands as a card with a purple note tile.
-  Select it and a transport bar appears under the canvas — play/pause
-  and stop, playing inside QuickBoard (rodio). Double-click the card
-  toggles play too. If the machine has no audio device, pressing play
-  says so instead of crashing.
-- **Video:** a video file lands as a card with a play tile; a video
-  link (a direct video file, or a YouTube/Vimeo page) pasted into the
-  link box becomes a video card instead of a link card. Videos play in
-  your system video player (local files) or browser (links) — select
-  the card and press play in the transport bar, or double-click it.
-  Decoding video frames inside the canvas is a planned follow-up.
+- **Audio:** an audio file lands as a mini-player card — a purple note
+  tile, the file name, and a waveform strip. Select it and a transport
+  bar appears under the canvas — play/pause and stop, playing inside
+  QuickBoard (rodio). Double-click the card toggles play too. If the
+  machine has no audio device, pressing play says so instead of crashing.
+- **Video:** a video file lands as a thumbnail-shaped card (16:9 tile
+  with a play button); a video link (a direct video file, or a
+  YouTube/Vimeo page) pasted into the link box becomes a video card
+  instead of a link card. Videos play in your system video player
+  (local files) or browser (links) — select the card and press play in
+  the transport bar, or double-click it. Decoding video frames inside
+  the canvas is a planned follow-up.
 - **Links:** the link icon, type a URL, `Enter`. The card shows the
   domain immediately and fills in the page title/description in the
   background when the fetch succeeds (Open Graph title/description
   preferred, `<title>` as fallback). Double-click a link card to open
   it in your browser; double-click a PDF card (or an image) to open it
   in its viewer.
+- **Long names never spill:** card text is clipped to the card — long
+  file names, titles and URLs end with "…", descriptions are capped at
+  two lines. Nothing ever runs onto the canvas or over a neighbour.
 - **Swatches:** the swatch icon, type `#FF6B35` (or `FF6B35`, or `#F53`).
   Bad input is rejected with a message instead of creating a broken swatch.
 - **PDFs:** a PDF lands as a card (name + size) and opens in your system

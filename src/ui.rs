@@ -9,7 +9,9 @@
 //! That keeps one source of truth (the model) for geometry.
 
 use quickboard::audio::{AudioPlayer, Playback};
-use quickboard::model::{Anchor, Board, Camera, Item, ItemId, Kind, Pt, normalise_hex, parse_hex};
+use quickboard::model::{
+    Anchor, Board, Camera, GridMode, Item, ItemId, Kind, Pt, normalise_hex, parse_hex,
+};
 use quickboard::preview::{domain_of, looks_like_video_url, parse_preview};
 use quickboard::store;
 use gpui::prelude::*;
@@ -142,6 +144,11 @@ enum Icon {
     Ungroup,
     Delete,
     Hide,
+    Tune,
+    GridLines,
+    GridDots,
+    GridOff,
+    Close,
 }
 
 impl Tool {
@@ -211,6 +218,26 @@ fn icon_canvas(icon: Icon, hex: u32) -> impl IntoElement {
                             s.line_to(pt($x, $y));
                         }
                     )+
+                }};
+            }
+            // One filled dot in the fill path, centred at ($x, $y).
+            macro_rules! dot {
+                ($x:expr, $y:expr, $r:expr) => {{
+                    f.move_to(pt($x + $r, $y));
+                    f.arc_to(
+                        point(px($r), px($r)),
+                        px(0.),
+                        false,
+                        true,
+                        pt($x - $r, $y),
+                    );
+                    f.arc_to(
+                        point(px($r), px($r)),
+                        px(0.),
+                        false,
+                        true,
+                        pt($x + $r, $y),
+                    );
                 }};
             }
             match icon {
@@ -336,6 +363,41 @@ fn icon_canvas(icon: Icon, hex: u32) -> impl IntoElement {
                     line!(9., 8.; 9., 14.);
                     line!(12., 8.; 12., 14.);
                 }
+                Icon::Tune => {
+                    // Two sliders with knobs: the customise control.
+                    line!(3., 7.; 17., 7.);
+                    line!(3., 13.; 17., 13.);
+                    dot!(12., 7., 2.2);
+                    dot!(8., 13., 2.2);
+                }
+                Icon::GridLines => {
+                    line!(7., 4.; 7., 16.);
+                    line!(13., 4.; 13., 16.);
+                    line!(4., 7.; 16., 7.);
+                    line!(4., 13.; 16., 13.);
+                }
+                Icon::GridDots => {
+                    dot!(6., 6., 1.3);
+                    dot!(10., 6., 1.3);
+                    dot!(14., 6., 1.3);
+                    dot!(6., 10., 1.3);
+                    dot!(10., 10., 1.3);
+                    dot!(14., 10., 1.3);
+                    dot!(6., 14., 1.3);
+                    dot!(10., 14., 1.3);
+                    dot!(14., 14., 1.3);
+                }
+                Icon::GridOff => {
+                    line!(7., 4.; 7., 16.);
+                    line!(13., 4.; 13., 16.);
+                    line!(4., 7.; 16., 7.);
+                    line!(4., 13.; 16., 13.);
+                    line!(3., 17.; 17., 3.);
+                }
+                Icon::Close => {
+                    line!(5., 5.; 15., 15.);
+                    line!(15., 5.; 5., 15.);
+                }
                 Icon::Hide => {
                     s.move_to(pt(3., 10.));
                     s.cubic_bezier_to(pt(17., 10.), pt(7., 4.), pt(13., 4.));
@@ -455,6 +517,7 @@ pub struct BoardView {
     drag: Option<Drag>,
     editing: Option<(ItemId, String)>,
     add_panel: Option<AddPanel>,
+    canvas_panel: bool,
     status: String,
     viewport_w: f32,
     viewport_h: f32,
@@ -472,6 +535,7 @@ impl BoardView {
             drag: None,
             editing: None,
             add_panel: None,
+            canvas_panel: false,
             status: "Board auto-saves on every change.".to_string(),
             viewport_w: 1024.0,
             viewport_h: 768.0,
@@ -995,7 +1059,10 @@ impl BoardView {
             }])
             .bg(rgb(0xFFFFFF))
             .border_1()
-            .border_color(border);
+            .border_color(border)
+            // Nothing inside a card may spill past its rounded corners,
+            // whatever the text length or zoom.
+            .overflow_hidden();
         let el = match &item.kind {
             Kind::Text {
                 text,
@@ -1063,27 +1130,36 @@ impl BoardView {
                             .text_color(rgb(0xFFFFFF))
                             .child(initial),
                     );
-                let mut col = div().flex().flex_col().gap(px(2.)).flex_1();
+                // Hard width: the text column may never push past the
+                // card edge, so long titles/URLs/descriptions clip
+                // instead of spilling onto the canvas.
+                let col_w = (w - 92.).max(40.);
+                let title_px = 14. * cam.zoom.max(0.7);
+                let mut col = div().flex().flex_col().gap(px(2.)).w(px(col_w));
                 col = col.child(
                     div()
-                        .text_size(px(14. * cam.zoom.max(0.7)))
+                        .text_size(px(title_px))
                         .font_weight(FontWeight::BOLD)
                         .text_color(rgb(0x1C1C1E))
-                        .child(head),
+                        .truncate()
+                        .child(elide(&head, col_w, title_px, true)),
                 );
                 col = col.child(
                     div()
                         .text_size(px(12.))
                         .text_color(rgb(0x2E86AB))
-                        .child(url.clone()),
+                        .truncate()
+                        .child(elide(url, col_w, 12.0, false)),
                 );
                 if let Some(d) = description {
                     if !d.is_empty() {
+                        // Two lines' worth, then line_clamp as backstop.
                         col = col.child(
                             div()
                                 .text_size(px(12.))
                                 .text_color(rgb(0x6E6E73))
-                                .child(d.clone()),
+                                .line_clamp(2)
+                                .child(elide(d, col_w * 2.0, 12.0, false)),
                         );
                     }
                 }
@@ -1127,19 +1203,26 @@ impl BoardView {
                             .flex()
                             .flex_col()
                             .gap(px(2.))
-                            .flex_1()
+                            .w(px((w - 92.).max(40.)))
                             .child(
                                 div()
                                     .text_size(px(14.))
                                     .font_weight(FontWeight::BOLD)
                                     .text_color(rgb(0x1C1C1E))
-                                    .child(name),
+                                    .truncate()
+                                    .child(elide(&name, (w - 92.).max(40.), 14.0, true)),
                             )
                             .child(
                                 div()
                                     .text_size(px(12.))
                                     .text_color(rgb(0x6E6E73))
-                                    .child(format!("{} KB — double-click to open", kb)),
+                                    .truncate()
+                                    .child(elide(
+                                        &format!("{} KB — double-click to open", kb),
+                                        (w - 92.).max(40.),
+                                        12.0,
+                                        false,
+                                    )),
                             ),
                     )
             }
@@ -1170,6 +1253,24 @@ impl BoardView {
                             .h(px(20.))
                             .child(icon_canvas(Icon::Audio, 0xFFFFFF)),
                     );
+                // A mini player look: the name, then a waveform strip
+                // that reads as audio at a glance, then the play hint.
+                let mut wave = div().flex().flex_row().items_end().gap(px(2.)).h(px(18.));
+                for (i, bh) in [
+                    5., 9., 13., 7., 15., 11., 6., 13., 17., 10., 8., 14., 6., 12., 9., 5., 10.,
+                    13.,
+                ]
+                .iter()
+                .enumerate()
+                {
+                    wave = wave.child(
+                        div()
+                            .w(px(3.))
+                            .h(px(*bh))
+                            .rounded(px(1.))
+                            .bg(rgb(if i % 3 == 0 { 0xB8A6CC } else { 0x6A4C93 })),
+                    );
+                }
                 base.flex()
                     .flex_row()
                     .items_center()
@@ -1180,23 +1281,31 @@ impl BoardView {
                         div()
                             .flex()
                             .flex_col()
-                            .gap(px(2.))
-                            .flex_1()
+                            .gap(px(4.))
+                            .w(px((w - 92.).max(40.)))
                             .child(
                                 div()
                                     .text_size(px(14.))
                                     .font_weight(FontWeight::BOLD)
                                     .text_color(rgb(0x1C1C1E))
-                                    .child(name),
+                                    .truncate()
+                                    .child(elide(&name, (w - 92.).max(40.), 14.0, true)),
                             )
+                            .child(wave)
                             .child(
                                 div()
                                     .text_size(px(12.))
                                     .text_color(rgb(0x6E6E73))
+                                    .truncate()
                                     .child(if playing {
-                                        "Playing — select for controls".to_string()
+                                        "Now playing".to_string()
                                     } else {
-                                        "Audio — select to play".to_string()
+                                        elide(
+                                            "Double-click or select to play",
+                                            (w - 92.).max(40.),
+                                            12.0,
+                                            false,
+                                        )
                                     }),
                             ),
                     )
@@ -1215,8 +1324,10 @@ impl BoardView {
                         .unwrap_or_else(|| source.clone())
                 };
                 let kb = (*size_bytes as f64 / 1024.0).round() as u64;
+                // A thumbnail shape (16:9) with a big play button, so
+                // the card reads as video instead of a black square.
                 let tile = div()
-                    .w(px(56.))
+                    .w(px(96.))
                     .h(px(56.))
                     .rounded(px(10.))
                     .bg(rgb(0x1C1C1E))
@@ -1225,8 +1336,8 @@ impl BoardView {
                     .justify_center()
                     .child(
                         div()
-                            .w(px(20.))
-                            .h(px(20.))
+                            .w(px(24.))
+                            .h(px(24.))
                             .child(icon_canvas(Icon::Play, 0xFFFFFF)),
                     );
                 base.flex()
@@ -1240,22 +1351,34 @@ impl BoardView {
                             .flex()
                             .flex_col()
                             .gap(px(2.))
-                            .flex_1()
+                            .w(px((w - 132.).max(40.)))
                             .child(
                                 div()
                                     .text_size(px(14.))
                                     .font_weight(FontWeight::BOLD)
                                     .text_color(rgb(0x1C1C1E))
-                                    .child(name),
+                                    .truncate()
+                                    .child(elide(&name, (w - 132.).max(40.), 14.0, true)),
                             )
                             .child(
                                 div()
                                     .text_size(px(12.))
                                     .text_color(rgb(0x6E6E73))
+                                    .truncate()
                                     .child(if *remote {
-                                        "Video link — double-click to open".to_string()
+                                        elide(
+                                            "Video link — double-click to open",
+                                            (w - 132.).max(40.),
+                                            12.0,
+                                            false,
+                                        )
                                     } else {
-                                        format!("{} KB — double-click to play", kb)
+                                        elide(
+                                            &format!("{} KB — double-click to play", kb),
+                                            (w - 132.).max(40.),
+                                            12.0,
+                                            false,
+                                        )
                                     }),
                             ),
                     )
@@ -1286,6 +1409,21 @@ impl BoardView {
         };
         el.into_any_element()
     }
+}
+
+/// Shorten `s` to roughly fit `width_px` at `text_px` size, appending
+/// "…" when cut. GPUI's own ellipsis does not reliably render for
+/// single-line text in these cards (the text clips without it), so the
+/// cut is done here; the card's overflow_hidden remains as a backstop.
+fn elide(s: &str, width_px: f32, text_px: f32, bold: bool) -> String {
+    let per_char = text_px * if bold { 0.55 } else { 0.50 };
+    let budget = (width_px / per_char).floor() as usize;
+    let chars: Vec<char> = s.chars().collect();
+    if chars.len() <= budget || budget < 2 {
+        return s.to_string();
+    }
+    let head: String = chars[..budget.saturating_sub(1)].iter().collect();
+    format!("{}…", head.trim_end())
 }
 
 /// Where the segment from `from` to `to` crosses a rectangle: its entry

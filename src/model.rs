@@ -233,7 +233,25 @@ pub fn normalise_hex(hex: &str) -> Option<String> {
     parse_hex(hex).map(|(r, g, b)| format!("#{:02X}{:02X}{:02X}", r, g, b))
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+/// How the canvas grid is drawn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum GridMode {
+    Lines,
+    Dots,
+    Off,
+}
+
+impl Default for GridMode {
+    fn default() -> Self {
+        GridMode::Lines
+    }
+}
+
+fn default_bg() -> String {
+    "#F7F5F0".to_string()
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Board {
     pub items: Vec<Item>,
     pub camera: Camera,
@@ -244,6 +262,26 @@ pub struct Board {
     /// Transient selection, never persisted.
     #[serde(skip)]
     pub selected: Vec<ItemId>,
+    /// Canvas background colour (hex). Old boards load as paper.
+    #[serde(default = "default_bg")]
+    pub bg: String,
+    /// Canvas grid style. Old boards load as lines.
+    #[serde(default)]
+    pub grid: GridMode,
+}
+
+impl Default for Board {
+    fn default() -> Self {
+        Self {
+            items: Vec::new(),
+            camera: Camera::default(),
+            next_id: 0,
+            next_group: 0,
+            selected: Vec::new(),
+            bg: default_bg(),
+            grid: GridMode::default(),
+        }
+    }
 }
 
 impl Board {
@@ -272,9 +310,39 @@ impl Board {
         }
     }
 
+    /// Whether `world` grabs this item. Connectors are tested against
+    /// their live endpoints, not their stored box: an endpoint anchored
+    /// to an item moves with that item, while the stored box is only set
+    /// at creation time — testing the box made anchored connectors
+    /// unselectable (and unmovable) after their items moved.
+    fn item_hit(&self, item: &Item, world: Pt) -> bool {
+        if let Kind::Connector { from, to, .. } = &item.kind {
+            if let (Some(a), Some(b)) = (self.anchor_point(*from), self.anchor_point(*to)) {
+                return dist_to_segment(world, a, b) <= 8.0;
+            }
+        }
+        item.contains(world)
+    }
+
+    /// Live bounds for an item: connectors use their current endpoints.
+    pub fn item_bounds(&self, item: &Item) -> (Pt, Size) {
+        if let Kind::Connector { from, to, .. } = &item.kind {
+            if let (Some(a), Some(b)) = (self.anchor_point(*from), self.anchor_point(*to)) {
+                let m = 8.0;
+                let x = a.x.min(b.x) - m;
+                let y = a.y.min(b.y) - m;
+                return (
+                    Pt::new(x, y),
+                    Size::new(a.x.max(b.x) - x + m, a.y.max(b.y) - y + m),
+                );
+            }
+        }
+        item.bounds()
+    }
+
     /// Topmost item under a world point, if any.
     pub fn hit_test(&self, world: Pt) -> Option<ItemId> {
-        self.items.iter().rev().find(|i| i.contains(world)).map(|i| i.id)
+        self.items.iter().rev().find(|i| self.item_hit(i, world)).map(|i| i.id)
     }
 
     /// All items intersecting a marquee rectangle (world coords).
@@ -284,7 +352,7 @@ impl Board {
         self.items
             .iter()
             .filter(|i| {
-                let (p, s) = i.bounds();
+                let (p, s) = self.item_bounds(i);
                 p.x < x1 && p.x + s.w > x0 && p.y < y1 && p.y + s.h > y0
             })
             .map(|i| i.id)
@@ -441,7 +509,8 @@ impl Board {
         self.items.push(Item {
             id,
             pos: at,
-            size: Size::new(300.0, 96.0),
+            // Wider than other cards: the 16:9 thumb takes 96px.
+            size: Size::new(340.0, 96.0),
             group: None,
             kind: Kind::Video {
                 source: source.to_string(),
@@ -644,5 +713,44 @@ mod tests {
         let _outside = b.add_text(Pt::new(500.0, 500.0), "out");
         let hits = b.marquee(Pt::new(0.0, 0.0), Pt::new(200.0, 200.0));
         assert_eq!(hits, vec![inside]);
+    }
+
+    #[test]
+    fn connector_hit_follows_anchored_items() {
+        // A note plus a connector anchored to it and to a free point.
+        let mut b = Board::new();
+        let note = b.add_text(Pt::new(100.0, 100.0), "hi");
+        let conn = b.add_connector(Anchor::Item(note), Anchor::Point(Pt::new(400.0, 100.0)));
+        // The note's centre is its anchor point; the line runs from there.
+        let centre = b.get(note).unwrap().centre();
+        let mid = Pt::new((centre.x + 400.0) / 2.0, (centre.y + 100.0) / 2.0);
+        assert_eq!(b.hit_test(mid), Some(conn));
+        // Move the note far away: the connector's grab line must move
+        // with it, and the old line must stop grabbing.
+        b.select(note, false);
+        b.move_selection(200.0, 200.0);
+        let new_centre = b.get(note).unwrap().centre();
+        let new_mid = Pt::new((new_centre.x + 400.0) / 2.0, (new_centre.y + 100.0) / 2.0);
+        assert_eq!(b.hit_test(new_mid), Some(conn));
+        assert_ne!(b.hit_test(mid), Some(conn));
+        // The marquee uses the live line too.
+        let hits = b.marquee(
+            Pt::new(new_mid.x - 5.0, new_mid.y - 5.0),
+            Pt::new(new_mid.x + 5.0, new_mid.y + 5.0),
+        );
+        assert!(hits.contains(&conn));
+    }
+
+    #[test]
+    fn canvas_settings_default_for_old_boards() {
+        // A board saved before canvas settings existed has neither field.
+        let json = r#"{"items":[],"camera":{"x":0.0,"y":0.0,"zoom":1.0},"next_id":0,"next_group":0}"#;
+        let b = Board::from_json(json).unwrap();
+        assert_eq!(b.bg, "#F7F5F0");
+        assert_eq!(b.grid, GridMode::Lines);
+        let json = r##"{"items":[],"camera":{"x":0.0,"y":0.0,"zoom":1.0},"next_id":0,"next_group":0,"bg":"#EAF3EC","grid":"Dots"}"##;
+        let b = Board::from_json(json).unwrap();
+        assert_eq!(b.bg, "#EAF3EC");
+        assert_eq!(b.grid, GridMode::Dots);
     }
 }
