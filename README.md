@@ -10,8 +10,7 @@ auto-saves on every change, so closing it never loses anything.
 
 Built with [Electron](https://www.electronjs.org): one frameless window
 with a board view filling it. Link cards are previews only — no
-embedded pages. The GPUI version that came before lives in
-`legacy-gpui/` for reference; it is not built by the Electron app.
+embedded pages.
 
 ## Run it
 
@@ -174,6 +173,29 @@ really restores the board.
   viewer on double-click. Rendering PDF pages *inside* the canvas is a
   planned follow-up, not a stub that pretends otherwise.
 
+## Icon
+
+Bowerbird has its own icon, not a framework default: a blue
+bowerbird on a white board with a dot grid, on a light squircle,
+in the app's palette. The vector source is `assets/icon.svg`;
+`assets/icon.png` is the 1024px export, `assets/icon.ico` is the
+Windows multi-size icon, and `assets/icon.iconset/` is the macOS
+iconset. The app uses it for its window icon (Linux/Windows
+taskbar) and, on macOS, for its Dock icon when running from source
+(`app.dock.setIcon`). For a packaged Mac build, generate the
+`.icns` on a Mac with:
+
+```sh
+iconutil -c icns assets/icon.iconset
+```
+
+## App Store screenshots
+
+`screenshots/` holds five 1440×900 PNGs captured from the running
+app (see `screenshots/README.md` for what each one shows and how
+to upload them). They are the app itself, full-bleed, with no
+cursor in frame and no captions baked in.
+
 ## Project layout
 
 ```
@@ -189,8 +211,9 @@ src/
               markdown, link classification
   styles.css  flat, quiet board styling
 index.html    board shell + vertical left toolbar
-assets/       welcome picture + sample PDF, installed beside the board
-legacy-gpui/  the previous Rust/GPUI app, kept for reference
+assets/       welcome picture + sample PDF, installed beside the board;
+              icon.svg / icon.png (1024) / icon.ico / icon.iconset
+screenshots/  App Store screenshots, 1440x900 PNG (see screenshots/README.md)
 ```
 
 Checks:

@@ -254,6 +254,11 @@ const MIME = {
 
 // ---------------------------------------------------------------- window
 
+function iconPath() {
+  const file = path.join(__dirname, '..', 'assets', 'icon.png');
+  return fs.existsSync(file) ? file : null;
+}
+
 function createWindow() {
   win = new BaseWindow({
     width: 1440,
@@ -261,6 +266,7 @@ function createWindow() {
     frame: false,
     title: 'Bowerbird',
     backgroundColor: '#ffffff',
+    ...(iconPath() ? { icon: iconPath() } : {}),
   });
   boardView = new WebContentsView({
     webPreferences: {
@@ -420,6 +426,9 @@ protocol.registerSchemesAsPrivileged([{
 }]);
 
 app.whenReady().then(() => {
+  if (process.platform === 'darwin' && iconPath()) {
+    try { app.dock.setIcon(iconPath()); } catch { /* Dock icon is cosmetic */ }
+  }
   // Local board files (images, audio, PDFs) reach the renderer through
   // this scheme, in dev and in a packaged build alike. The renderer
   // never gets a raw filesystem path it can use outside this scheme.
