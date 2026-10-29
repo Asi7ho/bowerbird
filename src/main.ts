@@ -2,6 +2,7 @@
 // touches Node or Electron directly; every privileged call goes through
 // this bridge, which the main process exposes with context isolation on.
 interface BowerbirdAPI {
+  isDemo: boolean;
   loadBoard(): Promise<{ json: string | null; board_path: string; board_dir: string; pdf_size_bytes: number; video_size_bytes: number }>;
   saveBoard(json: string): Promise<void>;
   resetBoard(): Promise<{ pdf_size_bytes: number; video_size_bytes: number }>;
@@ -181,7 +182,12 @@ function zoomAt(screen: Pt, factor: number): void {
 function zoomCentre(factor: number): void {
   zoomAt({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, factor);
 }
+const DEMO = api.isDemo === true;
 function save(): void {
+  // Demo mode saves nothing: not even an IPC call, so a main-process
+  // guard failure alone could never write. The main process also
+  // no-ops save-board in demo mode, as a second guard.
+  if (DEMO) return;
   api.saveBoard(JSON.stringify(board)).catch((e) => toast(`Save failed: ${String(e)}`));
 }
 function allocId(): number {
@@ -1228,7 +1234,7 @@ document.getElementById("btn-quit")?.addEventListener("click", async () => {
   // closes the only window, and the main process quits on
   // window-all-closed, so this is a full app quit.
   commitEditingIfAny();
-  try { await api.saveBoard(JSON.stringify(board)); } catch { /* closing anyway */ }
+  if (!DEMO) { try { await api.saveBoard(JSON.stringify(board)); } catch { /* closing anyway */ } }
   setSettings(false);
   api.quit().catch(() => undefined);
 });
@@ -1260,7 +1266,7 @@ document.getElementById("btn-reset-confirm")?.addEventListener("click", async ()
     save();
     render();
     void refreshLinkPreviews();
-    toast("Board data deleted — fresh welcome board restored");
+    toast(DEMO ? "Demo board reset — nothing was saved" : "Board data deleted — fresh welcome board restored");
   } catch (e) {
     toast(`Reset failed: ${String(e)}`);
   }
@@ -1283,7 +1289,7 @@ function setSettings(open: boolean): void {
     const table = document.getElementById("shortcuts-table") as HTMLTableElement;
     table.innerHTML = SHORTCUTS.map(([k, v]) => `<tr><td><kbd>${k}</kbd></td><td>${v}</td></tr>`).join("");
     const pathEl = document.getElementById("settings-board-path") as HTMLElement;
-    pathEl.textContent = `Board file: ${boardPath}`;
+    pathEl.textContent = DEMO ? "Demo — nothing is saved, and nothing is written to disk." : `Board file: ${boardPath}`;
     renderBgOpts();
     renderGridOpts();
     renderCornerOpts();
@@ -1607,6 +1613,7 @@ async function init(): Promise<void> {
   try { cornerReveal = (await api.getAppSettings()).corner; } catch { /* default stands */ }
   renderCollapseButton();
   render();
+  if (DEMO) toast("Demo \u2014 try anything, nothing is saved");
   // Fill in previews for cards that never got one (welcome card, old
   // boards): title, description, image and icon, in the background.
   void refreshLinkPreviews();

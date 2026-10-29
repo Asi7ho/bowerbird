@@ -3,6 +3,7 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('bowerbird', {
+  isDemo: process.env.BOWERBIRD_DEMO === '1',
   loadBoard: () => ipcRenderer.invoke('bowerbird:load-board'),
   saveBoard: (json) => ipcRenderer.invoke('bowerbird:save-board', json),
   resetBoard: () => ipcRenderer.invoke('bowerbird:reset-board'),

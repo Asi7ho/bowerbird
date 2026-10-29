@@ -13,11 +13,43 @@
 
 const { app, BaseWindow, WebContentsView, ipcMain, shell, protocol, screen } = require('electron');
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { Readable } = require('node:stream');
 
 let win = null;
 let boardView = null;
+
+// ---------------------------------------------------------------- demo mode
+
+// BOWERBIRD_DEMO=1 runs a demo that saves nothing, anywhere:
+// no board file, no settings file, no showcase copies, no dropped
+// file copies, no reset/delete. The demo always starts from the
+// welcome board, with its media read straight from the app's own
+// assets folder, and everything the user does lives only in
+// memory until quit. The real board and settings are never even
+// opened, so a demo can never overwrite or delete them. Every
+// write path below checks DEMO first, and the renderer also
+// short-circuits save() in demo mode, so a write needs both
+// guards to fail before anything could reach disk.
+const DEMO = process.env.BOWERBIRD_DEMO === "1";
+if (DEMO) {
+  try {
+    app.setPath("userData", fs.mkdtempSync(path.join(os.tmpdir(), "bowerbird-demo-")));
+  } catch {
+    // If the redirect fails, the demo guards below still prevent
+    // any board or settings write; only Chromium cache would land
+    // in the normal userData folder.
+  }
+}
+function demoShowcaseSizes() {
+  const sizeOf = (file) => { try { return fs.statSync(file).size; } catch { return 0; } };
+  const dir = assetsDir();
+  return {
+    pdf_size_bytes: sizeOf(path.join(dir, "sample.pdf")),
+    video_size_bytes: sizeOf(path.join(dir, "welcome-video.mp4")),
+  };
+}
 
 // ---------------------------------------------------------------- corner reveal
 
@@ -103,7 +135,7 @@ async function collapseBoard() {
     resizable: false,
     minimizable: false,
     maximizable: false,
-    title: 'Bowerbird',
+    title: DEMO ? 'Bowerbird \u2014 Demo' : 'Bowerbird',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -288,7 +320,7 @@ function createWindow() {
     minWidth: 800,
     minHeight: 600,
     frame: false,
-    title: 'Bowerbird',
+    title: DEMO ? 'Bowerbird \u2014 Demo' : 'Bowerbird',
     backgroundColor: '#ffffff',
     ...(iconPath() ? { icon: iconPath() } : {}),
   });
@@ -337,6 +369,9 @@ function createWindow() {
 
 function registerIpc() {
   ipcMain.handle('bowerbird:load-board', () => {
+    if (DEMO) {
+      return { json: null, board_path: '', board_dir: assetsDir(), ...demoShowcaseSizes() };
+    }
     const file = boardPath();
     const dir = path.dirname(file);
     let showcase = { pdf_size_bytes: 0, video_size_bytes: 0 };
@@ -367,6 +402,7 @@ function registerIpc() {
   });
 
   ipcMain.handle('bowerbird:save-board', (_event, json) => {
+    if (DEMO) return;
     const file = boardPath();
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const tmp = file + '.tmp';
@@ -381,6 +417,7 @@ function registerIpc() {
   // App settings (e.g. the corner) are NOT touched: they are not
   // board data. Returns the PDF size for the fresh welcome board.
   ipcMain.handle('bowerbird:reset-board', () => {
+    if (DEMO) return demoShowcaseSizes();
     const file = boardPath();
     const dir = path.dirname(file);
     try { fs.rmSync(file, { force: true }); } catch { /* already gone */ }
@@ -389,6 +426,7 @@ function registerIpc() {
   });
 
   ipcMain.handle('bowerbird:embed-file', (_event, filePath) => {
+    if (DEMO) return filePath;
     const assets = path.join(boardDir(), 'assets');
     fs.mkdirSync(assets, { recursive: true });
     const resolved = path.resolve(filePath);
@@ -454,7 +492,7 @@ function registerIpc() {
   ipcMain.handle('bowerbird:set-corner', (_event, corner) => {
     if (!CORNERS.includes(corner)) return cornerReveal;
     cornerReveal = corner;
-    saveAppSettings();
+    if (!DEMO) saveAppSettings();
     // Moving the icon while collapsed: it follows the new corner
     // and its arrow is re-pointed by reloading with the new corner.
     if (isCollapsed && peekWin) {
@@ -548,7 +586,7 @@ app.whenReady().then(() => {
       return new Response('not found', { status: 404 });
     }
   });
-  loadAppSettings();
+  if (!DEMO) loadAppSettings();
   registerIpc();
   createWindow();
 });
