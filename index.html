@@ -45,6 +45,14 @@
           <h3>Corner reveal</h3>
           <div class="canvas-opt" id="corner-opts"></div>
           <p class="meta">The board hides into this corner, and clicking its corner opens it again.</p>
+          <h3>Data</h3>
+          <p class="meta">Delete everything saved in this whiteboard: all notes, photos, links, files and sketches. The board starts again as a fresh welcome board. The corner setting above is kept.</p>
+          <button id="btn-reset">Delete all board data</button>
+          <div id="reset-confirm" style="display:none">
+            <p class="meta"><strong>This cannot be undone.</strong> Delete everything on this board?</p>
+            <button id="btn-reset-confirm">Delete everything</button>
+            <button id="btn-reset-cancel">Keep my board</button>
+          </div>
           <h3>App</h3>
           <button id="btn-quit">Quit Bowerbird</button>
         </div>

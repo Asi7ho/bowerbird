@@ -80,9 +80,9 @@ There is no handle tab.
   rebuilt when the visible set actually changes.
 - **Settings (?):** a panel listing every keyboard shortcut, plus the
   canvas background (White, Paper, Sage, Sky, Ink) and grid
-  (Dots, Lines, Off), the corner the board collapses into, and a
-  Quit Bowerbird button under App. The corner choice is saved in
-  the app's settings file and survives restarts.
+  (Dots, Lines, Off), the corner the board collapses into, a
+  Data section, and a Quit Bowerbird button under App. The corner
+  choice is saved in the app's settings file and survives restarts.
 - **In-app hotkeys:** `V` select, `P` pen, `A` arrow, `Ctrl/Cmd+G`
   group, `Ctrl/Cmd+U` ungroup, `Delete` removes the selection,
   `+`/`-` zoom, `0` resets the view, hold `Space` to pan, `h` hides,
@@ -99,15 +99,19 @@ really restores the board.
 
 ## Using the board
 
-- **First run:** a fresh board opens as a showcase — a note, two colour
-  swatches, a link card, a real PDF card and a picture, with a connector
-  from the note to the link — so you can see what every element looks
-  like before adding your own. The picture and PDF are installed next to
-  your board file on first launch, so they open wherever you run the app
-  from. Cards are flat and minimal: a hairline border, a soft corner,
-  no heavy shadow; link cards get a pastel tile with the domain's
-  initial in colour, PDF cards a pastel red tile, swatches a white
-  hex pill.
+- **First run:** a fresh board opens as a showcase of everything the
+  app does — a note, three real photographs, colour swatches, three
+  link cards to real Wikipedia articles, a real PDF card, a grouped
+  cluster (note + swatch + link, moving together), a pen circle
+  drawn around a photo, a connector, and notes explaining Tab
+  navigation, grouping, drag-and-drop and the corner button — so
+  you can see what every element looks like before adding your own.
+  The photos and PDF are installed next to your board file on
+  first launch, so they open wherever you run the app from. The
+  photos are Wikimedia Commons photographs. Cards are flat and
+  minimal: a hairline border, a soft corner, no heavy shadow;
+  link cards get a pastel tile with the domain's initial in colour,
+  PDF cards a pastel red tile, swatches a white hex pill.
 - **Pan:** hold `Space` and drag, or scroll without Ctrl. **Zoom:**
   `Ctrl` + scroll (keeps the point under the cursor fixed), or `+`/`-`,
   or the toolbar zoom buttons. The canvas fills the whole window and
@@ -123,6 +127,11 @@ really restores the board.
   and connectors are skipped — they are drawings and lines, not
   elements to find. Starting from a selected element, `Tab` goes to
   the next one after it.
+- **Delete all board data:** Settings → Data → Delete all board data.
+  It asks you to confirm first, then removes everything saved in
+  the whiteboard — the board file and every file dropped onto it —
+  and restores a fresh welcome board. The corner setting is kept.
+  There is no undo, so the confirm step is deliberate.
 - **Resize:** drag the small handle at a card's bottom-right corner —
   it works on the first click, no need to select first. Everything
   resizes: notes, cards, images, swatches, strokes (their points
@@ -211,7 +220,7 @@ src/
               markdown, link classification
   styles.css  flat, quiet board styling
 index.html    board shell + vertical left toolbar
-assets/       welcome picture + sample PDF, installed beside the board;
+assets/       welcome photos + sample PDF, installed beside the board;
               icon.svg / icon.png (1024) / icon.ico / icon.iconset
 screenshots/  App Store screenshots, 1440x900 PNG (see screenshots/README.md)
 ```

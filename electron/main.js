@@ -157,7 +157,7 @@ function assetsDir() {
     path.join(app.getAppPath(), 'assets'),
   ];
   for (const dir of candidates) {
-    if (fs.existsSync(path.join(dir, 'welcome.png'))) return dir;
+    if (fs.existsSync(path.join(dir, 'sample.pdf'))) return dir;
   }
   return candidates[0];
 }
@@ -165,9 +165,15 @@ function assetsDir() {
 function installShowcaseAssets(dir) {
   fs.mkdirSync(dir, { recursive: true });
   const src = assetsDir();
-  const welcome = path.join(dir, 'welcome.png');
-  if (!fs.existsSync(welcome) && fs.existsSync(path.join(src, 'welcome.png'))) {
-    fs.copyFileSync(path.join(src, 'welcome.png'), welcome);
+  // Real photographs for the welcome board (Wikimedia Commons).
+  // installShowcaseAssets only fills in what is missing, so a
+  // reset that deletes the board dir gets a full fresh set, while
+  // an existing board keeps the copies it already has.
+  for (const name of ['welcome-bower.jpg', 'welcome-kyoto.jpg', 'welcome-brutalist.jpg']) {
+    const dest = path.join(dir, name);
+    if (!fs.existsSync(dest) && fs.existsSync(path.join(src, name))) {
+      fs.copyFileSync(path.join(src, name), dest);
+    }
   }
   const pdf = path.join(dir, 'sample.pdf');
   if (!fs.existsSync(pdf) && fs.existsSync(path.join(src, 'sample.pdf'))) {
@@ -326,6 +332,20 @@ function registerIpc() {
     const tmp = file + '.tmp';
     fs.writeFileSync(tmp, json);
     fs.renameSync(tmp, file);
+  });
+
+  // Delete/reset: remove everything saved in the whiteboard — the
+  // board file and every board-owned file in its assets folder
+  // (dropped images, PDFs, audio, video) — then reinstall the
+  // showcase assets so a fresh welcome board can be built.
+  // App settings (e.g. the corner) are NOT touched: they are not
+  // board data. Returns the PDF size for the fresh welcome board.
+  ipcMain.handle('bowerbird:reset-board', () => {
+    const file = boardPath();
+    const dir = path.dirname(file);
+    try { fs.rmSync(file, { force: true }); } catch { /* already gone */ }
+    try { fs.rmSync(path.join(dir, 'assets'), { recursive: true, force: true }); } catch { /* already gone */ }
+    return installShowcaseAssets(dir);
   });
 
   ipcMain.handle('bowerbird:embed-file', (_event, filePath) => {

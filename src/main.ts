@@ -4,6 +4,7 @@
 interface BowerbirdAPI {
   loadBoard(): Promise<{ json: string | null; board_path: string; board_dir: string; pdf_size_bytes: number }>;
   saveBoard(json: string): Promise<void>;
+  resetBoard(): Promise<number>;
   embedFile(path: string): Promise<string>;
   readTextFile(path: string): Promise<string>;
   fileSize(path: string): Promise<number>;
@@ -950,6 +951,45 @@ document.getElementById("btn-quit")?.addEventListener("click", async () => {
   setSettings(false);
   api.quit().catch(() => undefined);
 });
+document.getElementById("btn-reset")?.addEventListener("click", () => {
+  const confirmEl = document.getElementById("reset-confirm") as HTMLDivElement;
+  const btn = document.getElementById("btn-reset") as HTMLButtonElement;
+  if (confirmEl) confirmEl.style.display = "block";
+  if (btn) btn.style.display = "none";
+});
+document.getElementById("btn-reset-cancel")?.addEventListener("click", () => {
+  const confirmEl = document.getElementById("reset-confirm") as HTMLDivElement;
+  const btn = document.getElementById("btn-reset") as HTMLButtonElement;
+  if (confirmEl) confirmEl.style.display = "none";
+  if (btn) btn.style.display = "";
+});
+document.getElementById("btn-reset-confirm")?.addEventListener("click", async () => {
+  // Delete first, then build the fresh welcome board in memory and
+  // save that — never save the old board after the wipe, or it
+  // would come straight back. The corner setting is untouched:
+  // reset-board only deletes board data, not app settings.
+  commitEditingIfAny();
+  if (wheelSaveTimer) { clearTimeout(wheelSaveTimer); wheelSaveTimer = null; }
+  if (audioEl) { audioEl.pause(); audioEl = null; audioId = null; }
+  selected = [];
+  editingId = null;
+  try {
+    const pdfSize = await api.resetBoard();
+    board = welcomeBoard(pdfSize);
+    board.camera = { x: 0, y: 0, zoom: 1 };
+    setSettings(false);
+    const confirmEl = document.getElementById("reset-confirm") as HTMLDivElement;
+    const btn = document.getElementById("btn-reset") as HTMLButtonElement;
+    if (confirmEl) confirmEl.style.display = "none";
+    if (btn) btn.style.display = "";
+    save();
+    render();
+    void refreshLinkPreviews();
+    toast("Board data deleted — fresh welcome board restored");
+  } catch (e) {
+    toast(`Reset failed: ${String(e)}`);
+  }
+});
 document.getElementById("btn-settings")?.addEventListener("click", () => setSettings(!settingsOpen));
 document.getElementById("settings-close")?.addEventListener("click", () => setSettings(false));
 document.getElementById("settings-backdrop")?.addEventListener("click", (e) => {
@@ -1191,14 +1231,39 @@ function welcomeBoard(pdfSize: number): Board {
   };
   const add = (item: Item) => { b.items.push(item); return item.id; };
   const next = () => { b.next_id += 1; return b.next_id; };
-  const welcomeText = "Welcome to Bowerbird\nEvery element, on one board:\na note, a link card, a swatch,\na PDF card and a picture.\nDrop your own files onto the canvas.";
-  add({ id: next(), pos: { x: 120, y: 40 }, size: { w: 260, h: estimateTextHeight(welcomeText, 16, 260) }, group: null, kind: { Text: { text: welcomeText, bold: false, size: 16, color: "#1A1A1A" } } });
-  add({ id: next(), pos: { x: 120, y: 240 }, size: { w: 120, h: 120 }, group: null, kind: { Swatch: { hex: "#FF6B35" } } });
-  add({ id: next(), pos: { x: 260, y: 240 }, size: { w: 120, h: 120 }, group: null, kind: { Swatch: { hex: "#2E86AB" } } });
-  add({ id: next(), pos: { x: 420, y: 240 }, size: { w: 320, h: 132 }, group: null, kind: { UrlCard: { url: "https://example.com", title: null, description: null, image: null, icon: null } } });
-  add({ id: next(), pos: { x: 760, y: 240 }, size: { w: 260, h: 96 }, group: null, kind: { PdfCard: { path: `${boardDir}/sample.pdf`, size_bytes: pdfSize } } });
-  add({ id: next(), pos: { x: 120, y: 400 }, size: { w: 360, h: 225 }, group: null, kind: { Image: { path: `${boardDir}/welcome.png` } } });
-  add({ id: next(), pos: { x: 120, y: 40 }, size: { w: 300, h: 200 }, group: null, kind: { Connector: { from: { Item: 1 }, to: { Item: 4 }, color: "#333333" } } });
+  const note = (text: string, _w: number) => ({ Text: { text, bold: false, size: 16, color: "#1A1A1A" } });
+  const WIKI_ICON = "https://en.wikipedia.org/static/favicon/wikipedia.ico";
+  // Tab order is board order, so items are added in the order a
+  // first-time user should meet them: title, photos, colours,
+  // links, PDF, the grouped cluster, then the how-to notes.
+  const titleText = "# Welcome to Bowerbird\n\nAn infinite board for notes, photos, links and sketches.\n\nEverything on this board is real — photos, articles and colours you can keep, move or delete.";
+  add({ id: next(), pos: { x: 120, y: 40 }, size: { w: 340, h: estimateTextHeight(titleText, 16, 340) }, group: null, kind: note(titleText, 340) });
+  add({ id: next(), pos: { x: 500, y: 40 }, size: { w: 360, h: 225 }, group: null, kind: { Image: { path: `${boardDir}/welcome-bower.jpg` } } });
+  add({ id: next(), pos: { x: 880, y: 40 }, size: { w: 360, h: 225 }, group: null, kind: { Image: { path: `${boardDir}/welcome-kyoto.jpg` } } });
+  add({ id: next(), pos: { x: 120, y: 260 }, size: { w: 120, h: 120 }, group: null, kind: { Swatch: { hex: "#2A6D09" } } });
+  add({ id: next(), pos: { x: 260, y: 260 }, size: { w: 120, h: 120 }, group: null, kind: { Swatch: { hex: "#007AFF" } } });
+  add({ id: next(), pos: { x: 400, y: 260 }, size: { w: 120, h: 120 }, group: null, kind: { Swatch: { hex: "#6A4C2F" } } });
+  add({ id: next(), pos: { x: 540, y: 290 }, size: { w: 320, h: 132 }, group: null, kind: { UrlCard: { url: "https://en.wikipedia.org/wiki/Bowerbird", title: "Bowerbird", description: "Family of birds", image: null, icon: WIKI_ICON } } });
+  add({ id: next(), pos: { x: 880, y: 290 }, size: { w: 320, h: 132 }, group: null, kind: { UrlCard: { url: "https://en.wikipedia.org/wiki/Japanese_garden", title: "Japanese garden", description: "Type of traditional garden", image: null, icon: WIKI_ICON } } });
+  add({ id: next(), pos: { x: 120, y: 410 }, size: { w: 260, h: 96 }, group: null, kind: { PdfCard: { path: `${boardDir}/sample.pdf`, size_bytes: pdfSize } } });
+  const groupText = "Grouped — these three move together.\n\nSelect any one of them, drag, and the note, the swatch and the link all move. Ctrl + G groups, Ctrl + U ungroups.";
+  add({ id: next(), pos: { x: 400, y: 410 }, size: { w: 300, h: estimateTextHeight(groupText, 16, 300) }, group: 1, kind: note(groupText, 300) });
+  add({ id: next(), pos: { x: 720, y: 410 }, size: { w: 120, h: 120 }, group: 1, kind: { Swatch: { hex: "#FF6B35" } } });
+  add({ id: next(), pos: { x: 860, y: 410 }, size: { w: 320, h: 132 }, group: 1, kind: { UrlCard: { url: "https://en.wikipedia.org/wiki/Brutalist_architecture", title: "Brutalist architecture", description: "Architectural style", image: null, icon: WIKI_ICON } } });
+  add({ id: next(), pos: { x: 120, y: 540 }, size: { w: 360, h: 225 }, group: null, kind: { Image: { path: `${boardDir}/welcome-brutalist.jpg` } } });
+  const tryText = "## Try this\n\n- Double-click a note to edit it, Esc to commit\n- Press Tab to jump to the next element\n- Space + drag to pan, Ctrl + scroll to zoom\n- Drag a file onto the board\n- Select cards, Ctrl + G to group them\n- Drop audio or video — it plays in place";
+  add({ id: next(), pos: { x: 500, y: 540 }, size: { w: 340, h: estimateTextHeight(tryText, 16, 340) }, group: null, kind: note(tryText, 340) });
+  const cornerText = "The round button in a corner hides this board into that corner. Click the corner to bring it back.\n\nPhotos: Wikimedia Commons.";
+  add({ id: next(), pos: { x: 880, y: 570 }, size: { w: 360, h: estimateTextHeight(cornerText, 16, 360) }, group: null, kind: note(cornerText, 360) });
+  // Pen annotation: a red circle drawn around the bowerbird photo.
+  const circle: Array<{ x: number; y: number }> = [];
+  for (let k = 0; k < 36; k += 1) {
+    const a = (2 * Math.PI * k) / 36;
+    circle.push({ x: 680 + 190 * Math.cos(a), y: 152 + 110 * Math.sin(a) });
+  }
+  add({ id: next(), pos: { x: 490, y: 42 }, size: { w: 380, h: 220 }, group: null, kind: { Stroke: { points: circle, color: "#E63946", width: 4, marker: false } } });
+  add({ id: next(), pos: { x: 1, y: 1 }, size: { w: 1, h: 1 }, group: null, kind: { Connector: { from: { Item: 1 }, to: { Item: 7 }, color: "#333333" } } });
+  b.next_group = 2;
   return b;
 }
 

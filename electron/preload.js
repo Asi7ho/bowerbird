@@ -5,6 +5,7 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('bowerbird', {
   loadBoard: () => ipcRenderer.invoke('bowerbird:load-board'),
   saveBoard: (json) => ipcRenderer.invoke('bowerbird:save-board', json),
+  resetBoard: () => ipcRenderer.invoke('bowerbird:reset-board'),
   embedFile: (filePath) => ipcRenderer.invoke('bowerbird:embed-file', filePath),
   readTextFile: (filePath) => ipcRenderer.invoke('bowerbird:read-text-file', filePath),
   fileSize: (filePath) => ipcRenderer.invoke('bowerbird:file-size', filePath),
