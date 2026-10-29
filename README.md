@@ -26,7 +26,23 @@ sudo apt install libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libxcb1-de
 sudo apt install mesa-vulkan-drivers
 ```
 
-On macOS, Xcode command-line tools are enough (`xcode-select --install`).
+On macOS, full Xcode is required — the command-line tools alone are
+not enough. GPUI compiles its Metal shaders at build time with
+`xcrun metal`, and that tool ships with Xcode. With only the
+command-line tools selected, the build fails with `xcrun: error:
+unable to find utility "metal"`. Fix:
+
+```sh
+# If Xcode is already installed but the command-line tools are selected:
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+# Otherwise install Xcode from the App Store first, then run the line above.
+sudo xcodebuild -license accept
+xcodebuild -runFirstLaunch
+xcrun -find metal   # should print a path inside Xcode.app
+cargo clean -p gpui # drop the failed build-script output
+cargo run
+```
+
 No other setup: the first run opens a welcome board that explains the
 controls on the canvas itself.
 
