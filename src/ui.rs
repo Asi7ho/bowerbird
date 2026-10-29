@@ -8,8 +8,9 @@
 //!   and hit-testing is done against the model, not the element tree.
 //! That keeps one source of truth (the model) for geometry.
 
+use quickboard::audio::{AudioPlayer, Playback};
 use quickboard::model::{Anchor, Board, Camera, Item, ItemId, Kind, Pt, normalise_hex, parse_hex};
-use quickboard::preview::{domain_of, parse_preview};
+use quickboard::preview::{domain_of, looks_like_video_url, parse_preview};
 use quickboard::store;
 use gpui::prelude::*;
 use gpui::{
@@ -26,6 +27,9 @@ use std::time::Duration;
 pub struct SharedState {
     pub board: RefCell<Board>,
     pub board_window: RefCell<Option<AnyWindowHandle>>,
+    /// In-app audio playback; created lazily on first play so a machine
+    /// without an audio device never fails at startup.
+    pub audio: RefCell<AudioPlayer>,
 }
 
 pub type Shared = Rc<SharedState>;
@@ -35,6 +39,7 @@ impl SharedState {
         Rc::new(Self {
             board: RefCell::new(board),
             board_window: RefCell::new(None),
+            audio: RefCell::new(AudioPlayer::new()),
         })
     }
 }
@@ -84,6 +89,8 @@ enum AddKind {
     Swatch,
     ImagePath,
     PdfPath,
+    AudioPath,
+    VideoPath,
 }
 
 impl AddKind {
@@ -94,6 +101,8 @@ impl AddKind {
             AddKind::Swatch => "Add colour swatch (e.g. #FF6B35)",
             AddKind::ImagePath => "Add image — type or paste a file path",
             AddKind::PdfPath => "Add PDF — type or paste a file path",
+            AddKind::AudioPath => "Add audio — type or paste a file path",
+            AddKind::VideoPath => "Add video — type or paste a file path",
         }
     }
 }
@@ -124,6 +133,11 @@ enum Icon {
     Swatch,
     Image,
     Pdf,
+    Audio,
+    Video,
+    Play,
+    Pause,
+    Stop,
     Group,
     Ungroup,
     Delete,
@@ -151,6 +165,8 @@ impl AddKind {
             AddKind::Swatch => Icon::Swatch,
             AddKind::ImagePath => Icon::Image,
             AddKind::PdfPath => Icon::Pdf,
+            AddKind::AudioPath => Icon::Audio,
+            AddKind::VideoPath => Icon::Video,
         }
     }
 }
@@ -260,6 +276,50 @@ fn icon_canvas(icon: Icon, hex: u32) -> impl IntoElement {
                     line!(5., 3.; 12., 3.; 15., 6.; 15., 17.; 5., 17.; 5., 3.);
                     line!(12., 3.; 12., 6.; 15., 6.);
                     line!(7., 12.; 13., 12.);
+                }
+                Icon::Audio => {
+                    // Eighth note: filled head, stem, flag.
+                    f.move_to(pt(4., 14.));
+                    f.arc_to(
+                        point(px(3.), px(2.2)),
+                        px(0.),
+                        false,
+                        true,
+                        pt(10., 14.),
+                    );
+                    f.arc_to(
+                        point(px(3.), px(2.2)),
+                        px(0.),
+                        false,
+                        true,
+                        pt(4., 14.),
+                    );
+                    f.close();
+                    line!(10., 14.; 10., 5.);
+                    line!(10., 5.; 15., 7.);
+                }
+                Icon::Video => {
+                    line!(3., 6.; 17., 6.; 17., 14.; 3., 14.; 3., 6.);
+                    f.add_polygon(&[pt(8., 8.), pt(8., 12.), pt(13., 10.)], true);
+                }
+                Icon::Play => {
+                    f.add_polygon(&[pt(7., 5.), pt(7., 15.), pt(16., 10.)], true);
+                }
+                Icon::Pause => {
+                    f.add_polygon(
+                        &[pt(6., 5.), pt(9., 5.), pt(9., 15.), pt(6., 15.)],
+                        true,
+                    );
+                    f.add_polygon(
+                        &[pt(11., 5.), pt(14., 5.), pt(14., 15.), pt(11., 15.)],
+                        true,
+                    );
+                }
+                Icon::Stop => {
+                    f.add_polygon(
+                        &[pt(6., 6.), pt(14., 6.), pt(14., 14.), pt(6., 14.)],
+                        true,
+                    );
                 }
                 Icon::Group => {
                     line!(3., 3.; 11., 3.; 11., 11.; 3., 11.; 3., 3.);
@@ -670,9 +730,19 @@ impl BoardView {
                 } else {
                     format!("https://{}", input)
                 };
-                let id = self.shared.board.borrow_mut().add_url(panel.at, &url);
-                self.status = format!("Link card added for {}.", domain_of(&url));
-                self.fetch_url_title(id, url, cx);
+                if looks_like_video_url(&url) {
+                    // Video links become video cards and open in the
+                    // browser/player on double-click — no preview fetch.
+                    self.shared
+                        .board
+                        .borrow_mut()
+                        .add_video(panel.at, &url, true, 0);
+                    self.status = format!("Video link added for {}.", domain_of(&url));
+                } else {
+                    let id = self.shared.board.borrow_mut().add_url(panel.at, &url);
+                    self.status = format!("Link card added for {}.", domain_of(&url));
+                    self.fetch_url_title(id, url, cx);
+                }
             }
             AddKind::Swatch => match normalise_hex(&input) {
                 Some(hex) => {
@@ -729,8 +799,100 @@ impl BoardView {
                 self.shared.board.borrow_mut().add_pdf(panel.at, &input, size);
                 self.status = "PDF card added — double-click it to open.".to_string();
             }
+            AddKind::AudioPath => {
+                let path = std::path::Path::new(&input);
+                let is_audio = path
+                    .extension()
+                    .map(|e| {
+                        ["mp3", "wav", "flac", "ogg", "m4a"]
+                            .contains(&e.to_string_lossy().to_lowercase().as_str())
+                    })
+                    .unwrap_or(false);
+                if !path.is_file() || !is_audio {
+                    self.status = "That is not an audio file (mp3, wav, flac, ogg, m4a)."
+                        .to_string();
+                    self.add_panel = Some(AddPanel {
+                        input: panel.input,
+                        ..panel
+                    });
+                    return;
+                }
+                self.shared.board.borrow_mut().add_audio(panel.at, &input);
+                self.status = "Audio added — select it to play.".to_string();
+            }
+            AddKind::VideoPath => {
+                let path = std::path::Path::new(&input);
+                let is_video = path
+                    .extension()
+                    .map(|e| {
+                        ["mp4", "mov", "webm", "mkv", "avi", "m4v"]
+                            .contains(&e.to_string_lossy().to_lowercase().as_str())
+                    })
+                    .unwrap_or(false);
+                if !path.is_file() || !is_video {
+                    self.status = "That is not a video file (mp4, mov, webm, mkv, avi)."
+                        .to_string();
+                    self.add_panel = Some(AddPanel {
+                        input: panel.input,
+                        ..panel
+                    });
+                    return;
+                }
+                let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+                self.shared
+                    .board
+                    .borrow_mut()
+                    .add_video(panel.at, &input, false, size);
+                self.status = "Video added — double-click it to play.".to_string();
+            }
         }
         self.save();
+    }
+
+    /// Play/pause the audio item. Failures (no device, bad file) are a
+    /// status message, never a crash.
+    fn toggle_audio(&mut self, id: ItemId) {
+        let path = self.with_board(|b| {
+            b.get(id).and_then(|i| match &i.kind {
+                Kind::Audio { path } => Some(path.clone()),
+                _ => None,
+            })
+        });
+        match path {
+            Some(path) => {
+                let name = std::path::Path::new(&path)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or(path.clone());
+                match self.shared.audio.borrow_mut().toggle(id, &path) {
+                    Ok(Playback::Playing) => self.status = format!("Playing {}.", name),
+                    Ok(Playback::Paused) => self.status = format!("Paused {}.", name),
+                    Ok(Playback::Stopped) => self.status = format!("Stopped {}.", name),
+                    Err(msg) => self.status = msg,
+                }
+            }
+            None => self.status = "That is not an audio item.".to_string(),
+        }
+    }
+
+    fn stop_audio(&mut self) {
+        self.shared.audio.borrow_mut().stop();
+        self.status = "Playback stopped.".to_string();
+    }
+
+    /// Video plays in the system player (local file) or the browser
+    /// (remote link) — QuickBoard does not decode video frames itself.
+    fn play_video(&mut self, id: ItemId) {
+        let source = self.with_board(|b| {
+            b.get(id).and_then(|i| match &i.kind {
+                Kind::Video { source, .. } => Some(source.clone()),
+                _ => None,
+            })
+        });
+        match source {
+            Some(source) => self.open_external(&source),
+            None => self.status = "That is not a video item.".to_string(),
+        }
     }
 
     fn open_external(&mut self, target: &str) {
@@ -769,6 +931,18 @@ impl BoardView {
                 "pdf" => {
                     let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
                     self.shared.board.borrow_mut().add_pdf(at, &path_str, size);
+                    added += 1;
+                }
+                "mp3" | "wav" | "flac" | "ogg" | "m4a" => {
+                    self.shared.board.borrow_mut().add_audio(at, &path_str);
+                    added += 1;
+                }
+                "mp4" | "mov" | "webm" | "mkv" | "avi" | "m4v" => {
+                    let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+                    self.shared
+                        .board
+                        .borrow_mut()
+                        .add_video(at, &path_str, false, size);
                     added += 1;
                 }
                 "txt" | "md" => {
@@ -966,6 +1140,123 @@ impl BoardView {
                                     .text_size(px(12.))
                                     .text_color(rgb(0x6E6E73))
                                     .child(format!("{} KB — double-click to open", kb)),
+                            ),
+                    )
+            }
+            Kind::Audio { path } => {
+                let name = std::path::Path::new(path)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| path.clone());
+                let playing = self
+                    .shared
+                    .audio
+                    .borrow()
+                    .playing
+                    .map(|pid| pid == item.id)
+                    .unwrap_or(false)
+                    && self.shared.audio.borrow().state() == Playback::Playing;
+                let tile = div()
+                    .w(px(56.))
+                    .h(px(56.))
+                    .rounded(px(10.))
+                    .bg(rgb(0x6A4C93))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(
+                        div()
+                            .w(px(20.))
+                            .h(px(20.))
+                            .child(icon_canvas(Icon::Audio, 0xFFFFFF)),
+                    );
+                base.flex()
+                    .flex_row()
+                    .items_center()
+                    .gap(px(12.))
+                    .p(px(12.))
+                    .child(tile)
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.))
+                            .flex_1()
+                            .child(
+                                div()
+                                    .text_size(px(14.))
+                                    .font_weight(FontWeight::BOLD)
+                                    .text_color(rgb(0x1C1C1E))
+                                    .child(name),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(rgb(0x6E6E73))
+                                    .child(if playing {
+                                        "Playing — select for controls".to_string()
+                                    } else {
+                                        "Audio — select to play".to_string()
+                                    }),
+                            ),
+                    )
+            }
+            Kind::Video {
+                source,
+                remote,
+                size_bytes,
+            } => {
+                let name = if *remote {
+                    domain_of(source)
+                } else {
+                    std::path::Path::new(source)
+                        .file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_else(|| source.clone())
+                };
+                let kb = (*size_bytes as f64 / 1024.0).round() as u64;
+                let tile = div()
+                    .w(px(56.))
+                    .h(px(56.))
+                    .rounded(px(10.))
+                    .bg(rgb(0x1C1C1E))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(
+                        div()
+                            .w(px(20.))
+                            .h(px(20.))
+                            .child(icon_canvas(Icon::Play, 0xFFFFFF)),
+                    );
+                base.flex()
+                    .flex_row()
+                    .items_center()
+                    .gap(px(12.))
+                    .p(px(12.))
+                    .child(tile)
+                    .child(
+                        div()
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.))
+                            .flex_1()
+                            .child(
+                                div()
+                                    .text_size(px(14.))
+                                    .font_weight(FontWeight::BOLD)
+                                    .text_color(rgb(0x1C1C1E))
+                                    .child(name),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(rgb(0x6E6E73))
+                                    .child(if *remote {
+                                        "Video link — double-click to open".to_string()
+                                    } else {
+                                        format!("{} KB — double-click to play", kb)
+                                    }),
                             ),
                     )
             }
@@ -1427,6 +1718,8 @@ impl Render for BoardView {
                                             Kind::UrlCard { url, .. } => format!("url:{}", url),
                                             Kind::PdfCard { path, .. } => format!("pdf:{}", path),
                                             Kind::Image { path } => format!("img:{}", path),
+                                            Kind::Audio { .. } => format!("audio:{}", id),
+                                            Kind::Video { .. } => format!("video:{}", id),
                                             _ => String::new(),
                                         })
                                     });
@@ -1446,6 +1739,20 @@ impl Render for BoardView {
                                         Some(k) if k.starts_with("img:") => {
                                             let path = k.trim_start_matches("img:").to_string();
                                             this.open_external(&path);
+                                        }
+                                        Some(k) if k.starts_with("audio:") => {
+                                            let id: ItemId = k
+                                                .trim_start_matches("audio:")
+                                                .parse()
+                                                .unwrap_or(0);
+                                            this.toggle_audio(id);
+                                        }
+                                        Some(k) if k.starts_with("video:") => {
+                                            let id: ItemId = k
+                                                .trim_start_matches("video:")
+                                                .parse()
+                                                .unwrap_or(0);
+                                            this.play_video(id);
                                         }
                                         _ => {}
                                     }
@@ -1654,6 +1961,8 @@ impl Render for BoardView {
             (AddKind::Swatch, "+ Swatch"),
             (AddKind::ImagePath, "+ Image"),
             (AddKind::PdfPath, "+ PDF"),
+            (AddKind::AudioPath, "+ Audio"),
+            (AddKind::VideoPath, "+ Video"),
         ] {
             let at = self.board_centre();
             // The PDF icon is red so it never reads as a second note icon.
@@ -1794,6 +2103,119 @@ impl Render for BoardView {
                     )
                     .child(div().text_size(px(13.)).child(format!("{}▍", text))),
             );
+        }
+
+        // --- media transport bar: shown when exactly one audio/video item
+        // is selected. These buttons live outside the canvas, so unlike
+        // in-card buttons they actually receive clicks.
+        if board.selected.len() == 1 {
+            let sel_id = board.selected[0];
+            if let Some(item) = board.get(sel_id) {
+                match &item.kind {
+                    Kind::Audio { path } => {
+                        let name = std::path::Path::new(path)
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_else(|| path.clone());
+                        let state = self.shared.audio.borrow().state();
+                        let is_this_playing = self
+                            .shared
+                            .audio
+                            .borrow()
+                            .playing
+                            .map(|pid| pid == sel_id)
+                            .unwrap_or(false)
+                            && state == Playback::Playing;
+                        let label = match state {
+                            Playback::Playing if is_this_playing => {
+                                format!("{} — playing", name)
+                            }
+                            Playback::Paused if is_this_playing => {
+                                format!("{} — paused", name)
+                            }
+                            _ => format!("{} — stopped", name),
+                        };
+                        let play_icon = if is_this_playing {
+                            Icon::Pause
+                        } else {
+                            Icon::Play
+                        };
+                        root = root.child(
+                            div()
+                                .h(px(40.))
+                                .flex()
+                                .items_center()
+                                .gap(px(8.))
+                                .px(px(12.))
+                                .bg(rgb(0xFFFFFF))
+                                .border_t_1()
+                                .border_color(rgb(0xE5E5EA))
+                                .child(
+                                    action_icon_button(play_icon, 0x1C1C1E)
+                                        .id(SharedString::from("media-play"))
+                                        .on_click(cx.listener(move |this, _event: &gpui::ClickEvent, _window, cx| {
+                                            this.toggle_audio(sel_id);
+                                            cx.notify();
+                                        })),
+                                )
+                                .child(
+                                    action_icon_button(Icon::Stop, 0x1C1C1E)
+                                        .id(SharedString::from("media-stop"))
+                                        .on_click(cx.listener(move |this, _event: &gpui::ClickEvent, _window, cx| {
+                                            this.stop_audio();
+                                            cx.notify();
+                                        })),
+                                )
+                                .child(
+                                    div()
+                                        .text_size(px(13.))
+                                        .text_color(rgb(0x1C1C1E))
+                                        .child(label),
+                                ),
+                        );
+                    }
+                    Kind::Video { source, remote, .. } => {
+                        let name = if *remote {
+                            domain_of(source)
+                        } else {
+                            std::path::Path::new(source)
+                                .file_name()
+                                .map(|n| n.to_string_lossy().to_string())
+                                .unwrap_or_else(|| source.clone())
+                        };
+                        root = root.child(
+                            div()
+                                .h(px(40.))
+                                .flex()
+                                .items_center()
+                                .gap(px(8.))
+                                .px(px(12.))
+                                .bg(rgb(0xFFFFFF))
+                                .border_t_1()
+                                .border_color(rgb(0xE5E5EA))
+                                .child(
+                                    action_icon_button(Icon::Play, 0x1C1C1E)
+                                        .id(SharedString::from("media-play"))
+                                        .on_click(cx.listener(move |this, _event: &gpui::ClickEvent, _window, cx| {
+                                            this.play_video(sel_id);
+                                            cx.notify();
+                                        })),
+                                )
+                                .child(
+                                    div()
+                                        .text_size(px(13.))
+                                        .text_color(rgb(0x1C1C1E))
+                                        .child(format!(
+                                            "{} — plays in {}",
+                                            name,
+                                            if *remote { "your browser" } else { "your video player" }
+                                        )),
+                                ),
+                        );
+                    }
+                    _ => {}
+                }
+            }
         }
 
         let status_text = format!(

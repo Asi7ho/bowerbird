@@ -3,7 +3,7 @@
 A quick-reveal infinite whiteboard for creatives — the "quick note" idea,
 but for a canvas instead of a note.
 
-Drop raw images, text snippets, web links, PDFs and colour swatches straight
+Drop raw images, text snippets, web links, PDFs, audio, video and colour swatches straight
 onto an infinite board. Pan and zoom freely, sketch with a pen or marker,
 connect things with lines, and group items that belong together. The board
 auto-saves on every change, so closing it never loses anything.
@@ -81,11 +81,25 @@ it stays on top.
   it again. Bold/size editing for notes is in the toolbar's next pass;
   notes are plain or bold in the model already.
 - **Drop files onto the canvas:** images (PNG/JPG/GIF/WebP/BMP/SVG),
-  PDFs, and `.txt`/`.md` files become board items at the drop point.
-  You can also use the image / PDF icons and type or paste a file path.
+  PDFs, audio files (MP3/WAV/FLAC/OGG/M4A), video files
+  (MP4/MOV/WebM/MKV/AVI), and `.txt`/`.md` files become board items at
+  the drop point. You can also use the image / PDF / audio / video
+  icons and type or paste a file path.
+- **Audio:** an audio file lands as a card with a purple note tile.
+  Select it and a transport bar appears under the canvas — play/pause
+  and stop, playing inside QuickBoard (rodio). Double-click the card
+  toggles play too. If the machine has no audio device, pressing play
+  says so instead of crashing.
+- **Video:** a video file lands as a card with a play tile; a video
+  link (a direct video file, or a YouTube/Vimeo page) pasted into the
+  link box becomes a video card instead of a link card. Videos play in
+  your system video player (local files) or browser (links) — select
+  the card and press play in the transport bar, or double-click it.
+  Decoding video frames inside the canvas is a planned follow-up.
 - **Links:** the link icon, type a URL, `Enter`. The card shows the
   domain immediately and fills in the page title/description in the
-  background when the fetch succeeds. Double-click a link card to open
+  background when the fetch succeeds (Open Graph title/description
+  preferred, `<title>` as fallback). Double-click a link card to open
   it in your browser; double-click a PDF card (or an image) to open it
   in its viewer.
 - **Swatches:** the swatch icon, type `#FF6B35` (or `FF6B35`, or `#F53`).
@@ -102,8 +116,12 @@ src/
   ui.rs       GPUI views (toolbar, canvas layers, cards, input bars)
   model.rs    board data + geometry: pan/zoom, hit-testing, grouping
   preview.rs  link-card domain/title/description parsing
+  audio.rs    in-app audio playback (rodio) + decode probing
   store.rs    JSON persistence (write-then-rename, corrupt file never wipes)
 ```
+
+Linux note: audio playback links against ALSA, so a Linux build needs
+`libasound2-dev` installed (macOS uses CoreAudio and needs nothing extra).
 
 The model, preview parsing and persistence are pure Rust with unit tests
 that run without a display:
@@ -118,8 +136,8 @@ v0.1 — the core loop above, tested on Linux (build, unit tests, and a
 launch under Xvfb; see the repo history for the exact check).
 
 Next, in order: system-wide global hotkey + corner trigger on macOS,
-in-canvas PDF page rendering, note formatting controls in the toolbar
-(bold/size/colour), and multi-board switching.
+in-canvas PDF page rendering, in-canvas video playback, note formatting
+controls in the toolbar (bold/size/colour), and multi-board switching.
 
 ## License
 

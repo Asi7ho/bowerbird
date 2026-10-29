@@ -112,6 +112,15 @@ pub enum Kind {
     PdfCard { path: String, size_bytes: u64 },
     /// A colour swatch, e.g. "#FF5733".
     Swatch { hex: String },
+    /// An audio file dropped on the board. Plays inside QuickBoard.
+    Audio { path: String },
+    /// A video: a local file path, or a URL when `remote` is true.
+    /// `size_bytes` is 0 for remote videos.
+    Video {
+        source: String,
+        remote: bool,
+        size_bytes: u64,
+    },
     /// A freehand stroke. `marker` = thicker, translucent marker pen.
     Stroke {
         points: Vec<Pt>,
@@ -411,6 +420,36 @@ impl Board {
             kind: Kind::Swatch { hex },
         });
         Some(id)
+    }
+
+    pub fn add_audio(&mut self, at: Pt, path: &str) -> ItemId {
+        let id = self.alloc_id();
+        self.items.push(Item {
+            id,
+            pos: at,
+            size: Size::new(300.0, 96.0),
+            group: None,
+            kind: Kind::Audio {
+                path: path.to_string(),
+            },
+        });
+        id
+    }
+
+    pub fn add_video(&mut self, at: Pt, source: &str, remote: bool, size_bytes: u64) -> ItemId {
+        let id = self.alloc_id();
+        self.items.push(Item {
+            id,
+            pos: at,
+            size: Size::new(300.0, 96.0),
+            group: None,
+            kind: Kind::Video {
+                source: source.to_string(),
+                remote,
+                size_bytes,
+            },
+        });
+        id
     }
 
     pub fn add_pdf(&mut self, at: Pt, path: &str, size_bytes: u64) -> ItemId {

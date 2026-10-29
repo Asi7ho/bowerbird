@@ -68,6 +68,21 @@ fn decode_entities(s: &str) -> String {
         .replace("&nbsp;", " ")
 }
 
+/// True when a URL looks like a video: a direct video file, or a video
+/// host page (YouTube / Vimeo). Those become video cards, not link cards.
+pub fn looks_like_video_url(url: &str) -> bool {
+    let lower = url.to_lowercase();
+    let host = domain_of(&lower);
+    if host == "youtube.com" || host == "youtu.be" || host == "vimeo.com" {
+        return true;
+    }
+    let path = lower.split('?').next().unwrap_or(&lower);
+    let path = path.split('#').next().unwrap_or(path);
+    ["mp4", "mov", "webm", "mkv", "avi", "m4v"]
+        .iter()
+        .any(|ext| path.ends_with(&format!(".{}", ext)))
+}
+
 /// Best-effort (title, description) from a page's HTML.
 pub fn parse_preview(html: &str) -> (Option<String>, Option<String>) {
     let title = meta_content(html, "og:title").or_else(|| tag_content(html, "title"));
@@ -95,6 +110,16 @@ mod tests {
         let (title, desc) = parse_preview(html);
         assert_eq!(title.as_deref(), Some("OG Title & More"));
         assert_eq!(desc.as_deref(), Some("A fine page."));
+    }
+
+    #[test]
+    fn video_url_detection() {
+        assert!(looks_like_video_url("https://cdn.example.com/clip.mp4"));
+        assert!(looks_like_video_url("https://cdn.example.com/clip.MOV?token=1"));
+        assert!(looks_like_video_url("https://www.youtube.com/watch?v=abc123"));
+        assert!(looks_like_video_url("https://youtu.be/abc123"));
+        assert!(!looks_like_video_url("https://example.com/article"));
+        assert!(!looks_like_video_url("https://example.com/song.mp3"));
     }
 
     #[test]

@@ -4,6 +4,7 @@
 //! without a display or a GPU — the UI in the binary is a thin view over
 //! this.
 
+pub mod audio;
 pub mod model;
 pub mod preview;
 pub mod store;
