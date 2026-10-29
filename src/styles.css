@@ -283,10 +283,7 @@ button { font-family: inherit; }
   border: none; background: #e63946; color: #fff; border-radius: 9px;
   padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 600; margin-right: 8px;
 }
-#settings #btn-reset-cancel {
-  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
-  padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink);
-}
+
 
 #toast {
   position: absolute; left: 16px; bottom: 16px;

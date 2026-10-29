@@ -957,12 +957,6 @@ document.getElementById("btn-reset")?.addEventListener("click", () => {
   if (confirmEl) confirmEl.style.display = "block";
   if (btn) btn.style.display = "none";
 });
-document.getElementById("btn-reset-cancel")?.addEventListener("click", () => {
-  const confirmEl = document.getElementById("reset-confirm") as HTMLDivElement;
-  const btn = document.getElementById("btn-reset") as HTMLButtonElement;
-  if (confirmEl) confirmEl.style.display = "none";
-  if (btn) btn.style.display = "";
-});
 document.getElementById("btn-reset-confirm")?.addEventListener("click", async () => {
   // Delete first, then build the fresh welcome board in memory and
   // save that — never save the old board after the wipe, or it
@@ -1001,6 +995,10 @@ function setSettings(open: boolean): void {
   const backdrop = document.getElementById("settings-backdrop") as HTMLDivElement;
   backdrop.classList.toggle("open", open);
   if (open) {
+    const confirmEl = document.getElementById("reset-confirm") as HTMLDivElement;
+    const resetBtn = document.getElementById("btn-reset") as HTMLButtonElement;
+    if (confirmEl) confirmEl.style.display = "none";
+    if (resetBtn) resetBtn.style.display = "";
     const table = document.getElementById("shortcuts-table") as HTMLTableElement;
     table.innerHTML = SHORTCUTS.map(([k, v]) => `<tr><td><kbd>${k}</kbd></td><td>${v}</td></tr>`).join("");
     const pathEl = document.getElementById("settings-board-path") as HTMLElement;
