@@ -47,18 +47,21 @@ focused minimises it, and it stays alive in the Dock / taskbar, which
 is what brings it back. There is no second handle window.
 
 - **Vertical toolbar, left side:** a frosted vertical bar, centred on
-  the left edge (40px in, clear of the edge handle) — Select, Pen,
+  the left edge — Select, Pen,
   Arrow (connectors), the pen palette (only while Pen is active),
   zoom out and zoom in, Delete, and Settings. There is no zoom
   percentage readout: zoom is `+`/`-`, `Ctrl` + scroll, or the toolbar
   buttons. Delete is dimmed while nothing is selected. The bar itself
   is the window drag region; its buttons are not. A fresh board starts
   clear of the bar, so the welcome board is never hidden behind it.
-- **Edge handle:** a slim, semi-transparent tab on the far left edge.
-  Click it and the whole window slides to the right edge of the
-  screen, leaving only the tab visible; click the tab again to slide
-  back. The chevron points right when the app is out, left when it is
-  hidden. Cards scale with the zoom: a card is laid out in world units
+- **Edge handle:** a slim, semi-transparent tab that is NOT inside
+  the app: it is its own small window sitting outside the app's
+  right edge, on the screen's right edge when the app is hidden.
+  The main window leaves exactly one handle-width at the screen's
+  right edge so the tab never covers the board. Click it and the
+  app hides, leaving only the tab; click it again to bring the app
+  back. The chevron points right when the app is out, left when it
+  is hidden. Cards scale with the zoom: a card is laid out in world units
   and scaled by the camera, so its text, padding and images shrink
   and grow with it instead of staying fixed while the card shrinks.
   Text is never selected by a board click or drag; only the note

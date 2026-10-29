@@ -57,7 +57,7 @@ const SHORTCUTS: Array<[string, string]> = [
   ["Double-click a PDF or picture", "Open it outside Bowerbird"],
   ["Click a play tile", "Play or pause audio / open a video"],
   ["Drag a card corner", "Resize the card (nwse cursor on hover)"],
-  ["Click the left edge handle", "Hide the app to the right edge / bring it back"],
+  ["Click the handle on the right edge", "Hide the app / bring it back"],
   ["Shift + click", "Add to the selection"],
   ["Drag on empty space", "Marquee-select"],
   ["Ctrl / Cmd + V", "Paste a link as a card"],
@@ -86,7 +86,6 @@ let liveStroke: Pt[] | null = null;
 let audioEl: HTMLAudioElement | null = null;
 let audioId: number | null = null;
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
-let edgeCollapsed = false;
 let wheelSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let lastToolbarKey = "";
 
@@ -513,7 +512,7 @@ function cornerHit(id: number, world: Pt): boolean {
 
 boardEl.addEventListener("mousedown", (e: MouseEvent) => {
   const target = e.target as HTMLElement;
-  if (target.closest("#toolbar, #settings-backdrop, #toast, #edge-handle")) return;
+  if (target.closest("#toolbar, #settings-backdrop, #toast")) return;
   // A board click or drag must never start a native text selection
   // across the cards (bug: clicking anywhere highlighted all text).
   if (!target.closest("textarea.note-edit")) window.getSelection()?.removeAllRanges();
@@ -805,14 +804,6 @@ document.getElementById("btn-quit")?.addEventListener("click", async () => {
   try { await api.saveBoard(JSON.stringify(board)); } catch { /* closing anyway */ }
   setSettings(false);
   api.quit().catch(() => undefined);
-});
-document.getElementById("edge-handle")?.addEventListener("click", async () => {
-  const collapsed = await api.toggleEdge().catch(() => edgeCollapsed);
-  edgeCollapsed = collapsed;
-  const handle = document.getElementById("edge-handle") as HTMLButtonElement;
-  handle.classList.toggle("collapsed", collapsed);
-  handle.title = collapsed ? "Bring the app back" : "Hide to the right edge";
-  handle.setAttribute("aria-label", handle.title);
 });
 document.getElementById("btn-settings")?.addEventListener("click", () => setSettings(!settingsOpen));
 document.getElementById("settings-close")?.addEventListener("click", () => setSettings(false));

@@ -13,11 +13,15 @@ const { Readable } = require('node:stream');
 
 let win = null;
 let boardView = null;
-// Edge-handle state: when collapsed, the window is slid right so only
-// its leftmost 32px (the handle tab) stay on screen.
-let edgeCollapsed = false;
-let edgeSavedBounds = null;
-const EDGE_HANDLE_W = 32;
+// The handle is NOT inside the app: it is its own small window that
+// sits outside the main window, on the main window's right edge —
+// and on the screen's right edge when the app is hidden. It is always
+// on top, so it stays reachable even when the app is hidden.
+let handleWin = null;
+let handleView = null;
+let appHidden = false;
+const HANDLE_W = 32;
+const HANDLE_H = 110;
 
 // ---------------------------------------------------------------- board file
 
@@ -170,11 +174,78 @@ function createWindow() {
     if (!win || !boardView) return;
     const b = win.getContentBounds();
     boardView.setBounds({ x: 0, y: 0, width: b.width, height: b.height });
+    updateHandlePosition();
   });
+  win.on('move', () => updateHandlePosition());
   win.on('closed', () => {
     win = null;
     boardView = null;
   });
+  // Leave exactly one handle-width at the screen's right edge, so the
+  // handle window sits outside the app instead of covering the board.
+  const display = screen.getPrimaryDisplay();
+  const wa = display.workArea;
+  win.setBounds({
+    x: wa.x,
+    y: wa.y,
+    width: Math.max(400, wa.width - HANDLE_W),
+    height: Math.min(900, wa.height),
+  });
+  createHandleWindow();
+}
+
+function updateHandlePosition() {
+  if (!handleWin || !win) return;
+  const bounds = win.getBounds();
+  const display = screen.getDisplayMatching(bounds);
+  const wa = display.workArea;
+  if (appHidden) {
+    // App hidden: the handle is the only thing left, on the screen's
+    // right edge, vertically centred on the screen.
+    handleWin.setBounds({
+      x: wa.x + wa.width - HANDLE_W,
+      y: wa.y + Math.round((wa.height - HANDLE_H) / 2),
+      width: HANDLE_W, height: HANDLE_H,
+    });
+  } else {
+    // App visible: the handle sits just outside the app's right edge,
+    // vertically centred on the app, clamped to the screen edge.
+    handleWin.setBounds({
+      x: Math.min(bounds.x + bounds.width, wa.x + wa.width - HANDLE_W),
+      y: Math.max(wa.y, Math.min(wa.y + wa.height - HANDLE_H, bounds.y + Math.round((bounds.height - HANDLE_H) / 2))),
+      width: HANDLE_W, height: HANDLE_H,
+    });
+  }
+}
+
+function createHandleWindow() {
+  handleWin = new BaseWindow({
+    width: HANDLE_W,
+    height: HANDLE_H,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    title: 'Bowerbird handle',
+  });
+  handleView = new WebContentsView({
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  handleWin.contentView.addChildView(handleView);
+  handleView.setBounds({ x: 0, y: 0, width: HANDLE_W, height: HANDLE_H });
+  handleView.webContents.loadFile(path.join(__dirname, 'handle.html'));
+  handleWin.on('closed', () => {
+    handleWin = null;
+    handleView = null;
+  });
+  updateHandlePosition();
 }
 
 // ---------------------------------------------------------------- IPC
@@ -265,30 +336,28 @@ function registerIpc() {
     return shell.openPath(target);
   });
   ipcMain.handle('bowerbird:toggle-edge', () => {
-    if (!win) return edgeCollapsed;
-    if (!edgeCollapsed) {
-      edgeSavedBounds = win.getBounds();
-      const display = screen.getDisplayMatching(edgeSavedBounds);
-      const wa = display.workArea;
-      win.setBounds({
-        x: wa.x + wa.width - EDGE_HANDLE_W,
-        y: edgeSavedBounds.y,
-        width: edgeSavedBounds.width,
-        height: edgeSavedBounds.height,
-      });
-      edgeCollapsed = true;
+    if (!win) return appHidden;
+    // Decide from the window's real state, not just a flag: a main
+    // window minimised with H must come back on a handle click, not
+    // hide further.
+    if (!win.isVisible() || win.isMinimized()) {
+      win.show();
+      if (win.isMinimized()) win.restore();
+      win.focus();
+      appHidden = false;
     } else {
-      if (edgeSavedBounds) win.setBounds(edgeSavedBounds);
-      edgeCollapsed = false;
+      win.hide();
+      appHidden = true;
     }
-    return edgeCollapsed;
+    updateHandlePosition();
+    return appHidden;
   });
   ipcMain.handle('bowerbird:minimise', () => { if (win) win.minimize(); });
   ipcMain.handle('bowerbird:close-window', () => { if (win) win.close(); });
   // Quit must quit the app, not just close the window: on macOS
   // closing the only window does not by itself end the app, and
   // BaseWindow.close() alone did not end the process in testing.
-  ipcMain.handle('bowerbird:quit', () => { if (win) win.destroy(); app.quit(); });
+  ipcMain.handle('bowerbird:quit', () => { if (handleWin) handleWin.destroy(); if (win) win.destroy(); app.quit(); });
   ipcMain.handle('bowerbird:fullscreen', () => { if (win) win.setFullScreen(!win.isFullScreen()); });
 }
 

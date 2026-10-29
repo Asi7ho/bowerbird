@@ -49,26 +49,6 @@ button { font-family: inherit; }
   z-index: 100; display: none; cursor: nwse-resize;
 }
 
-/* Edge handle: a slim, semi-transparent tab on the far left edge.
-   Click it and the whole window slides to the right edge of the
-   screen, leaving only this tab visible; click it again to slide
-   back. The chevron points right when the app is out, left when it
-   is hidden. */
-#edge-handle {
-  position: absolute; left: 0; top: 50%; transform: translateY(-50%);
-  width: 28px; height: 110px; padding: 0; z-index: 15;
-  display: flex; align-items: center; justify-content: center;
-  background: rgba(255, 255, 255, 0.45);
-  backdrop-filter: blur(12px) saturate(180%); -webkit-backdrop-filter: blur(12px) saturate(180%);
-  border: 1px solid rgba(0, 0, 0, 0.1); border-left: none;
-  border-radius: 0 10px 10px 0; box-shadow: var(--shadow-md);
-  color: var(--grey); cursor: pointer; opacity: 0.7;
-  -webkit-app-region: no-drag;
-}
-#edge-handle:hover { opacity: 1; color: var(--ink); }
-#edge-handle svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.15s ease; }
-#edge-handle.collapsed svg { transform: rotate(180deg); }
-
 /* Cards: white, 12px radius, soft macOS shadow. Selection is a blue
    focus ring, the way Finder and Notes show it. */
 .card {
@@ -186,7 +166,7 @@ button { font-family: inherit; }
    vertically, 12px from the edge. The bar itself is the window drag
    region; every control inside opts out of dragging. */
 #toolbar-wrap {
-  position: absolute; top: 50%; left: 40px; transform: translateY(-50%);
+  position: absolute; top: 50%; left: 12px; transform: translateY(-50%);
   display: flex; pointer-events: none; z-index: 10;
 }
 #toolbar {
