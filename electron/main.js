@@ -1,5 +1,10 @@
 // Bowerbird on Electron.
 // One frameless BaseWindow. The board is a WebContentsView filling it.
+// There is no handle tab: the board is revealed by holding the
+// cursor in a screen corner (see the corner trigger below). The
+// trigger is a tiny transparent window that is invisible while the
+// board is hidden, so the board itself still takes the full width
+// and no visible screen space is given up to a handle.
 // Link cards are previews only — no embedded pages — so there is no
 // second view type: a link card shows the site's own image, icon and
 // title, and clicking it opens the site in the browser.
@@ -13,15 +18,114 @@ const { Readable } = require('node:stream');
 
 let win = null;
 let boardView = null;
-// The handle is NOT inside the app: it is its own small window that
-// sits outside the main window, on the main window's left edge —
-// and on the screen's left edge when the app is hidden. It is always
-// on top, so it stays reachable even when the app is hidden.
-let handleWin = null;
-let handleView = null;
-let appHidden = false;
-const HANDLE_W = 32;
-const HANDLE_H = 110;
+
+// ---------------------------------------------------------------- corner reveal
+
+// Which screen corner reveals the board, chosen in Settings.
+// Default bottom-left, per the user's choice. "off" disables it.
+const CORNERS = ["bottom-left", "bottom-right", "top-left", "top-right", "off"];
+let cornerReveal = "bottom-left";
+
+function appSettingsPath() {
+  return path.join(app.getPath("userData"), "settings.json");
+}
+
+function loadAppSettings() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(appSettingsPath(), "utf8"));
+    if (parsed && CORNERS.includes(parsed.corner)) cornerReveal = parsed.corner;
+  } catch {
+    // No settings file yet: keep the default.
+  }
+}
+
+function saveAppSettings() {
+  try {
+    const file = appSettingsPath();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const tmp = file + ".tmp";
+    fs.writeFileSync(tmp, JSON.stringify({ corner: cornerReveal }));
+    fs.renameSync(tmp, file);
+  } catch {
+    // Settings are a convenience, not board data: never fail the app
+    // over a settings write.
+  }
+}
+
+// Corner reveal, done with a real window, not a cursor poll:
+// Electron's screen.getCursorScreenPoint() froze at the last
+// position before the board was hidden in Linux testing, so polling
+// it cannot be trusted to notice a move to a corner while hidden.
+// Instead, a tiny transparent window sits at the chosen corner.
+// It is invisible (transparent, 16px, no taskbar entry, no tab) and
+// it only exists while the board is NOT focused: when the board is
+// in front, the trigger is hidden, so it never steals a click or
+// a hover from the board itself. When the board is hidden,
+// minimised, or behind another app, the trigger is on top, and
+// hovering it for a short dwell (in trigger.html) reveals the board.
+// This is a mouse event delivered to a real window, so it works
+// whether or not the main process could query the cursor.
+const TRIGGER_SIZE = 16;
+let triggerWin = null;
+
+function triggerBounds() {
+  const display = screen.getPrimaryDisplay();
+  const b = display.bounds;
+  if (cornerReveal === "bottom-left") return { x: b.x, y: b.y + b.height - TRIGGER_SIZE };
+  if (cornerReveal === "bottom-right") return { x: b.x + b.width - TRIGGER_SIZE, y: b.y + b.height - TRIGGER_SIZE };
+  if (cornerReveal === "top-left") return { x: b.x, y: b.y };
+  if (cornerReveal === "top-right") return { x: b.x + b.width - TRIGGER_SIZE, y: b.y };
+  return null;
+}
+
+function createTriggerWindow() {
+  // A plain BrowserWindow, not BaseWindow+View: BrowserWindow
+  // transparency is the well-tested path, and a WebContentsView
+  // kept painting its default white background here, which showed
+  // as a white square at the corner.
+  const { BrowserWindow } = require('electron');
+  triggerWin = new BrowserWindow({
+    width: TRIGGER_SIZE,
+    height: TRIGGER_SIZE,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    minimizable: false,
+    maximizable: false,
+    focusable: false,
+    title: 'Bowerbird corner',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  triggerWin.loadFile(path.join(__dirname, 'trigger.html'));
+  triggerWin.on('closed', () => { triggerWin = null; });
+  updateTriggerWindow();
+}
+
+function updateTriggerWindow() {
+  if (!triggerWin) return;
+  const bounds = triggerBounds();
+  if (!bounds || !win) { triggerWin.hide(); return; }
+  triggerWin.setBounds({ ...bounds, width: TRIGGER_SIZE, height: TRIGGER_SIZE });
+  // Show the trigger only when the board is not the focused window;
+  // hide it the moment the board comes to the front.
+  if (win.isVisible() && !win.isMinimized() && win.isFocused()) triggerWin.hide();
+  else triggerWin.show();
+}
+
+function revealBoard() {
+  if (!win) return;
+  win.show();
+  if (win.isMinimized()) win.restore();
+  win.focus();
+  updateTriggerWindow();
+}
 
 // ---------------------------------------------------------------- board file
 
@@ -174,78 +278,28 @@ function createWindow() {
     if (!win || !boardView) return;
     const b = win.getContentBounds();
     boardView.setBounds({ x: 0, y: 0, width: b.width, height: b.height });
-    updateHandlePosition();
   });
-  win.on('move', () => updateHandlePosition());
   win.on('closed', () => {
     win = null;
     boardView = null;
   });
-  // Leave exactly one handle-width at the screen's LEFT edge, so the
-  // handle window sits outside the app instead of covering the board.
+  win.on('focus', () => updateTriggerWindow());
+  win.on('blur', () => updateTriggerWindow());
+  win.on('show', () => updateTriggerWindow());
+  win.on('hide', () => updateTriggerWindow());
+  win.on('minimize', () => updateTriggerWindow());
+  win.on('restore', () => updateTriggerWindow());
+  // Full work area: with no handle window, nothing needs to be left
+  // clear at either edge.
   const display = screen.getPrimaryDisplay();
   const wa = display.workArea;
   win.setBounds({
-    x: wa.x + HANDLE_W,
+    x: wa.x,
     y: wa.y,
-    width: Math.max(400, wa.width - HANDLE_W),
+    width: wa.width,
     height: Math.min(900, wa.height),
   });
-  createHandleWindow();
-}
-
-function updateHandlePosition() {
-  if (!handleWin || !win) return;
-  const bounds = win.getBounds();
-  const display = screen.getDisplayMatching(bounds);
-  const wa = display.workArea;
-  if (appHidden) {
-    // App hidden: the handle is the only thing left, on the screen's
-    // left edge, vertically centred on the screen.
-    handleWin.setBounds({
-      x: wa.x,
-      y: wa.y + Math.round((wa.height - HANDLE_H) / 2),
-      width: HANDLE_W, height: HANDLE_H,
-    });
-  } else {
-    // App visible: the handle sits just outside the app's left edge,
-    // vertically centred on the app, clamped to the screen edge.
-    handleWin.setBounds({
-      x: Math.max(wa.x, bounds.x - HANDLE_W),
-      y: Math.max(wa.y, Math.min(wa.y + wa.height - HANDLE_H, bounds.y + Math.round((bounds.height - HANDLE_H) / 2))),
-      width: HANDLE_W, height: HANDLE_H,
-    });
-  }
-}
-
-function createHandleWindow() {
-  handleWin = new BaseWindow({
-    width: HANDLE_W,
-    height: HANDLE_H,
-    frame: false,
-    transparent: true,
-    alwaysOnTop: true,
-    skipTaskbar: true,
-    resizable: false,
-    minimizable: false,
-    maximizable: false,
-    title: 'Bowerbird handle',
-  });
-  handleView = new WebContentsView({
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-    },
-  });
-  handleWin.contentView.addChildView(handleView);
-  handleView.setBounds({ x: 0, y: 0, width: HANDLE_W, height: HANDLE_H });
-  handleView.webContents.loadFile(path.join(__dirname, 'handle.html'));
-  handleWin.on('closed', () => {
-    handleWin = null;
-    handleView = null;
-  });
-  updateHandlePosition();
+  createTriggerWindow();
 }
 
 // ---------------------------------------------------------------- IPC
@@ -335,29 +389,21 @@ function registerIpc() {
     if (/^https?:\/\//.test(target)) return shell.openExternal(target);
     return shell.openPath(target);
   });
-  ipcMain.handle('bowerbird:toggle-edge', () => {
-    if (!win) return appHidden;
-    // Decide from the window's real state, not just a flag: a main
-    // window minimised with H must come back on a handle click, not
-    // hide further.
-    if (!win.isVisible() || win.isMinimized()) {
-      win.show();
-      if (win.isMinimized()) win.restore();
-      win.focus();
-      appHidden = false;
-    } else {
-      win.hide();
-      appHidden = true;
-    }
-    updateHandlePosition();
-    return appHidden;
+  ipcMain.handle('bowerbird:get-app-settings', () => ({ corner: cornerReveal }));
+  ipcMain.handle('bowerbird:set-corner', (_event, corner) => {
+    if (!CORNERS.includes(corner)) return cornerReveal;
+    cornerReveal = corner;
+    saveAppSettings();
+    updateTriggerWindow();
+    return cornerReveal;
   });
+  ipcMain.handle('bowerbird:reveal', () => { revealBoard(); });
   ipcMain.handle('bowerbird:minimise', () => { if (win) win.minimize(); });
   ipcMain.handle('bowerbird:close-window', () => { if (win) win.close(); });
   // Quit must quit the app, not just close the window: on macOS
   // closing the only window does not by itself end the app, and
   // BaseWindow.close() alone did not end the process in testing.
-  ipcMain.handle('bowerbird:quit', () => { if (handleWin) handleWin.destroy(); if (win) win.destroy(); app.quit(); });
+  ipcMain.handle('bowerbird:quit', () => { if (triggerWin) triggerWin.destroy(); if (win) win.destroy(); app.quit(); });
   ipcMain.handle('bowerbird:fullscreen', () => { if (win) win.setFullScreen(!win.isFullScreen()); });
 }
 
@@ -394,6 +440,7 @@ app.whenReady().then(() => {
       return new Response('not found', { status: 404 });
     }
   });
+  loadAppSettings();
   registerIpc();
   createWindow();
 });

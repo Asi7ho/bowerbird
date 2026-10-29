@@ -9,7 +9,8 @@ interface BowerbirdAPI {
   fileSize(path: string): Promise<number>;
   fetchPreview(url: string): Promise<{ title: string | null; description: string | null; image: string | null; icon: string | null }>;
   openExternal(target: string): Promise<void>;
-  toggleEdge(): Promise<boolean>;
+  getAppSettings(): Promise<{ corner: string }>;
+  setCorner(corner: string): Promise<string>;
   minimise(): Promise<void>;
   closeWindow(): Promise<void>;
   quit(): Promise<void>;
@@ -57,7 +58,7 @@ const SHORTCUTS: Array<[string, string]> = [
   ["Double-click a PDF or picture", "Open it outside Bowerbird"],
   ["Click a play tile", "Play or pause audio / open a video"],
   ["Drag a card corner", "Resize the card (nwse cursor on hover)"],
-  ["Click the handle on the left edge", "Hide the app / bring it back"],
+  ["Hold the cursor in the reveal corner", "Show the board"],
   ["Shift + click", "Add to the selection"],
   ["Drag on empty space", "Marquee-select"],
   ["Ctrl / Cmd + V", "Paste a link as a card"],
@@ -75,6 +76,7 @@ let selected: number[] = [];
 let spaceDown = false;
 let editingId: number | null = null;
 let settingsOpen = false;
+let cornerReveal = "bottom-left";
 let drag: null
   | { kind: "pan"; last: Pt }
   | { kind: "move"; lastWorld: Pt; moved: boolean }
@@ -915,6 +917,8 @@ function setSettings(open: boolean): void {
     pathEl.textContent = `Board file: ${boardPath}`;
     renderBgOpts();
     renderGridOpts();
+    renderCornerOpts();
+    api.getAppSettings().then((s) => { cornerReveal = s.corner; renderCornerOpts(); }).catch(() => undefined);
   }
   render();
 }
@@ -928,6 +932,22 @@ function renderBgOpts(): void {
     b.textContent = label;
     if (board.bg.toUpperCase() === hex) b.classList.add("active");
     b.addEventListener("click", () => { board.bg = hex; save(); render(); renderBgOpts(); });
+    el.appendChild(b);
+  }
+}
+function renderCornerOpts(): void {
+  const opts: Array<[string, string]> = [["Bottom-left", "bottom-left"], ["Bottom-right", "bottom-right"], ["Top-left", "top-left"], ["Top-right", "top-right"], ["Off", "off"]];
+  const el = document.getElementById("corner-opts") as HTMLDivElement;
+  if (!el) return;
+  el.innerHTML = "";
+  for (const [label, value] of opts) {
+    const b = document.createElement("button");
+    b.textContent = label;
+    if (cornerReveal === value) b.classList.add("active");
+    b.addEventListener("click", async () => {
+      try { cornerReveal = await api.setCorner(value); } catch { /* keep old value */ }
+      renderCornerOpts();
+    });
     el.appendChild(b);
   }
 }
@@ -1146,6 +1166,7 @@ async function init(): Promise<void> {
     toast(`Could not load the board: ${String(err)}`);
     board = welcomeBoard(0);
   }
+  try { cornerReveal = (await api.getAppSettings()).corner; } catch { /* default stands */ }
   render();
   // Fill in previews for cards that never got one (welcome card, old
   // boards): title, description, image and icon, in the background.

@@ -43,8 +43,8 @@ Your board is stored as one JSON file and auto-saved on every change:
 One window, always alive: the board itself. The window is frameless
 and the toolbar carries no window controls — close it the usual way
 for your system (Cmd+Q on a Mac); pressing `h` while the board is
-focused minimises it, and it stays alive in the Dock / taskbar, which
-is what brings it back. There is no second handle window.
+focused minimises it, and holding the cursor in a screen corner
+brings it back (see Corner reveal below). There is no handle tab.
 
 - **Vertical toolbar, left side:** a frosted vertical bar, centred on
   the left edge — Select, Pen,
@@ -54,14 +54,16 @@ is what brings it back. There is no second handle window.
   buttons. Delete is dimmed while nothing is selected. The bar itself
   is the window drag region; its buttons are not. A fresh board starts
   clear of the bar, so the welcome board is never hidden behind it.
-- **Edge handle:** a slim, semi-transparent tab that is NOT inside
-  the app: it is its own small window sitting outside the app's
-  LEFT edge, on the screen's left edge when the app is hidden.
-  The main window leaves exactly one handle-width at the screen's
-  left edge so the tab never covers the board. Click it and the
-  app hides, leaving only the tab; click it again to bring the app
-  back. The chevron points left when the app is out, right when it
-  is hidden. Cards scale with the zoom: a card is laid out in world units
+- **Corner reveal:** hold the cursor in a screen corner and the
+  board comes back, even from minimised, hidden, or behind another
+  app. By default the corner is the bottom-left; change it in
+  Settings, under Corner reveal (Bottom-left, Bottom-right,
+  Top-left, Top-right, or Off). A short hold is required, so just
+  passing through a corner does not trigger it. The trigger itself
+  is a tiny transparent window that only exists while the board
+  is not focused, so it never covers the board or steals a click
+  from it — when the board is in front, the trigger is hidden.
+  Cards scale with the zoom: a card is laid out in world units
   and scaled by the camera, so its text, padding and images shrink
   and grow with it instead of staying fixed while the card shrinks.
   Text is never selected by a board click or drag; only the note
@@ -79,7 +81,9 @@ is what brings it back. There is no second handle window.
   rebuilt when the visible set actually changes.
 - **Settings (?):** a panel listing every keyboard shortcut, plus the
   canvas background (White, Paper, Sage, Sky, Ink) and grid
-  (Dots, Lines, Off), and a Quit Bowerbird button under App.
+  (Dots, Lines, Off), the corner-reveal corner, and a Quit Bowerbird
+  button under App. The corner choice is saved in the app's
+  settings file and survives restarts.
 - **In-app hotkeys:** `V` select, `P` pen, `A` arrow, `Ctrl/Cmd+G`
   group, `Ctrl/Cmd+U` ungroup, `Delete` removes the selection,
   `+`/`-` zoom, `0` resets the view, hold `Space` to pan, `h` hides,
@@ -87,9 +91,11 @@ is what brings it back. There is no second handle window.
   below), plus double-clicking empty space for a note.
 
 What is *not* faked: a system-wide global hotkey that fires while another
-app is focused, and a macOS screen-corner swipe, both need OS-level hooks
-(CGEventTap / accessibility permission on macOS, a global key grabber on
-Linux). Those are the next step, not something v0.2 pretends to do.
+app is focused needs an OS-level hook (CGEventTap / accessibility
+permission on macOS, a global key grabber on Linux). That is the next
+step, not something v0.2 pretends to do. The corner reveal above is
+not a fake swipe: it is a real window that notices a hover in the
+corner, which is why it works while the board is hidden.
 
 ## Using the board
 
@@ -167,6 +173,7 @@ electron/
   main.js     frameless BaseWindow, board view,
               board file, asset embedding, link previews, IPC
   preload.js  the only privileged surface the renderer sees
+  trigger.html  tiny transparent corner window that reveals the board
   dev.js      dev runner: Vite, then Electron pointed at it
 src/
   main.ts     board UI: tools, rendering, interactions, settings
@@ -194,7 +201,7 @@ title). Still to check on a Mac: real drag-and-drop from Finder and
 from a browser address bar, audio audibility, Cmd+G/U grouping, and
 minimise/Dock behaviour.
 
-Next, in order: system-wide global hotkey + corner trigger on macOS,
+Next, in order: system-wide global hotkey on macOS,
 in-canvas PDF page rendering, in-canvas video playback, note formatting
 controls in the toolbar (bold/size/colour), multi-board switching, and
 a packaged build (`.app`/DMG).
