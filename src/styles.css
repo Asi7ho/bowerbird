@@ -1,72 +1,244 @@
-:root { --accent: #007aff; --ink: #1c1c1e; --grey: #6e6e73; --hairline: #e5e5ea; }
+/* Bowerbird, styled like a macOS app: SF type, system colours,
+   frosted materials, soft shadows, and a 2px focus ring — no emoji
+   icons, no flat web-pill chrome. */
+:root {
+  --accent: #007aff;
+  --ink: #1d1d1f;
+  --grey: #86868b;
+  --grey2: #aeaeb2;
+  --hairline: rgba(0, 0, 0, 0.08);
+  --separator: rgba(0, 0, 0, 0.1);
+  --fill: rgba(120, 120, 128, 0.12);
+  --fill-2: rgba(120, 120, 128, 0.08);
+  --bg-system: #f5f5f7;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.06);
+}
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; color: var(--ink); }
+html, body {
+  margin: 0; height: 100%; overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+    "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  background: #fff;
+}
+button { font-family: inherit; }
 #board { position: absolute; inset: 0; overflow: hidden; }
 #canvas-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 #cards { position: absolute; inset: 0; overflow: hidden; }
-.card { position: absolute; background: #fff; border: 1px solid var(--hairline); border-radius: 14px; overflow: hidden; pointer-events: none; }
-.card.selected { border-color: var(--accent); }
+
+/* Cards: white, 12px radius, soft macOS shadow. Selection is a blue
+   focus ring, the way Finder and Notes show it. */
+.card {
+  position: absolute; background: #fff;
+  border: 1px solid var(--hairline); border-radius: 12px;
+  overflow: hidden; pointer-events: none;
+  box-shadow: var(--shadow-sm);
+}
+.card.selected {
+  border-color: rgba(0, 122, 255, 0.5);
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.35), var(--shadow-md);
+}
 .card .inner { width: 100%; height: 100%; overflow: hidden; }
 .card button, .card .clickable, .card textarea, .card a { pointer-events: auto; }
-.card .note-body { padding: 12px; line-height: 1.62; word-wrap: break-word; }
-.card .note-body p { margin: 0 0 4px; }
-.card .note-body h1, .card .note-body h2, .card .note-body h3 { margin: 0 0 4px; line-height: 1.3; }
-.card .note-body pre { background: #f5f5f7; border-radius: 6px; padding: 6px; overflow: hidden; margin: 0 0 4px; white-space: pre-wrap; }
-.card .note-body code { background: #f0f0f0; border-radius: 4px; padding: 0 3px; }
-.card .note-body blockquote { margin: 0 0 4px; color: var(--grey); font-style: italic; }
-.card .note-body a { color: #2e86ab; text-decoration: underline; cursor: pointer; }
-.card textarea.note-edit { width: 100%; height: 100%; border: none; outline: none; resize: none; padding: 12px; font: inherit; line-height: 1.62; background: transparent; }
+.card .note-body { padding: 14px; line-height: 1.55; word-wrap: break-word; }
+.card .note-body p { margin: 0 0 6px; }
+.card .note-body h1, .card .note-body h2, .card .note-body h3 {
+  margin: 0 0 6px; line-height: 1.3; font-weight: 700; letter-spacing: -0.02em;
+}
+.card .note-body h1 { font-size: 1.5em; }
+.card .note-body h2 { font-size: 1.25em; }
+.card .note-body h3 { font-size: 1.1em; }
+.card .note-body pre {
+  background: var(--bg-system); border-radius: 8px; padding: 8px 10px;
+  overflow: hidden; margin: 0 0 6px; white-space: pre-wrap;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.9em;
+}
+.card .note-body code {
+  background: var(--bg-system); border-radius: 4px; padding: 1px 4px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.9em;
+}
+.card .note-body blockquote {
+  margin: 0 0 6px; padding-left: 10px; color: var(--grey);
+  border-left: 2px solid var(--separator);
+}
+.card .note-body a { color: var(--accent); text-decoration: none; cursor: pointer; }
+.card .note-body a:hover { text-decoration: underline; }
+.card textarea.note-edit {
+  width: 100%; height: 100%; border: none; outline: none; resize: none;
+  padding: 14px; font: inherit; line-height: 1.55; background: transparent;
+}
 .card .row { display: flex; align-items: center; gap: 12px; padding: 12px; height: 100%; }
-.card .tile { flex: none; width: 56px; height: 56px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; }
+.card .tile {
+  flex: none; width: 56px; height: 56px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 24px;
+}
 .card .col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.card .title { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card .sub { color: var(--grey); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card .desc { color: var(--grey); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.card .embed-header { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px; background: #f5f5f7; border-bottom: 1px solid var(--hairline); font-size: 13px; }
-.card .embed-header .drag { cursor: grab; color: var(--grey); }
+.card .desc {
+  color: var(--grey); display: -webkit-box; -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical; overflow: hidden; font-size: 12px; line-height: 1.45;
+}
+/* Small macOS buttons inside cards: white, hairline border, 13px medium. */
+.card .embed-header {
+  display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 8px;
+  background: rgba(246, 246, 248, 0.95); border-bottom: 1px solid var(--hairline);
+  font-size: 13px; font-weight: 500;
+}
+.card .embed-header .drag { cursor: grab; flex: none; display: flex; align-items: center; }
 .card .embed-header .domain { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card .embed-header button { border: 1px solid #dcdce0; background: #fff; border-radius: 6px; padding: 2px 8px; font-size: 12px; cursor: pointer; }
+.card .embed-header button, .card .simple-actions button {
+  border: 1px solid var(--separator); background: #fff; border-radius: 7px;
+  padding: 3px 10px; font-size: 12px; font-weight: 500; color: var(--ink);
+  cursor: pointer; box-shadow: var(--shadow-sm);
+}
+.card .embed-header button:hover, .card .simple-actions button:hover { background: var(--bg-system); }
+.card .embed-header button:active, .card .simple-actions button:active { background: #e8e8ed; }
 .card .embed-body-note { padding: 10px 12px; color: var(--grey); font-size: 13px; }
 .card .simple-actions { display: flex; gap: 6px; padding: 0 12px 10px; }
-.card .simple-actions button { border: 1px solid #dcdce0; background: #fff; border-radius: 6px; padding: 2px 8px; font-size: 12px; cursor: pointer; }
-.card .swatch-pill { position: absolute; right: 10px; bottom: 10px; background: #fff; border-radius: 10px; padding: 4px 8px; font-weight: 700; font-size: 12px; }
-.card .video-thumb { position: relative; background: #1c1c1e; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: #fff; cursor: pointer; }
-.card .audio-tile { flex: none; width: 56px; height: 56px; border-radius: 10px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.card .swatch-pill {
+  position: absolute; right: 10px; bottom: 10px;
+  background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(8px);
+  border: 1px solid var(--hairline); border-radius: 8px; padding: 4px 8px;
+  font-weight: 600; font-size: 12px; box-shadow: var(--shadow-sm);
+}
+.card .video-thumb {
+  position: relative; background: #1d1d1f; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; color: #fff; cursor: pointer;
+}
+.card .audio-tile {
+  flex: none; width: 56px; height: 56px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px;
+}
 .card .wave { display: flex; align-items: flex-end; gap: 2px; height: 18px; }
 .card .wave i { display: block; width: 3px; background: #6a4c93; border-radius: 1px; }
 
-/* Floating toolbar: a centred pill over the canvas. The wrapper lets
-   clicks outside the pill reach the board; the pill itself takes clicks. */
-#toolbar-wrap { position: absolute; top: 12px; left: 0; right: 0; display: flex; justify-content: center; pointer-events: none; z-index: 10; }
-#toolbar { pointer-events: auto; display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: rgba(255, 255, 255, 0.92); border: 1px solid #dcdce0; border-radius: 14px; box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08); }
-#toolbar .seg { display: flex; background: #e8e8ed; border-radius: 9px; padding: 2px; gap: 2px; }
-#toolbar button { border: none; background: transparent; border-radius: 7px; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #6e6e73; font-size: 15px; }
-#toolbar button.active { background: #fff; color: #1c1c1e; box-shadow: 0 0 0 1px #d9d9de; }
-#toolbar button.dim { opacity: 0.4; cursor: default; }
-#toolbar button.wide { width: auto; padding: 0 8px; font-size: 13px; }
-#toolbar .divider { width: 1px; height: 24px; background: #d8d8de; }
-#toolbar .palette { display: flex; gap: 4px; align-items: center; }
-#toolbar .swatch { width: 20px; height: 20px; border-radius: 10px; border: 1px solid #bbb; cursor: pointer; }
-#toolbar .swatch.active { width: 24px; height: 24px; border-radius: 12px; border-color: var(--accent); }
-#toolbar .grip { cursor: grab; color: #8e8e93; font-size: 13px; padding: 0 2px; -webkit-app-region: drag; }
-#toolbar button, #toolbar .swatch, #toolbar .zoom-label { -webkit-app-region: no-drag; }
-#toolbar .zoom-label { min-width: 44px; text-align: center; font-size: 13px; cursor: pointer; }
-#toolbar .zoom-label:hover { color: var(--accent); }
+/* Vertical toolbar, left side: a frosted macOS material bar, centred
+   vertically, 12px from the edge. The bar itself is the window drag
+   region; every control inside opts out of dragging. */
+#toolbar-wrap {
+  position: absolute; top: 50%; left: 12px; transform: translateY(-50%);
+  display: flex; pointer-events: none; z-index: 10;
+}
+#toolbar {
+  pointer-events: auto; display: flex; flex-direction: column; align-items: center;
+  gap: 10px; padding: 12px 8px; width: 56px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 16px;
+  box-shadow: var(--shadow-md);
+  -webkit-app-region: drag;
+}
+#toolbar .seg {
+  display: flex; flex-direction: column; background: var(--fill);
+  border-radius: 10px; padding: 2px; gap: 2px; width: 100%;
+}
+#toolbar button {
+  border: none; background: transparent; border-radius: 9px;
+  width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--ink); -webkit-app-region: no-drag;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+#toolbar button:hover { background: rgba(0, 0, 0, 0.05); }
+#toolbar button:active { background: rgba(0, 0, 0, 0.09); }
+#toolbar button.active {
+  background: #fff; color: var(--ink);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+}
+#toolbar button.dim { opacity: 0.35; cursor: default; }
+#toolbar button.dim:hover { background: transparent; }
+#toolbar button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+#toolbar .divider { width: 32px; height: 1px; background: var(--separator); flex: none; }
+#toolbar .zoom-group { display: flex; flex-direction: column; gap: 2px; width: 100%; }
+#toolbar .zoom-group button { width: 40px; }
+#toolbar .palette { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+#toolbar .swatch {
+  width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.12);
+  cursor: pointer; -webkit-app-region: no-drag; padding: 0;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+#toolbar .swatch:hover { transform: scale(1.1); }
+#toolbar .swatch.active {
+  width: 26px; height: 26px;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent);
+}
+/* macOS traffic lights: red close, yellow minimise, green full screen.
+   The glyph only appears on hover, exactly like a real Mac window. */
+#toolbar .traffic {
+  display: flex; gap: 7px; align-items: center; justify-content: center;
+  padding: 2px 0 4px; -webkit-app-region: no-drag;
+}
+#toolbar .traffic-btn {
+  width: 12px !important; height: 12px !important; min-width: 12px;
+  border-radius: 50%; padding: 0; flex: none;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.15);
+}
+#toolbar .traffic-btn span {
+  opacity: 0; font-size: 9px; font-weight: 700; line-height: 1;
+  color: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center;
+}
+#toolbar .traffic:hover .traffic-btn span { opacity: 1; }
+#toolbar .traffic-btn:hover { background: inherit; filter: brightness(0.92); }
+#toolbar .traffic-btn.close { background: #ff5f57; }
+#toolbar .traffic-btn.minimise { background: #febc2e; }
+#toolbar .traffic-btn.fullscreen { background: #28c840; }
 
-#settings-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.25); display: none; align-items: flex-start; justify-content: center; padding-top: 76px; z-index: 20; }
+/* Settings: a centred macOS sheet — frosted, 14px radius, soft shadow. */
+#settings-backdrop {
+  position: absolute; inset: 0; background: rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  display: none; align-items: center; justify-content: center; padding: 24px; z-index: 20;
+}
 #settings-backdrop.open { display: flex; }
-#settings { width: min(560px, 92vw); max-height: calc(100% - 120px); overflow: auto; background: #fff; border: 1px solid #dcdce0; border-radius: 16px; padding: 20px 24px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18); }
-#settings h2 { margin: 0 0 4px; font-size: 18px; }
-#settings h3 { margin: 18px 0 8px; font-size: 14px; }
-#settings .close { float: right; border: none; background: transparent; font-size: 20px; cursor: pointer; color: var(--grey); }
+#settings {
+  width: min(560px, 92vw); max-height: calc(100% - 48px); overflow: auto;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 14px;
+  padding: 22px 24px; box-shadow: var(--shadow-lg);
+}
+#settings h2 { margin: 0 0 4px; font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+#settings h3 { margin: 20px 0 8px; font-size: 13px; font-weight: 600; color: var(--ink); }
+#settings .close {
+  float: right; border: none; background: var(--fill); width: 26px; height: 26px;
+  border-radius: 50%; font-size: 16px; line-height: 1; cursor: pointer; color: var(--grey);
+  display: flex; align-items: center; justify-content: center;
+}
+#settings .close:hover { background: rgba(0, 0, 0, 0.1); }
 #settings table { width: 100%; border-collapse: collapse; font-size: 13px; }
-#settings td { padding: 3px 0; vertical-align: top; }
+#settings td { padding: 4px 0; vertical-align: top; }
 #settings td:first-child { width: 42%; color: var(--grey); }
-#settings td kbd { background: #f5f5f7; border: 1px solid #dcdce0; border-radius: 4px; padding: 0 5px; font-family: inherit; }
-#settings .canvas-opt { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0; }
-#settings .canvas-opt button { border: 1px solid #dcdce0; background: #fff; border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 13px; }
-#settings .canvas-opt button.active { border-color: var(--accent); color: var(--accent); }
-#settings .meta { color: var(--grey); font-size: 12px; word-break: break-all; }
+#settings td kbd {
+  background: #fff; border: 1px solid var(--separator); border-bottom-width: 2px;
+  border-radius: 5px; padding: 1px 6px; font-family: inherit; font-size: 12px;
+  box-shadow: var(--shadow-sm);
+}
+/* Canvas options as a macOS segmented control, not a row of web buttons. */
+#settings .canvas-opt {
+  display: inline-flex; gap: 2px; background: var(--fill);
+  border-radius: 9px; padding: 2px; margin: 4px 8px 4px 0;
+}
+#settings .canvas-opt button {
+  border: none; background: transparent; border-radius: 7px;
+  padding: 4px 12px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--ink);
+}
+#settings .canvas-opt button.active {
+  background: #fff; color: var(--ink);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+}
+#settings .meta { color: var(--grey); font-size: 12px; line-height: 1.5; word-break: break-all; }
 
-#toast { position: absolute; left: 16px; bottom: 16px; background: #1c1c1e; color: #fff; font-size: 13px; padding: 8px 12px; border-radius: 8px; display: none; z-index: 30; max-width: 70vw; }
+#toast {
+  position: absolute; left: 16px; bottom: 16px;
+  background: rgba(28, 28, 30, 0.88); backdrop-filter: blur(12px);
+  color: #fff; font-size: 13px; padding: 10px 14px; border-radius: 10px;
+  display: none; z-index: 30; max-width: 70vw; box-shadow: var(--shadow-md);
+}
 #toast.show { display: block; }

@@ -274,6 +274,7 @@ function registerIpc() {
   });
   ipcMain.handle('bowerbird:minimise', () => { if (win) win.minimize(); });
   ipcMain.handle('bowerbird:close-window', () => { if (win) win.close(); });
+  ipcMain.handle('bowerbird:fullscreen', () => { if (win) win.setFullScreen(!win.isFullScreen()); });
 }
 
 // ---------------------------------------------------------------- app

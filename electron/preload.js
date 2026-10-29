@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('bowerbird', {
   openExternal: (target) => ipcRenderer.invoke('bowerbird:open-external', target),
   minimise: () => ipcRenderer.invoke('bowerbird:minimise'),
   closeWindow: () => ipcRenderer.invoke('bowerbird:close-window'),
+  fullscreen: () => ipcRenderer.invoke('bowerbird:fullscreen'),
   getPathForFile: (file) => webUtils.getPathForFile(file),
   fileUrl: (filePath) => 'app-file://' + filePath.split('/').map(encodeURIComponent).join('/'),
 });

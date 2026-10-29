@@ -41,16 +41,19 @@ Your board is stored as one JSON file and auto-saved on every change:
 ## How the "quick reveal" works in v0.2
 
 One window, always alive: the board itself. The window is frameless,
-so the floating toolbar carries the window controls (minimise and
-close) next to the board tools. Pressing `h` while the board is focused
-minimises it; it stays alive in the Dock / taskbar, which is what
-brings it back. There is no second handle window.
+so the toolbar carries macOS traffic lights (close, minimise,
+full screen) above the board tools. Pressing `h` while the board is
+focused minimises it; it stays alive in the Dock / taskbar, which is
+what brings it back. There is no second handle window.
 
-- **Floating toolbar:** a centred pill over the canvas — Select, Pen,
-  Arrow (connectors), Delete, zoom out / percentage / zoom in,
-  Settings, minimise, close, and a drag grip. The pen palette appears
-  only while Pen is active. Delete is dimmed while nothing is
-  selected. Clicking the zoom percentage resets the view to 100%.
+- **Vertical toolbar, left side:** a frosted vertical bar, centred on
+  the left edge — traffic lights, then Select, Pen, Arrow
+  (connectors), the pen palette (only while Pen is active), zoom out
+  and zoom in, Delete, and Settings. There is no zoom percentage
+  readout: zoom is `+`/`-`, `Ctrl` + scroll, or the toolbar buttons.
+  Delete is dimmed while nothing is selected. The bar itself is the
+  window drag region; its buttons are not. A fresh board starts clear
+  of the bar, so the welcome board is never hidden behind it.
 - **Settings (?):** a panel listing every keyboard shortcut, plus the
   canvas background (White, Paper, Sage, Sky, Ink) and grid
   (Dots, Lines, Off). While settings are open, embedded pages are
@@ -79,8 +82,8 @@ Linux). Those are the next step, not something v0.2 pretends to do.
   hex pill.
 - **Pan:** hold `Space` and drag, or scroll without Ctrl. **Zoom:**
   `Ctrl` + scroll (keeps the point under the cursor fixed), or `+`/`-`,
-  or the toolbar zoom controls. The canvas fills the whole window and
-  the toolbar floats over it.
+  or the toolbar zoom buttons. The canvas fills the whole window and
+  the toolbar floats over its left edge.
 - **Select:** click an item, `Shift`-click to add to the selection, or drag
   a marquee around several items. Dragging one member of a group moves the
   whole group. `Ctrl/Cmd+G` groups the selection. Clicking a card brings
@@ -129,7 +132,7 @@ Linux). Those are the next step, not something v0.2 pretends to do.
   screenshot — it stays a simple card with an Open button. Direct
   file/video URLs stay simple; ordinary pages are embeddable.
   Because an embedded page is a native view, it always paints above
-  the board DOM: a page under the floating toolbar can cover toolbar
+  the board DOM: a page under the left toolbar can cover toolbar
   pixels, so drag such a card by its header to move it out from under
   the toolbar.
 - **Long names never spill:** card text is clipped to the card — long
@@ -154,7 +157,7 @@ src/
   model.ts    board data + geometry: pan/zoom, hit-testing, grouping,
               markdown, link classification
   styles.css  flat, quiet board styling
-index.html    board shell + floating toolbar
+index.html    board shell + vertical left toolbar
 assets/       welcome picture + sample PDF, installed beside the board
 legacy-gpui/  the previous Rust/GPUI app, kept for reference
 ```

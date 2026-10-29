@@ -15,6 +15,7 @@ interface BowerbirdAPI {
   openExternal(target: string): Promise<void>;
   minimise(): Promise<void>;
   closeWindow(): Promise<void>;
+  fullscreen(): Promise<void>;
   getPathForFile(file: File): string;
   fileUrl(path: string): string;
 }
@@ -90,7 +91,6 @@ const boardEl = document.getElementById("board") as HTMLDivElement;
 const worldEl = document.getElementById("world") as unknown as SVGGElement;
 const cardsEl = document.getElementById("cards") as HTMLDivElement;
 const toastEl = document.getElementById("toast") as HTMLDivElement;
-const zoomLabelEl = document.getElementById("zoom-label") as HTMLElement;
 
 // ---------------------------------------------------------------- helpers
 
@@ -254,7 +254,7 @@ function cardHtml(item: Item, screen: Pt, w: number, h: number): string {
     const initial = (domain[0] ?? "?").toUpperCase();
     if (isEmbedded(item)) {
       return `<div class="${cls}" data-id="${item.id}" style="${style}">
-        <div class="embed-header" data-embed-header="${item.id}"><span class="drag">⠿</span><span class="domain">${head}</span><button data-action="open-url" data-id="${item.id}">Open</button><button data-action="to-simple" data-id="${item.id}">Simple</button></div>
+        <div class="embed-header" data-embed-header="${item.id}"><span class="drag" aria-hidden="true"><svg width="10" height="14" viewBox="0 0 10 14"><circle cx="2.5" cy="2.5" r="1.3" fill="#aeaeb2"/><circle cx="7.5" cy="2.5" r="1.3" fill="#aeaeb2"/><circle cx="2.5" cy="7" r="1.3" fill="#aeaeb2"/><circle cx="7.5" cy="7" r="1.3" fill="#aeaeb2"/><circle cx="2.5" cy="11.5" r="1.3" fill="#aeaeb2"/><circle cx="7.5" cy="11.5" r="1.3" fill="#aeaeb2"/></svg></span><span class="domain">${head}</span><button data-action="open-url" data-id="${item.id}">Open</button><button data-action="to-simple" data-id="${item.id}">Simple</button></div>
         <div class="embed-body-note">This page lives in its own webview below this header. Drag the header to move the card.</div>
       </div>`;
     }
@@ -325,7 +325,6 @@ function render(): void {
   cardsEl.innerHTML = html;
   applyStacking();
   if (editingHtml) cardsEl.insertAdjacentHTML("beforeend", editingHtml);
-  zoomLabelEl.textContent = `${Math.round(cam.zoom * 100)}%`;
   updateToolbar();
   void syncEmbeds();
 }
@@ -770,7 +769,6 @@ document.getElementById("tool-pen")?.addEventListener("click", () => setTool("pe
 document.getElementById("tool-connector")?.addEventListener("click", () => setTool("connector"));
 document.getElementById("zoom-in")?.addEventListener("click", () => { zoomCentre(1.2); save(); render(); });
 document.getElementById("zoom-out")?.addEventListener("click", () => { zoomCentre(1 / 1.2); save(); render(); });
-zoomLabelEl.addEventListener("click", () => { board.camera.zoom = 1; save(); render(); });
 document.getElementById("btn-delete")?.addEventListener("click", () => {
   if (selected.length === 0) return;
   board.items = board.items.filter((it) => !selected.includes(it.id));
@@ -779,6 +777,7 @@ document.getElementById("btn-delete")?.addEventListener("click", () => {
 });
 document.getElementById("btn-minimise")?.addEventListener("click", () => api.minimise().catch(() => undefined));
 document.getElementById("btn-close")?.addEventListener("click", () => api.closeWindow().catch(() => undefined));
+document.getElementById("btn-fullscreen")?.addEventListener("click", () => api.fullscreen().catch(() => undefined));
 document.getElementById("btn-settings")?.addEventListener("click", () => setSettings(!settingsOpen));
 document.getElementById("settings-close")?.addEventListener("click", () => setSettings(false));
 document.getElementById("settings-backdrop")?.addEventListener("click", (e) => {
@@ -987,13 +986,13 @@ function welcomeBoard(pdfSize: number): Board {
   const add = (item: Item) => { b.items.push(item); return item.id; };
   const next = () => { b.next_id += 1; return b.next_id; };
   const welcomeText = "Welcome to Bowerbird\nEvery element, on one board:\na note, a link card, a swatch,\na PDF card and a picture.\nDrop your own files onto the canvas.";
-  add({ id: next(), pos: { x: 40, y: 40 }, size: { w: 260, h: estimateTextHeight(welcomeText, 16, 260) }, group: null, kind: { Text: { text: welcomeText, bold: false, size: 16, color: "#1A1A1A" } } });
-  add({ id: next(), pos: { x: 40, y: 240 }, size: { w: 120, h: 120 }, group: null, kind: { Swatch: { hex: "#FF6B35" } } });
-  add({ id: next(), pos: { x: 180, y: 240 }, size: { w: 120, h: 120 }, group: null, kind: { Swatch: { hex: "#2E86AB" } } });
-  add({ id: next(), pos: { x: 340, y: 240 }, size: { w: 300, h: 108 }, group: null, kind: { UrlCard: { url: "https://example.com", title: null, description: null, embed: false } } });
-  add({ id: next(), pos: { x: 660, y: 240 }, size: { w: 260, h: 96 }, group: null, kind: { PdfCard: { path: `${boardDir}/sample.pdf`, size_bytes: pdfSize } } });
-  add({ id: next(), pos: { x: 40, y: 400 }, size: { w: 360, h: 225 }, group: null, kind: { Image: { path: `${boardDir}/welcome.png` } } });
-  add({ id: next(), pos: { x: 40, y: 40 }, size: { w: 300, h: 200 }, group: null, kind: { Connector: { from: { Item: 1 }, to: { Item: 4 }, color: "#333333" } } });
+  add({ id: next(), pos: { x: 120, y: 40 }, size: { w: 260, h: estimateTextHeight(welcomeText, 16, 260) }, group: null, kind: { Text: { text: welcomeText, bold: false, size: 16, color: "#1A1A1A" } } });
+  add({ id: next(), pos: { x: 120, y: 240 }, size: { w: 120, h: 120 }, group: null, kind: { Swatch: { hex: "#FF6B35" } } });
+  add({ id: next(), pos: { x: 260, y: 240 }, size: { w: 120, h: 120 }, group: null, kind: { Swatch: { hex: "#2E86AB" } } });
+  add({ id: next(), pos: { x: 420, y: 240 }, size: { w: 300, h: 108 }, group: null, kind: { UrlCard: { url: "https://example.com", title: null, description: null, embed: false } } });
+  add({ id: next(), pos: { x: 740, y: 240 }, size: { w: 260, h: 96 }, group: null, kind: { PdfCard: { path: `${boardDir}/sample.pdf`, size_bytes: pdfSize } } });
+  add({ id: next(), pos: { x: 120, y: 400 }, size: { w: 360, h: 225 }, group: null, kind: { Image: { path: `${boardDir}/welcome.png` } } });
+  add({ id: next(), pos: { x: 120, y: 40 }, size: { w: 300, h: 200 }, group: null, kind: { Connector: { from: { Item: 1 }, to: { Item: 4 }, color: "#333333" } } });
   return b;
 }
 
