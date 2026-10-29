@@ -232,11 +232,13 @@ button { font-family: inherit; }
 #settings-backdrop.open { display: flex; }
 #settings {
   width: min(560px, 92vw); max-height: calc(100% - 48px); overflow: auto;
+  scrollbar-width: none;
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(20px) saturate(180%); -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 14px;
   padding: 22px 24px; box-shadow: var(--shadow-lg);
 }
+#settings::-webkit-scrollbar { display: none; }
 #settings h2 { margin: 0 0 4px; font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
 #settings h3 { margin: 20px 0 8px; font-size: 13px; font-weight: 600; color: var(--ink); }
 #settings .close {
