@@ -4,7 +4,7 @@ A quick-reveal infinite whiteboard for creatives — the "quick note" idea,
 but for a canvas instead of a note.
 
 Drop raw images, text snippets, web links, PDFs, audio, video and colour swatches straight
-onto an infinite board. Pan and zoom freely, sketch with a pen or marker,
+onto an infinite board. Pan and zoom freely, sketch with a pen,
 connect things with lines, and group items that belong together. The board
 auto-saves on every change, so closing it never loses anything.
 
@@ -55,31 +55,26 @@ Your board is stored as one JSON file and auto-saved on every change:
 
 ## How the "quick reveal" works in v0.1
 
-- **Desktop handle:** a small dark `▦ Bowerbird` pill sits in the
-  top-right corner of the primary display, above other apps. Click it and
-  the board comes forward.
-- **Hide:** the board toolbar's eye icon, or pressing `h` while the
-  board is focused, minimises the board back to just the handle.
-  The toolbar is icons only; the active tool is the highlighted one.
+One window, always alive: the board itself. Pressing `h` while the
+board is focused minimises it; it stays alive in the Dock / taskbar,
+which is what brings it back. There is no second handle window.
+
+- **Minimal toolbar:** exactly four controls — Select, Pen, Arrow
+  (connectors), Delete — plus the pen palette, which appears only
+  while Pen is active. Delete is dimmed while nothing is selected.
   Icons are drawn vectors, not emoji, so they look the same on every
-  platform.
-- **Minimal toolbar:** the bar shows only what you need right now —
-  the pen palette appears only for the Pen/Marker tools, group/ungroup/
-  delete only appear while something is selected. There is no add
-  menu: adding is drag and drop (see below), plus double-clicking
-  empty space for a note. The accent throughout is macOS blue; on a
-  Mac the interface also picks up the system font and native window
-  controls.
-- **In-app hotkeys:** `V` select, `P` pen, `M` marker, `C` connector,
-  `T` text, `Ctrl/Cmd+G` group, `Ctrl/Cmd+U` ungroup, `Delete` removes the
-  selection, `+`/`-` zoom, `0` resets the view, hold `Space` to pan.
+  platform. The accent throughout is macOS blue; on a Mac the
+  interface also picks up the system font and native window controls.
+- **In-app hotkeys:** `V` select, `P` pen, `A` arrow, `Ctrl/Cmd+G`
+  group, `Ctrl/Cmd+U` ungroup, `Delete` removes the selection,
+  `+`/`-` zoom, `0` resets the view, hold `Space` to pan, `h` hides.
+  There is no add menu: adding is drag and drop (see below), plus
+  double-clicking empty space for a note.
 
 What is *not* faked: a system-wide global hotkey that fires while another
 app is focused, and a macOS screen-corner swipe, both need OS-level hooks
 (CGEventTap / accessibility permission on macOS, a global key grabber on
-Linux). Those are the next step, not something v0.1 pretends to do — the
-handle pill is the honest v0.1 version, and it works from any app because
-it stays on top.
+Linux). Those are the next step, not something v0.1 pretends to do.
 
 ## Using the board
 
@@ -92,30 +87,31 @@ it stays on top.
   no heavy shadow; link cards get a pastel tile with the domain's
   initial in colour, PDF cards a pastel red tile, swatches a white
   hex pill.
-- **Pan:** drag with the Pan tool, hold `Space` and drag, or scroll without
-  Ctrl. **Zoom:** `Ctrl` + scroll (keeps the point under the cursor fixed),
-  or `+`/`-`.
+- **Pan:** hold `Space` and drag, or scroll without Ctrl. **Zoom:**
+  `Ctrl` + scroll (keeps the point under the cursor fixed), or `+`/`-`.
+  Nothing on the board ever paints over the toolbar: cards panned
+  above the top edge clip at it.
 - **Select:** click an item, `Shift`-click to add to the selection, or drag
   a marquee around several items. Dragging one member of a group moves the
   whole group. `Ctrl/Cmd+G` groups the selection.
-- **Resize:** select exactly one item and drag the small handle at its
-  bottom-right corner. Everything resizes: notes, cards, images,
-  swatches, strokes (their points scale), and connectors (their free
-  endpoints scale; item-anchored ends stay pinned to their items).
-- **Canvas:** the sliders icon at the toolbar's right end opens a panel
-  with background colours (Paper, White, Sage, Sky, Ink) and grid styles
-  (lines, dots, off). Choices apply instantly and save with the board.
-- **Pen / Marker:** drag on the canvas. Marker is thicker and translucent.
-- **Connector:** drag from one item to another (or from empty space to
-  empty space). Endpoints anchored to items follow them when they move.
-- **Text:** `T` then click, or double-click empty space, type,
-  `Enter` for a new line, `Esc` to finish. Double-click a note to edit
-  it again. Notes render markdown automatically — `#` headings, `-`
-  bullets, `1.` lists, `>` quotes, fenced code blocks, and inline
-  **bold**, *italic*, `code`, [links](https://example.com) and
-  ~~strikethrough~~ — and while you edit, the note on the canvas shows
-  the formatted result live as you type; the banner at the bottom
-  holds the raw text.
+- **Resize:** drag the small handle at a card's bottom-right corner —
+  it works on the first click, no need to select first. Everything
+  resizes: notes, cards, images, swatches, strokes (their points
+  scale). Connectors have no handle: their ends follow their anchors,
+  so there is nothing to drag — move the cards they connect instead.
+- **Canvas:** a fresh board is white with a dot grid. Boards saved
+  with other settings keep them.
+- **Pen:** drag on the canvas to sketch.
+- **Connector (Arrow):** drag from one item to another (or from empty
+  space to empty space). Endpoints anchored to items follow them when
+  they move.
+- **Text:** double-click empty space for a new note, double-click a
+  note to edit it. The card itself becomes a simple text editor: raw
+  text with a blinking cursor, no input bar anywhere. `Enter` is a new
+  line, `Esc` (or a click elsewhere) commits, and the note renders
+  markdown automatically once committed — `#` headings, `-` bullets,
+  `1.` lists, `>` quotes, fenced code blocks, and inline **bold**,
+  *italic*, `code`, [links](https://example.com) and ~~strikethrough~~.
 - **Drop files onto the canvas:** images (PNG/JPG/GIF/WebP/BMP/SVG),
   PDFs, audio files (MP3/WAV/FLAC/OGG/M4A), video files
   (MP4/MOV/WebM/MKV/AVI), `.txt`/`.md` files (become notes — a file
@@ -133,24 +129,24 @@ it stays on top.
   playing). It plays inside Bowerbird (rodio). If the machine has no
   audio device, pressing play says so instead of crashing.
 - **Video:** a video file lands as a big preview card — a 16:9 thumb
-  with a play button on top, the name below; a video link (a direct
-  video file, or a YouTube/Vimeo page) pasted into the link box becomes
-  a video card instead of a link card. Short video cards (made before
-  this change, or resized small) keep a compact row layout instead.
+  with a play button on top, the name below; a video link dropped as a
+  `.url`/`.webloc` file becomes a video card instead of a link card.
+  Short video cards (made before this change, or resized small) keep a
+  compact row layout instead.
   Videos play in your system video player (local files) or browser
   (links) — click the thumb to play it. Decoding video frames inside
   the canvas is a planned follow-up.
-- **Links:** the link icon, type a URL, `Enter`. The card shows the
-  domain immediately and fills in the page title/description in the
-  background when the fetch succeeds (Open Graph title/description
-  preferred, `<title>` as fallback). Double-click a link card to open
-  it in your browser; double-click a PDF card (or an image) to open it
-  in its viewer.
+- **Links:** drop a `.url`/`.webloc` shortcut file (or any link — see
+  below) and the card shows the domain immediately, filling in the
+  page title/description in the background when the fetch succeeds
+  (Open Graph title/description preferred, `<title>` as fallback).
+  Double-click a link card to open it in your browser; double-click a
+  PDF card (or an image) to open it in its viewer.
 - **Long names never spill:** card text is clipped to the card — long
   file names, titles and URLs end with "…", descriptions are capped at
   two lines. Nothing ever runs onto the canvas or over a neighbour.
-- **Swatches:** the swatch icon, type `#FF6B35` (or `FF6B35`, or `#F53`).
-  Bad input is rejected with a message instead of creating a broken swatch.
+- **Swatches:** drop a text file whose whole content is a colour code
+  like `#FF6B35` and it becomes a swatch.
 - **PDFs:** a PDF lands as a card (name + size) and opens in your system
   viewer on double-click. Rendering PDF pages *inside* the canvas is a
   planned follow-up, not a stub that pretends otherwise.
@@ -159,8 +155,8 @@ it stays on top.
 
 ```
 src/
-  main.rs     entry point: board window + corner handle window
-  ui.rs       GPUI views (toolbar, canvas layers, cards, input bars)
+  main.rs     entry point: the single board window
+  ui.rs       GPUI views (toolbar, canvas layers, cards)
   model.rs    board data + geometry: pan/zoom, hit-testing, grouping
   preview.rs  link-card domain/title/description parsing
   audio.rs    in-app audio playback (rodio) + decode probing

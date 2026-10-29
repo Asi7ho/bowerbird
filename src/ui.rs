@@ -1,4 +1,4 @@
-//! The GPUI board view: toolbar, canvas layers, item cards, add/edit bars.
+//! The GPUI board view: toolbar, canvas layers, item cards.
 //!
 //! Rendering strategy, kept deliberately boring:
 //! - a back canvas paints the grid + freehand strokes (low-level paint API),
@@ -18,19 +18,18 @@ use bowerbird::preview::{domain_of, looks_like_video_url, parse_preview};
 use bowerbird::store;
 use gpui::prelude::*;
 use gpui::{
-    AnyWindowHandle, App, Bounds, BoxShadow, Context, Div, ExternalPaths, FocusHandle, FontWeight,
-    Hsla, MouseButton, PathBuilder, Render, ScrollDelta, SharedString, Styled, Window,
-    WindowBounds, WindowKind, WindowOptions, canvas, div, img, point, px, rgb, size,
+    App, Context, Div, ExternalPaths, FocusHandle, FontWeight, Hsla, MouseButton, PathBuilder,
+    Render, ScrollDelta, SharedString, Styled, Window, WindowOptions, canvas, div, img, point, px,
+    rgb,
 };
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
-/// State shared between the board window and the little handle window, so
-/// closing/reopening the board never loses the board itself.
+/// State shared by the board view, so the board itself survives whatever
+/// the window does.
 pub struct SharedState {
     pub board: RefCell<Board>,
-    pub board_window: RefCell<Option<AnyWindowHandle>>,
     /// In-app audio playback; created lazily on first play so a machine
     /// without an audio device never fails at startup.
     pub audio: RefCell<AudioPlayer>,
@@ -42,7 +41,6 @@ impl SharedState {
     pub fn new(board: Board) -> Shared {
         Rc::new(Self {
             board: RefCell::new(board),
-            board_window: RefCell::new(None),
             audio: RefCell::new(AudioPlayer::new()),
         })
     }
@@ -51,25 +49,13 @@ impl SharedState {
 const TOOLBAR_H: f32 = 52.0;
 const GRID: f32 = 100.0;
 const PALETTE: [&str; 6] = ["#1A1A1A", "#E63946", "#2E86AB", "#FF6B35", "#6A4C93", "#2A9D8F"];
-
-/// Canvas background choices: name + hex.
-const CANVAS_COLORS: [(&str, &str); 5] = [
-    ("Paper", "#F7F5F0"),
-    ("White", "#FFFFFF"),
-    ("Sage", "#EAF3EC"),
-    ("Sky", "#EAF2FB"),
-    ("Ink", "#23232B"),
-];
 // macOS system blue: the selection/active accent throughout the app.
 const ACCENT: u32 = 0x007AFF;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tool {
     Select,
-    Pan,
     Pen,
-    Marker,
-    Text,
     Connector,
 }
 
@@ -77,11 +63,8 @@ impl Tool {
     fn label(self) -> &'static str {
         match self {
             Tool::Select => "Select (V)",
-            Tool::Pan => "Pan (Space)",
             Tool::Pen => "Pen (P)",
-            Tool::Marker => "Marker (M)",
-            Tool::Text => "Text (T)",
-            Tool::Connector => "Connector (C)",
+            Tool::Connector => "Arrow (A)",
         }
     }
 }
@@ -101,14 +84,6 @@ enum Drag {
     },
 }
 
-/// The text-entry banner. Adding is drag-and-drop first, so this is
-/// only the Text tool's way in: click with T, type, Enter to place.
-#[derive(Clone, Debug)]
-struct AddPanel {
-    at: Pt,
-    input: String,
-}
-
 // ----- toolbar icons: small vector glyphs drawn with the canvas API -----
 //
 // Deliberately font-independent: no emoji, no symbol font, so the toolbar
@@ -118,32 +93,18 @@ struct AddPanel {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Icon {
     Select,
-    Pan,
     Pen,
-    Marker,
-    Text,
     Connector,
     Play,
     Pause,
-    Group,
-    Ungroup,
     Delete,
-    Hide,
-    Tune,
-    GridLines,
-    GridDots,
-    GridOff,
-    Close,
 }
 
 impl Tool {
     fn icon(self) -> Icon {
         match self {
             Tool::Select => Icon::Select,
-            Tool::Pan => Icon::Pan,
             Tool::Pen => Icon::Pen,
-            Tool::Marker => Icon::Marker,
-            Tool::Text => Icon::Text,
             Tool::Connector => Icon::Connector,
         }
     }
@@ -191,26 +152,6 @@ fn icon_canvas(icon: Icon, hex: u32) -> impl IntoElement {
                     )+
                 }};
             }
-            // One filled dot in the fill path, centred at ($x, $y).
-            macro_rules! dot {
-                ($x:expr, $y:expr, $r:expr) => {{
-                    f.move_to(pt($x + $r, $y));
-                    f.arc_to(
-                        point(px($r), px($r)),
-                        px(0.),
-                        false,
-                        true,
-                        pt($x - $r, $y),
-                    );
-                    f.arc_to(
-                        point(px($r), px($r)),
-                        px(0.),
-                        false,
-                        true,
-                        pt($x + $r, $y),
-                    );
-                }};
-            }
             match icon {
                 Icon::Select => {
                     f.add_polygon(
@@ -226,28 +167,8 @@ fn icon_canvas(icon: Icon, hex: u32) -> impl IntoElement {
                         true,
                     );
                 }
-                Icon::Pan => {
-                    line!(4., 10.; 16., 10.);
-                    line!(4., 10.; 6.5, 7.5);
-                    line!(4., 10.; 6.5, 12.5);
-                    line!(16., 10.; 13.5, 7.5);
-                    line!(16., 10.; 13.5, 12.5);
-                    line!(10., 4.; 10., 16.);
-                    line!(10., 4.; 7.5, 6.5);
-                    line!(10., 4.; 12.5, 6.5);
-                    line!(10., 16.; 7.5, 13.5);
-                    line!(10., 16.; 12.5, 13.5);
-                }
                 Icon::Pen => {
                     line!(14., 3.; 5., 12.; 3., 17.; 8., 15.; 17., 6.; 14., 3.);
-                }
-                Icon::Marker => {
-                    let mut thick = PathBuilder::stroke(px(4.));
-                    thick.move_to(pt(4., 16.));
-                    thick.line_to(pt(16., 4.));
-                    if let Ok(p) = thick.build() {
-                        window.paint_path(p, rgb(hex));
-                    }
                 }
                 Icon::Connector => {
                     line!(4., 16.; 16., 4.);
@@ -267,14 +188,6 @@ fn icon_canvas(icon: Icon, hex: u32) -> impl IntoElement {
                         true,
                     );
                 }
-                Icon::Group => {
-                    line!(3., 3.; 11., 3.; 11., 11.; 3., 11.; 3., 3.);
-                    line!(9., 9.; 17., 9.; 17., 17.; 9., 17.; 9., 9.);
-                }
-                Icon::Ungroup => {
-                    line!(3., 3.; 9., 3.; 9., 9.; 3., 9.; 3., 3.);
-                    line!(11., 11.; 17., 11.; 17., 17.; 11., 17.; 11., 11.);
-                }
                 Icon::Delete => {
                     line!(4., 5.; 16., 5.);
                     line!(8., 5.; 8., 3.; 12., 3.; 12., 5.);
@@ -282,50 +195,6 @@ fn icon_canvas(icon: Icon, hex: u32) -> impl IntoElement {
                     line!(9., 8.; 9., 14.);
                     line!(12., 8.; 12., 14.);
                 }
-                Icon::Tune => {
-                    // Two sliders with knobs: the customise control.
-                    line!(3., 7.; 17., 7.);
-                    line!(3., 13.; 17., 13.);
-                    dot!(12., 7., 2.2);
-                    dot!(8., 13., 2.2);
-                }
-                Icon::GridLines => {
-                    line!(7., 4.; 7., 16.);
-                    line!(13., 4.; 13., 16.);
-                    line!(4., 7.; 16., 7.);
-                    line!(4., 13.; 16., 13.);
-                }
-                Icon::GridDots => {
-                    dot!(6., 6., 1.3);
-                    dot!(10., 6., 1.3);
-                    dot!(14., 6., 1.3);
-                    dot!(6., 10., 1.3);
-                    dot!(10., 10., 1.3);
-                    dot!(14., 10., 1.3);
-                    dot!(6., 14., 1.3);
-                    dot!(10., 14., 1.3);
-                    dot!(14., 14., 1.3);
-                }
-                Icon::GridOff => {
-                    line!(7., 4.; 7., 16.);
-                    line!(13., 4.; 13., 16.);
-                    line!(4., 7.; 16., 7.);
-                    line!(4., 13.; 16., 13.);
-                    line!(3., 17.; 17., 3.);
-                }
-                Icon::Close => {
-                    line!(5., 5.; 15., 15.);
-                    line!(15., 5.; 5., 15.);
-                }
-                Icon::Hide => {
-                    s.move_to(pt(3., 10.));
-                    s.cubic_bezier_to(pt(17., 10.), pt(7., 4.), pt(13., 4.));
-                    s.move_to(pt(17., 10.));
-                    s.cubic_bezier_to(pt(3., 10.), pt(13., 16.), pt(7., 16.));
-                    circle_path(&mut f, ox, oy, 10., 10., 2.2);
-                }
-                // Text is built from a div, not the canvas.
-                Icon::Text => {}
             }
             if let Ok(p) = s.build() {
                 window.paint_path(p, rgb(hex));
@@ -340,15 +209,7 @@ fn icon_canvas(icon: Icon, hex: u32) -> impl IntoElement {
 }
 
 fn icon_child(icon: Icon, hex: u32) -> gpui::AnyElement {
-    match icon {
-        Icon::Text => div()
-            .text_size(px(15.))
-            .font_weight(FontWeight::BOLD)
-            .text_color(rgb(hex))
-            .child("T".to_string())
-            .into_any_element(),
-        _ => icon_canvas(icon, hex).into_any_element(),
-    }
+    icon_canvas(icon, hex).into_any_element()
 }
 
 /// A tool button inside the segmented control: white when active, clear when not.
@@ -410,8 +271,10 @@ pub struct BoardView {
     space_down: bool,
     drag: Option<Drag>,
     editing: Option<(ItemId, String)>,
-    add_panel: Option<AddPanel>,
-    canvas_panel: bool,
+    // Blinking text cursor inside the note being edited: the visible
+    // phase and whether the blink task is already running.
+    cursor_visible: bool,
+    blink_running: bool,
     // Kept for debugging; nothing on screen shows it anymore — the
     // bottom status bar was removed at the user's request.
     _status: String,
@@ -590,8 +453,8 @@ impl BoardView {
             space_down: false,
             drag: None,
             editing: None,
-            add_panel: None,
-            canvas_panel: false,
+            cursor_visible: true,
+            blink_running: false,
             _status: "Board auto-saves on every change.".to_string(),
             viewport_w: 1024.0,
             viewport_h: 768.0,
@@ -630,6 +493,30 @@ impl BoardView {
     /// Board-area coordinates: the interaction div sits below the toolbar.
     fn window_to_world(&self, win: Pt) -> Pt {
         self.screen_to_world(Pt::new(win.x, win.y - TOOLBAR_H))
+    }
+
+    /// Whether `world` grabs the resize corner of `id`: the bottom-right
+    /// 16 screen px of the card. Connectors never have a corner: their
+    /// geometry comes from their anchors, so a handle on their
+    /// bounding-box corner would sit over whatever card they point at
+    /// and dragging it would change nothing visible.
+    fn corner_hit(&self, id: ItemId, world: Pt) -> bool {
+        let zoom = self.camera().zoom;
+        self.with_board(|b| {
+            b.get(id)
+                .map(|item| {
+                    if matches!(item.kind, Kind::Connector { .. }) {
+                        return false;
+                    }
+                    let (p, s) = b.item_bounds(item);
+                    let tol = 16.0 / zoom;
+                    world.x >= p.x + s.w - tol
+                        && world.x <= p.x + s.w + tol
+                        && world.y >= p.y + s.h - tol
+                        && world.y <= p.y + s.h + tol
+                })
+                .unwrap_or(false)
+        })
     }
 
     fn set_tool(&mut self, tool: Tool) {
@@ -678,37 +565,8 @@ impl BoardView {
     // ----- keyboard -----
 
     fn handle_key(&mut self, key: &str, key_char: Option<&str>, ctrl: bool, _shift: bool, cx: &mut Context<Self>) {
-        // 1. A text field (add panel / editing) eats everything first.
+        // 1. The note being edited eats everything first.
         // (Take-then-act, never borrow the field while replacing it.)
-        if self.add_panel.is_some() {
-            match key {
-                "escape" => self.add_panel = None,
-                "enter" => {
-                    let panel = self.add_panel.take().unwrap();
-                    self.confirm_add(panel, cx);
-                }
-                "backspace" => {
-                    if let Some(panel) = &mut self.add_panel {
-                        panel.input.pop();
-                    }
-                }
-                _ => {
-                    if let Some(c) = key_char {
-                        if c.chars().count() == 1 {
-                            if let Some(panel) = &mut self.add_panel {
-                                panel.input.push_str(c);
-                            }
-                        }
-                    } else if key == "space" {
-                        if let Some(panel) = &mut self.add_panel {
-                            panel.input.push(' ');
-                        }
-                    }
-                }
-            }
-            cx.notify();
-            return;
-        }
         if self.editing.is_some() {
             match key {
                 "escape" => {
@@ -747,9 +605,7 @@ impl BoardView {
         match key {
             "v" => self.set_tool(Tool::Select),
             "p" => self.set_tool(Tool::Pen),
-            "m" => self.set_tool(Tool::Marker),
-            "t" => self.set_tool(Tool::Text),
-            "c" => self.set_tool(Tool::Connector),
+            "a" => self.set_tool(Tool::Connector),
             "g" if ctrl => {
                 let grouped = {
                     let mut b = self.shared.board.borrow_mut();
@@ -825,15 +681,36 @@ impl BoardView {
         self.save();
     }
 
-    fn confirm_add(&mut self, panel: AddPanel, _cx: &mut Context<Self>) {
-        let input = panel.input.trim().to_string();
-        if input.is_empty() {
-            self._status = "Nothing typed — no note added.".to_string();
-            return;
+    /// Start editing a note in place: the card itself becomes the text
+    /// editor, with a blinking cursor showing it takes input. There is no
+    /// separate input bar anywhere — the card is the editor.
+    fn start_text_edit(&mut self, id: ItemId, text: String, cx: &mut Context<Self>) {
+        self.editing = Some((id, text));
+        self.cursor_visible = true;
+        if !self.blink_running {
+            self.blink_running = true;
+            cx.spawn(async move |this, cx| loop {
+                cx.background_executor()
+                    .timer(Duration::from_millis(550))
+                    .await;
+                let keep = this
+                    .update(cx, |view, cx| {
+                        if view.editing.is_none() {
+                            view.blink_running = false;
+                            false
+                        } else {
+                            view.cursor_visible = !view.cursor_visible;
+                            cx.notify();
+                            true
+                        }
+                    })
+                    .unwrap_or(false);
+                if !keep {
+                    break;
+                }
+            })
+            .detach();
         }
-        self.shared.board.borrow_mut().add_text(panel.at, &input);
-        self._status = "Note added.".to_string();
-        self.save();
     }
 
     /// Play/pause the audio item. Failures (no device, bad file) are a
@@ -1019,8 +896,24 @@ impl BoardView {
         let cam = self.camera();
         let screen = cam.to_screen(item.pos);
         let w = item.size.w * cam.zoom;
-        let h = item.size.h * cam.zoom;
-        let border = if selected { rgb(ACCENT) } else { rgb(0xE5E5EA) };
+        // While a note is being edited, the card itself is the editor:
+        // it grows to fit the raw draft so typed lines are never
+        // clipped, and it takes the accent border so it reads as focused.
+        let editing_draft: Option<String> = match (&item.kind, &self.editing) {
+            (Kind::Text { .. }, Some((edit_id, draft))) if *edit_id == item.id => {
+                Some(draft.clone())
+            }
+            _ => None,
+        };
+        let mut h = item.size.h * cam.zoom;
+        if let (Some(draft), Kind::Text { size, .. }) = (&editing_draft, &item.kind) {
+            h = h.max(estimate_text_height(draft, *size, item.size.w) * cam.zoom);
+        }
+        let border = if selected || editing_draft.is_some() {
+            rgb(ACCENT)
+        } else {
+            rgb(0xE5E5EA)
+        };
         let base = div()
             .absolute()
             .left(px(screen.x))
@@ -1043,21 +936,61 @@ impl BoardView {
                 size,
                 color,
             } => {
-                // Notes render markdown automatically: headings, bullets,
-                // ordered lists, quotes, code blocks, and inline bold /
-                // italic / code / links / strikethrough.
                 let fg = parse_hex(color)
                     .map(|(r, g, b)| rgb(((r as u32) << 16) | ((g as u32) << 8) | (b as u32)))
                     .unwrap_or(rgb(0x1C1C1E));
-                let mut col = base
-                    .p(px(12. * cam.zoom))
-                    .flex()
-                    .flex_col()
-                    .gap(px(4. * cam.zoom));
-                for block in parse_markdown(text) {
-                    col = col.child(render_md_block(block, *size, *bold, fg, cam.zoom));
+                if let Some(draft) = &editing_draft {
+                    // The editor shows raw text, not markdown: what you
+                    // type is what the card holds, with a blinking
+                    // cursor after the last character. Markdown renders
+                    // again the moment the edit is committed.
+                    let mut col = base
+                        .p(px(12. * cam.zoom))
+                        .flex()
+                        .flex_col();
+                    let lines: Vec<&str> = draft.split('\n').collect();
+                    for (i, line) in lines.iter().enumerate() {
+                        let shown = if line.is_empty() { "\u{00A0}" } else { line };
+                        let line_el = div()
+                            .text_size(px(*size * cam.zoom))
+                            .text_color(fg)
+                            .child(shown.to_string());
+                        if i + 1 == lines.len() {
+                            let cursor = div()
+                                .w(px(2.))
+                                .h(px(*size * cam.zoom * 1.3))
+                                .bg(if self.cursor_visible {
+                                    rgb(ACCENT)
+                                } else {
+                                    rgb(0xFFFFFF)
+                                });
+                            col = col.child(
+                                div()
+                                    .flex()
+                                    .flex_row()
+                                    .flex_wrap()
+                                    .child(line_el)
+                                    .child(cursor),
+                            );
+                        } else {
+                            col = col.child(line_el);
+                        }
+                    }
+                    col
+                } else {
+                    // Notes render markdown automatically: headings, bullets,
+                    // ordered lists, quotes, code blocks, and inline bold /
+                    // italic / code / links / strikethrough.
+                    let mut col = base
+                        .p(px(12. * cam.zoom))
+                        .flex()
+                        .flex_col()
+                        .gap(px(4. * cam.zoom));
+                    for block in parse_markdown(text) {
+                        col = col.child(render_md_block(block, *size, *bold, fg, cam.zoom));
+                    }
+                    col
                 }
-                col
             }
             Kind::Image { path } => {
                 if std::path::Path::new(path).is_file() {
@@ -1562,142 +1495,6 @@ fn hex_to_hsla(hex: &str, alpha: f32) -> Hsla {
 }
 
 impl BoardView {
-    /// The canvas customisation panel: background colours and grid
-    /// style. Choices apply instantly and save with the board; the
-    /// panel closes after a choice (a canvas click on the panel's
-    /// own buttons still lands the choice first), and also closes on
-    /// a canvas click elsewhere, Esc, or the close button.
-    fn canvas_panel_el(&self, cx: &mut Context<Self>) -> Div {
-        let bg_now = self.shared.board.borrow().bg.clone();
-        let grid_now = self.shared.board.borrow().grid;
-        let mut panel = div()
-            .absolute()
-            .right(px(16.))
-            .top(px(12.))
-            .w(px(272.))
-            .rounded(px(12.))
-            .bg(rgb(0xFFFFFF))
-            .border_1()
-            .border_color(rgb(0xE5E5EA))
-            .shadow(vec![BoxShadow {
-                color: Hsla {
-                    h: 0.0,
-                    s: 0.0,
-                    l: 0.0,
-                    a: 0.12,
-                },
-                offset: point(px(0.), px(4.)),
-                blur_radius: px(16.),
-                spread_radius: px(0.),
-            }])
-            .p(px(12.))
-            .flex()
-            .flex_col()
-            .gap(px(10.));
-        panel = panel.child(
-            div()
-                .flex()
-                .flex_row()
-                .items_center()
-                .justify_between()
-                .child(
-                    div()
-                        .text_size(px(13.))
-                        .font_weight(FontWeight::BOLD)
-                        .text_color(rgb(0x1C1C1E))
-                        .child("Canvas".to_string()),
-                )
-                .child(
-                    action_icon_button(Icon::Close, 0x333333)
-                        .id("canvas-close")
-                        .on_click(cx.listener(|this, _event: &gpui::ClickEvent, _window, cx| {
-                            this.canvas_panel = false;
-                            cx.notify();
-                        })),
-                ),
-        );
-        panel = panel.child(
-            div()
-                .text_size(px(11.))
-                .font_weight(FontWeight::BOLD)
-                .text_color(rgb(0x6E6E73))
-                .child("Colour".to_string()),
-        );
-        let mut row = div().flex().flex_row().gap(px(8.));
-        for (name, hex) in CANVAS_COLORS {
-            let (r, g, b) = parse_hex(hex).unwrap_or((0, 0, 0));
-            let active = bg_now == hex;
-            let hex_owned = hex.to_string();
-            let name_owned = name.to_string();
-            row = row.child(
-                div()
-                    .w(px(28.))
-                    .h(px(28.))
-                    .rounded(px(14.))
-                    .bg(rgb(((r as u32) << 16) | ((g as u32) << 8) | (b as u32)))
-                    .border_1()
-                    .border_color(if active { rgb(ACCENT) } else { rgb(0xDCDCE0) })
-                    .id(SharedString::from(format!("canvas-bg-{}", name)))
-                    .on_click(cx.listener(move |this, _event: &gpui::ClickEvent, _window, cx| {
-                        this.shared.board.borrow_mut().bg = hex_owned.clone();
-                        this._status = format!("Canvas colour: {}.", name_owned);
-                        this.save();
-                        cx.notify();
-                    })),
-            );
-        }
-        panel = panel.child(row);
-        panel = panel.child(
-            div()
-                .text_size(px(11.))
-                .font_weight(FontWeight::BOLD)
-                .text_color(rgb(0x6E6E73))
-                .child("Grid".to_string()),
-        );
-        let mut grid_row = div().flex().flex_row().gap(px(8.));
-        for (mode, label, icon) in [
-            (GridMode::Lines, "Lines", Icon::GridLines),
-            (GridMode::Dots, "Dots", Icon::GridDots),
-            (GridMode::Off, "Off", Icon::GridOff),
-        ] {
-            let active = grid_now == mode;
-            grid_row = grid_row.child(
-                div()
-                    .flex()
-                    .flex_col()
-                    .items_center()
-                    .gap(px(2.))
-                    .w(px(77.))
-                    .py(px(8.))
-                    .rounded(px(8.))
-                    .bg(if active { rgb(0xF5F5F7) } else { rgb(0xFFFFFF) })
-                    .border_1()
-                    .border_color(if active { rgb(ACCENT) } else { rgb(0xE5E5EA) })
-                    .child(icon_child(icon, if active { 0x1C1C1E } else { 0x6E6E73 }))
-                    .child(
-                        div()
-                            .text_size(px(11.))
-                            .text_color(rgb(0x1C1C1E))
-                            .child(label.to_string()),
-                    )
-                    .id(SharedString::from(format!("canvas-grid-{}", label)))
-                    .on_click(cx.listener(move |this, _event: &gpui::ClickEvent, _window, cx| {
-                        this.shared.board.borrow_mut().grid = mode;
-                        this._status = format!("Grid: {}.", label.to_lowercase());
-                        this.save();
-                        cx.notify();
-                    })),
-            );
-        }
-        panel = panel.child(grid_row);
-        panel = panel.child(
-            div()
-                .text_size(px(11.))
-                .text_color(rgb(0x8E8E93))
-                .child("Saved with the board.".to_string()),
-        );
-        panel
-    }
 }
 
 impl Render for BoardView {
@@ -1910,10 +1707,15 @@ impl Render for BoardView {
         };
         // Resize handle: the bottom-right corner of the single selected
         // item, in world coords; painted below by the front canvas.
+        // Connectors get none — their geometry comes from their anchors.
         let resize_handle: Option<Pt> = if board.selected.len() == 1 {
-            board.get(board.selected[0]).map(|item| {
-                let (p, s) = board.item_bounds(item);
-                Pt::new(p.x + s.w, p.y + s.h)
+            board.get(board.selected[0]).and_then(|item| {
+                if matches!(item.kind, Kind::Connector { .. }) {
+                    None
+                } else {
+                    let (p, s) = board.item_bounds(item);
+                    Some(Pt::new(p.x + s.w, p.y + s.h))
+                }
             })
         } else {
             None
@@ -2035,26 +1837,7 @@ impl Render for BoardView {
             match &item.kind {
                 Kind::Stroke { .. } | Kind::Connector { .. } => {}
                 _ => {
-                    // While a note is being edited, the canvas shows
-                    // the draft rendered as markdown — the automatic
-                    // preview — while the banner below holds the raw
-                    // text being typed.
-                    let preview = match &self.editing {
-                        Some((edit_id, draft)) if *edit_id == item.id => {
-                            let mut owned = item.clone();
-                            if let Kind::Text { text, .. } = &mut owned.kind {
-                                *text = draft.clone();
-                            }
-                            Some(owned)
-                        }
-                        _ => None,
-                    };
-                    match &preview {
-                        Some(owned) => item_els
-                            .push(self.item_element(owned, selected.contains(&item.id))),
-                        None => item_els
-                            .push(self.item_element(item, selected.contains(&item.id))),
-                    }
+                    item_els.push(self.item_element(item, selected.contains(&item.id)));
                 }
             }
         }
@@ -2077,31 +1860,16 @@ impl Render for BoardView {
                         cx.notify();
                         return;
                     }
-                    if this.add_panel.is_some() {
-                        return;
-                    }
-                    // A canvas click dismisses the customisation panel
-                    // instead of doing anything with the tool.
-                    if this.canvas_panel {
-                        this.canvas_panel = false;
-                        cx.notify();
-                        return;
-                    }
                     let world = this.window_to_world(win_pt);
-                    let effective_tool = if this.space_down {
-                        Tool::Pan
+                    if this.space_down {
+                        // Space + drag pans whatever tool is active.
+                        this.drag = Some(Drag::Pan { last: win_pt });
                     } else {
-                        this.tool
-                    };
-                    match effective_tool {
-                        Tool::Pan => {
-                            this.drag = Some(Drag::Pan { last: win_pt });
-                        }
-                        Tool::Pen | Tool::Marker => {
-                            let marker = effective_tool == Tool::Marker;
+                        match this.tool {
+                        Tool::Pen => {
                             this.drag = Some(Drag::Stroke {
                                 points: vec![world],
-                                marker,
+                                marker: false,
                             });
                         }
                         Tool::Connector => {
@@ -2112,12 +1880,6 @@ impl Render for BoardView {
                             this.drag = Some(Drag::Connector {
                                 from,
                                 current: world,
-                            });
-                        }
-                        Tool::Text => {
-                            this.add_panel = Some(AddPanel {
-                                at: world,
-                                input: String::new(),
                             });
                         }
                         Tool::Select => {
@@ -2139,7 +1901,7 @@ impl Render for BoardView {
                                     match kind {
                                         Some(k) if k.starts_with("text:") => {
                                             let text = k.trim_start_matches("text:").to_string();
-                                            this.editing = Some((id, text));
+                                            this.start_text_edit(id, text, cx);
                                         }
                                         Some(k) if k.starts_with("url:") => {
                                             let url = k.trim_start_matches("url:").to_string();
@@ -2169,7 +1931,7 @@ impl Render for BoardView {
                                         .board
                                         .borrow_mut()
                                         .add_text(world, "");
-                                    this.editing = Some((id, String::new()));
+                                    this.start_text_edit(id, String::new(), cx);
                                     this.save();
                                 }
                                 cx.notify();
@@ -2226,30 +1988,40 @@ impl Render for BoardView {
                                     return;
                                 }
                             }
-                            // Resize handle first: the bottom-right
-                            // 16 screen px of the single selected item.
-                            let handle_hit = {
-                                let selected = this.shared.board.borrow().selected.clone();
-                                if selected.len() == 1 {
-                                    let zoom = this.camera().zoom;
-                                    this.with_board(|b| {
-                                        b.get(selected[0]).map(|item| {
-                                            let (p, s) = b.item_bounds(item);
-                                            let tol = 16.0 / zoom;
-                                            world.x >= p.x + s.w - tol
-                                                && world.x <= p.x + s.w + tol
-                                                && world.y >= p.y + s.h - tol
-                                                && world.y <= p.y + s.h + tol
-                                        })
-                                    })
+                            // Resize handle: the bottom-right 16 screen
+                            // px of a card — the single selected card, or
+                            // the card under the cursor, so grabbing a
+                            // corner resizes on the first click instead
+                            // of moving the card. Connectors have no
+                            // handle: their geometry comes from their
+                            // anchors, so a handle on their bounding-box
+                            // corner would sit over whatever card they
+                            // point at and dragging it would change
+                            // nothing visible.
+                            let clicked = this.with_board(|b| b.hit_test(world));
+                            let handle_id = {
+                                let selected =
+                                    this.shared.board.borrow().selected.clone();
+                                if selected.len() == 1
+                                    && this.corner_hit(selected[0], world)
+                                {
+                                    Some(selected[0])
+                                } else if let Some(id) = clicked {
+                                    if this.corner_hit(id, world) {
+                                        Some(id)
+                                    } else {
+                                        None
+                                    }
                                 } else {
                                     None
                                 }
                             };
-                            if handle_hit == Some(true) {
-                                let sel = this.shared.board.borrow().selected[0];
+                            if let Some(sel) = handle_id {
+                                this.shared.board.borrow_mut().select(sel, false);
                                 let (ow, oh) = this.with_board(|b| {
-                                    b.get(sel).map(|i| (i.size.w, i.size.h)).unwrap_or((100.0, 100.0))
+                                    b.get(sel)
+                                        .map(|i| (i.size.w, i.size.h))
+                                        .unwrap_or((100.0, 100.0))
                                 });
                                 this.drag = Some(Drag::Resize {
                                     id: sel,
@@ -2257,7 +2029,7 @@ impl Render for BoardView {
                                     orig_w: ow,
                                     orig_h: oh,
                                 });
-                            } else if let Some(id) = this.with_board(|b| b.hit_test(world)) {
+                            } else if let Some(id) = clicked {
                                 let additive = event.modifiers.shift;
                                 this.shared.board.borrow_mut().select(id, additive);
                                 this.drag = Some(Drag::Move { last_world: world });
@@ -2271,6 +2043,7 @@ impl Render for BoardView {
                                 });
                             }
                         }
+                    }
                     }
                     cx.notify();
                 }),
@@ -2394,8 +2167,10 @@ impl Render for BoardView {
                 cx.notify();
             }));
 
-        // --- toolbar: macOS-style, icons only ---
-        // The status bar names the active tool, so nothing here needs a word.
+        // --- toolbar: four controls, nothing else. Select, pen and
+        // arrow are the tools; delete acts on the selection. Panning
+        // is Space + drag or scroll, text is a double-click, grouping
+        // is Ctrl+G / Ctrl+U — none of those need a button.
         let mut toolbar = div()
             .h(px(TOOLBAR_H))
             .flex()
@@ -2403,19 +2178,9 @@ impl Render for BoardView {
             .items_center()
             .gap(px(8.))
             .px(px(12.))
-            // Keep the right end clear of the floating handle pill, which
-            // sits over the top-right corner of the display (168 wide + margins).
-            .pr(px(200.))
             .bg(rgb(0xF5F5F7))
             .border_b_1()
             .border_color(rgb(0xDCDCE0));
-        toolbar = toolbar.child(
-            div()
-                .text_size(px(13.))
-                .font_weight(FontWeight::BOLD)
-                .text_color(rgb(0x1C1C1E))
-                .child("Bowerbird".to_string()),
-        );
         // Segmented tool control.
         let mut tools = div()
             .flex()
@@ -2426,11 +2191,8 @@ impl Render for BoardView {
             .p(px(2.));
         for (tool, label) in [
             (Tool::Select, "Select"),
-            (Tool::Pan, "Pan"),
             (Tool::Pen, "Pen"),
-            (Tool::Marker, "Marker"),
-            (Tool::Text, "Text"),
-            (Tool::Connector, "Connector"),
+            (Tool::Connector, "Arrow"),
         ] {
             let active = tool == self.tool;
             tools = tools.child(tool_icon_button(tool.icon(), active).id(SharedString::from(format!("tool-{}", label))).on_click(
@@ -2441,10 +2203,9 @@ impl Render for BoardView {
             ));
         }
         toolbar = toolbar.child(tools);
-        toolbar = toolbar.child(toolbar_divider());
-        // The pen palette only shows for the drawing tools — the rest
-        // of the time the toolbar stays quiet.
-        if self.tool == Tool::Pen || self.tool == Tool::Marker {
+        // The pen palette only shows for the pen — the rest of the
+        // time the toolbar stays quiet.
+        if self.tool == Tool::Pen {
             for hex in PALETTE {
             let active = self.pen_color == hex;
             let (r, g, b) = parse_hex(hex).unwrap_or((0, 0, 0));
@@ -2468,72 +2229,44 @@ impl Render for BoardView {
             )));
             }
         }
-        // Group/ungroup/delete only appear while something is selected.
-        if !board.selected.is_empty() {
-            toolbar = toolbar.child(toolbar_divider());
-            toolbar = toolbar
-                .child(action_icon_button(Icon::Group, 0x333333).id("btn-group").on_click(cx.listener(
-                    |this, _event: &gpui::ClickEvent, _window, cx| {
-                        let grouped = this.shared.board.borrow_mut().group_selection();
-                        this._status = match grouped {
-                            Some(g) => format!("Grouped (group {}).", g),
-                            None => "Select 2+ items to group.".to_string(),
-                        };
-                        this.save();
-                        cx.notify();
-                    },
-                )))
-                .child(action_icon_button(Icon::Ungroup, 0x333333).id("btn-ungroup").on_click(cx.listener(
-                    |this, _event: &gpui::ClickEvent, _window, cx| {
-                        this.shared.board.borrow_mut().ungroup_selection();
-                        this._status = "Ungrouped.".to_string();
-                        this.save();
-                        cx.notify();
-                    },
-                )))
-                .child(action_icon_button(Icon::Delete, 0x333333).id("btn-delete").on_click(cx.listener(
-                    |this, _event: &gpui::ClickEvent, _window, cx| {
+        // Delete is always present; with nothing selected it is dimmed
+        // and does nothing, so the bar never changes shape.
+        let has_selection = !board.selected.is_empty();
+        toolbar = toolbar.child(toolbar_divider());
+        toolbar = toolbar.child(
+            action_icon_button(
+                Icon::Delete,
+                if has_selection { 0x333333 } else { 0xC7C7CC },
+            )
+            .id("btn-delete")
+            .on_click(cx.listener(
+                |this, _event: &gpui::ClickEvent, _window, cx| {
+                    if !this.shared.board.borrow().selected.is_empty() {
                         this.shared.board.borrow_mut().delete_selection();
                         this._status = "Deleted selection.".to_string();
                         this.save();
-                        cx.notify();
-                    },
-                )));
-        }
-        toolbar = toolbar.child(toolbar_divider());
-        toolbar = toolbar.child(action_icon_button(Icon::Hide, 0x333333).id("btn-hide").on_click(cx.listener(
-            |_this, _event: &gpui::ClickEvent, window, cx| {
-                window.minimize_window();
-                cx.notify();
-            },
-        )));
-        toolbar = toolbar.child(toolbar_divider());
-        toolbar = toolbar.child(
-            action_icon_button(Icon::Tune, 0x333333)
-                .id("btn-canvas")
-                .on_click(cx.listener(|this, _event: &gpui::ClickEvent, _window, cx| {
-                    this.canvas_panel = !this.canvas_panel;
+                    }
                     cx.notify();
-                })),
+                },
+            )),
         );
 
         // --- board area ---
-        // The customisation panel, when open, sits above the interaction
-        // surface so its buttons receive clicks.
-        let mut board_area = div()
+        // Clipped: a card panned above the top edge must disappear at
+        // the toolbar, never paint over it.
+        let board_area = div()
             .relative()
             .flex_1()
             .bg(board_bg)
+            .overflow_hidden()
             .child(back_canvas)
             .children(item_els)
             .child(front_canvas)
             .child(interaction);
-        if self.canvas_panel {
-            board_area = board_area.child(self.canvas_panel_el(cx));
-        }
 
-        // --- bottom bars ---
-        let mut root = div()
+        // --- root: toolbar over the board, nothing else. There is no
+        // bottom bar: text is edited inside its card.
+        let root = div()
             .size_full()
             .flex()
             .flex_col()
@@ -2547,15 +2280,12 @@ impl Render for BoardView {
                 if key == " " || key == "space" {
                     this.space_down = true;
                 }
-                // "h" hides the board (minimise); the handle brings it back.
-                if key == "h" && this.add_panel.is_none() && this.editing.is_none() {
+                // "h" hides the board (minimise). It stays alive in
+                // the Dock / taskbar, which brings it back — the one
+                // window is the whole app, there is no second handle
+                // window anymore.
+                if key == "h" && this.editing.is_none() {
                     window.minimize_window();
-                    cx.notify();
-                    return;
-                }
-                // Esc closes the customisation panel.
-                if key == "escape" && this.canvas_panel {
-                    this.canvas_panel = false;
                     cx.notify();
                     return;
                 }
@@ -2570,156 +2300,23 @@ impl Render for BoardView {
             .child(toolbar)
             .child(board_area);
 
-        if let Some(panel) = &self.add_panel {
-            let text = if panel.input.is_empty() {
-                "Type here…  (Enter to add, Esc to cancel)".to_string()
-            } else {
-                format!("{}▍", panel.input)
-            };
-            root = root.child(
-                div()
-                    .h(px(40.))
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .px(px(12.))
-                    .bg(rgb(0xFFFFFF))
-                    .border_b_1()
-                    .border_color(rgb(0xE5E5EA))
-                    .child(
-                        div()
-                            .text_size(px(13.))
-                            .font_weight(FontWeight::BOLD)
-                            .child("Add text".to_string()),
-                    )
-                    .child(div().text_size(px(13.)).child(text)),
-            );
-        } else if let Some((_, text)) = &self.editing {
-            root = root.child(
-                div()
-                    .h(px(40.))
-                    .flex()
-                    .items_center()
-                    .gap(px(8.))
-                    .px(px(12.))
-                    .bg(rgb(0xFFFFFF))
-                    .border_b_1()
-                    .border_color(rgb(0xE5E5EA))
-                    .child(
-                        div()
-                            .text_size(px(13.))
-                            .font_weight(FontWeight::BOLD)
-                            .child("Editing note — Enter = new line, Esc = done".to_string()),
-                    )
-                    .child(div().text_size(px(13.)).child(format!("{}▍", text))),
-            );
-        }
-
         root
     }
 }
 
-/// Open the board window and remember its handle on the shared state.
-pub fn open_board_window(shared: &Shared, cx: &mut App) -> anyhow::Result<AnyWindowHandle> {
+/// Open the board window: the one window of the app. Hiding is
+/// minimise (`h` or the OS control); the window stays alive in the
+/// Dock / taskbar, which is what brings it back. There is no second
+/// handle window: a corner reveal needs a system-wide mouse monitor,
+/// which GPUI does not provide, so it is not faked here.
+pub fn open_board_window(shared: &Shared, cx: &mut App) -> anyhow::Result<()> {
     let shared2 = shared.clone();
-    let handle = cx.open_window(
+    cx.open_window(
         WindowOptions {
             window_bounds: None,
             ..Default::default()
         },
         move |_window, cx| cx.new(|cx| BoardView::new(shared2, cx)),
     )?;
-    let any: AnyWindowHandle = handle.into();
-    *shared.board_window.borrow_mut() = Some(any);
-    Ok(any)
-}
-
-/// Open the small corner handle window (a PopUp that sits above other apps).
-pub fn open_handle_window(shared: &Shared, cx: &mut App) -> anyhow::Result<()> {
-    let display = cx.primary_display();
-    let (dx, dy, dw) = match &display {
-        Some(d) => {
-            let b = d.bounds();
-            (
-                f32::from(b.origin.x),
-                f32::from(b.origin.y),
-                f32::from(b.size.width),
-            )
-        }
-        None => (0.0, 0.0, 1440.0),
-    };
-    let handle_w = 168.0;
-    let bounds = Bounds::new(
-        point(px(dx + dw - handle_w - 16.0), px(dy + 16.0)),
-        size(px(handle_w), px(44.)),
-    );
-    let shared2 = shared.clone();
-    cx.open_window(
-        WindowOptions {
-            window_bounds: Some(WindowBounds::Windowed(bounds)),
-            kind: WindowKind::PopUp,
-            ..Default::default()
-        },
-        move |_window, cx| cx.new(|cx| HandleView::new(shared2, cx)),
-    )?;
     Ok(())
-}
-
-pub struct HandleView {
-    shared: Shared,
-    focus_handle: FocusHandle,
-    title_set: bool,
-}
-
-impl HandleView {
-    pub fn new(shared: Shared, cx: &mut Context<Self>) -> Self {
-        Self {
-            shared,
-            focus_handle: cx.focus_handle(),
-            title_set: false,
-        }
-    }
-}
-
-impl Render for HandleView {
-    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        if !self.title_set {
-            window.set_window_title("Bowerbird");
-            self.title_set = true;
-        }
-        let shared = self.shared.clone();
-        div()
-            .size_full()
-            .flex()
-            .items_center()
-            .justify_center()
-            .bg(rgb(0x1A1A1A))
-            .text_color(rgb(0xFFFFFF))
-            .text_size(px(13.))
-            .font_weight(FontWeight::BOLD)
-            .track_focus(&self.focus_handle)
-            .id("handle")
-            .on_click(cx.listener(move |this, _event: &gpui::ClickEvent, _window, cx| {
-                // Try to bring the existing board window forward; if it was
-                // closed, open a fresh one over the same shared board.
-                let existing = *this.shared.board_window.borrow();
-                let mut revived = false;
-                if let Some(handle) = existing {
-                    if handle
-                        .update(cx, |_view, window, _cx| {
-                            window.activate_window();
-                        })
-                        .is_ok()
-                    {
-                        revived = true;
-                    }
-                }
-                if !revived {
-                    let _ = open_board_window(&this.shared, cx);
-                }
-                let _ = &shared;
-                cx.notify();
-            }))
-            .child(SharedString::from("▦  Bowerbird"))
-    }
 }

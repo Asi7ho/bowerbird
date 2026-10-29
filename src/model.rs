@@ -306,12 +306,12 @@ pub enum GridMode {
 
 impl Default for GridMode {
     fn default() -> Self {
-        GridMode::Lines
+        GridMode::Dots
     }
 }
 
 fn default_bg() -> String {
-    "#F7F5F0".to_string()
+    "#FFFFFF".to_string()
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -997,8 +997,8 @@ mod tests {
         // A board saved before canvas settings existed has neither field.
         let json = r#"{"items":[],"camera":{"x":0.0,"y":0.0,"zoom":1.0},"next_id":0,"next_group":0}"#;
         let b = Board::from_json(json).unwrap();
-        assert_eq!(b.bg, "#F7F5F0");
-        assert_eq!(b.grid, GridMode::Lines);
+        assert_eq!(b.bg, "#FFFFFF");
+        assert_eq!(b.grid, GridMode::Dots);
         let json = r##"{"items":[],"camera":{"x":0.0,"y":0.0,"zoom":1.0},"next_id":0,"next_group":0,"bg":"#EAF3EC","grid":"Dots"}"##;
         let b = Board::from_json(json).unwrap();
         assert_eq!(b.bg, "#EAF3EC");
