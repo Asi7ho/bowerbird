@@ -11,6 +11,8 @@
     <div id="board">
       <svg id="canvas-svg"><g id="world"></g></svg>
       <div id="cards"></div>
+      <div id="resize-handle" aria-hidden="true"></div>
+      <button id="edge-handle" title="Hide to the right edge" aria-label="Hide to the right edge"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg></button>
       <div id="toolbar-wrap">
         <div id="toolbar">
           <div class="seg" id="tools">
@@ -39,8 +41,8 @@
           <h3>Canvas</h3>
           <div class="canvas-opt" id="bg-opts"></div>
           <div class="canvas-opt" id="grid-opts"></div>
-          <h3>About link cards</h3>
-          <p class="meta">A link card is a preview: the site's own image, icon and title when the site provides them. Click a card's image, title or domain to open it in your browser. Dropped links become preview cards automatically; a video link becomes a video card instead.</p>
+          <h3>App</h3>
+          <button id="btn-quit">Quit Bowerbird</button>
         </div>
       </div>
       <div id="toast"></div>

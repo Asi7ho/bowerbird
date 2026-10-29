@@ -6,13 +6,18 @@
 // The board file format is unchanged from the GPUI board, so existing
 // boards load as-is (an old embed:true flag is simply ignored).
 
-const { app, BaseWindow, WebContentsView, ipcMain, shell, protocol } = require('electron');
+const { app, BaseWindow, WebContentsView, ipcMain, shell, protocol, screen } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { Readable } = require('node:stream');
 
 let win = null;
 let boardView = null;
+// Edge-handle state: when collapsed, the window is slid right so only
+// its leftmost 32px (the handle tab) stay on screen.
+let edgeCollapsed = false;
+let edgeSavedBounds = null;
+const EDGE_HANDLE_W = 32;
 
 // ---------------------------------------------------------------- board file
 
@@ -259,8 +264,31 @@ function registerIpc() {
     if (/^https?:\/\//.test(target)) return shell.openExternal(target);
     return shell.openPath(target);
   });
+  ipcMain.handle('bowerbird:toggle-edge', () => {
+    if (!win) return edgeCollapsed;
+    if (!edgeCollapsed) {
+      edgeSavedBounds = win.getBounds();
+      const display = screen.getDisplayMatching(edgeSavedBounds);
+      const wa = display.workArea;
+      win.setBounds({
+        x: wa.x + wa.width - EDGE_HANDLE_W,
+        y: edgeSavedBounds.y,
+        width: edgeSavedBounds.width,
+        height: edgeSavedBounds.height,
+      });
+      edgeCollapsed = true;
+    } else {
+      if (edgeSavedBounds) win.setBounds(edgeSavedBounds);
+      edgeCollapsed = false;
+    }
+    return edgeCollapsed;
+  });
   ipcMain.handle('bowerbird:minimise', () => { if (win) win.minimize(); });
   ipcMain.handle('bowerbird:close-window', () => { if (win) win.close(); });
+  // Quit must quit the app, not just close the window: on macOS
+  // closing the only window does not by itself end the app, and
+  // BaseWindow.close() alone did not end the process in testing.
+  ipcMain.handle('bowerbird:quit', () => { if (win) win.destroy(); app.quit(); });
   ipcMain.handle('bowerbird:fullscreen', () => { if (win) win.setFullScreen(!win.isFullScreen()); });
 }
 

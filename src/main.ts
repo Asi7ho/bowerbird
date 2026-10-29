@@ -9,8 +9,10 @@ interface BowerbirdAPI {
   fileSize(path: string): Promise<number>;
   fetchPreview(url: string): Promise<{ title: string | null; description: string | null; image: string | null; icon: string | null }>;
   openExternal(target: string): Promise<void>;
+  toggleEdge(): Promise<boolean>;
   minimise(): Promise<void>;
   closeWindow(): Promise<void>;
+  quit(): Promise<void>;
   fullscreen(): Promise<void>;
   getPathForFile(file: File): string;
   fileUrl(path: string): string;
@@ -54,7 +56,8 @@ const SHORTCUTS: Array<[string, string]> = [
   ["Double-click a link card", "Open it in your browser"],
   ["Double-click a PDF or picture", "Open it outside Bowerbird"],
   ["Click a play tile", "Play or pause audio / open a video"],
-  ["Drag a card corner", "Resize the card"],
+  ["Drag a card corner", "Resize the card (nwse cursor on hover)"],
+  ["Click the left edge handle", "Hide the app to the right edge / bring it back"],
   ["Shift + click", "Add to the selection"],
   ["Drag on empty space", "Marquee-select"],
   ["Ctrl / Cmd + V", "Paste a link as a card"],
@@ -83,6 +86,9 @@ let liveStroke: Pt[] | null = null;
 let audioEl: HTMLAudioElement | null = null;
 let audioId: number | null = null;
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
+let edgeCollapsed = false;
+let wheelSaveTimer: ReturnType<typeof setTimeout> | null = null;
+let lastToolbarKey = "";
 
 const boardEl = document.getElementById("board") as HTMLDivElement;
 const worldEl = document.getElementById("world") as unknown as SVGGElement;
@@ -183,8 +189,9 @@ function renderGrid(): void {
 }
 
 function renderStrokesAndConnectors(): void {
-  const cam = board.camera;
+  const v = visibleRect();
   for (const item of board.items) {
+    if (!isVisibleItem(item, v)) continue;
     if ("Stroke" in item.kind) {
       const { points, color, width, marker } = item.kind.Stroke;
       if (points.length < 2) continue;
@@ -227,30 +234,27 @@ function renderStrokesAndConnectors(): void {
     const x0 = Math.min(drag.start.x, drag.current.x), y0 = Math.min(drag.start.y, drag.current.y);
     worldEl.appendChild(svgEl2("rect", { x: String(x0), y: String(y0), width: String(Math.abs(drag.current.x - drag.start.x)), height: String(Math.abs(drag.current.y - drag.start.y)), fill: "none", stroke: ACCENT, "stroke-width": "1" }));
   }
-  if (selected.length === 1) {
-    const it = boardGet(board, selected[0]);
-    if (it && !("Connector" in it.kind)) {
-      const [p, s] = itemBounds(board, it);
-      const hx = p.x + s.w, hy = p.y + s.h;
-      const hs = 16 / cam.zoom;
-      worldEl.appendChild(svgEl2("rect", { x: String(hx - hs), y: String(hy - hs), width: String(hs), height: String(hs), fill: "#fff", stroke: "#8e8e93", "stroke-width": String(1 / cam.zoom) }));
-    }
-  }
 }
 
 function cardHtml(item: Item, screen: Pt, w: number, h: number): string {
   const sel = selected.includes(item.id);
   const cls = sel ? "card selected" : "card";
-  const style = `left:${screen.x}px;top:${screen.y}px;width:${w}px;height:${h}px;`;
   const cam = board.camera;
+  // The card itself is laid out in world units and scaled by the
+  // camera zoom, so its *content* scales with the zoom too. Before,
+  // only the outer box scaled (width/height in screen px) while inner
+  // text, padding and image heights stayed fixed, so zooming out left
+  // full-size text overflowing a shrunken card.
+  const ww = w / cam.zoom, hh = h / cam.zoom;
+  const style = `left:${screen.x}px;top:${screen.y}px;width:${ww}px;height:${hh}px;transform:scale(${cam.zoom});transform-origin:top left;`;
   if ("Text" in item.kind) {
     if (editingId === item.id) return ""; // the editor DOM is managed separately
     const { text, size, color } = item.kind.Text;
-    return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner note-body" style="font-size:${size * cam.zoom}px;color:${color}">${renderMarkdownHtml(text, size)}</div></div>`;
+    return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner note-body" style="font-size:${size}px;color:${color}">${renderMarkdownHtml(text, size)}</div></div>`;
   }
   if ("Image" in item.kind) {
     const { path } = item.kind.Image;
-    return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner"><img src="${api.fileUrl(path)}" style="width:100%;height:100%;object-fit:cover;border-radius:12px" alt="" /></div></div>`;
+    return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner"><img src="${api.fileUrl(path)}" draggable="false" style="width:100%;height:100%;object-fit:cover;border-radius:12px" alt="" /></div></div>`;
   }
   if ("UrlCard" in item.kind) {
     const { url, title, description, image, icon } = item.kind.UrlCard;
@@ -264,7 +268,7 @@ function cardHtml(item: Item, screen: Pt, w: number, h: number): string {
     const footer = `<div class="link-footer"><a class="link-domain" data-action="open-link" data-id="${item.id}">${ico ? `<img class="favicon" src="${esc(ico)}" alt="" onerror="this.style.display='none';var f=this.nextElementSibling;if(f)f.style.display='flex'" /><span class="favicon-fallback" style="display:none;background:${tint(tile, 0.85)};color:${tile}">${initial}</span>` : `<span class="favicon-fallback" style="background:${tint(tile, 0.85)};color:${tile}">${initial}</span>`}<span>${domain}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" /></svg></a></div>`;
     if (img) {
       return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner link-card">
-        <a class="link-image" data-action="open-link" data-id="${item.id}"><img src="${esc(img)}" alt="" onerror="this.closest('.link-image').style.display='none'" /></a>
+        <a class="link-image" data-action="open-link" data-id="${item.id}"><img src="${esc(img)}" draggable="false" alt="" onerror="this.closest('.link-image').style.display='none'" /></a>
         <div class="link-body">
           <a class="link-title" data-action="open-link" data-id="${item.id}">${esc(head)}</a>
           ${description ? `<div class="link-desc">${esc(description)}</div>` : ""}
@@ -284,7 +288,7 @@ function cardHtml(item: Item, screen: Pt, w: number, h: number): string {
     const kb = Math.round(size_bytes / 1024);
     return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner row" style="padding:12px">
       <div class="tile" style="background:${tint("#E63946", 0.88)};color:#E63946;font-size:13px">PDF</div>
-      <div class="col"><div class="title" style="font-size:14px">${elide(name, w - 92, 14, true)}</div><div class="sub" style="font-size:12px">${kb} KB</div></div></div></div>`;
+      <div class="col"><div class="title" style="font-size:14px">${elide(name, ww - 92, 14, true)}</div><div class="sub" style="font-size:12px">${kb} KB</div></div></div></div>`;
   }
   if ("Swatch" in item.kind) {
     const { hex } = item.kind.Swatch;
@@ -297,23 +301,41 @@ function cardHtml(item: Item, screen: Pt, w: number, h: number): string {
     const bars = [5, 9, 13, 7, 15, 11, 6, 13, 17, 10, 8, 14, 6, 12, 9, 5, 10, 13].map((bh, i) => `<i style="height:${bh}px;background:${i % 3 === 0 ? "#b8a6cc" : "#6a4c93"}"></i>`).join("");
     return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner row" style="padding:12px">
       <div class="audio-tile clickable" data-action="play-audio" data-id="${item.id}" style="background:${tint("#6A4C93", 0.88)};color:#6a4c93;font-size:18px">${playing ? "❚❚" : "▶"}</div>
-      <div class="col"><div class="title" style="font-size:14px">${elide(name, w - 92, 14, true)}</div><div class="wave">${bars}</div>${playing ? `<div class="sub" style="font-size:12px">Now playing</div>` : ""}</div></div></div>`;
+      <div class="col"><div class="title" style="font-size:14px">${elide(name, ww - 92, 14, true)}</div><div class="wave">${bars}</div>${playing ? `<div class="sub" style="font-size:12px">Now playing</div>` : ""}</div></div></div>`;
   }
   if ("Video" in item.kind) {
     const { source, remote, size_bytes } = item.kind.Video;
     const name = remote ? domainOf(source) : (source.split("/").pop() ?? source);
     const sub = remote ? "Video link" : `${Math.round(size_bytes / 1024)} KB`;
-    const thumbH = (w - 24) * 9 / 16;
-    if (h >= thumbH + 70) {
+    const thumbH = (ww - 24) * 9 / 16;
+    if (hh >= thumbH + 70) {
       return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
-        <div class="video-thumb clickable" data-action="play-video" data-id="${item.id}" style="width:${w - 24}px;height:${thumbH}px;font-size:28px">▶</div>
-        <div class="title" style="font-size:14px">${elide(name, w - 24, 14, true)}</div><div class="sub" style="font-size:12px">${sub}</div></div></div>`;
+        <div class="video-thumb clickable" data-action="play-video" data-id="${item.id}" style="width:${ww - 24}px;height:${thumbH}px;font-size:28px">▶</div>
+        <div class="title" style="font-size:14px">${elide(name, ww - 24, 14, true)}</div><div class="sub" style="font-size:12px">${sub}</div></div></div>`;
     }
     return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner row" style="padding:12px">
       <div class="video-thumb clickable" data-action="play-video" data-id="${item.id}" style="width:96px;height:56px;font-size:20px">▶</div>
-      <div class="col"><div class="title" style="font-size:14px">${elide(name, w - 132, 14, true)}</div><div class="sub" style="font-size:12px">${sub}</div></div></div></div>`;
+      <div class="col"><div class="title" style="font-size:14px">${elide(name, ww - 132, 14, true)}</div><div class="sub" style="font-size:12px">${sub}</div></div></div></div>`;
   }
   return "";
+}
+
+// Visible world rect, with a margin so cards at the edge do not pop
+// in and out while panning. Everything else is culled: for a board
+// with thousands of items, render() only builds DOM for what is on
+// screen, instead of rebuilding every card on every mousemove.
+function visibleRect(): { x0: number; y0: number; x1: number; y1: number } {
+  const cam = board.camera;
+  const m = 200;
+  return {
+    x0: cam.x - m, y0: cam.y - m,
+    x1: cam.x + window.innerWidth / cam.zoom + m,
+    y1: cam.y + window.innerHeight / cam.zoom + m,
+  };
+}
+function isVisibleItem(item: Item, v: { x0: number; y0: number; x1: number; y1: number }): boolean {
+  const [p, s] = itemBounds(board, item);
+  return p.x < v.x1 && p.x + s.w > v.x0 && p.y < v.y1 && p.y + s.h > v.y0;
 }
 
 function render(): void {
@@ -324,12 +346,15 @@ function render(): void {
   renderGrid();
   renderStrokesAndConnectors();
   // Cards: rebuild, except the note being edited (its textarea stays).
+  // Only visible cards are built (see visibleRect).
   const editingEl = editingId !== null ? cardsEl.querySelector(`[data-id="${editingId}"]`) : null;
   const editingHtml = editingEl ? editingEl.outerHTML : null;
+  const v = visibleRect();
   let html = "";
   for (const item of board.items) {
     if ("Stroke" in item.kind || "Connector" in item.kind) continue;
     if (editingId === item.id) continue;
+    if (!isVisibleItem(item, v)) continue;
     const screen = toScreen(item.pos);
     html += cardHtml(item, screen, item.size.w * cam.zoom, item.size.h * cam.zoom);
   }
@@ -337,9 +362,30 @@ function render(): void {
   applyStacking();
   if (editingHtml) cardsEl.insertAdjacentHTML("beforeend", editingHtml);
   updateToolbar();
+  updateResizeHandle();
+}
+
+function updateResizeHandle(): void {
+  const el = document.getElementById("resize-handle") as HTMLDivElement;
+  if (selected.length !== 1 || settingsOpen || editingId !== null) { el.style.display = "none"; return; }
+  const it = boardGet(board, selected[0]);
+  if (!it || "Connector" in it.kind) { el.style.display = "none"; return; }
+  const [p, s] = itemBounds(board, it);
+  const screen = toScreen({ x: p.x + s.w, y: p.y + s.h });
+  if (screen.x < 0 || screen.y < 0 || screen.x > window.innerWidth || screen.y > window.innerHeight) {
+    el.style.display = "none"; return;
+  }
+  el.style.left = `${screen.x}px`;
+  el.style.top = `${screen.y}px`;
+  el.style.display = "block";
 }
 
 function updateToolbar(): void {
+  // render() runs on every mousemove; rebuilding the toolbar's DOM
+  // every time is wasted work when nothing about it changed.
+  const key = `${tool}|${selected.length}|${penColor}`;
+  if (key === lastToolbarKey) return;
+  lastToolbarKey = key;
   const setActive = (id: string, on: boolean) => {
     const el = document.getElementById(id);
     if (el) el.classList.toggle("active", on);
@@ -383,6 +429,9 @@ function updateSelection(): void {
   }
   const del = document.getElementById("btn-delete") as HTMLButtonElement;
   del.classList.toggle("dim", selected.length === 0);
+  // Selection changes without a full render (a plain click) still
+  // need the resize handle to appear / disappear immediately.
+  updateResizeHandle();
 }
 
 function applyStacking(): void {
@@ -407,7 +456,7 @@ function startTextEdit(id: number): void {
   const ta = document.createElement("textarea");
   ta.className = "note-edit";
   ta.value = item.kind.Text.text;
-  ta.style.fontSize = `${size * board.camera.zoom}px`;
+  ta.style.fontSize = `${size}px`;
   ta.style.color = item.kind.Text.color;
   card.innerHTML = "";
   card.appendChild(ta);
@@ -464,7 +513,10 @@ function cornerHit(id: number, world: Pt): boolean {
 
 boardEl.addEventListener("mousedown", (e: MouseEvent) => {
   const target = e.target as HTMLElement;
-  if (target.closest("#toolbar, #settings-backdrop, #toast")) return;
+  if (target.closest("#toolbar, #settings-backdrop, #toast, #edge-handle")) return;
+  // A board click or drag must never start a native text selection
+  // across the cards (bug: clicking anywhere highlighted all text).
+  if (!target.closest("textarea.note-edit")) window.getSelection()?.removeAllRanges();
   if (e.button !== 0) return;
   const winPt: Pt = { x: e.clientX, y: e.clientY };
   if (editingId !== null && !target.closest("textarea.note-edit")) {
@@ -536,9 +588,27 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
 });
 
 window.addEventListener("mousemove", (e: MouseEvent) => {
-  if (!drag) return;
   const winPt: Pt = { x: e.clientX, y: e.clientY };
   const world = toWorld(winPt);
+  if (!drag) {
+    // Cursor hints: resize on a selected card's corner, move on a
+    // card, crosshair for pen/connector, default on empty canvas.
+    if (settingsOpen || editingId !== null) {
+      boardEl.style.cursor = "default";
+    } else if (tool === "pen" || tool === "connector") {
+      boardEl.style.cursor = "crosshair";
+    } else if (spaceDown) {
+      boardEl.style.cursor = "grab";
+    } else if (selected.length === 1 && cornerHit(selected[0], world)) {
+      boardEl.style.cursor = "nwse-resize";
+    } else if (hitTest(board, world) !== null) {
+      boardEl.style.cursor = "move";
+    } else {
+      boardEl.style.cursor = "default";
+    }
+    return;
+  }
+  boardEl.style.cursor = drag.kind === "resize" ? "nwse-resize" : drag.kind === "pan" ? "grabbing" : drag.kind === "move" ? "move" : "default";
   if (drag.kind === "pan") {
     board.camera.x -= (winPt.x - drag.last.x) / board.camera.zoom;
     board.camera.y -= (winPt.y - drag.last.y) / board.camera.zoom;
@@ -618,12 +688,17 @@ window.addEventListener("wheel", (e: WheelEvent) => {
   if (e.ctrlKey || e.metaKey) {
     const factor = Math.exp(-e.deltaY * 0.0015);
     zoomAt({ x: e.clientX, y: e.clientY }, factor);
-    save();
   } else {
     board.camera.x -= e.deltaX / board.camera.zoom;
     board.camera.y -= e.deltaY / board.camera.zoom;
-    save();
   }
+  // Wheel events fire many times a second; writing the whole board
+  // JSON on every tick is the worst save cost for a large board.
+  // Save once, 400ms after the last wheel event instead. Content
+  // edits still save immediately (move/resize mouseup, note commit),
+  // and Quit saves explicitly before closing.
+  if (wheelSaveTimer) clearTimeout(wheelSaveTimer);
+  wheelSaveTimer = setTimeout(() => save(), 400);
   render();
 }, { passive: false });
 
@@ -722,6 +797,23 @@ document.getElementById("btn-delete")?.addEventListener("click", () => {
   save(); render();
 });
 
+document.getElementById("btn-quit")?.addEventListener("click", async () => {
+  // Commit any note being edited, save, then quit. closeWindow
+  // closes the only window, and the main process quits on
+  // window-all-closed, so this is a full app quit.
+  commitEditingIfAny();
+  try { await api.saveBoard(JSON.stringify(board)); } catch { /* closing anyway */ }
+  setSettings(false);
+  api.quit().catch(() => undefined);
+});
+document.getElementById("edge-handle")?.addEventListener("click", async () => {
+  const collapsed = await api.toggleEdge().catch(() => edgeCollapsed);
+  edgeCollapsed = collapsed;
+  const handle = document.getElementById("edge-handle") as HTMLButtonElement;
+  handle.classList.toggle("collapsed", collapsed);
+  handle.title = collapsed ? "Bring the app back" : "Hide to the right edge";
+  handle.setAttribute("aria-label", handle.title);
+});
 document.getElementById("btn-settings")?.addEventListener("click", () => setSettings(!settingsOpen));
 document.getElementById("settings-close")?.addEventListener("click", () => setSettings(false));
 document.getElementById("settings-backdrop")?.addEventListener("click", (e) => {

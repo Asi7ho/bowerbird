@@ -47,16 +47,27 @@ focused minimises it, and it stays alive in the Dock / taskbar, which
 is what brings it back. There is no second handle window.
 
 - **Vertical toolbar, left side:** a frosted vertical bar, centred on
-  the left edge — Select, Pen, Arrow (connectors), the pen palette
-  (only while Pen is active), zoom out and zoom in, Delete, and
-  Settings. There is no zoom percentage readout: zoom is `+`/`-`,
-  `Ctrl` + scroll, or the toolbar buttons. Delete is dimmed while
-  nothing is selected. The bar itself is the window drag region; its
-  buttons are not. A fresh board starts clear of the bar, so the
-  welcome board is never hidden behind it.
+  the left edge (40px in, clear of the edge handle) — Select, Pen,
+  Arrow (connectors), the pen palette (only while Pen is active),
+  zoom out and zoom in, Delete, and Settings. There is no zoom
+  percentage readout: zoom is `+`/`-`, `Ctrl` + scroll, or the toolbar
+  buttons. Delete is dimmed while nothing is selected. The bar itself
+  is the window drag region; its buttons are not. A fresh board starts
+  clear of the bar, so the welcome board is never hidden behind it.
+- **Edge handle:** a slim, semi-transparent tab on the far left edge.
+  Click it and the whole window slides to the right edge of the
+  screen, leaving only the tab visible; click the tab again to slide
+  back. The chevron points right when the app is out, left when it is
+  hidden. Cards scale with the zoom: a card is laid out in world units
+  and scaled by the camera, so its text, padding and images shrink
+  and grow with it instead of staying fixed while the card shrinks.
+  Text is never selected by a board click or drag; only the note
+  editor and Settings allow text selection. A selected card shows a
+  visible resize square at its bottom-right corner, and hovering that
+  corner shows a diagonal resize cursor.
 - **Settings (?):** a panel listing every keyboard shortcut, plus the
   canvas background (White, Paper, Sage, Sky, Ink) and grid
-  (Dots, Lines, Off).
+  (Dots, Lines, Off), and a Quit Bowerbird button under App.
 - **In-app hotkeys:** `V` select, `P` pen, `A` arrow, `Ctrl/Cmd+G`
   group, `Ctrl/Cmd+U` ungroup, `Delete` removes the selection,
   `+`/`-` zoom, `0` resets the view, hold `Space` to pan, `h` hides,
