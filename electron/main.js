@@ -443,7 +443,7 @@ function registerIpc() {
     return cornerReveal;
   });
   ipcMain.handle('bowerbird:collapse', () => collapseBoard());
-  ipcMain.handle('bowerbird:move-window', (_event, dx, dy) => {
+  ipcMain.on('bowerbird:move-window', (_event, dx, dy) => {
     if (!win || isCollapsed) return;
     const b = win.getBounds();
     win.setBounds({ x: Math.round(b.x + dx), y: Math.round(b.y + dy), width: b.width, height: b.height });

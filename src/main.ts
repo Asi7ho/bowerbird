@@ -13,7 +13,7 @@ interface BowerbirdAPI {
   getAppSettings(): Promise<{ corner: string }>;
   setCorner(corner: string): Promise<string>;
   collapse(): Promise<void>;
-  moveWindow(dx: number, dy: number): Promise<void>;
+  moveWindow(dx: number, dy: number): void;
   minimise(): Promise<void>;
   closeWindow(): Promise<void>;
   quit(): Promise<void>;
@@ -1147,15 +1147,21 @@ let collapseDragged = false;
 document.getElementById("btn-collapse")?.addEventListener("mousedown", (e) => {
   if (e.button !== 0) return;
   collapseDragged = false;
-  let lastX = e.clientX, lastY = e.clientY;
+  // Screen coordinates, not client coordinates: client coordinates
+  // move when the window itself moves, so a window move fires a
+  // mousemove that moves the window back — that feedback loop is
+  // what made dragging shake. Screen coordinates stay put when
+  // the window moves under a stationary mouse, so a move-induced
+  // mousemove has dx = dy = 0 and is skipped.
+  let lastX = e.screenX, lastY = e.screenY;
   let moved = 0;
   const onMove = (me: MouseEvent) => {
-    const dx = me.clientX - lastX, dy = me.clientY - lastY;
-    lastX = me.clientX; lastY = me.clientY;
+    const dx = me.screenX - lastX, dy = me.screenY - lastY;
+    lastX = me.screenX; lastY = me.screenY;
     moved += Math.abs(dx) + Math.abs(dy);
     if (moved > 5) {
       collapseDragged = true;
-      api.moveWindow(dx, dy).catch(() => undefined);
+      if (dx !== 0 || dy !== 0) api.moveWindow(dx, dy);
     }
   };
   const onUp = () => {
