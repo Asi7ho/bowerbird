@@ -857,8 +857,14 @@ window.addEventListener("wheel", (e: WheelEvent) => {
     const factor = Math.exp(-e.deltaY * 0.0015);
     zoomAt({ x: e.clientX, y: e.clientY }, factor);
   } else {
-    board.camera.x -= e.deltaX / board.camera.zoom;
-    board.camera.y -= e.deltaY / board.camera.zoom;
+    // Pan follows standard Mac scrolling: scrolling down moves
+    // the content up, as in Safari, Notes and every other Mac
+    // app. The previous code moved the content with the scroll,
+    // which is the opposite of what a Mac trackpad user expects.
+    // (Dragging with Space still grabs the paper and moves it
+    // with the pointer — that is a grab, not a scroll, and stays.)
+    board.camera.x += e.deltaX / board.camera.zoom;
+    board.camera.y += e.deltaY / board.camera.zoom;
   }
   // Wheel events fire many times a second; writing the whole board
   // JSON on every tick is the worst save cost for a large board.
