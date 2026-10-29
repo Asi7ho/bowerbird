@@ -26,6 +26,14 @@ cd "$(dirname "$0")/.."
 
 ARCH="${ARCH:-arm64}"
 VERSION="$(node -e "console.log(require('./package.json').version)")"
+# node_modules is gitignored, so a zip download does not contain it.
+# Fail with the actual fix instead of a Node stack trace.
+if [ ! -f node_modules/electron/package.json ]; then
+  echo "!! Dependencies are not installed in this folder."
+  echo "!! Run this first, then run this script again:"
+  echo "!!   npm install"
+  exit 1
+fi
 ELECTRON_VERSION="$(node -e "console.log(require('./node_modules/electron/package.json').version)")"
 OUT="dist-mac"
 APP="$OUT/Bowerbird.app"
