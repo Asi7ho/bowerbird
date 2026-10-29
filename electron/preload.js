@@ -14,7 +14,6 @@ contextBridge.exposeInMainWorld('bowerbird', {
   setCorner: (corner) => ipcRenderer.invoke('bowerbird:set-corner', corner),
   collapse: () => ipcRenderer.invoke('bowerbird:collapse'),
   restore: () => ipcRenderer.invoke('bowerbird:restore'),
-  peekImage: () => ipcRenderer.invoke('bowerbird:peek-image'),
   minimise: () => ipcRenderer.invoke('bowerbird:minimise'),
   closeWindow: () => ipcRenderer.invoke('bowerbird:close-window'),
   quit: () => ipcRenderer.invoke('bowerbird:quit'),

@@ -52,26 +52,22 @@ function saveAppSettings() {
   }
 }
 
-// Corner peek: the board hides into a corner, it does not vanish.
+// Corner icon: the board hides into a corner, it does not vanish.
 // The floating button in the board (see src/main.ts) asks the main
-// process to collapse. The main process first screenshots the board
-// view and shows a small version of it in a card at the chosen
-// screen corner. Clicking the card restores the board to its saved
-// bounds. A small version, not a literal corner slice, on purpose:
-// the corner slice of a board is often empty (the welcome board's
-// bottom-left corner is blank white), while a miniature is always
-// recognisable as the board. This is a real window receiving a
-// real click, so it works whether or not the main process could
-// query the cursor while hidden — the previous trigger-window
-// approach was dropped for exactly that reason, and a cursor poll
-// was dropped earlier because Electron's cursor query froze at
-// the last position before the board hid.
-// Peek size matches the board's 1.6 aspect, so the miniature is
-// not distorted.
-const PEEK_W = 240;
-const PEEK_H = 150;
+// process to collapse. The board window hides and only a small
+// round icon stays visible at the chosen screen corner. Clicking
+// the icon restores the board to its saved bounds. This is a real
+// window receiving a real click, so it works whether or not the
+// main process could query the cursor while hidden — the previous
+// trigger-window approach was dropped for exactly that reason,
+// and a cursor poll was dropped earlier because Electron's cursor
+// query froze at the last position before the board hid. No
+// screenshot is needed: the icon is just an icon.
+// The window is 80px so the 56px circle sits with a 12px margin
+// from the screen edges and room to grow slightly on hover.
+const PEEK_W = 80;
+const PEEK_H = 80;
 let peekWin = null;
-let peekImageURL = null;
 let savedBounds = null;
 let isCollapsed = false;
 
@@ -95,15 +91,6 @@ async function collapseBoard() {
   const bounds = peekBounds();
   if (!bounds) return; // Corner is Off: the button is hidden, so this should not happen.
   savedBounds = win.getBounds();
-  // Screenshot first, while the board is still visible, then
-  // shrink it to a miniature (2x for sharpness on Retina).
-  // On failure the peek still appears, with a placeholder.
-  try {
-    const img = await boardView.webContents.capturePage();
-    peekImageURL = img.resize({ width: PEEK_W * 2, height: PEEK_H * 2 }).toDataURL();
-  } catch {
-    peekImageURL = null;
-  }
   const { BrowserWindow } = require('electron');
   peekWin = new BrowserWindow({
     width: PEEK_W,
@@ -125,7 +112,9 @@ async function collapseBoard() {
   });
   try { peekWin.setAlwaysOnTop(true, 'screen-saver'); } catch { /* level is macOS-only */ }
   peekWin.setBounds(bounds);
-  peekWin.loadFile(path.join(__dirname, 'peek.html'));
+  // The corner tells the icon which way its expand arrow points:
+  // away from the corner, into the screen.
+  peekWin.loadFile(path.join(__dirname, 'peek.html'), { query: { corner: cornerReveal } });
   peekWin.on('closed', () => { peekWin = null; });
   win.hide();
   isCollapsed = true;
@@ -135,7 +124,6 @@ function restoreBoard() {
   if (!win) return;
   if (peekWin) { peekWin.destroy(); peekWin = null; }
   isCollapsed = false;
-  peekImageURL = null;
   win.show();
   if (win.isMinimized()) win.restore();
   if (savedBounds) win.setBounds(savedBounds);
@@ -401,18 +389,20 @@ function registerIpc() {
     if (!CORNERS.includes(corner)) return cornerReveal;
     cornerReveal = corner;
     saveAppSettings();
-    // Moving the peek while collapsed: the peek window follows the
-    // new corner (its screenshot stays the same; it is a peek, not
-    // a live view).
+    // Moving the icon while collapsed: it follows the new corner
+    // and its arrow is re-pointed by reloading with the new corner.
     if (isCollapsed && peekWin) {
       const bounds = peekBounds();
-      if (bounds) peekWin.setBounds(bounds);
+      if (bounds) {
+        peekWin.setBounds(bounds);
+        peekWin.loadFile(path.join(__dirname, 'peek.html'), { query: { corner: cornerReveal } });
+      }
     }
     return cornerReveal;
   });
   ipcMain.handle('bowerbird:collapse', () => collapseBoard());
   ipcMain.handle('bowerbird:restore', () => { restoreBoard(); });
-  ipcMain.handle('bowerbird:peek-image', () => peekImageURL);
+
   ipcMain.handle('bowerbird:minimise', () => { if (win) win.minimize(); });
   ipcMain.handle('bowerbird:close-window', () => { if (win) win.close(); });
   // Quit must quit the app, not just close the window: on macOS

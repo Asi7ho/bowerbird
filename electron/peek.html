@@ -5,48 +5,35 @@
     <title>Bowerbird</title>
     <style>
       html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
-      /* The peek: a card showing a small version of the board itself.
-         Hovering it grows it slightly and shows the hint, so it is
-         clear this corner is clickable to open the board again. */
-      #peek {
-        width: 100%; height: 100%; overflow: hidden; cursor: pointer;
-        background: #fff; border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 12px;
+      /* A small round icon, not a card: 56px circle, 12px margin
+         from the screen edges (the window is 80px). Hovering grows
+         it slightly; the arrow points away from the corner, into
+         the screen, so it reads as "open the board". */
+      #icon {
+        width: 56px; height: 56px; margin: 12px; border-radius: 50%;
+        background: rgba(255, 255, 255, 0.92);
+        border: 1px solid rgba(0, 0, 0, 0.12);
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.1);
-        transition: transform 0.15s ease, box-shadow 0.15s ease; position: relative;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
       }
-      #peek:hover { transform: scale(1.04); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22), 0 2px 8px rgba(0, 0, 0, 0.12); }
-      #peek img { width: 100%; height: 100%; object-fit: cover; display: none; }
-      #placeholder {
-        width: 100%; height: 100%; display: flex; flex-direction: column; gap: 6px;
-        align-items: flex-start; justify-content: center; padding: 16px;
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; color: #1d1d1f;
-      }
-      #placeholder b { font-size: 15px; }
-      #placeholder span { font-size: 12px; color: #86868b; }
-      #hint {
-        position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 12px;
-        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
-        font-size: 12px; color: #fff; background: linear-gradient(transparent, rgba(0, 0, 0, 0.55));
-        opacity: 0; transition: opacity 0.15s ease;
-      }
-      #peek:hover #hint { opacity: 1; }
+      #icon:hover { transform: scale(1.1); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22), 0 2px 8px rgba(0, 0, 0, 0.12); }
+      #icon svg { width: 24px; height: 24px; fill: none; stroke: #1d1d1f; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+      /* Base arrow points north-east (away from a bottom-left
+         corner); rotate it for the other corners. */
+      body.corner-bottom-left svg { transform: rotate(0deg); }
+      body.corner-bottom-right svg { transform: rotate(-90deg); }
+      body.corner-top-right svg { transform: rotate(180deg); }
+      body.corner-top-left svg { transform: rotate(90deg); }
     </style>
   </head>
   <body>
-    <div id="peek" title="Click to open the board">
-      <img id="shot" alt="" />
-      <div id="placeholder"><b>Bowerbird</b><span>Click to open the board</span></div>
-      <div id="hint">Click to open</div>
-    </div>
+    <div id="icon" title="Click to open the board"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18l12 -12" /><path d="M12 6h6v6" /></svg></div>
     <script>
-      window.bowerbird.peekImage().then((url) => {
-        if (!url) return;
-        const img = document.getElementById('shot');
-        img.src = url;
-        img.style.display = 'block';
-        document.getElementById('placeholder').style.display = 'none';
-      }).catch(() => undefined);
-      document.getElementById('peek').addEventListener('click', () => {
+      const corner = new URLSearchParams(location.search).get('corner') || 'bottom-left';
+      document.body.classList.add('corner-' + corner);
+      document.getElementById('icon').addEventListener('click', () => {
         window.bowerbird.restore().catch(() => undefined);
       });
     </script>

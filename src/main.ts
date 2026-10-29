@@ -52,6 +52,8 @@ const SHORTCUTS: Array<[string, string]> = [
   ["H", "Hide the board (minimise)"],
   ["?", "Open settings"],
   ["Esc", "Close settings, commit a note, or clear the selection"],
+  ["Tab", "Go to the next element"],
+  ["Shift + Tab", "Go to the previous element"],
   ["Double-click empty space", "New note"],
   ["Double-click a note", "Edit it in place"],
   ["Click a link card", "Open it in your browser"],
@@ -833,9 +835,55 @@ function toggleAudio(id: number, path: string): void {
 
 // ---------------------------------------------------------------- keyboard
 
+// Find elements one by one on an infinite board: Tab steps through
+// the board's elements in board order, selecting each in turn and
+// centring the camera on it, so an element far from the current
+// view is found without hunting. Shift+Tab steps backwards, and
+// the cycle wraps. Pen strokes and connectors are skipped: they
+// are drawings and lines, not elements to find. A grouped item
+// selects its whole group and centres on the group's bounds.
+function navigateElements(dir: 1 | -1): void {
+  const navigable = board.items.filter((it) => !("Stroke" in it.kind) && !("Connector" in it.kind));
+  if (navigable.length === 0) return;
+  let idx = -1;
+  if (selected.length === 1) idx = navigable.findIndex((it) => it.id === selected[0]);
+  if (idx === -1 && selected.length > 0) {
+    const first = navigable.findIndex((it) => selected.includes(it.id));
+    if (first !== -1) idx = first;
+  }
+  const next = idx === -1
+    ? (dir === 1 ? 0 : navigable.length - 1)
+    : (idx + dir + navigable.length) % navigable.length;
+  const target = navigable[next];
+  selected = select(board, [], target.id, false);
+  let c: Pt;
+  if (target.group !== null) {
+    const members = board.items.filter((it) => it.group === target.group);
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const m of members) {
+      const [p, s] = itemBounds(board, m);
+      minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x + s.w); maxY = Math.max(maxY, p.y + s.h);
+    }
+    c = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+  } else {
+    c = centre(target);
+  }
+  board.camera.x = c.x - window.innerWidth / 2 / board.camera.zoom;
+  board.camera.y = c.y - window.innerHeight / 2 / board.camera.zoom;
+  save(); render();
+}
+
 window.addEventListener("keydown", (e: KeyboardEvent) => {
   const active = document.activeElement;
   if (active && active.tagName === "TEXTAREA") return;
+  // Tab cycles elements, unless Settings is open, where Tab keeps
+  // its normal job of moving focus around the sheet.
+  if (e.key === "Tab" && !settingsOpen) {
+    e.preventDefault();
+    navigateElements(e.shiftKey ? -1 : 1);
+    return;
+  }
   const ctrl = e.ctrlKey || e.metaKey;
   if (e.key === " " || e.key === " ") spaceDown = true;
   if (e.key === "h" && editingId === null && !settingsOpen) {

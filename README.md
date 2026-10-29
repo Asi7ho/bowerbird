@@ -57,10 +57,10 @@ There is no handle tab.
   clear of the bar, so the welcome board is never hidden behind it.
 - **Collapse to a corner:** a floating button in a corner of the
   board (bottom-left by default) hides the whole board into that
-  corner. Only a small card stays visible there, showing a small
-  version of the board itself, and hovering it shows "Click to
-  open". Clicking that card opens the board again, back in its
-  saved bounds. Change the corner in Settings, under Corner reveal
+  corner. Only a small round icon stays visible there, with an
+  arrow pointing away from the corner into the screen. Clicking
+  that icon opens the board again, back in its saved bounds.
+  Change the corner in Settings, under Corner reveal
   (Bottom-left, Bottom-right, Top-left, Top-right, or Off) — the
   floating button moves to the chosen corner, and Off hides it.
   Cards scale with the zoom: a card is laid out in world units
@@ -87,15 +87,16 @@ There is no handle tab.
 - **In-app hotkeys:** `V` select, `P` pen, `A` arrow, `Ctrl/Cmd+G`
   group, `Ctrl/Cmd+U` ungroup, `Delete` removes the selection,
   `+`/`-` zoom, `0` resets the view, hold `Space` to pan, `h` hides,
-  `?` settings. There is no add menu: adding is drag and drop (see
+  `?` settings, `Tab` next element, `Shift + Tab` previous element.
+  There is no add menu: adding is drag and drop (see
   below), plus double-clicking empty space for a note.
 
 What is *not* faked: a system-wide global hotkey that fires while another
 app is focused needs an OS-level hook (CGEventTap / accessibility
 permission on macOS, a global key grabber on Linux). That is the next
 step, not something v0.2 pretends to do. The corner peek above is
-not a fake swipe: it is a real window showing a screenshot of the
-board, and clicking it really restores the board.
+not a fake swipe: it is a real window, and clicking its icon
+really restores the board.
 
 ## Using the board
 
@@ -116,6 +117,13 @@ board, and clicking it really restores the board.
   a marquee around several items. Dragging one member of a group moves the
   whole group. `Ctrl/Cmd+G` groups the selection. Clicking a card brings
   it to the front.
+- **Find an element:** the board is infinite, so an element can be far
+  from the current view. `Tab` steps through the elements one by one
+  in board order, selecting each in turn and centring the camera on
+  it; `Shift + Tab` steps backwards, and the cycle wraps. Pen strokes
+  and connectors are skipped — they are drawings and lines, not
+  elements to find. Starting from a selected element, `Tab` goes to
+  the next one after it.
 - **Resize:** drag the small handle at a card's bottom-right corner —
   it works on the first click, no need to select first. Everything
   resizes: notes, cards, images, swatches, strokes (their points
@@ -173,7 +181,7 @@ electron/
   main.js     frameless BaseWindow, board view,
               board file, asset embedding, link previews, IPC
   preload.js  the only privileged surface the renderer sees
-  peek.html     small corner card showing the board, click to restore
+  peek.html     small round corner icon, click to restore
   dev.js      dev runner: Vite, then Electron pointed at it
 src/
   main.ts     board UI: tools, rendering, interactions, settings
