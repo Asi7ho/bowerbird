@@ -110,8 +110,9 @@ function updateAudioProgress(): void {
   const durEl = cardsEl.querySelector(`[data-audio-dur="${audioId}"]`);
   if (durEl && isFinite(dur)) durEl.textContent = formatAudioTime(dur);
   const seekEl = cardsEl.querySelector(`[data-audio-seek="${audioId}"]`) as HTMLInputElement | null;
-  if (seekEl && isFinite(dur) && dur > 0 && document.activeElement !== seekEl) {
-    seekEl.value = String(Math.round((cur / dur) * 1000));
+  if (seekEl && isFinite(dur) && dur > 0) {
+    seekEl.style.setProperty("--seek-pct", `${Math.round((cur / dur) * 100)}%`);
+    if (document.activeElement !== seekEl) seekEl.value = String(Math.round((cur / dur) * 1000));
   }
 }
 function loadAudioDuration(id: number, path: string): void {
@@ -375,13 +376,19 @@ function cardHtml(item: Item): string {
     const dur = isCurrent && isFinite(audioEl!.duration) ? audioEl!.duration : (audioDurations.get(path) ?? NaN);
     const cur = isCurrent ? audioEl!.currentTime : 0;
     const seekVal = isFinite(dur) && dur > 0 ? Math.round((cur / dur) * 1000) : 0;
+    const seekPct = isFinite(dur) && dur > 0 ? Math.round((cur / dur) * 100) : 0;
     if (!isCurrent) loadAudioDuration(item.id, path);
-    return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner" style="padding:10px 12px;display:flex;flex-direction:column;gap:6px">
+    // Like the other media cards: a tile, a title, and the time as
+    // a quiet grey sub-line — the same shape as the PDF card's
+    // "1 KB". The seek control is a thin track in the tile's own
+    // purple, not a chunky browser slider in blue.
+    const tile = hh >= 104 ? 56 : 48;
+    return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
       <div style="display:flex;align-items:center;gap:12px">
-        <div class="audio-tile clickable" data-action="play-audio" data-id="${item.id}" style="background:${tint("#6A4C93", 0.88)};color:#6a4c93;font-size:16px">${playing ? "\u275a\u275a" : "\u25b6"}</div>
-        <div class="col"><div class="title" style="font-size:14px">${elide(name, ww - 92, 14, true)}</div></div>
+        <div class="audio-tile clickable" data-action="play-audio" data-id="${item.id}" style="width:${tile}px;height:${tile}px;background:${tint("#6A4C93", 0.88)};color:#6a4c93;font-size:${tile === 56 ? 18 : 16}px">${playing ? "\u275a\u275a" : "\u25b6"}</div>
+        <div class="col"><div class="title" style="font-size:14px">${elide(name, ww - 92, 14, true)}</div><div class="sub" style="font-size:12px"><span data-audio-time="${item.id}">${formatAudioTime(cur)}</span> / <span data-audio-dur="${item.id}">${formatAudioTime(dur)}</span></div></div>
       </div>
-      <div class="audio-progress"><span data-audio-time="${item.id}">${formatAudioTime(cur)}</span><input class="audio-seek" type="range" min="0" max="1000" value="${seekVal}" data-audio-seek="${item.id}" aria-label="Seek"><span data-audio-dur="${item.id}">${formatAudioTime(dur)}</span></div>
+      <input class="audio-seek" type="range" min="0" max="1000" value="${seekVal}" style="--seek-pct:${seekPct}%" data-audio-seek="${item.id}" aria-label="Seek">
     </div></div>`;
   }
   if ("Video" in item.kind) {
@@ -1267,7 +1274,7 @@ async function dropPaths(paths: string[], atScreen: Pt): Promise<void> {
       } else if (kind === "audio") {
         const stored = await api.embedFile(path);
         const id = allocId();
-        board.items.push({ id, pos: at, size: { w: 300, h: 96 }, group: null, kind: { Audio: { path: stored } } });
+        board.items.push({ id, pos: at, size: { w: 300, h: 104 }, group: null, kind: { Audio: { path: stored } } });
         added++;
       } else if (kind === "video") {
         const stored = await api.embedFile(path);
@@ -1355,7 +1362,7 @@ function welcomeBoard(pdfSize: number, videoSize: number): Board {
   add({ id: next(), pos: { x: 120, y: 240 }, size: { w: 120, h: 120 }, group: null, kind: { Swatch: { hex: "#2A6D09" } } });
   add({ id: next(), pos: { x: 260, y: 240 }, size: { w: 120, h: 120 }, group: null, kind: { Swatch: { hex: "#007AFF" } } });
   add({ id: next(), pos: { x: 120, y: 400 }, size: { w: 260, h: 96 }, group: null, kind: { PdfCard: { path: `${boardDir}/sample.pdf`, size_bytes: pdfSize } } });
-  add({ id: next(), pos: { x: 420, y: 400 }, size: { w: 300, h: 96 }, group: null, kind: { Audio: { path: `${boardDir}/welcome-birdsong.mp3` } } });
+  add({ id: next(), pos: { x: 420, y: 400 }, size: { w: 300, h: 104 }, group: null, kind: { Audio: { path: `${boardDir}/welcome-birdsong.mp3` } } });
   add({ id: next(), pos: { x: 760, y: 400 }, size: { w: 360, h: 280 }, group: null, kind: { Video: { source: `${boardDir}/welcome-video.mp4`, remote: false, size_bytes: videoSize } } });
   const groupText = "Grouped — these two move together.\n\nDrag either one, and both move. Ctrl + G groups, Ctrl + U ungroups.";
   add({ id: next(), pos: { x: 120, y: 530 }, size: { w: 300, h: estimateTextHeight(groupText, 16, 300) }, group: 1, kind: note(groupText, 300) });
