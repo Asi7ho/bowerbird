@@ -100,15 +100,17 @@ really restores the board.
 ## Using the board
 
 - **First run:** a fresh board opens as a showcase of everything the
-  app does — a note, three real photographs, colour swatches, three
-  link cards to real Wikipedia articles, a real PDF card, a grouped
-  cluster (note + swatch + link, moving together), a pen circle
-  drawn around a photo, a connector, and notes explaining Tab
-  navigation, grouping, drag-and-drop and the corner button — so
-  you can see what every element looks like before adding your own.
-  The photos and PDF are installed next to your board file on
-  first launch, so they open wherever you run the app from. The
-  photos are Wikimedia Commons photographs. Cards are flat and
+  app does — a note, a real photograph, a link card with a real
+  image and icon, colour swatches, a PDF card, an audio card, a
+  video card, a grouped pair (note + swatch, moving together), a
+  pen circle drawn around the photo, a connector, and a short
+  note explaining Tab navigation, panning, zooming and
+  drag-and-drop — with space between the cards, so you can see
+  what every element looks like before adding your own. The
+  photo, audio, video and PDF are installed next to your board
+  file on first launch, so they open wherever you run the app
+  from. They are real Wikimedia Commons media: a Satin Bowerbird
+  photograph, its call, and a short clip of one. Cards are flat and
   minimal: a hairline border, a soft corner, no heavy shadow;
   link cards get a pastel tile with the domain's initial in colour,
   PDF cards a pastel red tile, swatches a white hex pill.
@@ -220,7 +222,7 @@ src/
               markdown, link classification
   styles.css  flat, quiet board styling
 index.html    board shell + vertical left toolbar
-assets/       welcome photos + sample PDF, installed beside the board;
+assets/       welcome photo, birdsong and video + sample PDF, installed beside the board;
               icon.svg / icon.png (1024) / icon.ico / icon.iconset
 screenshots/  App Store screenshots, 1440x900 PNG (see screenshots/README.md)
 ```

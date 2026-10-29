@@ -169,7 +169,7 @@ function installShowcaseAssets(dir) {
   // installShowcaseAssets only fills in what is missing, so a
   // reset that deletes the board dir gets a full fresh set, while
   // an existing board keeps the copies it already has.
-  for (const name of ['welcome-bower.jpg', 'welcome-kyoto.jpg', 'welcome-brutalist.jpg']) {
+  for (const name of ['welcome-bower.jpg', 'welcome-birdsong.mp3', 'welcome-video.ogv']) {
     const dest = path.join(dir, name);
     if (!fs.existsSync(dest) && fs.existsSync(path.join(src, name))) {
       fs.copyFileSync(path.join(src, name), dest);
@@ -179,11 +179,11 @@ function installShowcaseAssets(dir) {
   if (!fs.existsSync(pdf) && fs.existsSync(path.join(src, 'sample.pdf'))) {
     fs.copyFileSync(path.join(src, 'sample.pdf'), pdf);
   }
-  try {
-    return fs.statSync(pdf).size;
-  } catch {
-    return 0;
-  }
+  const sizeOf = (file) => { try { return fs.statSync(file).size; } catch { return 0; } };
+  return {
+    pdf_size_bytes: sizeOf(pdf),
+    video_size_bytes: sizeOf(path.join(dir, 'welcome-video.ogv')),
+  };
 }
 
 function sanitise(name) {
@@ -315,15 +315,15 @@ function registerIpc() {
   ipcMain.handle('bowerbird:load-board', () => {
     const file = boardPath();
     const dir = path.dirname(file);
-    let pdfSize = 0;
-    if (!fs.existsSync(file)) pdfSize = installShowcaseAssets(dir);
+    let showcase = { pdf_size_bytes: 0, video_size_bytes: 0 };
+    if (!fs.existsSync(file)) showcase = installShowcaseAssets(dir);
     let json = null;
     try {
       json = fs.readFileSync(file, 'utf8');
     } catch {
       json = null;
     }
-    return { json, board_path: file, board_dir: dir, pdf_size_bytes: pdfSize };
+    return { json, board_path: file, board_dir: dir, ...showcase };
   });
 
   ipcMain.handle('bowerbird:save-board', (_event, json) => {

@@ -2,9 +2,9 @@
 // touches Node or Electron directly; every privileged call goes through
 // this bridge, which the main process exposes with context isolation on.
 interface BowerbirdAPI {
-  loadBoard(): Promise<{ json: string | null; board_path: string; board_dir: string; pdf_size_bytes: number }>;
+  loadBoard(): Promise<{ json: string | null; board_path: string; board_dir: string; pdf_size_bytes: number; video_size_bytes: number }>;
   saveBoard(json: string): Promise<void>;
-  resetBoard(): Promise<number>;
+  resetBoard(): Promise<{ pdf_size_bytes: number; video_size_bytes: number }>;
   embedFile(path: string): Promise<string>;
   readTextFile(path: string): Promise<string>;
   fileSize(path: string): Promise<number>;
@@ -968,8 +968,8 @@ document.getElementById("btn-reset-confirm")?.addEventListener("click", async ()
   selected = [];
   editingId = null;
   try {
-    const pdfSize = await api.resetBoard();
-    board = welcomeBoard(pdfSize);
+    const showcase = await api.resetBoard();
+    board = welcomeBoard(showcase.pdf_size_bytes, showcase.video_size_bytes);
     board.camera = { x: 0, y: 0, zoom: 1 };
     setSettings(false);
     const confirmEl = document.getElementById("reset-confirm") as HTMLDivElement;
@@ -1222,7 +1222,7 @@ window.addEventListener("paste", (e: ClipboardEvent) => {
 
 // ---------------------------------------------------------------- init
 
-function welcomeBoard(pdfSize: number): Board {
+function welcomeBoard(pdfSize: number, videoSize: number): Board {
   const b: Board = {
     items: [], camera: { x: 0, y: 0, zoom: 1 }, next_id: 0, next_group: 0,
     bg: "#FFFFFF", grid: "Dots",
@@ -1231,36 +1231,34 @@ function welcomeBoard(pdfSize: number): Board {
   const next = () => { b.next_id += 1; return b.next_id; };
   const note = (text: string, _w: number) => ({ Text: { text, bold: false, size: 16, color: "#1A1A1A" } });
   const WIKI_ICON = "https://en.wikipedia.org/static/favicon/wikipedia.ico";
-  // Tab order is board order, so items are added in the order a
-  // first-time user should meet them: title, photos, colours,
-  // links, PDF, the grouped cluster, then the how-to notes.
-  const titleText = "# Welcome to Bowerbird\n\nAn infinite board for notes, photos, links and sketches.\n\nEverything on this board is real — photos, articles and colours you can keep, move or delete.";
-  add({ id: next(), pos: { x: 120, y: 40 }, size: { w: 340, h: estimateTextHeight(titleText, 16, 340) }, group: null, kind: note(titleText, 340) });
-  add({ id: next(), pos: { x: 500, y: 40 }, size: { w: 360, h: 225 }, group: null, kind: { Image: { path: `${boardDir}/welcome-bower.jpg` } } });
-  add({ id: next(), pos: { x: 880, y: 40 }, size: { w: 360, h: 225 }, group: null, kind: { Image: { path: `${boardDir}/welcome-kyoto.jpg` } } });
-  add({ id: next(), pos: { x: 120, y: 260 }, size: { w: 120, h: 120 }, group: null, kind: { Swatch: { hex: "#2A6D09" } } });
-  add({ id: next(), pos: { x: 260, y: 260 }, size: { w: 120, h: 120 }, group: null, kind: { Swatch: { hex: "#007AFF" } } });
-  add({ id: next(), pos: { x: 400, y: 260 }, size: { w: 120, h: 120 }, group: null, kind: { Swatch: { hex: "#6A4C2F" } } });
-  add({ id: next(), pos: { x: 540, y: 290 }, size: { w: 320, h: 132 }, group: null, kind: { UrlCard: { url: "https://en.wikipedia.org/wiki/Bowerbird", title: "Bowerbird", description: "Family of birds", image: null, icon: WIKI_ICON } } });
-  add({ id: next(), pos: { x: 880, y: 290 }, size: { w: 320, h: 132 }, group: null, kind: { UrlCard: { url: "https://en.wikipedia.org/wiki/Japanese_garden", title: "Japanese garden", description: "Type of traditional garden", image: null, icon: WIKI_ICON } } });
-  add({ id: next(), pos: { x: 120, y: 410 }, size: { w: 260, h: 96 }, group: null, kind: { PdfCard: { path: `${boardDir}/sample.pdf`, size_bytes: pdfSize } } });
-  const groupText = "Grouped — these three move together.\n\nSelect any one of them, drag, and the note, the swatch and the link all move. Ctrl + G groups, Ctrl + U ungroups.";
-  add({ id: next(), pos: { x: 400, y: 410 }, size: { w: 300, h: estimateTextHeight(groupText, 16, 300) }, group: 1, kind: note(groupText, 300) });
-  add({ id: next(), pos: { x: 720, y: 410 }, size: { w: 120, h: 120 }, group: 1, kind: { Swatch: { hex: "#FF6B35" } } });
-  add({ id: next(), pos: { x: 860, y: 410 }, size: { w: 320, h: 132 }, group: 1, kind: { UrlCard: { url: "https://en.wikipedia.org/wiki/Brutalist_architecture", title: "Brutalist architecture", description: "Architectural style", image: null, icon: WIKI_ICON } } });
-  add({ id: next(), pos: { x: 120, y: 540 }, size: { w: 360, h: 225 }, group: null, kind: { Image: { path: `${boardDir}/welcome-brutalist.jpg` } } });
-  const tryText = "## Try this\n\n- Double-click a note to edit it, Esc to commit\n- Press Tab to jump to the next element\n- Space + drag to pan, Ctrl + scroll to zoom\n- Drag a file onto the board\n- Select cards, Ctrl + G to group them\n- Drop audio or video — it plays in place";
-  add({ id: next(), pos: { x: 500, y: 540 }, size: { w: 340, h: estimateTextHeight(tryText, 16, 340) }, group: null, kind: note(tryText, 340) });
-  const cornerText = "The round button in a corner hides this board into that corner. Click the corner to bring it back.\n\nPhotos: Wikimedia Commons.";
-  add({ id: next(), pos: { x: 880, y: 570 }, size: { w: 360, h: estimateTextHeight(cornerText, 16, 360) }, group: null, kind: note(cornerText, 360) });
+  // V3: fewer items, more space. Every capability is shown once,
+  // with at least 30px between cards, and nothing overlapping.
+  // Tab order is board order: title, photo, link, colours, PDF,
+  // audio, video, the grouped pair, then the how-to note.
+  const titleText = "# Welcome to Bowerbird\n\nAn infinite board for notes, photos, links, audio and video.";
+  add({ id: next(), pos: { x: 120, y: 40 }, size: { w: 320, h: estimateTextHeight(titleText, 16, 320) }, group: null, kind: note(titleText, 320) });
+  add({ id: next(), pos: { x: 480, y: 40 }, size: { w: 360, h: 225 }, group: null, kind: { Image: { path: `${boardDir}/welcome-bower.jpg` } } });
+  add({ id: next(), pos: { x: 880, y: 40 }, size: { w: 320, h: 300 }, group: null, kind: { UrlCard: { url: "https://en.wikipedia.org/wiki/Japanese_garden", title: "Japanese garden", description: "Type of traditional garden", image: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Saihouji-kokedera01.jpg/330px-Saihouji-kokedera01.jpg", icon: WIKI_ICON } } });
+  add({ id: next(), pos: { x: 120, y: 240 }, size: { w: 120, h: 120 }, group: null, kind: { Swatch: { hex: "#2A6D09" } } });
+  add({ id: next(), pos: { x: 260, y: 240 }, size: { w: 120, h: 120 }, group: null, kind: { Swatch: { hex: "#007AFF" } } });
+  add({ id: next(), pos: { x: 120, y: 400 }, size: { w: 260, h: 96 }, group: null, kind: { PdfCard: { path: `${boardDir}/sample.pdf`, size_bytes: pdfSize } } });
+  add({ id: next(), pos: { x: 420, y: 400 }, size: { w: 300, h: 96 }, group: null, kind: { Audio: { path: `${boardDir}/welcome-birdsong.mp3` } } });
+  add({ id: next(), pos: { x: 760, y: 400 }, size: { w: 360, h: 280 }, group: null, kind: { Video: { source: `${boardDir}/welcome-video.ogv`, remote: false, size_bytes: videoSize } } });
+  const groupText = "Grouped — these two move together.\n\nDrag either one, and both move. Ctrl + G groups, Ctrl + U ungroups.";
+  add({ id: next(), pos: { x: 120, y: 530 }, size: { w: 300, h: estimateTextHeight(groupText, 16, 300) }, group: 1, kind: note(groupText, 300) });
+  add({ id: next(), pos: { x: 450, y: 530 }, size: { w: 120, h: 120 }, group: 1, kind: { Swatch: { hex: "#FF6B35" } } });
+  const tryText = "## Try this\n\n- Double-click a note to edit it\n- Tab jumps to the next element\n- Space + drag to pan, Ctrl + scroll to zoom\n- Drag a file onto the board";
+  add({ id: next(), pos: { x: 600, y: 710 }, size: { w: 420, h: estimateTextHeight(tryText, 16, 420) }, group: null, kind: note(tryText, 420) });
   // Pen annotation: a red circle drawn around the bowerbird photo.
   const circle: Array<{ x: number; y: number }> = [];
   for (let k = 0; k < 36; k += 1) {
     const a = (2 * Math.PI * k) / 36;
-    circle.push({ x: 680 + 190 * Math.cos(a), y: 152 + 110 * Math.sin(a) });
+    circle.push({ x: 660 + 190 * Math.cos(a), y: 152 + 110 * Math.sin(a) });
   }
-  add({ id: next(), pos: { x: 490, y: 42 }, size: { w: 380, h: 220 }, group: null, kind: { Stroke: { points: circle, color: "#E63946", width: 4, marker: false } } });
-  add({ id: next(), pos: { x: 1, y: 1 }, size: { w: 1, h: 1 }, group: null, kind: { Connector: { from: { Item: 1 }, to: { Item: 7 }, color: "#333333" } } });
+  add({ id: next(), pos: { x: 470, y: 42 }, size: { w: 380, h: 220 }, group: null, kind: { Stroke: { points: circle, color: "#E63946", width: 4, marker: false } } });
+  // Connector: the photo points to the article. Short, between
+  // neighbours, crossing nothing.
+  add({ id: next(), pos: { x: 1, y: 1 }, size: { w: 1, h: 1 }, group: null, kind: { Connector: { from: { Item: 2 }, to: { Item: 3 }, color: "#333333" } } });
   b.next_group = 2;
   return b;
 }
@@ -1285,12 +1283,12 @@ async function init(): Promise<void> {
         }
       }
     } else {
-      board = welcomeBoard(loaded.pdf_size_bytes);
+      board = welcomeBoard(loaded.pdf_size_bytes, loaded.video_size_bytes ?? 0);
       save();
     }
   } catch (err) {
     toast(`Could not load the board: ${String(err)}`);
-    board = welcomeBoard(0);
+    board = welcomeBoard(0, 0);
   }
   try { cornerReveal = (await api.getAppSettings()).corner; } catch { /* default stands */ }
   renderCollapseButton();
