@@ -1,8 +1,8 @@
 [package]
-name = "quickboard"
+name = "bowerbird"
 version = "0.1.0"
 edition = "2021"
-description = "QuickBoard — a quick-reveal infinite whiteboard for creatives"
+description = "Bowerbird — a quick-reveal infinite whiteboard for creatives"
 license = "MIT"
 
 [dependencies]

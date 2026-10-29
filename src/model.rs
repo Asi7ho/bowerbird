@@ -113,7 +113,7 @@ pub enum Kind {
     PdfCard { path: String, size_bytes: u64 },
     /// A colour swatch, e.g. "#FF5733".
     Swatch { hex: String },
-    /// An audio file dropped on the board. Plays inside QuickBoard.
+    /// An audio file dropped on the board. Plays inside Bowerbird.
     Audio { path: String },
     /// A video: a local file path, or a URL when `remote` is true.
     /// `size_bytes` is 0 for remote videos.
@@ -750,7 +750,7 @@ impl Board {
         let mut board = Self::new();
         board.add_text(
             Pt::new(40.0, 40.0),
-            "Welcome to QuickBoard\nEvery element, on one board:\na note, a link card, a swatch,\na PDF card and a picture.\nDrop your own files onto the canvas.",
+            "Welcome to Bowerbird\nEvery element, on one board:\na note, a link card, a swatch,\na PDF card and a picture.\nDrop your own files onto the canvas.",
         );
         board.add_swatch(Pt::new(40.0, 240.0), "#FF6B35");
         board.add_swatch(Pt::new(180.0, 240.0), "#2E86AB");

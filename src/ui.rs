@@ -8,14 +8,14 @@
 //!   and hit-testing is done against the model, not the element tree.
 //! That keeps one source of truth (the model) for geometry.
 
-use quickboard::audio::{AudioPlayer, Playback};
-use quickboard::model::{
+use bowerbird::audio::{AudioPlayer, Playback};
+use bowerbird::model::{
     Anchor, Board, Camera, DropKind, GridMode, Item, ItemId, Kind, Pt, drop_kind_for_ext,
     estimate_text_height, extract_shortcut_url, parse_hex, swatch_hex_from_text,
 };
-use quickboard::markdown::{Block, Segment, parse_markdown};
-use quickboard::preview::{domain_of, looks_like_video_url, parse_preview};
-use quickboard::store;
+use bowerbird::markdown::{Block, Segment, parse_markdown};
+use bowerbird::preview::{domain_of, looks_like_video_url, parse_preview};
+use bowerbird::store;
 use gpui::prelude::*;
 use gpui::{
     AnyWindowHandle, App, Bounds, BoxShadow, Context, Div, ExternalPaths, FocusHandle, FontWeight,
@@ -646,7 +646,7 @@ impl BoardView {
                 .background_executor()
                 .spawn(async move {
                     ureq::get(&url)
-                        .set("User-Agent", "QuickBoard/0.1")
+                        .set("User-Agent", "Bowerbird/0.1")
                         .timeout(Duration::from_secs(6))
                         .call()
                         .ok()
@@ -863,7 +863,7 @@ impl BoardView {
     }
 
     /// Video plays in the system player (local file) or the browser
-    /// (remote link) — QuickBoard does not decode video frames itself.
+    /// (remote link) — Bowerbird does not decode video frames itself.
     fn play_video(&mut self, id: ItemId) {
         let source = self.with_board(|b| {
             b.get(id).and_then(|i| match &i.kind {
@@ -1703,7 +1703,7 @@ impl BoardView {
 impl Render for BoardView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if !self.title_set {
-            window.set_window_title("QuickBoard");
+            window.set_window_title("Bowerbird");
             self.title_set = true;
         }
         // Keep keyboard focus on the board so shortcuts work after a click.
@@ -2414,7 +2414,7 @@ impl Render for BoardView {
                 .text_size(px(13.))
                 .font_weight(FontWeight::BOLD)
                 .text_color(rgb(0x1C1C1E))
-                .child("QuickBoard".to_string()),
+                .child("Bowerbird".to_string()),
         );
         // Segmented tool control.
         let mut tools = div()
@@ -2684,7 +2684,7 @@ impl HandleView {
 impl Render for HandleView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if !self.title_set {
-            window.set_window_title("QuickBoard");
+            window.set_window_title("Bowerbird");
             self.title_set = true;
         }
         let shared = self.shared.clone();
@@ -2720,6 +2720,6 @@ impl Render for HandleView {
                 let _ = &shared;
                 cx.notify();
             }))
-            .child(SharedString::from("▦  QuickBoard"))
+            .child(SharedString::from("▦  Bowerbird"))
     }
 }

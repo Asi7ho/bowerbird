@@ -1,9 +1,12 @@
 //! Persistence: one JSON file, auto-saved on every change.
 //!
-//! Default location honours XDG_DATA_HOME, else ~/.local/share/quickboard/.
-//! `QB_BOARD_PATH` overrides it (used by tests and by anyone who wants a
-//! portable board file). A corrupt file never wipes the board: loading
-//! falls back to the welcome board and keeps the bad file untouched.
+//! Default location honours XDG_DATA_HOME, else ~/.local/share/bowerbird/.
+//! `BOWERBIRD_BOARD_PATH` overrides it (used by tests and by anyone who
+//! wants a portable board file); the old `QB_BOARD_PATH` still works.
+//! A board left in the pre-rename `quickboard` folder is still read
+//! from there, so renaming never orphans an existing board. A corrupt
+//! file never wipes the board: loading falls back to the welcome board
+//! and keeps the bad file untouched.
 
 use crate::model::{Board, Kind};
 use std::path::{Path, PathBuf};
@@ -117,9 +120,11 @@ pub fn embed_board_files(board: &mut Board, board_path: &Path) -> usize {
 }
 
 pub fn board_path() -> PathBuf {
-    if let Ok(p) = std::env::var("QB_BOARD_PATH") {
-        if !p.is_empty() {
-            return PathBuf::from(p);
+    for var in ["BOWERBIRD_BOARD_PATH", "QB_BOARD_PATH"] {
+        if let Ok(p) = std::env::var(var) {
+            if !p.is_empty() {
+                return PathBuf::from(p);
+            }
         }
     }
     let base = std::env::var("XDG_DATA_HOME")
@@ -128,7 +133,14 @@ pub fn board_path() -> PathBuf {
         .map(PathBuf::from)
         .or_else(|| std::env::var("HOME").ok().map(|h| PathBuf::from(h).join(".local").join("share")))
         .unwrap_or_else(|| PathBuf::from("."));
-    base.join("quickboard").join("board.json")
+    let new = base.join("bowerbird").join("board.json");
+    let old = base.join("quickboard").join("board.json");
+    // Prefer the new folder, but keep reading a pre-rename board from
+    // the old one rather than starting fresh and orphaning it.
+    if !new.exists() && old.exists() {
+        return old;
+    }
+    new
 }
 
 pub fn save(board: &Board) -> anyhow::Result<()> {

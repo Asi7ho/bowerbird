@@ -1,4 +1,4 @@
-//! QuickBoard entry point.
+//! Bowerbird entry point.
 //!
 //! Two windows:
 //! - the board itself (a normal window, auto-saved to disk),
@@ -13,7 +13,7 @@
 mod ui;
 
 use gpui::{App, Application};
-use quickboard::store;
+use bowerbird::store;
 use ui::{SharedState, open_board_window, open_handle_window};
 
 /// First-run showcase assets, embedded in the binary and installed next to
@@ -51,7 +51,7 @@ fn main() {
         }
         board
     } else if let Some((image_path, pdf_path, pdf_bytes)) = install_showcase_assets() {
-        quickboard::model::Board::welcome_showcase(&image_path, &pdf_path, pdf_bytes)
+        bowerbird::model::Board::welcome_showcase(&image_path, &pdf_path, pdf_bytes)
     } else {
         store::load()
     };
@@ -59,10 +59,10 @@ fn main() {
     Application::new().run(move |cx: &mut App| {
         match open_board_window(&shared, cx) {
             Ok(_) => {}
-            Err(e) => eprintln!("QuickBoard: could not open board window: {}", e),
+            Err(e) => eprintln!("Bowerbird: could not open board window: {}", e),
         }
         if let Err(e) = open_handle_window(&shared, cx) {
-            eprintln!("QuickBoard: could not open handle window: {}", e);
+            eprintln!("Bowerbird: could not open handle window: {}", e);
         }
         cx.activate(true);
     });

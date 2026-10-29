@@ -1,4 +1,4 @@
-# QuickBoard
+# Bowerbird
 
 A quick-reveal infinite whiteboard for creatives — the "quick note" idea,
 but for a canvas instead of a note.
@@ -32,13 +32,14 @@ controls on the canvas itself.
 
 Your board is stored as one JSON file and auto-saved on every change:
 
-- Linux: `~/.local/share/quickboard/board.json` (or `$XDG_DATA_HOME/quickboard/board.json`)
-- macOS: `~/.local/share/quickboard/board.json`
-- Override for testing/portability: `QB_BOARD_PATH=/tmp/my-board.json cargo run`
+- Linux: `~/.local/share/bowerbird/board.json` (or `$XDG_DATA_HOME/bowerbird/board.json`)
+- macOS: `~/.local/share/bowerbird/board.json`
+- Override for testing/portability: `BOWERBIRD_BOARD_PATH=/tmp/my-board.json cargo run`
+- A board left in the pre-rename `quickboard` folder is still read from there.
 
 ## How the "quick reveal" works in v0.1
 
-- **Desktop handle:** a small dark `▦ QuickBoard` pill sits in the
+- **Desktop handle:** a small dark `▦ Bowerbird` pill sits in the
   top-right corner of the primary display, above other apps. Click it and
   the board comes forward.
 - **Hide:** the board toolbar's eye icon, or pressing `h` while the
@@ -106,14 +107,14 @@ it stays on top.
   instead), and `.url`/`.webloc` shortcut files (become link preview
   cards; a video link becomes a video card). Drop several at once and
   they fan out from the drop point. Double-click empty space to start
-  a note right there. QuickBoard keeps its own copy of every dropped
+  a note right there. Bowerbird keeps its own copy of every dropped
   file in an `assets` folder next to your board file, so deleting the
   original later never breaks the card — and boards from before this
   change get their surviving files copied in on the next launch.
 - **Audio:** an audio file lands as a mini-player card — a pastel tile
   with a play button, the file name, and a waveform strip. Click the
   play button to play or pause it (the tile turns into pause bars while
-  playing). It plays inside QuickBoard (rodio). If the machine has no
+  playing). It plays inside Bowerbird (rodio). If the machine has no
   audio device, pressing play says so instead of crashing.
 - **Video:** a video file lands as a big preview card — a 16:9 thumb
   with a play button on top, the name below; a video link (a direct

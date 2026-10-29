@@ -8,7 +8,7 @@ macro_rules! platforms {
             #[cfg(any($(target_os = $platform),*))]
             pub use self::$module::*;
 
-            // QuickBoard patch (see vendor/xattr/PATCH.md): newer `libc`
+            // Bowerbird patch (see vendor/xattr/PATCH.md): newer `libc`
             // no longer defines ENOATTR on Linux — glibc reports a missing
             // extended attribute as ENODATA (61) instead. Use that value
             // on Linux and keep the libc constant everywhere else.
