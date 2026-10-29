@@ -11,6 +11,7 @@ interface BowerbirdAPI {
   openExternal(target: string): Promise<void>;
   getAppSettings(): Promise<{ corner: string }>;
   setCorner(corner: string): Promise<string>;
+  collapse(): Promise<void>;
   minimise(): Promise<void>;
   closeWindow(): Promise<void>;
   quit(): Promise<void>;
@@ -58,7 +59,8 @@ const SHORTCUTS: Array<[string, string]> = [
   ["Double-click a PDF or picture", "Open it outside Bowerbird"],
   ["Click a play tile", "Play or pause audio / open a video"],
   ["Drag a card corner", "Resize the card (nwse cursor on hover)"],
-  ["Hold the cursor in the reveal corner", "Show the board"],
+  ["Click the corner button", "Hide the board into its corner"],
+  ["Click the board's corner", "Open the board again"],
   ["Shift + click", "Add to the selection"],
   ["Drag on empty space", "Marquee-select"],
   ["Ctrl / Cmd + V", "Paste a link as a card"],
@@ -540,7 +542,7 @@ function cornerHit(id: number, world: Pt): boolean {
 
 boardEl.addEventListener("mousedown", (e: MouseEvent) => {
   const target = e.target as HTMLElement;
-  if (target.closest("#toolbar, #settings-backdrop, #toast")) return;
+  if (target.closest("#toolbar, #settings-backdrop, #toast, #btn-collapse")) return;
   // A board click or drag must never start a native text selection
   // across the cards (bug: clicking anywhere highlighted all text).
   if (!target.closest("textarea.note-edit")) window.getSelection()?.removeAllRanges();
@@ -918,7 +920,7 @@ function setSettings(open: boolean): void {
     renderBgOpts();
     renderGridOpts();
     renderCornerOpts();
-    api.getAppSettings().then((s) => { cornerReveal = s.corner; renderCornerOpts(); }).catch(() => undefined);
+    api.getAppSettings().then((s) => { cornerReveal = s.corner; renderCornerOpts(); renderCollapseButton(); }).catch(() => undefined);
   }
   render();
 }
@@ -946,11 +948,24 @@ function renderCornerOpts(): void {
     if (cornerReveal === value) b.classList.add("active");
     b.addEventListener("click", async () => {
       try { cornerReveal = await api.setCorner(value); } catch { /* keep old value */ }
-      renderCornerOpts();
+      renderCornerOpts(); renderCollapseButton();
     });
     el.appendChild(b);
   }
 }
+function renderCollapseButton(): void {
+  const el = document.getElementById("btn-collapse") as HTMLButtonElement | null;
+  if (!el) return;
+  el.className = `corner-${cornerReveal}`;
+  el.title = cornerReveal === "off" ? "Corner is off" : `Hide into the ${cornerReveal.replace("-", " ")} corner`;
+  el.setAttribute("aria-label", el.title);
+}
+document.getElementById("btn-collapse")?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  commitEditingIfAny();
+  save();
+  api.collapse().catch(() => undefined);
+});
 function renderGridOpts(): void {
   const opts: Array<[string, Board["grid"]]> = [["Dots", "Dots"], ["Lines", "Lines"], ["Off", "Off"]];
   const el = document.getElementById("grid-opts") as HTMLDivElement;
@@ -1167,6 +1182,7 @@ async function init(): Promise<void> {
     board = welcomeBoard(0);
   }
   try { cornerReveal = (await api.getAppSettings()).corner; } catch { /* default stands */ }
+  renderCollapseButton();
   render();
   // Fill in previews for cards that never got one (welcome card, old
   // boards): title, description, image and icon, in the background.

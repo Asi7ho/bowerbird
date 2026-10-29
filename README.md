@@ -43,8 +43,9 @@ Your board is stored as one JSON file and auto-saved on every change:
 One window, always alive: the board itself. The window is frameless
 and the toolbar carries no window controls — close it the usual way
 for your system (Cmd+Q on a Mac); pressing `h` while the board is
-focused minimises it, and holding the cursor in a screen corner
-brings it back (see Corner reveal below). There is no handle tab.
+focused minimises it, and the floating button in a corner of the
+board hides it into that corner (see Collapse to a corner below).
+There is no handle tab.
 
 - **Vertical toolbar, left side:** a frosted vertical bar, centred on
   the left edge — Select, Pen,
@@ -54,15 +55,14 @@ brings it back (see Corner reveal below). There is no handle tab.
   buttons. Delete is dimmed while nothing is selected. The bar itself
   is the window drag region; its buttons are not. A fresh board starts
   clear of the bar, so the welcome board is never hidden behind it.
-- **Corner reveal:** hold the cursor in a screen corner and the
-  board comes back, even from minimised, hidden, or behind another
-  app. By default the corner is the bottom-left; change it in
-  Settings, under Corner reveal (Bottom-left, Bottom-right,
-  Top-left, Top-right, or Off). A short hold is required, so just
-  passing through a corner does not trigger it. The trigger itself
-  is a tiny transparent window that only exists while the board
-  is not focused, so it never covers the board or steals a click
-  from it — when the board is in front, the trigger is hidden.
+- **Collapse to a corner:** a floating button in a corner of the
+  board (bottom-left by default) hides the whole board into that
+  corner. Only a small card stays visible there, showing a small
+  version of the board itself, and hovering it shows "Click to
+  open". Clicking that card opens the board again, back in its
+  saved bounds. Change the corner in Settings, under Corner reveal
+  (Bottom-left, Bottom-right, Top-left, Top-right, or Off) — the
+  floating button moves to the chosen corner, and Off hides it.
   Cards scale with the zoom: a card is laid out in world units
   and scaled by the camera, so its text, padding and images shrink
   and grow with it instead of staying fixed while the card shrinks.
@@ -81,9 +81,9 @@ brings it back (see Corner reveal below). There is no handle tab.
   rebuilt when the visible set actually changes.
 - **Settings (?):** a panel listing every keyboard shortcut, plus the
   canvas background (White, Paper, Sage, Sky, Ink) and grid
-  (Dots, Lines, Off), the corner-reveal corner, and a Quit Bowerbird
-  button under App. The corner choice is saved in the app's
-  settings file and survives restarts.
+  (Dots, Lines, Off), the corner the board collapses into, and a
+  Quit Bowerbird button under App. The corner choice is saved in
+  the app's settings file and survives restarts.
 - **In-app hotkeys:** `V` select, `P` pen, `A` arrow, `Ctrl/Cmd+G`
   group, `Ctrl/Cmd+U` ungroup, `Delete` removes the selection,
   `+`/`-` zoom, `0` resets the view, hold `Space` to pan, `h` hides,
@@ -93,9 +93,9 @@ brings it back (see Corner reveal below). There is no handle tab.
 What is *not* faked: a system-wide global hotkey that fires while another
 app is focused needs an OS-level hook (CGEventTap / accessibility
 permission on macOS, a global key grabber on Linux). That is the next
-step, not something v0.2 pretends to do. The corner reveal above is
-not a fake swipe: it is a real window that notices a hover in the
-corner, which is why it works while the board is hidden.
+step, not something v0.2 pretends to do. The corner peek above is
+not a fake swipe: it is a real window showing a screenshot of the
+board, and clicking it really restores the board.
 
 ## Using the board
 
@@ -173,7 +173,7 @@ electron/
   main.js     frameless BaseWindow, board view,
               board file, asset embedding, link previews, IPC
   preload.js  the only privileged surface the renderer sees
-  trigger.html  tiny transparent corner window that reveals the board
+  peek.html     small corner card showing the board, click to restore
   dev.js      dev runner: Vite, then Electron pointed at it
 src/
   main.ts     board UI: tools, rendering, interactions, settings

@@ -281,3 +281,28 @@ button { font-family: inherit; }
   display: none; z-index: 30; max-width: 70vw; box-shadow: var(--shadow-md);
 }
 #toast.show { display: block; }
+
+/* Floating collapse button: sits in a corner of the board itself,
+   clear of the vertically-centred toolbar. Its arrow points into
+   the corner it hides into (rotated per corner class). It is
+   hidden when the corner setting is Off. */
+#btn-collapse {
+  position: absolute; width: 44px; height: 44px; border: none; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(0, 0, 0, 0.08); box-shadow: var(--shadow-md);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--ink); z-index: 15;
+}
+#btn-collapse:hover { background: #fff; }
+#btn-collapse svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+#btn-collapse.corner-bottom-left { left: 16px; bottom: 16px; }
+#btn-collapse.corner-bottom-right { right: 16px; bottom: 16px; }
+#btn-collapse.corner-top-left { left: 16px; top: 16px; }
+#btn-collapse.corner-top-right { right: 16px; top: 16px; }
+#btn-collapse.corner-off { display: none; }
+#btn-collapse.corner-bottom-right svg { transform: rotate(0deg); }
+#btn-collapse.corner-bottom-left svg { transform: rotate(90deg); }
+#btn-collapse.corner-top-left svg { transform: rotate(180deg); }
+#btn-collapse.corner-top-right svg { transform: rotate(270deg); }

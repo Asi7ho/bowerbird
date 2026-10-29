@@ -1,10 +1,10 @@
 // Bowerbird on Electron.
 // One frameless BaseWindow. The board is a WebContentsView filling it.
-// There is no handle tab: the board is revealed by holding the
-// cursor in a screen corner (see the corner trigger below). The
-// trigger is a tiny transparent window that is invisible while the
-// board is hidden, so the board itself still takes the full width
-// and no visible screen space is given up to a handle.
+// There is no handle tab. A floating button in a corner of the
+// board hides the whole board into that corner (see the peek
+// below): the board window hides and a small corner of the board
+// itself stays visible at the screen corner. Clicking that corner
+// opens the board again, back in its saved bounds.
 // Link cards are previews only — no embedded pages — so there is no
 // second view type: a link card shows the site's own image, icon and
 // title, and clicking it opens the site in the browser.
@@ -52,41 +52,62 @@ function saveAppSettings() {
   }
 }
 
-// Corner reveal, done with a real window, not a cursor poll:
-// Electron's screen.getCursorScreenPoint() froze at the last
-// position before the board was hidden in Linux testing, so polling
-// it cannot be trusted to notice a move to a corner while hidden.
-// Instead, a tiny transparent window sits at the chosen corner.
-// It is invisible (transparent, 16px, no taskbar entry, no tab) and
-// it only exists while the board is NOT focused: when the board is
-// in front, the trigger is hidden, so it never steals a click or
-// a hover from the board itself. When the board is hidden,
-// minimised, or behind another app, the trigger is on top, and
-// hovering it for a short dwell (in trigger.html) reveals the board.
-// This is a mouse event delivered to a real window, so it works
-// whether or not the main process could query the cursor.
-const TRIGGER_SIZE = 16;
-let triggerWin = null;
+// Corner peek: the board hides into a corner, it does not vanish.
+// The floating button in the board (see src/main.ts) asks the main
+// process to collapse. The main process first screenshots the board
+// view and shows a small version of it in a card at the chosen
+// screen corner. Clicking the card restores the board to its saved
+// bounds. A small version, not a literal corner slice, on purpose:
+// the corner slice of a board is often empty (the welcome board's
+// bottom-left corner is blank white), while a miniature is always
+// recognisable as the board. This is a real window receiving a
+// real click, so it works whether or not the main process could
+// query the cursor while hidden — the previous trigger-window
+// approach was dropped for exactly that reason, and a cursor poll
+// was dropped earlier because Electron's cursor query froze at
+// the last position before the board hid.
+// Peek size matches the board's 1.6 aspect, so the miniature is
+// not distorted.
+const PEEK_W = 240;
+const PEEK_H = 150;
+let peekWin = null;
+let peekImageURL = null;
+let savedBounds = null;
+let isCollapsed = false;
 
-function triggerBounds() {
+function cornerOrigin(w, h) {
   const display = screen.getPrimaryDisplay();
   const b = display.bounds;
-  if (cornerReveal === "bottom-left") return { x: b.x, y: b.y + b.height - TRIGGER_SIZE };
-  if (cornerReveal === "bottom-right") return { x: b.x + b.width - TRIGGER_SIZE, y: b.y + b.height - TRIGGER_SIZE };
+  if (cornerReveal === "bottom-left") return { x: b.x, y: b.y + b.height - h };
+  if (cornerReveal === "bottom-right") return { x: b.x + b.width - w, y: b.y + b.height - h };
   if (cornerReveal === "top-left") return { x: b.x, y: b.y };
-  if (cornerReveal === "top-right") return { x: b.x + b.width - TRIGGER_SIZE, y: b.y };
+  if (cornerReveal === "top-right") return { x: b.x + b.width - w, y: b.y };
   return null;
 }
 
-function createTriggerWindow() {
-  // A plain BrowserWindow, not BaseWindow+View: BrowserWindow
-  // transparency is the well-tested path, and a WebContentsView
-  // kept painting its default white background here, which showed
-  // as a white square at the corner.
+function peekBounds() {
+  const origin = cornerOrigin(PEEK_W, PEEK_H);
+  return origin ? { ...origin, width: PEEK_W, height: PEEK_H } : null;
+}
+
+async function collapseBoard() {
+  if (!win || isCollapsed || !boardView) return;
+  const bounds = peekBounds();
+  if (!bounds) return; // Corner is Off: the button is hidden, so this should not happen.
+  savedBounds = win.getBounds();
+  // Screenshot first, while the board is still visible, then
+  // shrink it to a miniature (2x for sharpness on Retina).
+  // On failure the peek still appears, with a placeholder.
+  try {
+    const img = await boardView.webContents.capturePage();
+    peekImageURL = img.resize({ width: PEEK_W * 2, height: PEEK_H * 2 }).toDataURL();
+  } catch {
+    peekImageURL = null;
+  }
   const { BrowserWindow } = require('electron');
-  triggerWin = new BrowserWindow({
-    width: TRIGGER_SIZE,
-    height: TRIGGER_SIZE,
+  peekWin = new BrowserWindow({
+    width: PEEK_W,
+    height: PEEK_H,
     frame: false,
     transparent: true,
     backgroundColor: '#00000000',
@@ -95,36 +116,30 @@ function createTriggerWindow() {
     resizable: false,
     minimizable: false,
     maximizable: false,
-    focusable: false,
-    title: 'Bowerbird corner',
+    title: 'Bowerbird',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
-  triggerWin.loadFile(path.join(__dirname, 'trigger.html'));
-  triggerWin.on('closed', () => { triggerWin = null; });
-  updateTriggerWindow();
+  try { peekWin.setAlwaysOnTop(true, 'screen-saver'); } catch { /* level is macOS-only */ }
+  peekWin.setBounds(bounds);
+  peekWin.loadFile(path.join(__dirname, 'peek.html'));
+  peekWin.on('closed', () => { peekWin = null; });
+  win.hide();
+  isCollapsed = true;
 }
 
-function updateTriggerWindow() {
-  if (!triggerWin) return;
-  const bounds = triggerBounds();
-  if (!bounds || !win) { triggerWin.hide(); return; }
-  triggerWin.setBounds({ ...bounds, width: TRIGGER_SIZE, height: TRIGGER_SIZE });
-  // Show the trigger only when the board is not the focused window;
-  // hide it the moment the board comes to the front.
-  if (win.isVisible() && !win.isMinimized() && win.isFocused()) triggerWin.hide();
-  else triggerWin.show();
-}
-
-function revealBoard() {
+function restoreBoard() {
   if (!win) return;
+  if (peekWin) { peekWin.destroy(); peekWin = null; }
+  isCollapsed = false;
+  peekImageURL = null;
   win.show();
   if (win.isMinimized()) win.restore();
+  if (savedBounds) win.setBounds(savedBounds);
   win.focus();
-  updateTriggerWindow();
 }
 
 // ---------------------------------------------------------------- board file
@@ -283,14 +298,7 @@ function createWindow() {
     win = null;
     boardView = null;
   });
-  win.on('focus', () => updateTriggerWindow());
-  win.on('blur', () => updateTriggerWindow());
-  win.on('show', () => updateTriggerWindow());
-  win.on('hide', () => updateTriggerWindow());
-  win.on('minimize', () => updateTriggerWindow());
-  win.on('restore', () => updateTriggerWindow());
-  // Full work area: with no handle window, nothing needs to be left
-  // clear at either edge.
+  // Full work area.
   const display = screen.getPrimaryDisplay();
   const wa = display.workArea;
   win.setBounds({
@@ -299,7 +307,6 @@ function createWindow() {
     width: wa.width,
     height: Math.min(900, wa.height),
   });
-  createTriggerWindow();
 }
 
 // ---------------------------------------------------------------- IPC
@@ -394,16 +401,24 @@ function registerIpc() {
     if (!CORNERS.includes(corner)) return cornerReveal;
     cornerReveal = corner;
     saveAppSettings();
-    updateTriggerWindow();
+    // Moving the peek while collapsed: the peek window follows the
+    // new corner (its screenshot stays the same; it is a peek, not
+    // a live view).
+    if (isCollapsed && peekWin) {
+      const bounds = peekBounds();
+      if (bounds) peekWin.setBounds(bounds);
+    }
     return cornerReveal;
   });
-  ipcMain.handle('bowerbird:reveal', () => { revealBoard(); });
+  ipcMain.handle('bowerbird:collapse', () => collapseBoard());
+  ipcMain.handle('bowerbird:restore', () => { restoreBoard(); });
+  ipcMain.handle('bowerbird:peek-image', () => peekImageURL);
   ipcMain.handle('bowerbird:minimise', () => { if (win) win.minimize(); });
   ipcMain.handle('bowerbird:close-window', () => { if (win) win.close(); });
   // Quit must quit the app, not just close the window: on macOS
   // closing the only window does not by itself end the app, and
   // BaseWindow.close() alone did not end the process in testing.
-  ipcMain.handle('bowerbird:quit', () => { if (triggerWin) triggerWin.destroy(); if (win) win.destroy(); app.quit(); });
+  ipcMain.handle('bowerbird:quit', () => { if (peekWin) peekWin.destroy(); if (win) win.destroy(); app.quit(); });
   ipcMain.handle('bowerbird:fullscreen', () => { if (win) win.setFullScreen(!win.isFullScreen()); });
 }
 
