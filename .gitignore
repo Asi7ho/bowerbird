@@ -1,2 +1,6 @@
 /target
+legacy-gpui/target
+node_modules/
+dist/
+out/
 *.tmp
