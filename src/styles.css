@@ -69,7 +69,7 @@ button { font-family: inherit; }
   box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.35), var(--shadow-md);
 }
 .card .inner { width: 100%; height: 100%; overflow: hidden; }
-.card button, .card .clickable, .card textarea, .card a { pointer-events: auto; }
+.card button, .card .clickable, .card textarea, .card a, .card video { pointer-events: auto; }
 .card .note-body { padding: 14px; line-height: 1.55; word-wrap: break-word; }
 .card .note-body p { margin: 0 0 6px; }
 .card .note-body h1, .card .note-body h2, .card .note-body h3 {

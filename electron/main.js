@@ -169,7 +169,7 @@ function installShowcaseAssets(dir) {
   // installShowcaseAssets only fills in what is missing, so a
   // reset that deletes the board dir gets a full fresh set, while
   // an existing board keeps the copies it already has.
-  for (const name of ['welcome-bower.jpg', 'welcome-birdsong.mp3', 'welcome-video.ogv']) {
+  for (const name of ['welcome-bower.jpg', 'welcome-birdsong.mp3', 'welcome-video.mp4']) {
     const dest = path.join(dir, name);
     if (!fs.existsSync(dest) && fs.existsSync(path.join(src, name))) {
       fs.copyFileSync(path.join(src, name), dest);
@@ -182,7 +182,7 @@ function installShowcaseAssets(dir) {
   const sizeOf = (file) => { try { return fs.statSync(file).size; } catch { return 0; } };
   return {
     pdf_size_bytes: sizeOf(pdf),
-    video_size_bytes: sizeOf(path.join(dir, 'welcome-video.ogv')),
+    video_size_bytes: sizeOf(path.join(dir, 'welcome-video.mp4')),
   };
 }
 
@@ -253,7 +253,7 @@ const MIME = {
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
   '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
   '.pdf': 'application/pdf', '.mp3': 'audio/mpeg', '.wav': 'audio/wav',
-  '.ogg': 'audio/ogg', '.m4a': 'audio/mp4', '.mp4': 'video/mp4',
+  '.ogg': 'audio/ogg', '.ogv': 'video/ogg', '.m4a': 'audio/mp4', '.mp4': 'video/mp4',
   '.mov': 'video/quicktime', '.webm': 'video/webm', '.txt': 'text/plain',
   '.md': 'text/markdown',
 };
@@ -322,6 +322,22 @@ function registerIpc() {
       json = fs.readFileSync(file, 'utf8');
     } catch {
       json = null;
+    }
+    // One-time migration: the welcome video was Theora (.ogv),
+    // which Chromium cannot play inline, and is now H.264 (.mp4).
+    // An existing board pointing at the old file gets the new
+    // file installed and its reference rewritten, so it plays in
+    // the board without the user having to reset their board.
+    if (json && json.includes('welcome-video.ogv')) {
+      const src = path.join(assetsDir(), 'welcome-video.mp4');
+      const dest = path.join(dir, 'welcome-video.mp4');
+      try {
+        if (fs.existsSync(src) && !fs.existsSync(dest)) fs.copyFileSync(src, dest);
+        if (fs.existsSync(dest)) {
+          json = json.split('welcome-video.ogv').join('welcome-video.mp4');
+          fs.writeFileSync(file, json);
+        }
+      } catch { /* old reference stays, video still opens outside */ }
     }
     return { json, board_path: file, board_dir: dir, ...showcase };
   });
@@ -467,8 +483,37 @@ app.whenReady().then(() => {
       }).join('/');
       const ext = path.extname(filePath).toLowerCase();
       const type = MIME[ext] || 'application/octet-stream';
+      // Chromium's media player asks for byte ranges and refuses a
+      // source it cannot seek in ("no supported source was found"
+      // for audio served as an open-ended stream). Answer ranges
+      // properly, and always send a length, so <audio> and <video>
+      // work through this scheme just as <img> already did.
+      let size;
+      try {
+        size = fs.statSync(filePath).size;
+      } catch {
+        return new Response('not found', { status: 404 });
+      }
+      const range = request.headers.get('range');
+      if (request.method === 'HEAD') {
+        return new Response(null, { headers: { 'Content-Type': type, 'Content-Length': String(size), 'Accept-Ranges': 'bytes' } });
+      }
+      if (range) {
+        const m = /^bytes=(\d*)-(\d*)$/.exec(range);
+        if (m) {
+          const start = m[1] ? parseInt(m[1], 10) : 0;
+          const end = m[2] ? parseInt(m[2], 10) : size - 1;
+          if (start < size && end >= start && end < size) {
+            return new Response(Readable.toWeb(fs.createReadStream(filePath, { start, end })), {
+              status: 206,
+              headers: { 'Content-Type': type, 'Content-Length': String(end - start + 1), 'Content-Range': `bytes ${start}-${end}/${size}`, 'Accept-Ranges': 'bytes' },
+            });
+          }
+          return new Response('range not satisfiable', { status: 416, headers: { 'Content-Range': `bytes */${size}` } });
+        }
+      }
       return new Response(Readable.toWeb(fs.createReadStream(filePath)), {
-        headers: { 'Content-Type': type },
+        headers: { 'Content-Type': type, 'Content-Length': String(size), 'Accept-Ranges': 'bytes' },
       });
     } catch {
       return new Response('not found', { status: 404 });

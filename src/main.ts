@@ -60,7 +60,7 @@ const SHORTCUTS: Array<[string, string]> = [
   ["Click a link card", "Open it in your browser"],
   ["Double-click a link card", "Open it in your browser"],
   ["Double-click a PDF or picture", "Open it outside Bowerbird"],
-  ["Click a play tile", "Play or pause audio / open a video"],
+  ["Click a play tile", "Play audio / video"],
   ["Drag a card corner", "Resize the card (nwse cursor on hover)"],
   ["Click the corner button", "Hide the board into its corner"],
   ["Click the board's corner", "Open the board again"],
@@ -344,6 +344,24 @@ function cardHtml(item: Item): string {
     const name = remote ? domainOf(source) : (source.split("/").pop() ?? source);
     const sub = remote ? "Video link" : `${Math.round(size_bytes / 1024)} KB`;
     const thumbH = (ww - 24) * 9 / 16;
+    // A local video in a format Chromium can play plays right here
+    // in the board, with its real first frame as the thumbnail —
+    // no black box, no trip out to a browser or system player.
+    // Remote links (YouTube, Vimeo, …) and formats Chromium cannot
+    // play still open outside the app, as before.
+    const ext = source.toLowerCase().split("?")[0].split("#")[0].split(".").pop() ?? "";
+    const inline = !remote && ["mp4", "webm", "m4v"].includes(ext);
+    if (inline) {
+      const src = api.fileUrl(source);
+      if (hh >= thumbH + 70) {
+        return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
+          <video controls preload="metadata" playsinline src="${src}" style="width:${ww - 24}px;height:${thumbH}px;object-fit:cover;border-radius:10px;background:#1d1d1f;pointer-events:auto"></video>
+          <div class="title" style="font-size:14px">${elide(name, ww - 24, 14, true)}</div><div class="sub" style="font-size:12px">${sub}</div></div></div>`;
+      }
+      return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner row" style="padding:12px">
+        <video controls preload="metadata" playsinline src="${src}" style="width:96px;height:56px;object-fit:cover;border-radius:10px;background:#1d1d1f;pointer-events:auto"></video>
+        <div class="col"><div class="title" style="font-size:14px">${elide(name, ww - 132, 14, true)}</div><div class="sub" style="font-size:12px">${sub}</div></div></div></div>`;
+    }
     if (hh >= thumbH + 70) {
       return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
         <div class="video-thumb clickable" data-action="play-video" data-id="${item.id}" style="width:${ww - 24}px;height:${thumbH}px;font-size:28px">▶</div>
@@ -545,7 +563,7 @@ function cornerHit(id: number, world: Pt): boolean {
 
 boardEl.addEventListener("mousedown", (e: MouseEvent) => {
   const target = e.target as HTMLElement;
-  if (target.closest("#toolbar, #settings-backdrop, #toast, #btn-collapse")) return;
+  if (target.closest("#toolbar, #settings-backdrop, #toast, #btn-collapse, video")) return;
   // A board click or drag must never start a native text selection
   // across the cards (bug: clicking anywhere highlighted all text).
   if (!target.closest("textarea.note-edit")) window.getSelection()?.removeAllRanges();
@@ -829,7 +847,13 @@ function toggleAudio(id: number, path: string): void {
   if (audioEl) audioEl.pause();
   audioEl = new Audio(api.fileUrl(path));
   audioId = id;
-  audioEl.play().catch((err) => toast(`Could not play audio: ${String(err)}`));
+  audioEl.play().catch((err) => {
+    // Do not leave the card saying "Now playing" for a file that
+    // failed to load.
+    audioId = null;
+    toast(`Could not play audio: ${String(err)}`);
+    render();
+  });
   audioEl.onended = () => { audioId = null; render(); };
   render();
 }
@@ -1243,7 +1267,7 @@ function welcomeBoard(pdfSize: number, videoSize: number): Board {
   add({ id: next(), pos: { x: 260, y: 240 }, size: { w: 120, h: 120 }, group: null, kind: { Swatch: { hex: "#007AFF" } } });
   add({ id: next(), pos: { x: 120, y: 400 }, size: { w: 260, h: 96 }, group: null, kind: { PdfCard: { path: `${boardDir}/sample.pdf`, size_bytes: pdfSize } } });
   add({ id: next(), pos: { x: 420, y: 400 }, size: { w: 300, h: 96 }, group: null, kind: { Audio: { path: `${boardDir}/welcome-birdsong.mp3` } } });
-  add({ id: next(), pos: { x: 760, y: 400 }, size: { w: 360, h: 280 }, group: null, kind: { Video: { source: `${boardDir}/welcome-video.ogv`, remote: false, size_bytes: videoSize } } });
+  add({ id: next(), pos: { x: 760, y: 400 }, size: { w: 360, h: 280 }, group: null, kind: { Video: { source: `${boardDir}/welcome-video.mp4`, remote: false, size_bytes: videoSize } } });
   const groupText = "Grouped — these two move together.\n\nDrag either one, and both move. Ctrl + G groups, Ctrl + U ungroups.";
   add({ id: next(), pos: { x: 120, y: 530 }, size: { w: 300, h: estimateTextHeight(groupText, 16, 300) }, group: 1, kind: note(groupText, 300) });
   add({ id: next(), pos: { x: 450, y: 530 }, size: { w: 120, h: 120 }, group: 1, kind: { Swatch: { hex: "#FF6B35" } } });
