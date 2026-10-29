@@ -56,11 +56,11 @@ is what brings it back. There is no second handle window.
   clear of the bar, so the welcome board is never hidden behind it.
 - **Edge handle:** a slim, semi-transparent tab that is NOT inside
   the app: it is its own small window sitting outside the app's
-  right edge, on the screen's right edge when the app is hidden.
+  LEFT edge, on the screen's left edge when the app is hidden.
   The main window leaves exactly one handle-width at the screen's
-  right edge so the tab never covers the board. Click it and the
+  left edge so the tab never covers the board. Click it and the
   app hides, leaving only the tab; click it again to bring the app
-  back. The chevron points right when the app is out, left when it
+  back. The chevron points left when the app is out, right when it
   is hidden. Cards scale with the zoom: a card is laid out in world units
   and scaled by the camera, so its text, padding and images shrink
   and grow with it instead of staying fixed while the card shrinks.
@@ -68,6 +68,15 @@ is what brings it back. There is no second handle window.
   editor and Settings allow text selection. A selected card shows a
   visible resize square at its bottom-right corner, and hovering that
   corner shows a diagonal resize cursor.
+- **Smoothness:** cards live in world coordinates and the whole
+  cards layer is transformed once by the camera, so pan and zoom
+  are one GPU transform instead of repositioning and re-parsing
+  every card per frame. The grid is a CSS background that follows
+  the camera, not hundreds of SVG dots rebuilt per frame. Drags
+  update only the dragged card's style (or a single SVG preview
+  for pen, connector and marquee) instead of rebuilding the board,
+  cursor hints run at most once per frame, and content is only
+  rebuilt when the visible set actually changes.
 - **Settings (?):** a panel listing every keyboard shortcut, plus the
   canvas background (White, Paper, Sage, Sky, Ink) and grid
   (Dots, Lines, Off), and a Quit Bowerbird button under App.

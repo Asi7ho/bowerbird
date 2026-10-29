@@ -29,7 +29,14 @@ html, body {
 button { font-family: inherit; }
 #board { position: absolute; inset: 0; overflow: hidden; user-select: none; -webkit-user-select: none; }
 #canvas-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-#cards { position: absolute; inset: 0; overflow: hidden; }
+#grid { position: absolute; inset: 0; pointer-events: none; }
+/* #cards must NOT have overflow:hidden: cards live in world
+   coordinates, so a card at world x=1500 sits outside the layer's
+   own 1439px box and would be clipped before the camera transform
+   moves it into view. Clipping to the viewport is #board's job
+   (#board is untransformed and overflow:hidden), which clips in
+   screen space after the transform. */
+#cards { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }
 /* Text inside cards is never selected by a board click or drag — the
    board is a canvas, not a document. The note editor and Settings are
    the exceptions, where selecting text is the point. */

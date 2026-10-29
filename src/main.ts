@@ -57,7 +57,7 @@ const SHORTCUTS: Array<[string, string]> = [
   ["Double-click a PDF or picture", "Open it outside Bowerbird"],
   ["Click a play tile", "Play or pause audio / open a video"],
   ["Drag a card corner", "Resize the card (nwse cursor on hover)"],
-  ["Click the handle on the right edge", "Hide the app / bring it back"],
+  ["Click the handle on the left edge", "Hide the app / bring it back"],
   ["Shift + click", "Add to the selection"],
   ["Drag on empty space", "Marquee-select"],
   ["Ctrl / Cmd + V", "Paste a link as a card"],
@@ -77,12 +77,11 @@ let editingId: number | null = null;
 let settingsOpen = false;
 let drag: null
   | { kind: "pan"; last: Pt }
-  | { kind: "move"; lastWorld: Pt }
+  | { kind: "move"; lastWorld: Pt; moved: boolean }
   | { kind: "stroke"; points: Pt[] }
   | { kind: "connector"; from: Anchor; current: Pt }
   | { kind: "marquee"; start: Pt; current: Pt }
-  | { kind: "resize"; id: number; startWorld: Pt; origW: number; origH: number } = null;
-let liveStroke: Pt[] | null = null;
+  | { kind: "resize"; id: number; startWorld: Pt; origW: number; origH: number; moved: boolean } = null;
 let audioEl: HTMLAudioElement | null = null;
 let audioId: number | null = null;
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -92,6 +91,13 @@ let lastToolbarKey = "";
 const boardEl = document.getElementById("board") as HTMLDivElement;
 const worldEl = document.getElementById("world") as unknown as SVGGElement;
 const cardsEl = document.getElementById("cards") as HTMLDivElement;
+const gridEl = document.getElementById("grid") as HTMLDivElement;
+// Key of the card/stroke content currently built in the DOM. Camera
+// moves that leave this key unchanged must not rebuild anything:
+// panning then is one GPU transform, not a DOM rebuild per frame.
+let lastContentKey = "";
+let cursorRaf = 0;
+let pendingCursor: Pt | null = null;
 const toastEl = document.getElementById("toast") as HTMLDivElement;
 
 // ---------------------------------------------------------------- helpers
@@ -159,32 +165,66 @@ function svgEl2(tag: string, attrs: Record<string, string>): SVGElement {
   return el;
 }
 
-function renderGrid(): void {
+// The grid is a CSS background, not SVG nodes: a repeating dot or
+// line pattern whose size and offset follow the camera. Panning
+// then costs two style properties, not rebuilding hundreds of
+// circles on every frame.
+function applyGrid(): void {
   const cam = board.camera;
-  const w = window.innerWidth, h = window.innerHeight;
-  const x0 = cam.x, x1 = cam.x + w / cam.zoom;
-  const y0 = cam.y, y1 = cam.y + h / cam.zoom;
+  if (board.grid === "Off") { gridEl.style.backgroundImage = "none"; return; }
   const rgb = parseHex(board.bg) ?? [247, 245, 240];
   const lum = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
-  const gridColor = lum > 140 ? "#d8d8de" : "#55555a";
+  const color = lum > 140 ? "#d8d8de" : "#55555a";
   let step = GRID;
-  while ((x1 - x0) / step > 40 || (y1 - y0) / step > 40) step *= 2;
-  const g = svgEl2("g", {});
+  while ((window.innerWidth / cam.zoom) / step > 40 || (window.innerHeight / cam.zoom) / step > 40) step *= 2;
+  const size = step * cam.zoom;
+  const offX = (Math.floor(cam.x / step) * step - cam.x) * cam.zoom;
+  const offY = (Math.floor(cam.y / step) * step - cam.y) * cam.zoom;
   if (board.grid === "Dots") {
-    for (let gx = Math.floor(x0 / step) * step; gx <= x1; gx += step) {
-      for (let gy = Math.floor(y0 / step) * step; gy <= y1; gy += step) {
-        g.appendChild(svgEl2("circle", { cx: String(gx), cy: String(gy), r: "1.5", fill: gridColor }));
-      }
-    }
-  } else if (board.grid === "Lines") {
-    for (let gx = Math.floor(x0 / step) * step; gx <= x1; gx += step) {
-      g.appendChild(svgEl2("line", { x1: String(gx), y1: String(y0), x2: String(gx), y2: String(y1), stroke: gridColor, "stroke-width": "1" }));
-    }
-    for (let gy = Math.floor(y0 / step) * step; gy <= y1; gy += step) {
-      g.appendChild(svgEl2("line", { x1: String(x0), y1: String(gy), x2: String(x1), y2: String(gy), stroke: gridColor, "stroke-width": "1" }));
-    }
+    gridEl.style.backgroundImage = `radial-gradient(circle, ${color} 1.5px, transparent 1.6px)`;
+    gridEl.style.backgroundSize = `${size}px ${size}px`;
+    gridEl.style.backgroundPosition = `${offX}px ${offY}px`;
+    gridEl.style.backgroundRepeat = "repeat";
+  } else {
+    gridEl.style.backgroundImage = `linear-gradient(to right, ${color} 0 1px, transparent 1px), linear-gradient(to bottom, ${color} 0 1px, transparent 1px)`;
+    gridEl.style.backgroundSize = `${size}px ${size}px, ${size}px ${size}px`;
+    gridEl.style.backgroundPosition = `${offX}px ${offY}px, ${offX}px ${offY}px`;
+    gridEl.style.backgroundRepeat = "repeat";
   }
-  worldEl.appendChild(g);
+}
+
+// Camera-only update: one GPU transform on the SVG world and on the
+// cards layer (cards live in world coordinates now), plus the grid
+// offset and the resize-handle position. No DOM rebuild, no markdown,
+// no image re-parse — this is what makes pan and zoom feel smooth.
+function applyCamera(): void {
+  const cam = board.camera;
+  worldEl.setAttribute("transform", `translate(${-cam.x * cam.zoom},${-cam.y * cam.zoom}) scale(${cam.zoom})`);
+  cardsEl.style.transform = `translate(${-cam.x * cam.zoom}px,${-cam.y * cam.zoom}px) scale(${cam.zoom})`;
+  applyGrid();
+  updateResizeHandle();
+}
+
+function visibleKey(): string {
+  const v = visibleRect();
+  const ids: number[] = [];
+  for (const item of board.items) if (isVisibleItem(item, v)) ids.push(item.id);
+  return `${ids.join(",")}|${selected.join(",")}|${editingId ?? ""}`;
+}
+
+// After a camera move, rebuild content only if the visible set
+// actually changed (new cards scrolled into view). Panning inside
+// the same visible set is applyCamera() alone.
+function refreshContentIfVisibleChanged(): void {
+  if (visibleKey() !== lastContentKey) render();
+}
+
+// Rebuild only the SVG layer (strokes/connectors), without touching
+// card DOM. Used while dragging a card, so connectors attached to
+// it follow in real time without re-parsing every card.
+function renderSvgOnly(): void {
+  worldEl.innerHTML = "";
+  renderStrokesAndConnectors();
 }
 
 function renderStrokesAndConnectors(): void {
@@ -219,33 +259,23 @@ function renderStrokesAndConnectors(): void {
       worldEl.appendChild(svgEl2("polyline", { points: `${p1.x},${p1.y} ${b.x},${b.y} ${p2.x},${p2.y}`, fill: "none", stroke: sel ? ACCENT : "#333333", "stroke-width": sel ? "3" : "2" }));
     }
   }
-  if (liveStroke && liveStroke.length >= 2) {
-    const d = liveStroke.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
-    worldEl.appendChild(svgEl2("path", { d, fill: "none", stroke: penColor, "stroke-width": "3", "stroke-linecap": "round", "stroke-linejoin": "round" }));
-  }
-  if (drag && drag.kind === "connector") {
-    const a = anchorPoint(board, drag.from);
-    if (a) {
-      worldEl.appendChild(svgEl2("line", { x1: String(a.x), y1: String(a.y), x2: String(drag.current.x), y2: String(drag.current.y), stroke: "#333333", "stroke-width": "2" }));
-    }
-  }
-  if (drag && drag.kind === "marquee") {
-    const x0 = Math.min(drag.start.x, drag.current.x), y0 = Math.min(drag.start.y, drag.current.y);
-    worldEl.appendChild(svgEl2("rect", { x: String(x0), y: String(y0), width: String(Math.abs(drag.current.x - drag.start.x)), height: String(Math.abs(drag.current.y - drag.start.y)), fill: "none", stroke: ACCENT, "stroke-width": "1" }));
-  }
+  // Live stroke, connector preview and marquee are fast-path SVG
+  // nodes updated directly during the drag (see mousemove); they
+  // are not part of a content rebuild, or every pen point would
+  // rebuild every card.
 }
 
-function cardHtml(item: Item, screen: Pt, w: number, h: number): string {
+function cardHtml(item: Item): string {
   const sel = selected.includes(item.id);
   const cls = sel ? "card selected" : "card";
-  const cam = board.camera;
-  // The card itself is laid out in world units and scaled by the
-  // camera zoom, so its *content* scales with the zoom too. Before,
-  // only the outer box scaled (width/height in screen px) while inner
-  // text, padding and image heights stayed fixed, so zooming out left
-  // full-size text overflowing a shrunken card.
-  const ww = w / cam.zoom, hh = h / cam.zoom;
-  const style = `left:${screen.x}px;top:${screen.y}px;width:${ww}px;height:${hh}px;transform:scale(${cam.zoom});transform-origin:top left;`;
+  // Cards live in world coordinates; the whole #cards layer is
+  // transformed once by the camera (see applyCamera). Per-card
+  // screen positions and per-card scale transforms used to force a
+  // full reposition of every card on every pan/zoom frame — that
+  // was the main source of lag. Content still scales with zoom,
+  // because the layer itself is scaled.
+  const ww = item.size.w, hh = item.size.h;
+  const style = `left:${item.pos.x}px;top:${item.pos.y}px;width:${ww}px;height:${hh}px;`;
   if ("Text" in item.kind) {
     if (editingId === item.id) return ""; // the editor DOM is managed separately
     const { text, size, color } = item.kind.Text;
@@ -339,10 +369,7 @@ function isVisibleItem(item: Item, v: { x0: number; y0: number; x1: number; y1: 
 
 function render(): void {
   boardEl.style.background = board.bg;
-  const cam = board.camera;
-  worldEl.setAttribute("transform", `translate(${-cam.x * cam.zoom},${-cam.y * cam.zoom}) scale(${cam.zoom})`);
   worldEl.innerHTML = "";
-  renderGrid();
   renderStrokesAndConnectors();
   // Cards: rebuild, except the note being edited (its textarea stays).
   // Only visible cards are built (see visibleRect).
@@ -354,14 +381,14 @@ function render(): void {
     if ("Stroke" in item.kind || "Connector" in item.kind) continue;
     if (editingId === item.id) continue;
     if (!isVisibleItem(item, v)) continue;
-    const screen = toScreen(item.pos);
-    html += cardHtml(item, screen, item.size.w * cam.zoom, item.size.h * cam.zoom);
+    html += cardHtml(item);
   }
   cardsEl.innerHTML = html;
   applyStacking();
   if (editingHtml) cardsEl.insertAdjacentHTML("beforeend", editingHtml);
   updateToolbar();
-  updateResizeHandle();
+  lastContentKey = visibleKey();
+  applyCamera();
 }
 
 function updateResizeHandle(): void {
@@ -494,7 +521,6 @@ function commitEditingIfAny(): void {
 function setTool(t: Tool): void {
   tool = t;
   drag = null;
-  liveStroke = null;
   render();
 }
 
@@ -527,8 +553,6 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
   if (spaceDown) { drag = { kind: "pan", last: winPt }; return; }
   if (tool === "pen") {
     drag = { kind: "stroke", points: [world] };
-    liveStroke = [world];
-    render();
     return;
   }
   if (tool === "connector") {
@@ -561,7 +585,7 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
   if (selected.length === 1 && cornerHit(selected[0], world)) {
     const sel = selected[0];
     const it = boardGet(board, sel);
-    drag = { kind: "resize", id: sel, startWorld: world, origW: it?.size.w ?? 100, origH: it?.size.h ?? 100 };
+    drag = { kind: "resize", id: sel, startWorld: world, origW: it?.size.w ?? 100, origH: it?.size.h ?? 100, moved: false };
     return;
   }
   if (clicked !== null && cornerHit(clicked, world)) {
@@ -570,7 +594,7 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
     applyStacking();
     updateSelection();
     const it = boardGet(board, clicked);
-    drag = { kind: "resize", id: clicked, startWorld: world, origW: it?.size.w ?? 100, origH: it?.size.h ?? 100 };
+    drag = { kind: "resize", id: clicked, startWorld: world, origW: it?.size.w ?? 100, origH: it?.size.h ?? 100, moved: false };
     return;
   }
   if (clicked !== null) {
@@ -578,32 +602,74 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
     bringToFront(selected);
     applyStacking();
     updateSelection();
-    drag = { kind: "move", lastWorld: world };
+    drag = { kind: "move", lastWorld: world, moved: false };
     return;
   }
   if (!e.shiftKey) selected = [];
   drag = { kind: "marquee", start: world, current: world };
-  render();
 });
+
+// Fast-path drag previews: a single SVG node updated in place,
+// instead of rebuilding every card and stroke on every mousemove.
+// The node is cleared by the next full render (mouseup), so it never
+// needs its own removal.
+function dragPreview(id: string, tag: string): SVGElement {
+  let el = worldEl.querySelector(`#${id}`) as SVGElement | null;
+  if (!el) {
+    el = svgEl2(tag, { id }) as SVGElement;
+    worldEl.appendChild(el);
+  }
+  return el;
+}
+function updateLiveStroke(points: Pt[]): void {
+  const el = dragPreview("live-stroke", "path");
+  el.setAttribute("d", points.map((pt, i) => `${i === 0 ? "M" : "L"}${pt.x},${pt.y}`).join(" "));
+  el.setAttribute("fill", "none");
+  el.setAttribute("stroke", penColor);
+  el.setAttribute("stroke-width", "3");
+  el.setAttribute("stroke-linecap", "round");
+  el.setAttribute("stroke-linejoin", "round");
+}
+function updateDraggedCards(ids: number[]): void {
+  // Cards are world-space now, so moving one is a style change on
+  // its own node — no markdown, no image re-parse, no rebuild.
+  for (const id of ids) {
+    const it = boardGet(board, id);
+    const el = cardsEl.querySelector(`[data-id="${id}"]`) as HTMLElement | null;
+    if (!it || !el) continue;
+    el.style.left = `${it.pos.x}px`;
+    el.style.top = `${it.pos.y}px`;
+    el.style.width = `${it.size.w}px`;
+    el.style.height = `${it.size.h}px`;
+  }
+}
 
 window.addEventListener("mousemove", (e: MouseEvent) => {
   const winPt: Pt = { x: e.clientX, y: e.clientY };
   const world = toWorld(winPt);
   if (!drag) {
-    // Cursor hints: resize on a selected card's corner, move on a
-    // card, crosshair for pen/connector, default on empty canvas.
-    if (settingsOpen || editingId !== null) {
-      boardEl.style.cursor = "default";
-    } else if (tool === "pen" || tool === "connector") {
-      boardEl.style.cursor = "crosshair";
-    } else if (spaceDown) {
-      boardEl.style.cursor = "grab";
-    } else if (selected.length === 1 && cornerHit(selected[0], world)) {
-      boardEl.style.cursor = "nwse-resize";
-    } else if (hitTest(board, world) !== null) {
-      boardEl.style.cursor = "move";
-    } else {
-      boardEl.style.cursor = "default";
+    // Cursor hints run at most once per frame: hitTest walks every
+    // item, and mousemove can fire far faster than the display.
+    pendingCursor = world;
+    if (!cursorRaf) {
+      cursorRaf = requestAnimationFrame(() => {
+        cursorRaf = 0;
+        const w = pendingCursor;
+        if (!w) return;
+        if (settingsOpen || editingId !== null) {
+          boardEl.style.cursor = "default";
+        } else if (tool === "pen" || tool === "connector") {
+          boardEl.style.cursor = "crosshair";
+        } else if (spaceDown) {
+          boardEl.style.cursor = "grab";
+        } else if (selected.length === 1 && cornerHit(selected[0], w)) {
+          boardEl.style.cursor = "nwse-resize";
+        } else if (hitTest(board, w) !== null) {
+          boardEl.style.cursor = "move";
+        } else {
+          boardEl.style.cursor = "default";
+        }
+      });
     }
     return;
   }
@@ -612,27 +678,50 @@ window.addEventListener("mousemove", (e: MouseEvent) => {
     board.camera.x -= (winPt.x - drag.last.x) / board.camera.zoom;
     board.camera.y -= (winPt.y - drag.last.y) / board.camera.zoom;
     drag.last = winPt;
-    render();
+    applyCamera();
+    refreshContentIfVisibleChanged();
   } else if (drag.kind === "move") {
-    moveSelection(board, selected, world.x - drag.lastWorld.x, world.y - drag.lastWorld.y);
+    const dx = world.x - drag.lastWorld.x, dy = world.y - drag.lastWorld.y;
+    if (Math.hypot(dx, dy) > 0.5) drag.moved = true;
+    moveSelection(board, selected, dx, dy);
     drag.lastWorld = world;
-    render();
+    updateDraggedCards(selected);
+    renderSvgOnly();
+    updateResizeHandle();
   } else if (drag.kind === "resize") {
     resizeItem(board, drag.id, drag.origW + (world.x - drag.startWorld.x), drag.origH + (world.y - drag.startWorld.y));
-    render();
+    if (Math.hypot(world.x - drag.startWorld.x, world.y - drag.startWorld.y) > 2) drag.moved = true;
+    updateDraggedCards([drag.id]);
+    updateResizeHandle();
   } else if (drag.kind === "stroke") {
     const last = drag.points[drag.points.length - 1];
     if (Math.hypot(world.x - last.x, world.y - last.y) > 2 / board.camera.zoom) {
       drag.points.push(world);
-      liveStroke = [...drag.points];
-      render();
+      updateLiveStroke(drag.points);
     }
   } else if (drag.kind === "connector") {
     drag.current = world;
-    render();
+    const a = anchorPoint(board, drag.from);
+    if (a) {
+      const el = dragPreview("connector-preview", "line");
+      el.setAttribute("x1", String(a.x));
+      el.setAttribute("y1", String(a.y));
+      el.setAttribute("x2", String(world.x));
+      el.setAttribute("y2", String(world.y));
+      el.setAttribute("stroke", "#333333");
+      el.setAttribute("stroke-width", "2");
+    }
   } else if (drag.kind === "marquee") {
     drag.current = world;
-    render();
+    const el = dragPreview("marquee-preview", "rect");
+    const x0 = Math.min(drag.start.x, world.x), y0 = Math.min(drag.start.y, world.y);
+    el.setAttribute("x", String(x0));
+    el.setAttribute("y", String(y0));
+    el.setAttribute("width", String(Math.abs(world.x - drag.start.x)));
+    el.setAttribute("height", String(Math.abs(world.y - drag.start.y)));
+    el.setAttribute("fill", "none");
+    el.setAttribute("stroke", ACCENT);
+    el.setAttribute("stroke-width", "1");
   }
 });
 
@@ -641,7 +730,6 @@ window.addEventListener("mouseup", (e: MouseEvent) => {
   const world = toWorld({ x: e.clientX, y: e.clientY });
   const d = drag;
   drag = null;
-  liveStroke = null;
   if (d.kind === "stroke") {
     if (d.points.length >= 2) {
       const id = allocId();
@@ -671,10 +759,14 @@ window.addEventListener("mouseup", (e: MouseEvent) => {
   } else if (d.kind === "move" || d.kind === "resize") {
     save();
   }
-  // Do not rebuild here for a move/resize: mousemove already rendered
-  // during the drag, and rebuilding on mouseup would destroy a card
-  // button the user just pressed, so its click would never fire.
+  // A move/resize that actually moved is safe to rebuild once at
+  // the end (it refreshes truncation and connector endpoints with
+  // their final geometry). A move/resize that never moved was a
+  // click, not a drag: rebuilding here would destroy the card
+  // button just pressed, so its click would never fire.
   if (d.kind === "stroke" || d.kind === "connector" || d.kind === "marquee") {
+    render();
+  } else if ((d.kind === "move" || d.kind === "resize") && d.moved) {
     render();
   } else {
     updateSelection();
@@ -698,10 +790,11 @@ window.addEventListener("wheel", (e: WheelEvent) => {
   // and Quit saves explicitly before closing.
   if (wheelSaveTimer) clearTimeout(wheelSaveTimer);
   wheelSaveTimer = setTimeout(() => save(), 400);
-  render();
+  applyCamera();
+  refreshContentIfVisibleChanged();
 }, { passive: false });
 
-window.addEventListener("resize", () => render());
+window.addEventListener("resize", () => { applyCamera(); refreshContentIfVisibleChanged(); });
 
 // Card button / link clicks (delegated; cards are pointer-events:none
 // except these controls, so clicks here never start a board drag).

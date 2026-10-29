@@ -7,11 +7,11 @@
       * { box-sizing: border-box; }
       html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
       /* The tab itself: semi-transparent, rounded on the side that
-         faces away from the app (left, when it sits on the app's
-         right edge), flat on the screen-edge side. */
+         faces the app (right, when it sits on the app's left edge),
+         flat on the screen-edge side. */
       button {
         width: 100%; height: 100%; padding: 0; border: 1px solid rgba(0, 0, 0, 0.1);
-        border-right: none; border-radius: 10px 0 0 10px;
+        border-left: none; border-radius: 0 10px 10px 0;
         background: rgba(255, 255, 255, 0.55);
         color: #86868b; cursor: pointer;
         display: flex; align-items: center; justify-content: center;
@@ -22,7 +22,7 @@
     </style>
   </head>
   <body>
-    <button id="handle" title="Hide the app" aria-label="Hide the app"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6" /></svg></button>
+    <button id="handle" title="Hide the app" aria-label="Hide the app"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 6l-6 6 6 6" /></svg></button>
     <script>
       const btn = document.getElementById('handle');
       btn.addEventListener('click', async () => {

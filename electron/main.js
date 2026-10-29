@@ -14,8 +14,8 @@ const { Readable } = require('node:stream');
 let win = null;
 let boardView = null;
 // The handle is NOT inside the app: it is its own small window that
-// sits outside the main window, on the main window's right edge —
-// and on the screen's right edge when the app is hidden. It is always
+// sits outside the main window, on the main window's left edge —
+// and on the screen's left edge when the app is hidden. It is always
 // on top, so it stays reachable even when the app is hidden.
 let handleWin = null;
 let handleView = null;
@@ -181,12 +181,12 @@ function createWindow() {
     win = null;
     boardView = null;
   });
-  // Leave exactly one handle-width at the screen's right edge, so the
+  // Leave exactly one handle-width at the screen's LEFT edge, so the
   // handle window sits outside the app instead of covering the board.
   const display = screen.getPrimaryDisplay();
   const wa = display.workArea;
   win.setBounds({
-    x: wa.x,
+    x: wa.x + HANDLE_W,
     y: wa.y,
     width: Math.max(400, wa.width - HANDLE_W),
     height: Math.min(900, wa.height),
@@ -201,17 +201,17 @@ function updateHandlePosition() {
   const wa = display.workArea;
   if (appHidden) {
     // App hidden: the handle is the only thing left, on the screen's
-    // right edge, vertically centred on the screen.
+    // left edge, vertically centred on the screen.
     handleWin.setBounds({
-      x: wa.x + wa.width - HANDLE_W,
+      x: wa.x,
       y: wa.y + Math.round((wa.height - HANDLE_H) / 2),
       width: HANDLE_W, height: HANDLE_H,
     });
   } else {
-    // App visible: the handle sits just outside the app's right edge,
+    // App visible: the handle sits just outside the app's left edge,
     // vertically centred on the app, clamped to the screen edge.
     handleWin.setBounds({
-      x: Math.min(bounds.x + bounds.width, wa.x + wa.width - HANDLE_W),
+      x: Math.max(wa.x, bounds.x - HANDLE_W),
       y: Math.max(wa.y, Math.min(wa.y + wa.height - HANDLE_H, bounds.y + Math.round((bounds.height - HANDLE_H) / 2))),
       width: HANDLE_W, height: HANDLE_H,
     });
