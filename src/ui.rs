@@ -134,6 +134,7 @@ pub struct BoardView {
     status: String,
     viewport_w: f32,
     viewport_h: f32,
+    title_set: bool,
 }
 
 impl BoardView {
@@ -150,6 +151,7 @@ impl BoardView {
             status: "Board auto-saves on every change.".to_string(),
             viewport_w: 1024.0,
             viewport_h: 768.0,
+            title_set: false,
         }
     }
 
@@ -708,6 +710,10 @@ fn hex_to_hsla(hex: &str, alpha: f32) -> Hsla {
 
 impl Render for BoardView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if !self.title_set {
+            window.set_window_title("QuickBoard");
+            self.title_set = true;
+        }
         // Keep keyboard focus on the board so shortcuts work after a click.
         if !self.focus_handle.is_focused(window) {
             window.focus(&self.focus_handle);
@@ -1173,6 +1179,9 @@ impl Render for BoardView {
             .items_center()
             .gap(px(6.))
             .px(px(10.))
+            // Keep the right end clear of the floating handle pill, which
+            // sits over the top-right corner of the display (168 wide + margins).
+            .pr(px(200.))
             .bg(rgb(0xE8E4DC));
         toolbar = toolbar.child(
             div()
@@ -1427,6 +1436,7 @@ pub fn open_handle_window(shared: &Shared, cx: &mut App) -> anyhow::Result<()> {
 pub struct HandleView {
     shared: Shared,
     focus_handle: FocusHandle,
+    title_set: bool,
 }
 
 impl HandleView {
@@ -1434,12 +1444,17 @@ impl HandleView {
         Self {
             shared,
             focus_handle: cx.focus_handle(),
+            title_set: false,
         }
     }
 }
 
 impl Render for HandleView {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if !self.title_set {
+            window.set_window_title("QuickBoard");
+            self.title_set = true;
+        }
         let shared = self.shared.clone();
         div()
             .size_full()

@@ -372,7 +372,7 @@ impl Board {
         self.items.push(Item {
             id,
             pos: at,
-            size: Size::new((longest * 9.0 + 24.0).max(120.0), (lines * 22.0 + 16.0).max(40.0)),
+            size: Size::new((longest * 9.0 + 24.0).max(120.0), (lines * 27.0 + 22.0).max(48.0)),
             group: None,
             kind: Kind::Text {
                 text: text.to_string(),
