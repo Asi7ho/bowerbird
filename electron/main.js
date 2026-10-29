@@ -32,8 +32,21 @@ let boardView = null;
 // write path below checks DEMO first, and the renderer also
 // short-circuits save() in demo mode, so a write needs both
 // guards to fail before anything could reach disk.
-const DEMO = process.env.BOWERBIRD_DEMO === "1";
+// Demo mode is on either by environment (running from source with
+// BOWERBIRD_DEMO=1) or by a demo-mode marker file next to the app
+// code (Contents/Resources/app/demo-mode in a packaged demo).
+// The marker is how an installed demo knows it is a demo: a user
+// who installs the demo DMG does not set any environment variable,
+// and macOS does not reliably pass one through Finder launches.
+// Once DEMO is known, it is also written back into process.env so
+// the preload bridge — which only reads the environment — reports
+// isDemo correctly in a packaged demo too. The marker file is
+// created only in the demo staging folder by package-demo.sh;
+// it must never be committed at the repo root, or source runs
+// would become demos.
+const DEMO = process.env.BOWERBIRD_DEMO === "1" || fs.existsSync(path.join(__dirname, "..", "demo-mode"));
 if (DEMO) {
+  process.env.BOWERBIRD_DEMO = "1";
   try {
     app.setPath("userData", fs.mkdtempSync(path.join(os.tmpdir(), "bowerbird-demo-")));
   } catch {
