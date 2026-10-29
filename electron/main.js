@@ -269,8 +269,13 @@ function createWindow() {
   // Default size: one third of the screen, centred in the work
   // area (so it never sits under the menu bar or the Dock).
   const wa0 = screen.getPrimaryDisplay().workArea;
-  const defaultWidth = Math.round(wa0.width / 3);
-  const defaultHeight = Math.round(wa0.height / 3);
+  // Screenshot override (not a user setting): BOWERBIRD_WINDOW_SIZE
+  // e.g. 1440x900 makes the window fill the frame for App Store
+  // screenshots, which the 1/3 default would otherwise make tiny.
+  // Used only by screenshots/README.md recapture instructions.
+  const sizeOverride = /^([0-9]+)x([0-9]+)$/.exec(process.env.BOWERBIRD_WINDOW_SIZE || "");
+  const defaultWidth = sizeOverride ? Number(sizeOverride[1]) : Math.round(wa0.width / 3);
+  const defaultHeight = sizeOverride ? Number(sizeOverride[2]) : Math.round(wa0.height / 3);
   const defaultX = wa0.x + Math.round((wa0.width - defaultWidth) / 2);
   const defaultY = wa0.y + Math.round((wa0.height - defaultHeight) / 2);
   win = new BaseWindow({
