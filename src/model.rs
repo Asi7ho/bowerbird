@@ -487,7 +487,7 @@ impl Board {
         let mut board = Self::new();
         board.add_text(
             Pt::new(40.0, 40.0),
-            "QuickBoard — your scratch board, one key away.\nDrag to pan (or Space + drag). Ctrl + scroll to zoom.\nV = select · P = pen · M = marker · C = connector · T = text\nClick + Add to drop text, a link, a swatch or a file.",
+            "QuickBoard — your scratch board, one key away.\nDrag to pan (or Space + drag). Ctrl + scroll to zoom.\nV = select · P = pen · M = marker · C = connector · T = text\nUse the icons above to drop text, a link, a swatch or a file.",
         );
         board.add_swatch(Pt::new(40.0, 240.0), "#FF6B35");
         board.add_swatch(Pt::new(180.0, 240.0), "#2E86AB");

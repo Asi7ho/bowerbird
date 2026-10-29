@@ -39,7 +39,7 @@ impl SharedState {
     }
 }
 
-const TOOLBAR_H: f32 = 44.0;
+const TOOLBAR_H: f32 = 52.0;
 const STATUS_H: f32 = 28.0;
 const GRID: f32 = 100.0;
 const PALETTE: [&str; 6] = ["#1A1A1A", "#E63946", "#2E86AB", "#FF6B35", "#6A4C93", "#2A9D8F"];
@@ -103,6 +103,270 @@ struct AddPanel {
     kind: AddKind,
     at: Pt,
     input: String,
+}
+
+// ----- toolbar icons: small vector glyphs drawn with the canvas API -----
+//
+// Deliberately font-independent: no emoji, no symbol font, so the toolbar
+// looks the same on macOS (San Francisco) and Linux (DejaVu/Noto) with no
+// tofu boxes for missing glyphs. Every icon is drawn in a 20x20 box.
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Icon {
+    Select,
+    Pan,
+    Pen,
+    Marker,
+    Text,
+    Connector,
+    Note,
+    Link,
+    Swatch,
+    Image,
+    Pdf,
+    Group,
+    Ungroup,
+    Delete,
+    Hide,
+}
+
+impl Tool {
+    fn icon(self) -> Icon {
+        match self {
+            Tool::Select => Icon::Select,
+            Tool::Pan => Icon::Pan,
+            Tool::Pen => Icon::Pen,
+            Tool::Marker => Icon::Marker,
+            Tool::Text => Icon::Text,
+            Tool::Connector => Icon::Connector,
+        }
+    }
+}
+
+impl AddKind {
+    fn icon(self) -> Icon {
+        match self {
+            AddKind::Text => Icon::Note,
+            AddKind::Url => Icon::Link,
+            AddKind::Swatch => Icon::Swatch,
+            AddKind::ImagePath => Icon::Image,
+            AddKind::PdfPath => Icon::Pdf,
+        }
+    }
+}
+
+fn circle_path(b: &mut PathBuilder, ox: f32, oy: f32, cx: f32, cy: f32, r: f32) {
+    b.move_to(point(px(ox + cx - r), px(oy + cy)));
+    b.arc_to(
+        point(px(r), px(r)),
+        px(0.),
+        false,
+        true,
+        point(px(ox + cx + r), px(oy + cy)),
+    );
+    b.arc_to(
+        point(px(r), px(r)),
+        px(0.),
+        false,
+        true,
+        point(px(ox + cx - r), px(oy + cy)),
+    );
+    b.close();
+}
+
+fn icon_canvas(icon: Icon, hex: u32) -> impl IntoElement {
+    canvas(
+        move |_bounds, _window, _cx| (),
+        move |bounds, _state, window, _cx| {
+            let ox = f32::from(bounds.origin.x);
+            let oy = f32::from(bounds.origin.y);
+            let pt = |x: f32, y: f32| point(px(ox + x), px(oy + y));
+            let mut s = PathBuilder::stroke(px(1.6));
+            let mut f = PathBuilder::fill();
+            // One polyline in the stroke path.
+            macro_rules! line {
+                ($($x:expr, $y:expr);+) => {{
+                    let mut first = true;
+                    $(
+                        if first {
+                            s.move_to(pt($x, $y));
+                            first = false;
+                        } else {
+                            s.line_to(pt($x, $y));
+                        }
+                    )+
+                }};
+            }
+            match icon {
+                Icon::Select => {
+                    f.add_polygon(
+                        &[
+                            pt(4., 3.),
+                            pt(4., 17.),
+                            pt(7., 14.),
+                            pt(9., 18.),
+                            pt(11., 17.),
+                            pt(9., 13.),
+                            pt(14., 13.),
+                        ],
+                        true,
+                    );
+                }
+                Icon::Pan => {
+                    line!(4., 10.; 16., 10.);
+                    line!(4., 10.; 6.5, 7.5);
+                    line!(4., 10.; 6.5, 12.5);
+                    line!(16., 10.; 13.5, 7.5);
+                    line!(16., 10.; 13.5, 12.5);
+                    line!(10., 4.; 10., 16.);
+                    line!(10., 4.; 7.5, 6.5);
+                    line!(10., 4.; 12.5, 6.5);
+                    line!(10., 16.; 7.5, 13.5);
+                    line!(10., 16.; 12.5, 13.5);
+                }
+                Icon::Pen => {
+                    line!(14., 3.; 5., 12.; 3., 17.; 8., 15.; 17., 6.; 14., 3.);
+                }
+                Icon::Marker => {
+                    let mut thick = PathBuilder::stroke(px(4.));
+                    thick.move_to(pt(4., 16.));
+                    thick.line_to(pt(16., 4.));
+                    if let Ok(p) = thick.build() {
+                        window.paint_path(p, rgb(hex));
+                    }
+                }
+                Icon::Connector => {
+                    line!(4., 16.; 16., 4.);
+                    circle_path(&mut f, ox, oy, 4., 16., 2.4);
+                    circle_path(&mut f, ox, oy, 16., 4., 2.4);
+                }
+                Icon::Note => {
+                    line!(5., 3.; 12., 3.; 15., 6.; 15., 17.; 5., 17.; 5., 3.);
+                    line!(12., 3.; 12., 6.; 15., 6.);
+                    line!(7., 10.; 13., 10.);
+                    line!(7., 13.; 13., 13.);
+                }
+                Icon::Link => {
+                    circle_path(&mut s, ox, oy, 7., 13., 3.);
+                    circle_path(&mut s, ox, oy, 13., 7., 3.);
+                    line!(9.2, 10.8; 10.8, 9.2);
+                }
+                Icon::Image => {
+                    line!(3., 5.; 17., 5.; 17., 15.; 3., 15.; 3., 5.);
+                    line!(5., 15.; 9., 9.; 12., 13.; 14., 10.; 17., 15.);
+                    circle_path(&mut f, ox, oy, 13.5, 8., 1.7);
+                }
+                Icon::Pdf => {
+                    line!(5., 3.; 12., 3.; 15., 6.; 15., 17.; 5., 17.; 5., 3.);
+                    line!(12., 3.; 12., 6.; 15., 6.);
+                    line!(7., 12.; 13., 12.);
+                }
+                Icon::Group => {
+                    line!(3., 3.; 11., 3.; 11., 11.; 3., 11.; 3., 3.);
+                    line!(9., 9.; 17., 9.; 17., 17.; 9., 17.; 9., 9.);
+                }
+                Icon::Ungroup => {
+                    line!(3., 3.; 9., 3.; 9., 9.; 3., 9.; 3., 3.);
+                    line!(11., 11.; 17., 11.; 17., 17.; 11., 17.; 11., 11.);
+                }
+                Icon::Delete => {
+                    line!(4., 5.; 16., 5.);
+                    line!(8., 5.; 8., 3.; 12., 3.; 12., 5.);
+                    line!(6., 5.; 7., 17.; 13., 17.; 14., 5.);
+                    line!(9., 8.; 9., 14.);
+                    line!(12., 8.; 12., 14.);
+                }
+                Icon::Hide => {
+                    s.move_to(pt(3., 10.));
+                    s.cubic_bezier_to(pt(17., 10.), pt(7., 4.), pt(13., 4.));
+                    s.move_to(pt(17., 10.));
+                    s.cubic_bezier_to(pt(3., 10.), pt(13., 16.), pt(7., 16.));
+                    circle_path(&mut f, ox, oy, 10., 10., 2.2);
+                }
+                // Text and Swatch are built from divs, not the canvas.
+                Icon::Text | Icon::Swatch => {}
+            }
+            if let Ok(p) = s.build() {
+                window.paint_path(p, rgb(hex));
+            }
+            if let Ok(p) = f.build() {
+                window.paint_path(p, rgb(hex));
+            }
+        },
+    )
+    .w(px(20.))
+    .h(px(20.))
+}
+
+fn icon_child(icon: Icon, hex: u32) -> gpui::AnyElement {
+    match icon {
+        Icon::Text => div()
+            .text_size(px(15.))
+            .font_weight(FontWeight::BOLD)
+            .text_color(rgb(hex))
+            .child("T".to_string())
+            .into_any_element(),
+        Icon::Swatch => div()
+            .relative()
+            .w(px(20.))
+            .h(px(20.))
+            .child(
+                div()
+                    .absolute()
+                    .left(px(1.))
+                    .top(px(1.))
+                    .w(px(12.))
+                    .h(px(12.))
+                    .rounded(px(3.))
+                    .bg(rgb(0xFF6B35)),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .right(px(1.))
+                    .bottom(px(1.))
+                    .w(px(12.))
+                    .h(px(12.))
+                    .rounded(px(3.))
+                    .bg(rgb(0x2E86AB)),
+            )
+            .into_any_element(),
+        _ => icon_canvas(icon, hex).into_any_element(),
+    }
+}
+
+/// A tool button inside the segmented control: white when active, clear when not.
+fn tool_icon_button(icon: Icon, active: bool) -> Div {
+    let mut b = div()
+        .w(px(32.))
+        .h(px(32.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(7.));
+    if active {
+        b = b.bg(rgb(0xFFFFFF)).border_1().border_color(rgb(0xD9D9DE));
+    }
+    b.child(icon_child(icon, if active { 0x1C1C1E } else { 0x6E6E73 }))
+}
+
+/// A standalone toolbar action button: white pill with a hairline border.
+fn action_icon_button(icon: Icon, hex: u32) -> Div {
+    div()
+        .w(px(32.))
+        .h(px(32.))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(8.))
+        .bg(rgb(0xFFFFFF))
+        .border_1()
+        .border_color(rgb(0xDCDCE0))
+        .child(icon_child(icon, hex))
+}
+
+fn toolbar_divider() -> Div {
+    div().w(px(1.)).h(px(24.)).bg(rgb(0xD8D8DE))
 }
 
 /// Snapshot of what the canvases need, cloned each frame (the board is small).
@@ -530,24 +794,6 @@ impl BoardView {
     }
 
     // ----- rendering helpers -----
-
-    fn tool_button(&self, label: &str, active: bool) -> Div {
-        div()
-            .px(px(10.))
-            .py(px(6.))
-            .text_size(px(13.))
-            .bg(if active {
-                rgb(0x1A1A1A)
-            } else {
-                rgb(0xE8E4DC)
-            })
-            .text_color(if active {
-                rgb(0xFFFFFF)
-            } else {
-                rgb(0x1A1A1A)
-            })
-            .child(label.to_string())
-    }
 
     fn item_element(&self, item: &Item, selected: bool) -> gpui::AnyElement {
         let cam = self.camera();
@@ -1171,24 +1417,36 @@ impl Render for BoardView {
                 cx.notify();
             }));
 
-        // --- toolbar ---
+        // --- toolbar: macOS-style, icons only ---
+        // The status bar names the active tool, so nothing here needs a word.
         let mut toolbar = div()
             .h(px(TOOLBAR_H))
             .flex()
             .flex_row()
             .items_center()
-            .gap(px(6.))
-            .px(px(10.))
+            .gap(px(8.))
+            .px(px(12.))
             // Keep the right end clear of the floating handle pill, which
             // sits over the top-right corner of the display (168 wide + margins).
             .pr(px(200.))
-            .bg(rgb(0xE8E4DC));
+            .bg(rgb(0xF5F5F7))
+            .border_b_1()
+            .border_color(rgb(0xDCDCE0));
         toolbar = toolbar.child(
             div()
-                .text_size(px(14.))
+                .text_size(px(13.))
                 .font_weight(FontWeight::BOLD)
+                .text_color(rgb(0x1C1C1E))
                 .child("QuickBoard".to_string()),
         );
+        // Segmented tool control.
+        let mut tools = div()
+            .flex()
+            .flex_row()
+            .items_center()
+            .bg(rgb(0xE8E8ED))
+            .rounded(px(9.))
+            .p(px(2.));
         for (tool, label) in [
             (Tool::Select, "Select"),
             (Tool::Pan, "Pan"),
@@ -1198,26 +1456,28 @@ impl Render for BoardView {
             (Tool::Connector, "Connector"),
         ] {
             let active = tool == self.tool;
-            toolbar = toolbar.child(self.tool_button(label, active).id(SharedString::from(format!("tool-{}", label))).on_click(
+            tools = tools.child(tool_icon_button(tool.icon(), active).id(SharedString::from(format!("tool-{}", label))).on_click(
                 cx.listener(move |this, _event: &gpui::ClickEvent, _window, cx| {
                     this.set_tool(tool);
                     cx.notify();
                 }),
             ));
         }
-        toolbar = toolbar.child(div().w(px(12.)));
+        toolbar = toolbar.child(tools);
+        toolbar = toolbar.child(toolbar_divider());
         for hex in PALETTE {
             let active = self.pen_color == hex;
             let (r, g, b) = parse_hex(hex).unwrap_or((0, 0, 0));
             let swatch = div()
                 .w(px(if active { 24. } else { 20. }))
                 .h(px(if active { 24. } else { 20. }))
+                .rounded(px(if active { 12. } else { 10. }))
                 .bg(rgb(((r as u32) << 16) | ((g as u32) << 8) | (b as u32)))
                 .border_1()
                 .border_color(if active {
                     rgb(ACCENT)
                 } else {
-                    rgb(0x999999)
+                    rgb(0xBBBBBB)
                 });
             let hex_owned = hex.to_string();
             toolbar = toolbar.child(swatch.id(SharedString::from(format!("swatch-{}", hex))).on_click(cx.listener(
@@ -1227,7 +1487,7 @@ impl Render for BoardView {
                 },
             )));
         }
-        toolbar = toolbar.child(div().w(px(12.)));
+        toolbar = toolbar.child(toolbar_divider());
         for (kind, label) in [
             (AddKind::Text, "+ Note"),
             (AddKind::Url, "+ Link"),
@@ -1236,7 +1496,13 @@ impl Render for BoardView {
             (AddKind::PdfPath, "+ PDF"),
         ] {
             let at = self.board_centre();
-            toolbar = toolbar.child(self.tool_button(label, false).id(SharedString::from(format!("add-{}", label))).on_click(
+            // The PDF icon is red so it never reads as a second note icon.
+            let icon_hex = if kind == AddKind::PdfPath {
+                0xC0392B
+            } else {
+                0x333333
+            };
+            toolbar = toolbar.child(action_icon_button(kind.icon(), icon_hex).id(SharedString::from(format!("add-{}", label))).on_click(
                 cx.listener(move |this, _event: &gpui::ClickEvent, _window, cx| {
                     this.add_panel = Some(AddPanel {
                         kind,
@@ -1247,8 +1513,9 @@ impl Render for BoardView {
                 }),
             ));
         }
+        toolbar = toolbar.child(toolbar_divider());
         toolbar = toolbar
-            .child(self.tool_button("Group", false).id("btn-group").on_click(cx.listener(
+            .child(action_icon_button(Icon::Group, 0x333333).id("btn-group").on_click(cx.listener(
                 |this, _event: &gpui::ClickEvent, _window, cx| {
                     let grouped = this.shared.board.borrow_mut().group_selection();
                     this.status = match grouped {
@@ -1259,7 +1526,7 @@ impl Render for BoardView {
                     cx.notify();
                 },
             )))
-            .child(self.tool_button("Ungroup", false).id("btn-ungroup").on_click(cx.listener(
+            .child(action_icon_button(Icon::Ungroup, 0x333333).id("btn-ungroup").on_click(cx.listener(
                 |this, _event: &gpui::ClickEvent, _window, cx| {
                     this.shared.board.borrow_mut().ungroup_selection();
                     this.status = "Ungrouped.".to_string();
@@ -1267,7 +1534,7 @@ impl Render for BoardView {
                     cx.notify();
                 },
             )))
-            .child(self.tool_button("Delete", false).id("btn-delete").on_click(cx.listener(
+            .child(action_icon_button(Icon::Delete, 0x333333).id("btn-delete").on_click(cx.listener(
                 |this, _event: &gpui::ClickEvent, _window, cx| {
                     this.shared.board.borrow_mut().delete_selection();
                     this.status = "Deleted selection.".to_string();
@@ -1275,7 +1542,7 @@ impl Render for BoardView {
                     cx.notify();
                 },
             )))
-            .child(self.tool_button("Hide", false).id("btn-hide").on_click(cx.listener(
+            .child(action_icon_button(Icon::Hide, 0x333333).id("btn-hide").on_click(cx.listener(
                 |_this, _event: &gpui::ClickEvent, window, cx| {
                     window.minimize_window();
                     cx.notify();
@@ -1337,7 +1604,9 @@ impl Render for BoardView {
                     .items_center()
                     .gap(px(8.))
                     .px(px(12.))
-                    .bg(rgb(0xFFF7D6))
+                    .bg(rgb(0xFFFFFF))
+                    .border_b_1()
+                    .border_color(rgb(0xE5E5EA))
                     .child(
                         div()
                             .text_size(px(13.))
@@ -1354,7 +1623,9 @@ impl Render for BoardView {
                     .items_center()
                     .gap(px(8.))
                     .px(px(12.))
-                    .bg(rgb(0xFFF7D6))
+                    .bg(rgb(0xFFFFFF))
+                    .border_b_1()
+                    .border_color(rgb(0xE5E5EA))
                     .child(
                         div()
                             .text_size(px(13.))
@@ -1379,8 +1650,15 @@ impl Render for BoardView {
                 .flex()
                 .items_center()
                 .px(px(12.))
-                .bg(rgb(0xE8E4DC))
-                .child(div().text_size(px(12.)).child(status_text)),
+                .bg(rgb(0xF5F5F7))
+                .border_t_1()
+                .border_color(rgb(0xDCDCE0))
+                .child(
+                    div()
+                        .text_size(px(12.))
+                        .text_color(rgb(0x6E6E73))
+                        .child(status_text),
+                ),
         );
 
         root

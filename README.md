@@ -41,8 +41,11 @@ Your board is stored as one JSON file and auto-saved on every change:
 - **Desktop handle:** a small dark `▦ QuickBoard` pill sits in the
   top-right corner of the primary display, above other apps. Click it and
   the board comes forward.
-- **Hide:** the board toolbar's **Hide** button, or pressing `h` while the
+- **Hide:** the board toolbar's eye icon, or pressing `h` while the
   board is focused, minimises the board back to just the handle.
+  The toolbar is icons only (the status bar names the active tool);
+  icons are drawn vectors, not emoji, so they look the same on every
+  platform.
 - **In-app hotkeys:** `V` select, `P` pen, `M` marker, `C` connector,
   `T` text, `Ctrl/Cmd+G` group, `Ctrl/Cmd+U` ungroup, `Delete` removes the
   selection, `+`/`-` zoom, `0` resets the view, hold `Space` to pan.
@@ -65,18 +68,19 @@ it stays on top.
 - **Pen / Marker:** drag on the canvas. Marker is thicker and translucent.
 - **Connector:** drag from one item to another (or from empty space to
   empty space). Endpoints anchored to items follow them when they move.
-- **Text:** `T` then click, or the **+ Note** button, type, `Enter` for a
-  new line, `Esc` to finish. Double-click a note to edit it again.
-  Bold/size editing for notes is in the toolbar's next pass; notes are
-  plain or bold in the model already.
+- **Text:** `T` then click, or the note icon in the toolbar, type,
+  `Enter` for a new line, `Esc` to finish. Double-click a note to edit
+  it again. Bold/size editing for notes is in the toolbar's next pass;
+  notes are plain or bold in the model already.
 - **Drop files onto the canvas:** images (PNG/JPG/GIF/WebP/BMP/SVG),
   PDFs, and `.txt`/`.md` files become board items at the drop point.
-  You can also use **+ Image** / **+ PDF** and type or paste a file path.
-- **Links:** **+ Link**, type a URL, `Enter`. The card shows the domain
-  immediately and fills in the page title/description in the background
-  when the fetch succeeds. Double-click a link card to open it in your
-  browser; double-click a PDF card (or an image) to open it in its viewer.
-- **Swatches:** **+ Swatch**, type `#FF6B35` (or `FF6B35`, or `#F53`).
+  You can also use the image / PDF icons and type or paste a file path.
+- **Links:** the link icon, type a URL, `Enter`. The card shows the
+  domain immediately and fills in the page title/description in the
+  background when the fetch succeeds. Double-click a link card to open
+  it in your browser; double-click a PDF card (or an image) to open it
+  in its viewer.
+- **Swatches:** the swatch icon, type `#FF6B35` (or `FF6B35`, or `#F53`).
   Bad input is rejected with a message instead of creating a broken swatch.
 - **PDFs:** a PDF lands as a card (name + size) and opens in your system
   viewer on double-click. Rendering PDF pages *inside* the canvas is a
