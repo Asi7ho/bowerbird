@@ -58,7 +58,8 @@ const CANVAS_COLORS: [(&str, &str); 5] = [
     ("Sky", "#EAF2FB"),
     ("Ink", "#23232B"),
 ];
-const ACCENT: u32 = 0xE63946;
+// macOS system blue: the selection/active accent throughout the app.
+const ACCENT: u32 = 0x007AFF;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tool {
@@ -163,6 +164,7 @@ enum Icon {
     GridDots,
     GridOff,
     Close,
+    Plus,
 }
 
 impl Tool {
@@ -356,6 +358,10 @@ fn icon_canvas(icon: Icon, hex: u32) -> impl IntoElement {
                         true,
                     );
                 }
+                Icon::Plus => {
+                    line!(5., 10.; 15., 10.);
+                    line!(10., 5.; 10., 15.);
+                }
                 Icon::Stop => {
                     f.add_polygon(
                         &[pt(6., 6.), pt(14., 6.), pt(14., 14.), pt(6., 14.)],
@@ -532,6 +538,7 @@ pub struct BoardView {
     editing: Option<(ItemId, String)>,
     add_panel: Option<AddPanel>,
     canvas_panel: bool,
+    add_menu: bool,
     // Kept for debugging; nothing on screen shows it anymore — the
     // bottom status bar was removed at the user's request.
     _status: String,
@@ -552,6 +559,7 @@ impl BoardView {
             editing: None,
             add_panel: None,
             canvas_panel: false,
+            add_menu: false,
             _status: "Board auto-saves on every change.".to_string(),
             viewport_w: 1024.0,
             viewport_h: 768.0,
@@ -1247,6 +1255,9 @@ impl BoardView {
                     .map(|pid| pid == item.id)
                     .unwrap_or(false)
                     && self.shared.audio.borrow().state() == Playback::Playing;
+                // The tile IS the play button: a play triangle when
+                // stopped or paused, pause bars while playing.
+                let tile_icon = if playing { Icon::Pause } else { Icon::Play };
                 let tile = div()
                     .w(px(56.))
                     .h(px(56.))
@@ -1259,7 +1270,7 @@ impl BoardView {
                         div()
                             .w(px(20.))
                             .h(px(20.))
-                            .child(icon_canvas(Icon::Audio, 0x6A4C93)),
+                            .child(icon_canvas(tile_icon, 0x6A4C93)),
                     );
                 // A mini player look: the name, then a waveform strip
                 // that reads as audio at a glance, then the play hint.
@@ -1309,7 +1320,7 @@ impl BoardView {
                                         "Now playing".to_string()
                                     } else {
                                         elide(
-                                            "Double-click or select to play",
+                                            "Click play to listen",
                                             (w - 92.).max(40.),
                                             12.0,
                                             false,
@@ -1333,9 +1344,9 @@ impl BoardView {
                 };
                 let kb = (*size_bytes as f64 / 1024.0).round() as u64;
                 let subline = if *remote {
-                    "Video link — double-click to open".to_string()
+                    "Video link — click to play".to_string()
                 } else {
-                    format!("{} KB — double-click to play", kb)
+                    format!("{} KB — click to play", kb)
                 };
                 // Big preview when the card is tall enough for a 16:9
                 // thumb plus text; otherwise the compact row layout.
@@ -1591,6 +1602,80 @@ fn hex_to_hsla(hex: &str, alpha: f32) -> Hsla {
 }
 
 impl BoardView {
+    /// The "+" menu: every add action as an icon + label row, top-left
+    /// of the board. Picking one opens the same input banner the old
+    /// toolbar buttons opened, then the menu closes.
+    fn add_menu_el(&self, cx: &mut Context<Self>) -> Div {
+        let mut menu = div()
+            .absolute()
+            .left(px(16.))
+            .top(px(12.))
+            .w(px(220.))
+            .rounded(px(12.))
+            .bg(rgb(0xFFFFFF))
+            .border_1()
+            .border_color(rgb(0xE5E5EA))
+            .shadow(vec![BoxShadow {
+                color: Hsla {
+                    h: 0.0,
+                    s: 0.0,
+                    l: 0.0,
+                    a: 0.12,
+                },
+                offset: point(px(0.), px(4.)),
+                blur_radius: px(16.),
+                spread_radius: px(0.),
+            }])
+            .p(px(8.))
+            .flex()
+            .flex_col()
+            .gap(px(2.));
+        for (kind, label) in [
+            (AddKind::Text, "Note"),
+            (AddKind::Url, "Link"),
+            (AddKind::Swatch, "Colour swatch"),
+            (AddKind::ImagePath, "Image"),
+            (AddKind::PdfPath, "PDF"),
+            (AddKind::AudioPath, "Audio"),
+            (AddKind::VideoPath, "Video"),
+        ] {
+            let at = self.board_centre();
+            let icon_hex = if kind == AddKind::PdfPath {
+                0xC0392B
+            } else {
+                0x333333
+            };
+            menu = menu.child(
+                div()
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .gap(px(8.))
+                    .px(px(8.))
+                    .py(px(6.))
+                    .rounded(px(8.))
+                    .child(icon_child(kind.icon(), icon_hex))
+                    .child(
+                        div()
+                            .text_size(px(13.))
+                            .text_color(rgb(0x1C1C1E))
+                            .child(label.to_string()),
+                    )
+                    .id(SharedString::from(format!("add-menu-{}", label)))
+                    .on_click(cx.listener(move |this, _event: &gpui::ClickEvent, _window, cx| {
+                        this.add_panel = Some(AddPanel {
+                            kind,
+                            at,
+                            input: String::new(),
+                        });
+                        this.add_menu = false;
+                        cx.notify();
+                    })),
+            );
+        }
+        menu
+    }
+
     /// The canvas customisation panel: background colours and grid
     /// style. Choices apply instantly and save with the board; the
     /// panel closes after a choice (a canvas click on the panel's
@@ -2096,6 +2181,12 @@ impl Render for BoardView {
                         cx.notify();
                         return;
                     }
+                    // Same for the add menu.
+                    if this.add_menu {
+                        this.add_menu = false;
+                        cx.notify();
+                        return;
+                    }
                     let world = this.window_to_world(win_pt);
                     let effective_tool = if this.space_down {
                         Tool::Pan
@@ -2163,25 +2254,67 @@ impl Render for BoardView {
                                             let path = k.trim_start_matches("img:").to_string();
                                             this.open_external(&path);
                                         }
-                                        Some(k) if k.starts_with("audio:") => {
-                                            let id: ItemId = k
-                                                .trim_start_matches("audio:")
-                                                .parse()
-                                                .unwrap_or(0);
-                                            this.toggle_audio(id);
-                                        }
-                                        Some(k) if k.starts_with("video:") => {
-                                            let id: ItemId = k
-                                                .trim_start_matches("video:")
-                                                .parse()
-                                                .unwrap_or(0);
-                                            this.play_video(id);
-                                        }
+                                        // No audio/video arms here on
+                                        // purpose: playback is a single
+                                        // click on the play button now,
+                                        // so a double-click must not
+                                        // fire it a second time.
                                         _ => {}
                                     }
                                 }
                                 cx.notify();
                                 return;
+                            }
+                            // Play buttons first: a single click on a
+                            // video thumb plays it, and a single click
+                            // on an audio tile toggles playback. The
+                            // item is selected too, so the transport
+                            // bar appears for audio.
+                            if let Some(id) = this.with_board(|b| b.hit_test(world)) {
+                                let play_hit = this.with_board(|b| {
+                                    b.get(id).map(|item| match &item.kind {
+                                        Kind::Video { .. } => {
+                                            let (pw, ph) = (item.size.w, item.size.h);
+                                            let thumb_h = (pw - 24.) * 9. / 16.;
+                                            if ph >= thumb_h + 70. {
+                                                // Big layout: thumb on top.
+                                                world.x >= item.pos.x + 12.
+                                                    && world.x <= item.pos.x + pw - 12.
+                                                    && world.y >= item.pos.y + 12.
+                                                    && world.y <= item.pos.y + 12. + thumb_h
+                                            } else {
+                                                // Compact row: 96x56 thumb,
+                                                // vertically centred.
+                                                world.x >= item.pos.x + 12.
+                                                    && world.x <= item.pos.x + 108.
+                                                    && world.y >= item.pos.y + (ph - 56.) / 2.
+                                                    && world.y <= item.pos.y + (ph + 56.) / 2.
+                                            }
+                                        }
+                                        Kind::Audio { .. } => {
+                                            // The tile: 56x56, vertically
+                                            // centred, 12 in from the left.
+                                            let ph = item.size.h;
+                                            world.x >= item.pos.x + 12.
+                                                && world.x <= item.pos.x + 68.
+                                                && world.y >= item.pos.y + (ph - 56.) / 2.
+                                                && world.y <= item.pos.y + (ph + 56.) / 2.
+                                        }
+                                        _ => false,
+                                    })
+                                });
+                                if play_hit == Some(true) {
+                                    this.shared.board.borrow_mut().select(id, false);
+                                    match this.with_board(|b| {
+                                        b.get(id).map(|i| i.kind.clone())
+                                    }) {
+                                        Some(Kind::Video { .. }) => this.play_video(id),
+                                        Some(Kind::Audio { .. }) => this.toggle_audio(id),
+                                        _ => {}
+                                    }
+                                    cx.notify();
+                                    return;
+                                }
                             }
                             // Resize handle first: the bottom-right
                             // 16 screen px of the single selected item.
@@ -2399,7 +2532,10 @@ impl Render for BoardView {
         }
         toolbar = toolbar.child(tools);
         toolbar = toolbar.child(toolbar_divider());
-        for hex in PALETTE {
+        // The pen palette only shows for the drawing tools — the rest
+        // of the time the toolbar stays quiet.
+        if self.tool == Tool::Pen || self.tool == Tool::Marker {
+            for hex in PALETTE {
             let active = self.pen_color == hex;
             let (r, g, b) = parse_hex(hex).unwrap_or((0, 0, 0));
             let swatch = div()
@@ -2420,76 +2556,66 @@ impl Render for BoardView {
                     cx.notify();
                 },
             )));
+            }
         }
         toolbar = toolbar.child(toolbar_divider());
-        for (kind, label) in [
-            (AddKind::Text, "+ Note"),
-            (AddKind::Url, "+ Link"),
-            (AddKind::Swatch, "+ Swatch"),
-            (AddKind::ImagePath, "+ Image"),
-            (AddKind::PdfPath, "+ PDF"),
-            (AddKind::AudioPath, "+ Audio"),
-            (AddKind::VideoPath, "+ Video"),
-        ] {
-            let at = self.board_centre();
-            // The PDF icon is red so it never reads as a second note icon.
-            let icon_hex = if kind == AddKind::PdfPath {
-                0xC0392B
-            } else {
-                0x333333
-            };
-            toolbar = toolbar.child(action_icon_button(kind.icon(), icon_hex).id(SharedString::from(format!("add-{}", label))).on_click(
-                cx.listener(move |this, _event: &gpui::ClickEvent, _window, cx| {
-                    this.add_panel = Some(AddPanel {
-                        kind,
-                        at,
-                        input: String::new(),
-                    });
+        // One "+" button opens the add menu; the seven add actions
+        // live there instead of filling the toolbar.
+        toolbar = toolbar.child(
+            action_icon_button(Icon::Plus, 0x333333)
+                .id("btn-add")
+                .on_click(cx.listener(|this, _event: &gpui::ClickEvent, _window, cx| {
+                    this.add_menu = !this.add_menu;
+                    this.canvas_panel = false;
                     cx.notify();
-                }),
-            ));
+                })),
+        );
+        // Group/ungroup/delete only appear while something is selected.
+        if !board.selected.is_empty() {
+            toolbar = toolbar.child(toolbar_divider());
+            toolbar = toolbar
+                .child(action_icon_button(Icon::Group, 0x333333).id("btn-group").on_click(cx.listener(
+                    |this, _event: &gpui::ClickEvent, _window, cx| {
+                        let grouped = this.shared.board.borrow_mut().group_selection();
+                        this._status = match grouped {
+                            Some(g) => format!("Grouped (group {}).", g),
+                            None => "Select 2+ items to group.".to_string(),
+                        };
+                        this.save();
+                        cx.notify();
+                    },
+                )))
+                .child(action_icon_button(Icon::Ungroup, 0x333333).id("btn-ungroup").on_click(cx.listener(
+                    |this, _event: &gpui::ClickEvent, _window, cx| {
+                        this.shared.board.borrow_mut().ungroup_selection();
+                        this._status = "Ungrouped.".to_string();
+                        this.save();
+                        cx.notify();
+                    },
+                )))
+                .child(action_icon_button(Icon::Delete, 0x333333).id("btn-delete").on_click(cx.listener(
+                    |this, _event: &gpui::ClickEvent, _window, cx| {
+                        this.shared.board.borrow_mut().delete_selection();
+                        this._status = "Deleted selection.".to_string();
+                        this.save();
+                        cx.notify();
+                    },
+                )));
         }
         toolbar = toolbar.child(toolbar_divider());
-        toolbar = toolbar
-            .child(action_icon_button(Icon::Group, 0x333333).id("btn-group").on_click(cx.listener(
-                |this, _event: &gpui::ClickEvent, _window, cx| {
-                    let grouped = this.shared.board.borrow_mut().group_selection();
-                    this._status = match grouped {
-                        Some(g) => format!("Grouped (group {}).", g),
-                        None => "Select 2+ items to group.".to_string(),
-                    };
-                    this.save();
-                    cx.notify();
-                },
-            )))
-            .child(action_icon_button(Icon::Ungroup, 0x333333).id("btn-ungroup").on_click(cx.listener(
-                |this, _event: &gpui::ClickEvent, _window, cx| {
-                    this.shared.board.borrow_mut().ungroup_selection();
-                    this._status = "Ungrouped.".to_string();
-                    this.save();
-                    cx.notify();
-                },
-            )))
-            .child(action_icon_button(Icon::Delete, 0x333333).id("btn-delete").on_click(cx.listener(
-                |this, _event: &gpui::ClickEvent, _window, cx| {
-                    this.shared.board.borrow_mut().delete_selection();
-                    this._status = "Deleted selection.".to_string();
-                    this.save();
-                    cx.notify();
-                },
-            )))
-            .child(action_icon_button(Icon::Hide, 0x333333).id("btn-hide").on_click(cx.listener(
-                |_this, _event: &gpui::ClickEvent, window, cx| {
-                    window.minimize_window();
-                    cx.notify();
-                },
-            )));
+        toolbar = toolbar.child(action_icon_button(Icon::Hide, 0x333333).id("btn-hide").on_click(cx.listener(
+            |_this, _event: &gpui::ClickEvent, window, cx| {
+                window.minimize_window();
+                cx.notify();
+            },
+        )));
         toolbar = toolbar.child(toolbar_divider());
         toolbar = toolbar.child(
             action_icon_button(Icon::Tune, 0x333333)
                 .id("btn-canvas")
                 .on_click(cx.listener(|this, _event: &gpui::ClickEvent, _window, cx| {
                     this.canvas_panel = !this.canvas_panel;
+                    this.add_menu = false;
                     cx.notify();
                 })),
         );
@@ -2507,6 +2633,9 @@ impl Render for BoardView {
             .child(interaction);
         if self.canvas_panel {
             board_area = board_area.child(self.canvas_panel_el(cx));
+        }
+        if self.add_menu {
+            board_area = board_area.child(self.add_menu_el(cx));
         }
 
         // --- bottom bars ---
@@ -2530,7 +2659,12 @@ impl Render for BoardView {
                     cx.notify();
                     return;
                 }
-                // Esc closes the customisation panel.
+                // Esc closes the add menu, then the customisation panel.
+                if key == "escape" && this.add_menu {
+                    this.add_menu = false;
+                    cx.notify();
+                    return;
+                }
                 if key == "escape" && this.canvas_panel {
                     this.canvas_panel = false;
                     cx.notify();
