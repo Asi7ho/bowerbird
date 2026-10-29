@@ -57,6 +57,10 @@ const SHORTCUTS: Array<[string, string]> = [
   ["Esc", "Close settings, commit a note, or clear the selection"],
   ["Tab", "Go to the next element"],
   ["Shift + Tab", "Go to the previous element"],
+  ["Ctrl / Cmd + F", "Search the board"],
+  ["Enter in search", "Jump to the next match"],
+  ["Shift + Enter in search", "Jump to the previous match"],
+  ["Esc in search", "Clear the search"],
   ["Double-click empty space", "New note"],
   ["Double-click a note", "Edit it in place"],
   ["Click a link card", "Open it in your browser"],
@@ -84,6 +88,13 @@ let spaceDown = false;
 let editingId: number | null = null;
 let settingsOpen = false;
 let cornerReveal = "bottom-left";
+// Search: matches are board item ids in board order, in the same
+// spirit as Tab navigation (strokes and connectors are skipped:
+// they carry no searchable text). searchIndex is -1 until the user
+// presses Enter, so typing only highlights and counts — it does
+// not yank the camera on every keystroke.
+let searchMatches: number[] = [];
+let searchIndex = -1;
 let drag: null
   | { kind: "pan"; last: Pt }
   | { kind: "move"; lastWorld: Pt; moved: boolean }
@@ -466,6 +477,7 @@ function render(): void {
   updateToolbar();
   lastContentKey = visibleKey();
   applyCamera();
+  updateSearch();
 }
 
 function updateResizeHandle(): void {
@@ -615,7 +627,7 @@ function cornerHit(id: number, world: Pt): boolean {
 
 boardEl.addEventListener("mousedown", (e: MouseEvent) => {
   const target = e.target as HTMLElement;
-  if (target.closest("#toolbar, #settings-backdrop, #toast, #btn-collapse, video, input")) return;
+  if (target.closest("#toolbar, #settings-backdrop, #toast, #btn-collapse, #search-box, video, input")) return;
   // A board click or drag must never start a native text selection
   // across the cards (bug: clicking anywhere highlighted all text).
   if (!target.closest("textarea.note-edit")) window.getSelection()?.removeAllRanges();
@@ -977,6 +989,18 @@ function navigateElements(dir: 1 | -1): void {
 window.addEventListener("keydown", (e: KeyboardEvent) => {
   const active = document.activeElement;
   if (active && active.tagName === "TEXTAREA") return;
+  // Typing in the search box must never trigger board shortcuts:
+  // without this, typing "h" would minimise the app, "v" would
+  // switch tools, and so on. The search input has its own key
+  // handler below, and this window handler stays out of its way.
+  if (active && active.id === "search-input") return;
+  const ctrl0 = e.ctrlKey || e.metaKey;
+  if (ctrl0 && e.key.toLowerCase() === "f") {
+    e.preventDefault();
+    const input = document.getElementById("search-input") as HTMLInputElement | null;
+    if (input) { input.focus(); input.select(); }
+    return;
+  }
   // Tab cycles elements, unless Settings is open, where Tab keeps
   // its normal job of moving focus around the sheet.
   if (e.key === "Tab" && !settingsOpen) {
@@ -993,6 +1017,12 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   if (e.key === "?") { setSettings(true); return; }
   if (e.key === "Escape") {
     if (settingsOpen) { setSettings(false); return; }
+    // An active search is cleared first; the next Esc clears the
+    // selection, as before. Searching must not eat the selection
+    // clear entirely, and clearing the selection must not eat a
+    // search the user is still looking at.
+    const searchInput = document.getElementById("search-input") as HTMLInputElement | null;
+    if (searchInput && searchInput.value.trim() !== "") { clearSearch(); return; }
     selected = [];
     render();
     return;
@@ -1039,6 +1069,110 @@ document.getElementById("btn-delete")?.addEventListener("click", () => {
   board.items = board.items.filter((it) => !selected.includes(it.id));
   selected = [];
   save(); render();
+});
+
+// ---------------------------------------------------------------- search
+
+function searchText(item: Item): string {
+  const k = item.kind;
+  const base = (p: string) => p.split("/").pop() ?? p;
+  if ("Text" in k) return k.Text.text;
+  if ("UrlCard" in k) return [k.UrlCard.title ?? "", k.UrlCard.description ?? "", k.UrlCard.url].join(" ");
+  if ("Image" in k) return base(k.Image.path);
+  if ("PdfCard" in k) return base(k.PdfCard.path);
+  if ("Audio" in k) return base(k.Audio.path);
+  if ("Video" in k) return base(k.Video.source);
+  if ("Swatch" in k) return k.Swatch.hex;
+  return "";
+}
+
+function updateSearch(): void {
+  const input = document.getElementById("search-input") as HTMLInputElement | null;
+  const countEl = document.getElementById("search-count") as HTMLSpanElement | null;
+  const clearEl = document.getElementById("search-clear") as HTMLButtonElement | null;
+  if (!input || !countEl || !clearEl) return;
+  const query = input.value.trim().toLowerCase();
+  clearEl.style.display = query === "" ? "none" : "flex";
+  if (query === "") {
+    searchMatches = [];
+    searchIndex = -1;
+    countEl.textContent = "";
+    for (const child of Array.from(cardsEl.children)) {
+      (child as HTMLElement).classList.remove("search-match", "search-dim");
+    }
+    return;
+  }
+  searchMatches = board.items
+    .filter((it) => !("Stroke" in it.kind) && !("Connector" in it.kind) && searchText(it).toLowerCase().includes(query))
+    .map((it) => it.id);
+  if (searchIndex >= searchMatches.length) searchIndex = -1;
+  const matchSet = new Set(searchMatches);
+  for (const child of Array.from(cardsEl.children)) {
+    const el = child as HTMLElement;
+    const id = Number(el.dataset.id);
+    el.classList.toggle("search-match", matchSet.has(id));
+    el.classList.toggle("search-dim", !matchSet.has(id));
+  }
+  if (searchMatches.length === 0) countEl.textContent = "No matches";
+  else if (searchIndex >= 0) countEl.textContent = `${searchIndex + 1} of ${searchMatches.length}`;
+  else countEl.textContent = searchMatches.length === 1 ? "1 match" : `${searchMatches.length} matches`;
+}
+
+function clearSearch(): void {
+  const input = document.getElementById("search-input") as HTMLInputElement | null;
+  if (input) input.value = "";
+  searchMatches = [];
+  searchIndex = -1;
+  updateSearch();
+}
+
+function jumpToSearch(dir: 1 | -1): void {
+  if (searchMatches.length === 0) return;
+  const next = searchIndex === -1
+    ? (dir === 1 ? 0 : searchMatches.length - 1)
+    : (searchIndex + dir + searchMatches.length) % searchMatches.length;
+  searchIndex = next;
+  const target = boardGet(board, searchMatches[next]);
+  if (!target) return;
+  selected = select(board, [], target.id, false);
+  let c: Pt;
+  if (target.group !== null) {
+    const members = board.items.filter((it) => it.group === target.group);
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const m of members) {
+      const [p, s] = itemBounds(board, m);
+      minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+      maxX = Math.max(maxX, p.x + s.w); maxY = Math.max(maxY, p.y + s.h);
+    }
+    c = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+  } else {
+    c = centre(target);
+  }
+  board.camera.x = c.x - window.innerWidth / 2 / board.camera.zoom;
+  board.camera.y = c.y - window.innerHeight / 2 / board.camera.zoom;
+  save();
+  render();
+}
+
+document.getElementById("search-input")?.addEventListener("input", () => {
+  // A new query restarts the jump position: Enter always starts
+  // from the first match of what is actually typed now.
+  searchIndex = -1;
+  updateSearch();
+});
+document.getElementById("search-input")?.addEventListener("keydown", (e: KeyboardEvent) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    jumpToSearch(e.shiftKey ? -1 : 1);
+  } else if (e.key === "Escape") {
+    e.preventDefault();
+    clearSearch();
+    (e.target as HTMLInputElement).blur();
+  }
+});
+document.getElementById("search-clear")?.addEventListener("click", () => {
+  clearSearch();
+  document.getElementById("search-input")?.focus();
 });
 
 document.getElementById("btn-quit")?.addEventListener("click", async () => {
