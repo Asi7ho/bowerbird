@@ -266,9 +266,16 @@ function iconPath() {
 }
 
 function createWindow() {
+  // Default size: one third of the screen, centred in the work
+  // area (so it never sits under the menu bar or the Dock).
+  const wa0 = screen.getPrimaryDisplay().workArea;
+  const defaultWidth = Math.round(wa0.width / 3);
+  const defaultHeight = Math.round(wa0.height / 3);
+  const defaultX = wa0.x + Math.round((wa0.width - defaultWidth) / 2);
+  const defaultY = wa0.y + Math.round((wa0.height - defaultHeight) / 2);
   win = new BaseWindow({
-    width: 1440,
-    height: 900,
+    width: defaultWidth,
+    height: defaultHeight,
     frame: false,
     title: 'Bowerbird',
     backgroundColor: '#ffffff',
@@ -298,14 +305,11 @@ function createWindow() {
     win = null;
     boardView = null;
   });
-  // Full work area.
-  const display = screen.getPrimaryDisplay();
-  const wa = display.workArea;
   win.setBounds({
-    x: wa.x,
-    y: wa.y,
-    width: wa.width,
-    height: Math.min(900, wa.height),
+    x: defaultX,
+    y: defaultY,
+    width: defaultWidth,
+    height: defaultHeight,
   });
 }
 
