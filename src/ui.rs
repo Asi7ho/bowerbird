@@ -47,9 +47,17 @@ impl SharedState {
 }
 
 const TOOLBAR_H: f32 = 52.0;
-const STATUS_H: f32 = 28.0;
 const GRID: f32 = 100.0;
 const PALETTE: [&str; 6] = ["#1A1A1A", "#E63946", "#2E86AB", "#FF6B35", "#6A4C93", "#2A9D8F"];
+
+/// Canvas background choices: name + hex.
+const CANVAS_COLORS: [(&str, &str); 5] = [
+    ("Paper", "#F7F5F0"),
+    ("White", "#FFFFFF"),
+    ("Sage", "#EAF3EC"),
+    ("Sky", "#EAF2FB"),
+    ("Ink", "#23232B"),
+];
 const ACCENT: u32 = 0xE63946;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -82,6 +90,12 @@ enum Drag {
     Stroke { points: Vec<Pt>, marker: bool },
     Connector { from: Anchor, current: Pt },
     Marquee { start: Pt, current: Pt },
+    Resize {
+        id: ItemId,
+        start_world: Pt,
+        orig_w: f32,
+        orig_h: f32,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -518,7 +532,9 @@ pub struct BoardView {
     editing: Option<(ItemId, String)>,
     add_panel: Option<AddPanel>,
     canvas_panel: bool,
-    status: String,
+    // Kept for debugging; nothing on screen shows it anymore — the
+    // bottom status bar was removed at the user's request.
+    _status: String,
     viewport_w: f32,
     viewport_h: f32,
     title_set: bool,
@@ -536,7 +552,7 @@ impl BoardView {
             editing: None,
             add_panel: None,
             canvas_panel: false,
-            status: "Board auto-saves on every change.".to_string(),
+            _status: "Board auto-saves on every change.".to_string(),
             viewport_w: 1024.0,
             viewport_h: 768.0,
             title_set: false,
@@ -558,8 +574,8 @@ impl BoardView {
             store::save(&board)
         };
         match result {
-            Ok(()) => self.status = "Saved.".to_string(),
-            Err(e) => self.status = format!("Save failed: {}", e),
+            Ok(()) => self._status = "Saved.".to_string(),
+            Err(e) => self._status = format!("Save failed: {}", e),
         }
     }
 
@@ -579,14 +595,14 @@ impl BoardView {
     fn board_centre(&self) -> Pt {
         self.screen_to_world(Pt::new(
             self.viewport_w / 2.0,
-            (self.viewport_h - TOOLBAR_H - STATUS_H) / 2.0,
+            (self.viewport_h - TOOLBAR_H) / 2.0,
         ))
     }
 
     fn set_tool(&mut self, tool: Tool) {
         self.tool = tool;
         self.drag = None;
-        self.status = format!("Tool: {}", tool.label());
+        self._status = format!("Tool: {}", tool.label());
     }
 
     // ----- URL title fetching (background, never blocks the UI) -----
@@ -706,7 +722,7 @@ impl BoardView {
                     let mut b = self.shared.board.borrow_mut();
                     b.group_selection()
                 };
-                self.status = match grouped {
+                self._status = match grouped {
                     Some(g) => format!("Grouped (group {}).", g),
                     None => "Select 2+ items to group.".to_string(),
                 };
@@ -714,23 +730,23 @@ impl BoardView {
             }
             "u" if ctrl => {
                 self.shared.board.borrow_mut().ungroup_selection();
-                self.status = "Ungrouped.".to_string();
+                self._status = "Ungrouped.".to_string();
                 self.save();
             }
             "backspace" | "delete" => {
                 self.shared.board.borrow_mut().delete_selection();
-                self.status = "Deleted selection.".to_string();
+                self._status = "Deleted selection.".to_string();
                 self.save();
             }
             "escape" => {
                 self.shared.board.borrow_mut().selected.clear();
-                self.status = "Selection cleared.".to_string();
+                self._status = "Selection cleared.".to_string();
             }
             "=" | "+" => self.zoom_centre(1.2),
             "-" => self.zoom_centre(1.0 / 1.2),
             "0" => {
                 self.shared.board.borrow_mut().camera = Camera::default();
-                self.status = "View reset.".to_string();
+                self._status = "View reset.".to_string();
                 self.save();
             }
             " " | "space" => {
@@ -750,10 +766,10 @@ impl BoardView {
     fn zoom_centre(&mut self, factor: f32) {
         let centre = Pt::new(
             self.viewport_w / 2.0,
-            (self.viewport_h - TOOLBAR_H - STATUS_H) / 2.0,
+            (self.viewport_h - TOOLBAR_H) / 2.0,
         );
         self.shared.board.borrow_mut().camera.zoom_at(centre, factor);
-        self.status = format!("Zoom {}%.", (self.camera().zoom * 100.0).round() as i32);
+        self._status = format!("Zoom {}%.", (self.camera().zoom * 100.0).round() as i32);
         self.save();
     }
 
@@ -778,15 +794,15 @@ impl BoardView {
         match panel.kind {
             AddKind::Text => {
                 if input.is_empty() {
-                    self.status = "Nothing typed — no note added.".to_string();
+                    self._status = "Nothing typed — no note added.".to_string();
                     return;
                 }
                 self.shared.board.borrow_mut().add_text(panel.at, &input);
-                self.status = "Note added.".to_string();
+                self._status = "Note added.".to_string();
             }
             AddKind::Url => {
                 if input.is_empty() {
-                    self.status = "No link typed.".to_string();
+                    self._status = "No link typed.".to_string();
                     return;
                 }
                 let url = if input.contains("://") {
@@ -801,20 +817,20 @@ impl BoardView {
                         .board
                         .borrow_mut()
                         .add_video(panel.at, &url, true, 0);
-                    self.status = format!("Video link added for {}.", domain_of(&url));
+                    self._status = format!("Video link added for {}.", domain_of(&url));
                 } else {
                     let id = self.shared.board.borrow_mut().add_url(panel.at, &url);
-                    self.status = format!("Link card added for {}.", domain_of(&url));
+                    self._status = format!("Link card added for {}.", domain_of(&url));
                     self.fetch_url_title(id, url, cx);
                 }
             }
             AddKind::Swatch => match normalise_hex(&input) {
                 Some(hex) => {
                     self.shared.board.borrow_mut().add_swatch(panel.at, &hex);
-                    self.status = format!("Swatch {} added.", hex);
+                    self._status = format!("Swatch {} added.", hex);
                 }
                 None => {
-                    self.status = "Not a colour — try #FF6B35.".to_string();
+                    self._status = "Not a colour — try #FF6B35.".to_string();
                     self.add_panel = Some(AddPanel {
                         input: panel.input,
                         ..panel
@@ -825,7 +841,7 @@ impl BoardView {
             AddKind::ImagePath => {
                 let path = std::path::Path::new(&input);
                 if !path.is_file() {
-                    self.status = format!("No such file: {}", input);
+                    self._status = format!("No such file: {}", input);
                     self.add_panel = Some(AddPanel {
                         input: panel.input,
                         ..panel
@@ -843,7 +859,7 @@ impl BoardView {
                     .board
                     .borrow_mut()
                     .add_image(panel.at, &input, w, h);
-                self.status = "Image added.".to_string();
+                self._status = "Image added.".to_string();
             }
             AddKind::PdfPath => {
                 let path = std::path::Path::new(&input);
@@ -852,7 +868,7 @@ impl BoardView {
                     .map(|e| e.eq_ignore_ascii_case("pdf"))
                     .unwrap_or(false);
                 if !path.is_file() || !is_pdf {
-                    self.status = "That is not a PDF file.".to_string();
+                    self._status = "That is not a PDF file.".to_string();
                     self.add_panel = Some(AddPanel {
                         input: panel.input,
                         ..panel
@@ -861,7 +877,7 @@ impl BoardView {
                 }
                 let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
                 self.shared.board.borrow_mut().add_pdf(panel.at, &input, size);
-                self.status = "PDF card added — double-click it to open.".to_string();
+                self._status = "PDF card added — double-click it to open.".to_string();
             }
             AddKind::AudioPath => {
                 let path = std::path::Path::new(&input);
@@ -873,7 +889,7 @@ impl BoardView {
                     })
                     .unwrap_or(false);
                 if !path.is_file() || !is_audio {
-                    self.status = "That is not an audio file (mp3, wav, flac, ogg, m4a)."
+                    self._status = "That is not an audio file (mp3, wav, flac, ogg, m4a)."
                         .to_string();
                     self.add_panel = Some(AddPanel {
                         input: panel.input,
@@ -882,7 +898,7 @@ impl BoardView {
                     return;
                 }
                 self.shared.board.borrow_mut().add_audio(panel.at, &input);
-                self.status = "Audio added — select it to play.".to_string();
+                self._status = "Audio added — select it to play.".to_string();
             }
             AddKind::VideoPath => {
                 let path = std::path::Path::new(&input);
@@ -894,7 +910,7 @@ impl BoardView {
                     })
                     .unwrap_or(false);
                 if !path.is_file() || !is_video {
-                    self.status = "That is not a video file (mp4, mov, webm, mkv, avi)."
+                    self._status = "That is not a video file (mp4, mov, webm, mkv, avi)."
                         .to_string();
                     self.add_panel = Some(AddPanel {
                         input: panel.input,
@@ -907,7 +923,7 @@ impl BoardView {
                     .board
                     .borrow_mut()
                     .add_video(panel.at, &input, false, size);
-                self.status = "Video added — double-click it to play.".to_string();
+                self._status = "Video added — double-click it to play.".to_string();
             }
         }
         self.save();
@@ -929,19 +945,19 @@ impl BoardView {
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or(path.clone());
                 match self.shared.audio.borrow_mut().toggle(id, &path) {
-                    Ok(Playback::Playing) => self.status = format!("Playing {}.", name),
-                    Ok(Playback::Paused) => self.status = format!("Paused {}.", name),
-                    Ok(Playback::Stopped) => self.status = format!("Stopped {}.", name),
-                    Err(msg) => self.status = msg,
+                    Ok(Playback::Playing) => self._status = format!("Playing {}.", name),
+                    Ok(Playback::Paused) => self._status = format!("Paused {}.", name),
+                    Ok(Playback::Stopped) => self._status = format!("Stopped {}.", name),
+                    Err(msg) => self._status = msg,
                 }
             }
-            None => self.status = "That is not an audio item.".to_string(),
+            None => self._status = "That is not an audio item.".to_string(),
         }
     }
 
     fn stop_audio(&mut self) {
         self.shared.audio.borrow_mut().stop();
-        self.status = "Playback stopped.".to_string();
+        self._status = "Playback stopped.".to_string();
     }
 
     /// Video plays in the system player (local file) or the browser
@@ -955,7 +971,7 @@ impl BoardView {
         });
         match source {
             Some(source) => self.open_external(&source),
-            None => self.status = "That is not a video item.".to_string(),
+            None => self._status = "That is not a video item.".to_string(),
         }
     }
 
@@ -965,8 +981,8 @@ impl BoardView {
         #[cfg(not(target_os = "macos"))]
         let opener = "xdg-open";
         match std::process::Command::new(opener).arg(target).spawn() {
-            Ok(_) => self.status = format!("Opening {}.", target),
-            Err(_) => self.status = format!("Could not open {} (no viewer found).", target),
+            Ok(_) => self._status = format!("Opening {}.", target),
+            Err(_) => self._status = format!("Could not open {} (no viewer found).", target),
         }
     }
 
@@ -1024,10 +1040,10 @@ impl BoardView {
             at.y += 24.0;
         }
         if added > 0 {
-            self.status = format!("Dropped {} item(s) onto the board.", added);
+            self._status = format!("Dropped {} item(s) onto the board.", added);
             self.save();
         } else if skipped > 0 {
-            self.status = "That file type is not dropped as a board item yet.".to_string();
+            self._status = "That file type is not dropped as a board item yet.".to_string();
         }
     }
 
@@ -1045,18 +1061,9 @@ impl BoardView {
             .top(px(screen.y))
             .w(px(w))
             .h(px(h))
-            .rounded(px(12.))
-            .shadow(vec![BoxShadow {
-                color: Hsla {
-                    h: 0.0,
-                    s: 0.0,
-                    l: 0.0,
-                    a: 0.12,
-                },
-                offset: point(px(0.), px(4.)),
-                blur_radius: px(16.),
-                spread_radius: px(0.),
-            }])
+            // Flat and minimal: a hairline border and a soft corner,
+            // no heavy shadow.
+            .rounded(px(14.))
             .bg(rgb(0xFFFFFF))
             .border_1()
             .border_color(border)
@@ -1115,11 +1122,12 @@ impl BoardView {
                     .unwrap_or('?')
                     .to_ascii_uppercase()
                     .to_string();
+                let tile_color = tile_color_for(&domain);
                 let tile = div()
                     .w(px(56.))
                     .h(px(56.))
                     .rounded(px(10.))
-                    .bg(rgb(tile_color_for(&domain)))
+                    .bg(rgb(tint_u32(tile_color, 0.85)))
                     .flex()
                     .items_center()
                     .justify_center()
@@ -1127,7 +1135,7 @@ impl BoardView {
                         div()
                             .text_size(px(24.))
                             .font_weight(FontWeight::BOLD)
-                            .text_color(rgb(0xFFFFFF))
+                            .text_color(rgb(tile_color))
                             .child(initial),
                     );
                 // Hard width: the text column may never push past the
@@ -1181,7 +1189,7 @@ impl BoardView {
                     .w(px(56.))
                     .h(px(56.))
                     .rounded(px(10.))
-                    .bg(rgb(0xE63946))
+                    .bg(rgb(tint_u32(0xE63946, 0.88)))
                     .flex()
                     .items_center()
                     .justify_center()
@@ -1189,7 +1197,7 @@ impl BoardView {
                         div()
                             .text_size(px(13.))
                             .font_weight(FontWeight::BOLD)
-                            .text_color(rgb(0xFFFFFF))
+                            .text_color(rgb(0xE63946))
                             .child("PDF".to_string()),
                     );
                 base.flex()
@@ -1243,7 +1251,7 @@ impl BoardView {
                     .w(px(56.))
                     .h(px(56.))
                     .rounded(px(10.))
-                    .bg(rgb(0x6A4C93))
+                    .bg(rgb(tint_u32(0x6A4C93, 0.88)))
                     .flex()
                     .items_center()
                     .justify_center()
@@ -1251,7 +1259,7 @@ impl BoardView {
                         div()
                             .w(px(20.))
                             .h(px(20.))
-                            .child(icon_canvas(Icon::Audio, 0xFFFFFF)),
+                            .child(icon_canvas(Icon::Audio, 0x6A4C93)),
                     );
                 // A mini player look: the name, then a waveform strip
                 // that reads as audio at a glance, then the play hint.
@@ -1324,64 +1332,101 @@ impl BoardView {
                         .unwrap_or_else(|| source.clone())
                 };
                 let kb = (*size_bytes as f64 / 1024.0).round() as u64;
-                // A thumbnail shape (16:9) with a big play button, so
-                // the card reads as video instead of a black square.
-                let tile = div()
-                    .w(px(96.))
-                    .h(px(56.))
-                    .rounded(px(10.))
-                    .bg(rgb(0x1C1C1E))
-                    .flex()
-                    .items_center()
-                    .justify_center()
-                    .child(
-                        div()
-                            .w(px(24.))
-                            .h(px(24.))
-                            .child(icon_canvas(Icon::Play, 0xFFFFFF)),
-                    );
-                base.flex()
-                    .flex_row()
-                    .items_center()
-                    .gap(px(12.))
-                    .p(px(12.))
-                    .child(tile)
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(2.))
-                            .w(px((w - 132.).max(40.)))
-                            .child(
-                                div()
-                                    .text_size(px(14.))
-                                    .font_weight(FontWeight::BOLD)
-                                    .text_color(rgb(0x1C1C1E))
-                                    .truncate()
-                                    .child(elide(&name, (w - 132.).max(40.), 14.0, true)),
-                            )
-                            .child(
-                                div()
-                                    .text_size(px(12.))
-                                    .text_color(rgb(0x6E6E73))
-                                    .truncate()
-                                    .child(if *remote {
-                                        elide(
-                                            "Video link — double-click to open",
+                let subline = if *remote {
+                    "Video link — double-click to open".to_string()
+                } else {
+                    format!("{} KB — double-click to play", kb)
+                };
+                // Big preview when the card is tall enough for a 16:9
+                // thumb plus text; otherwise the compact row layout.
+                // (Cards made before this change are short, so they
+                // keep the row layout until resized bigger.)
+                let thumb_h = (w - 24.) * 9. / 16.;
+                if h >= thumb_h + 70. {
+                    let col_w = (w - 24.).max(40.);
+                    let thumb = div()
+                        .w(px(w - 24.))
+                        .h(px(thumb_h))
+                        .rounded(px(10.))
+                        .bg(rgb(0x1C1C1E))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(
+                            div()
+                                .w(px(28.))
+                                .h(px(28.))
+                                .child(icon_canvas(Icon::Play, 0xFFFFFF)),
+                        );
+                    base.flex()
+                        .flex_col()
+                        .p(px(12.))
+                        .gap(px(8.))
+                        .child(thumb)
+                        .child(
+                            div()
+                                .text_size(px(14.))
+                                .font_weight(FontWeight::BOLD)
+                                .text_color(rgb(0x1C1C1E))
+                                .truncate()
+                                .child(elide(&name, col_w, 14.0, true)),
+                        )
+                        .child(
+                            div()
+                                .text_size(px(12.))
+                                .text_color(rgb(0x6E6E73))
+                                .truncate()
+                                .child(elide(&subline, col_w, 12.0, false)),
+                        )
+                } else {
+                    let tile = div()
+                        .w(px(96.))
+                        .h(px(56.))
+                        .rounded(px(10.))
+                        .bg(rgb(0x1C1C1E))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .child(
+                            div()
+                                .w(px(24.))
+                                .h(px(24.))
+                                .child(icon_canvas(Icon::Play, 0xFFFFFF)),
+                        );
+                    base.flex()
+                        .flex_row()
+                        .items_center()
+                        .gap(px(12.))
+                        .p(px(12.))
+                        .child(tile)
+                        .child(
+                            div()
+                                .flex()
+                                .flex_col()
+                                .gap(px(2.))
+                                .w(px((w - 132.).max(40.)))
+                                .child(
+                                    div()
+                                        .text_size(px(14.))
+                                        .font_weight(FontWeight::BOLD)
+                                        .text_color(rgb(0x1C1C1E))
+                                        .truncate()
+                                        .child(elide(&name, (w - 132.).max(40.), 14.0, true)),
+                                )
+                                .child(
+                                    div()
+                                        .text_size(px(12.))
+                                        .text_color(rgb(0x6E6E73))
+                                        .truncate()
+                                        .child(elide(
+                                            &subline,
                                             (w - 132.).max(40.),
                                             12.0,
                                             false,
-                                        )
-                                    } else {
-                                        elide(
-                                            &format!("{} KB — double-click to play", kb),
-                                            (w - 132.).max(40.),
-                                            12.0,
-                                            false,
-                                        )
-                                    }),
-                            ),
-                    )
+                                        )),
+                                ),
+                        )
+                }
             }
             Kind::Swatch { hex } => {
                 let (r, g, b) = parse_hex(hex).unwrap_or((0, 0, 0));
@@ -1499,6 +1544,16 @@ fn tile_color_for(domain: &str) -> u32 {
     TILES[(h % TILES.len() as u32) as usize]
 }
 
+/// Mix a 0xRRGGBB colour toward white: 0.85 gives a pastel tint for
+/// the minimal card tiles, with the full colour kept for the glyph.
+fn tint_u32(color: u32, white_mix: f32) -> u32 {
+    let r = ((color >> 16) & 0xFF) as f32;
+    let g = ((color >> 8) & 0xFF) as f32;
+    let b = (color & 0xFF) as f32;
+    let m = |c: f32| (c * (1.0 - white_mix) + 255.0 * white_mix) as u32;
+    (m(r) << 16) | (m(g) << 8) | m(b)
+}
+
 fn hex_to_hsla(hex: &str, alpha: f32) -> Hsla {
     // Approximate: convert sRGB to HSL for the canvas paint API.
     let (r, g, b) = parse_hex(hex).unwrap_or((26, 26, 26));
@@ -1535,6 +1590,145 @@ fn hex_to_hsla(hex: &str, alpha: f32) -> Hsla {
     }
 }
 
+impl BoardView {
+    /// The canvas customisation panel: background colours and grid
+    /// style. Choices apply instantly and save with the board; the
+    /// panel closes after a choice (a canvas click on the panel's
+    /// own buttons still lands the choice first), and also closes on
+    /// a canvas click elsewhere, Esc, or the close button.
+    fn canvas_panel_el(&self, cx: &mut Context<Self>) -> Div {
+        let bg_now = self.shared.board.borrow().bg.clone();
+        let grid_now = self.shared.board.borrow().grid;
+        let mut panel = div()
+            .absolute()
+            .right(px(16.))
+            .top(px(12.))
+            .w(px(272.))
+            .rounded(px(12.))
+            .bg(rgb(0xFFFFFF))
+            .border_1()
+            .border_color(rgb(0xE5E5EA))
+            .shadow(vec![BoxShadow {
+                color: Hsla {
+                    h: 0.0,
+                    s: 0.0,
+                    l: 0.0,
+                    a: 0.12,
+                },
+                offset: point(px(0.), px(4.)),
+                blur_radius: px(16.),
+                spread_radius: px(0.),
+            }])
+            .p(px(12.))
+            .flex()
+            .flex_col()
+            .gap(px(10.));
+        panel = panel.child(
+            div()
+                .flex()
+                .flex_row()
+                .items_center()
+                .justify_between()
+                .child(
+                    div()
+                        .text_size(px(13.))
+                        .font_weight(FontWeight::BOLD)
+                        .text_color(rgb(0x1C1C1E))
+                        .child("Canvas".to_string()),
+                )
+                .child(
+                    action_icon_button(Icon::Close, 0x333333)
+                        .id("canvas-close")
+                        .on_click(cx.listener(|this, _event: &gpui::ClickEvent, _window, cx| {
+                            this.canvas_panel = false;
+                            cx.notify();
+                        })),
+                ),
+        );
+        panel = panel.child(
+            div()
+                .text_size(px(11.))
+                .font_weight(FontWeight::BOLD)
+                .text_color(rgb(0x6E6E73))
+                .child("Colour".to_string()),
+        );
+        let mut row = div().flex().flex_row().gap(px(8.));
+        for (name, hex) in CANVAS_COLORS {
+            let (r, g, b) = parse_hex(hex).unwrap_or((0, 0, 0));
+            let active = bg_now == hex;
+            let hex_owned = hex.to_string();
+            let name_owned = name.to_string();
+            row = row.child(
+                div()
+                    .w(px(28.))
+                    .h(px(28.))
+                    .rounded(px(14.))
+                    .bg(rgb(((r as u32) << 16) | ((g as u32) << 8) | (b as u32)))
+                    .border_1()
+                    .border_color(if active { rgb(ACCENT) } else { rgb(0xDCDCE0) })
+                    .id(SharedString::from(format!("canvas-bg-{}", name)))
+                    .on_click(cx.listener(move |this, _event: &gpui::ClickEvent, _window, cx| {
+                        this.shared.board.borrow_mut().bg = hex_owned.clone();
+                        this._status = format!("Canvas colour: {}.", name_owned);
+                        this.save();
+                        cx.notify();
+                    })),
+            );
+        }
+        panel = panel.child(row);
+        panel = panel.child(
+            div()
+                .text_size(px(11.))
+                .font_weight(FontWeight::BOLD)
+                .text_color(rgb(0x6E6E73))
+                .child("Grid".to_string()),
+        );
+        let mut grid_row = div().flex().flex_row().gap(px(8.));
+        for (mode, label, icon) in [
+            (GridMode::Lines, "Lines", Icon::GridLines),
+            (GridMode::Dots, "Dots", Icon::GridDots),
+            (GridMode::Off, "Off", Icon::GridOff),
+        ] {
+            let active = grid_now == mode;
+            grid_row = grid_row.child(
+                div()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .gap(px(2.))
+                    .w(px(77.))
+                    .py(px(8.))
+                    .rounded(px(8.))
+                    .bg(if active { rgb(0xF5F5F7) } else { rgb(0xFFFFFF) })
+                    .border_1()
+                    .border_color(if active { rgb(ACCENT) } else { rgb(0xE5E5EA) })
+                    .child(icon_child(icon, if active { 0x1C1C1E } else { 0x6E6E73 }))
+                    .child(
+                        div()
+                            .text_size(px(11.))
+                            .text_color(rgb(0x1C1C1E))
+                            .child(label.to_string()),
+                    )
+                    .id(SharedString::from(format!("canvas-grid-{}", label)))
+                    .on_click(cx.listener(move |this, _event: &gpui::ClickEvent, _window, cx| {
+                        this.shared.board.borrow_mut().grid = mode;
+                        this._status = format!("Grid: {}.", label.to_lowercase());
+                        this.save();
+                        cx.notify();
+                    })),
+            );
+        }
+        panel = panel.child(grid_row);
+        panel = panel.child(
+            div()
+                .text_size(px(11.))
+                .text_color(rgb(0x8E8E93))
+                .child("Saved with the board.".to_string()),
+        );
+        panel
+    }
+}
+
 impl Render for BoardView {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         if !self.title_set {
@@ -1555,6 +1749,14 @@ impl Render for BoardView {
         let tool = self.tool;
         let pen_color = self.pen_color.clone();
         let drag = self.drag.clone();
+        // Canvas appearance, from the board's own settings.
+        let (br, bg_g, bb) = parse_hex(&board.bg).unwrap_or((0xF7, 0xF5, 0xF0));
+        let board_bg = rgb(((br as u32) << 16) | ((bg_g as u32) << 8) | (bb as u32));
+        // Grid marks stay subtle on any background: dark grey on light
+        // boards, mid grey on dark ones.
+        let lum = 0.299 * br as f32 + 0.587 * bg_g as f32 + 0.114 * bb as f32;
+        let grid_lightness = if lum > 140.0 { 0.85 } else { 0.35 };
+        let grid_mode = board.grid;
 
         // --- back canvas: grid + strokes ---
         let strokes: Vec<StrokePaint> = board
@@ -1593,33 +1795,70 @@ impl Render for BoardView {
                 let oy = f32::from(bounds.origin.y);
                 let bw = f32::from(bounds.size.width);
                 let bh = f32::from(bounds.size.height);
-                // Grid lines every GRID world units.
+                // Grid, in the board's chosen style, every GRID units.
                 let x0 = cam.x;
                 let x1 = cam.x + bw / cam.zoom;
                 let y0 = cam.y;
                 let y1 = cam.y + bh / cam.zoom;
-                let mut grid = PathBuilder::stroke(px(1.));
-                let mut gx = (x0 / GRID).floor() * GRID;
-                while gx <= x1 {
-                    let sx = (gx - cam.x) * cam.zoom + ox;
-                    grid.move_to(point(px(sx), px(oy)));
-                    grid.line_to(point(px(sx), px(oy + bh)));
-                    gx += GRID;
-                }
-                let mut gy = (y0 / GRID).floor() * GRID;
-                while gy <= y1 {
-                    let sy = (gy - cam.y) * cam.zoom + oy;
-                    grid.move_to(point(px(ox), px(sy)));
-                    grid.line_to(point(px(ox + bw), px(sy)));
-                    gy += GRID;
-                }
-                if let Ok(path) = grid.build() {
-                    window.paint_path(path, Hsla {
-                        h: 0.0,
-                        s: 0.0,
-                        l: 0.85,
-                        a: 1.0,
-                    });
+                let grid_color = Hsla {
+                    h: 0.0,
+                    s: 0.0,
+                    l: grid_lightness,
+                    a: 1.0,
+                };
+                match grid_mode {
+                    GridMode::Lines => {
+                        let mut grid = PathBuilder::stroke(px(1.));
+                        let mut gx = (x0 / GRID).floor() * GRID;
+                        while gx <= x1 {
+                            let sx = (gx - cam.x) * cam.zoom + ox;
+                            grid.move_to(point(px(sx), px(oy)));
+                            grid.line_to(point(px(sx), px(oy + bh)));
+                            gx += GRID;
+                        }
+                        let mut gy = (y0 / GRID).floor() * GRID;
+                        while gy <= y1 {
+                            let sy = (gy - cam.y) * cam.zoom + oy;
+                            grid.move_to(point(px(ox), px(sy)));
+                            grid.line_to(point(px(ox + bw), px(sy)));
+                            gy += GRID;
+                        }
+                        if let Ok(path) = grid.build() {
+                            window.paint_path(path, grid_color);
+                        }
+                    }
+                    GridMode::Dots => {
+                        let mut dots = PathBuilder::fill();
+                        let mut gx = (x0 / GRID).floor() * GRID;
+                        while gx <= x1 {
+                            let sx = (gx - cam.x) * cam.zoom + ox;
+                            let mut gy = (y0 / GRID).floor() * GRID;
+                            while gy <= y1 {
+                                let sy = (gy - cam.y) * cam.zoom + oy;
+                                dots.move_to(point(px(sx + 1.5), px(sy)));
+                                dots.arc_to(
+                                    point(px(1.5), px(1.5)),
+                                    px(0.),
+                                    false,
+                                    true,
+                                    point(px(sx - 1.5), px(sy)),
+                                );
+                                dots.arc_to(
+                                    point(px(1.5), px(1.5)),
+                                    px(0.),
+                                    false,
+                                    true,
+                                    point(px(sx + 1.5), px(sy)),
+                                );
+                                gy += GRID;
+                            }
+                            gx += GRID;
+                        }
+                        if let Ok(path) = dots.build() {
+                            window.paint_path(path, grid_color);
+                        }
+                    }
+                    GridMode::Off => {}
                 }
                 // Strokes.
                 let mut all = strokes;
@@ -1699,6 +1938,16 @@ impl Render for BoardView {
             Some(Drag::Marquee { start, current }) => Some((*start, *current)),
             _ => None,
         };
+        // Resize handle: the bottom-right corner of the single selected
+        // item, in world coords; painted below by the front canvas.
+        let resize_handle: Option<Pt> = if board.selected.len() == 1 {
+            board.get(board.selected[0]).map(|item| {
+                let (p, s) = board.item_bounds(item);
+                Pt::new(p.x + s.w, p.y + s.h)
+            })
+        } else {
+            None
+        };
         let front_canvas = canvas(
             move |_bounds, _window, _cx| (),
             move |bounds, _state, window, _cx| {
@@ -1773,6 +2022,35 @@ impl Render for BoardView {
                         window.paint_path(path, rgb(ACCENT));
                     }
                 }
+                // Resize handle: a white square with a hairline border
+                // and two grip diagonals at the selected item's corner.
+                if let Some(hp) = resize_handle {
+                    let hs = to_screen(hp);
+                    let hx = f32::from(hs.x);
+                    let hy = f32::from(hs.y);
+                    let mut fill = PathBuilder::fill();
+                    fill.move_to(point(px(hx - 16.), px(hy - 16.)));
+                    fill.line_to(point(px(hx), px(hy - 16.)));
+                    fill.line_to(point(px(hx), px(hy)));
+                    fill.line_to(point(px(hx - 16.), px(hy)));
+                    fill.close();
+                    if let Ok(path) = fill.build() {
+                        window.paint_path(path, rgb(0xFFFFFF));
+                    }
+                    let mut grip = PathBuilder::stroke(px(1.));
+                    grip.move_to(point(px(hx - 16.), px(hy - 16.)));
+                    grip.line_to(point(px(hx), px(hy - 16.)));
+                    grip.line_to(point(px(hx), px(hy)));
+                    grip.line_to(point(px(hx - 16.), px(hy)));
+                    grip.line_to(point(px(hx - 16.), px(hy - 16.)));
+                    grip.move_to(point(px(hx - 12.), px(hy - 4.)));
+                    grip.line_to(point(px(hx - 4.), px(hy - 12.)));
+                    grip.move_to(point(px(hx - 7.), px(hy - 4.)));
+                    grip.line_to(point(px(hx - 4.), px(hy - 7.)));
+                    if let Ok(path) = grip.build() {
+                        window.paint_path(path, rgb(0x8E8E93));
+                    }
+                }
             },
         )
         .absolute()
@@ -1809,6 +2087,13 @@ impl Render for BoardView {
                         return;
                     }
                     if this.add_panel.is_some() {
+                        return;
+                    }
+                    // A canvas click dismisses the customisation panel
+                    // instead of doing anything with the tool.
+                    if this.canvas_panel {
+                        this.canvas_panel = false;
+                        cx.notify();
                         return;
                     }
                     let world = this.window_to_world(win_pt);
@@ -1898,7 +2183,38 @@ impl Render for BoardView {
                                 cx.notify();
                                 return;
                             }
-                            if let Some(id) = this.with_board(|b| b.hit_test(world)) {
+                            // Resize handle first: the bottom-right
+                            // 16 screen px of the single selected item.
+                            let handle_hit = {
+                                let selected = this.shared.board.borrow().selected.clone();
+                                if selected.len() == 1 {
+                                    let zoom = this.camera().zoom;
+                                    this.with_board(|b| {
+                                        b.get(selected[0]).map(|item| {
+                                            let (p, s) = b.item_bounds(item);
+                                            let tol = 16.0 / zoom;
+                                            world.x >= p.x + s.w - tol
+                                                && world.x <= p.x + s.w + tol
+                                                && world.y >= p.y + s.h - tol
+                                                && world.y <= p.y + s.h + tol
+                                        })
+                                    })
+                                } else {
+                                    None
+                                }
+                            };
+                            if handle_hit == Some(true) {
+                                let sel = this.shared.board.borrow().selected[0];
+                                let (ow, oh) = this.with_board(|b| {
+                                    b.get(sel).map(|i| (i.size.w, i.size.h)).unwrap_or((100.0, 100.0))
+                                });
+                                this.drag = Some(Drag::Resize {
+                                    id: sel,
+                                    start_world: world,
+                                    orig_w: ow,
+                                    orig_h: oh,
+                                });
+                            } else if let Some(id) = this.with_board(|b| b.hit_test(world)) {
                                 let additive = event.modifiers.shift;
                                 this.shared.board.borrow_mut().select(id, additive);
                                 this.drag = Some(Drag::Move { last_world: world });
@@ -1933,6 +2249,16 @@ impl Render for BoardView {
                         this.shared.board.borrow_mut().move_selection(dx, dy);
                         *last_world = world;
                     }
+                    Some(Drag::Resize {
+                        id,
+                        start_world,
+                        orig_w,
+                        orig_h,
+                    }) => {
+                        let new_w = *orig_w + (world.x - start_world.x);
+                        let new_h = *orig_h + (world.y - start_world.y);
+                        this.shared.board.borrow_mut().resize_item(*id, new_w, new_h);
+                    }
                     Some(Drag::Stroke { points, .. }) => {
                         if points.last().map(|p| p.dist(world)).unwrap_or(999.0) > 2.0 / zoom {
                             points.push(world);
@@ -1960,7 +2286,7 @@ impl Render for BoardView {
                                 .add_stroke(points, &color, width, marker)
                                 .is_some()
                             {
-                                this.status = "Stroke added.".to_string();
+                                this._status = "Stroke added.".to_string();
                                 this.save();
                             }
                         }
@@ -1973,19 +2299,22 @@ impl Render for BoardView {
                             let degenerate = matches!((a, to), (Some(p), Anchor::Point(q)) if p.dist(q) < 4.0);
                             if !degenerate {
                                 this.shared.board.borrow_mut().add_connector(from, to);
-                                this.status = "Connector added.".to_string();
+                                this._status = "Connector added.".to_string();
                                 this.save();
                             }
                         }
                         Some(Drag::Marquee { start, .. }) => {
                             let ids = this.with_board(|b| b.marquee(start, world));
                             this.shared.board.borrow_mut().selected = ids;
-                            this.status = format!(
+                            this._status = format!(
                                 "{} item(s) selected — Ctrl+G groups them.",
                                 this.with_board(|b| b.selected.len())
                             );
                         }
                         Some(Drag::Move { .. }) => {
+                            this.save();
+                        }
+                        Some(Drag::Resize { .. }) => {
                             this.save();
                         }
                         _ => {}
@@ -2003,7 +2332,7 @@ impl Render for BoardView {
                     let factor = (-delta.y * 0.0015).exp();
                     let screen = Pt::new(win_pt.x, win_pt.y - TOOLBAR_H);
                     this.shared.board.borrow_mut().camera.zoom_at(screen, factor);
-                    this.status = format!("Zoom {}%.", (this.camera().zoom * 100.0).round() as i32);
+                    this._status = format!("Zoom {}%.", (this.camera().zoom * 100.0).round() as i32);
                     this.save();
                 } else {
                     this.shared
@@ -2125,7 +2454,7 @@ impl Render for BoardView {
             .child(action_icon_button(Icon::Group, 0x333333).id("btn-group").on_click(cx.listener(
                 |this, _event: &gpui::ClickEvent, _window, cx| {
                     let grouped = this.shared.board.borrow_mut().group_selection();
-                    this.status = match grouped {
+                    this._status = match grouped {
                         Some(g) => format!("Grouped (group {}).", g),
                         None => "Select 2+ items to group.".to_string(),
                     };
@@ -2136,7 +2465,7 @@ impl Render for BoardView {
             .child(action_icon_button(Icon::Ungroup, 0x333333).id("btn-ungroup").on_click(cx.listener(
                 |this, _event: &gpui::ClickEvent, _window, cx| {
                     this.shared.board.borrow_mut().ungroup_selection();
-                    this.status = "Ungrouped.".to_string();
+                    this._status = "Ungrouped.".to_string();
                     this.save();
                     cx.notify();
                 },
@@ -2144,7 +2473,7 @@ impl Render for BoardView {
             .child(action_icon_button(Icon::Delete, 0x333333).id("btn-delete").on_click(cx.listener(
                 |this, _event: &gpui::ClickEvent, _window, cx| {
                     this.shared.board.borrow_mut().delete_selection();
-                    this.status = "Deleted selection.".to_string();
+                    this._status = "Deleted selection.".to_string();
                     this.save();
                     cx.notify();
                 },
@@ -2155,23 +2484,37 @@ impl Render for BoardView {
                     cx.notify();
                 },
             )));
+        toolbar = toolbar.child(toolbar_divider());
+        toolbar = toolbar.child(
+            action_icon_button(Icon::Tune, 0x333333)
+                .id("btn-canvas")
+                .on_click(cx.listener(|this, _event: &gpui::ClickEvent, _window, cx| {
+                    this.canvas_panel = !this.canvas_panel;
+                    cx.notify();
+                })),
+        );
 
         // --- board area ---
-        let board_area = div()
+        // The customisation panel, when open, sits above the interaction
+        // surface so its buttons receive clicks.
+        let mut board_area = div()
             .relative()
             .flex_1()
-            .bg(rgb(0xF7F5F0))
+            .bg(board_bg)
             .child(back_canvas)
             .children(item_els)
             .child(front_canvas)
             .child(interaction);
+        if self.canvas_panel {
+            board_area = board_area.child(self.canvas_panel_el(cx));
+        }
 
         // --- bottom bars ---
         let mut root = div()
             .size_full()
             .flex()
             .flex_col()
-            .bg(rgb(0xF7F5F0))
+            .bg(board_bg)
             .track_focus(&self.focus_handle)
             .on_key_down(cx.listener(|this, event: &gpui::KeyDownEvent, window, cx| {
                 let key = event.keystroke.key.clone();
@@ -2184,6 +2527,12 @@ impl Render for BoardView {
                 // "h" hides the board (minimise); the handle brings it back.
                 if key == "h" && this.add_panel.is_none() && this.editing.is_none() {
                     window.minimize_window();
+                    cx.notify();
+                    return;
+                }
+                // Esc closes the customisation panel.
+                if key == "escape" && this.canvas_panel {
+                    this.canvas_panel = false;
                     cx.notify();
                     return;
                 }
@@ -2355,31 +2704,6 @@ impl Render for BoardView {
                 }
             }
         }
-
-        let status_text = format!(
-            "{}  ·  {} items  ·  {} selected  ·  zoom {}%  ·  {}",
-            self.status,
-            board.items.len(),
-            board.selected.len(),
-            (cam.zoom * 100.0).round() as i32,
-            tool.label()
-        );
-        root = root.child(
-            div()
-                .h(px(STATUS_H))
-                .flex()
-                .items_center()
-                .px(px(12.))
-                .bg(rgb(0xF5F5F7))
-                .border_t_1()
-                .border_color(rgb(0xDCDCE0))
-                .child(
-                    div()
-                        .text_size(px(12.))
-                        .text_color(rgb(0x6E6E73))
-                        .child(status_text),
-                ),
-        );
 
         root
     }

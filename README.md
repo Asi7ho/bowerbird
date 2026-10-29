@@ -43,8 +43,8 @@ Your board is stored as one JSON file and auto-saved on every change:
   the board comes forward.
 - **Hide:** the board toolbar's eye icon, or pressing `h` while the
   board is focused, minimises the board back to just the handle.
-  The toolbar is icons only (the status bar names the active tool);
-  icons are drawn vectors, not emoji, so they look the same on every
+  The toolbar is icons only; the active tool is the highlighted one.
+  Icons are drawn vectors, not emoji, so they look the same on every
   platform.
 - **In-app hotkeys:** `V` select, `P` pen, `M` marker, `C` connector,
   `T` text, `Ctrl/Cmd+G` group, `Ctrl/Cmd+U` ungroup, `Delete` removes the
@@ -64,8 +64,9 @@ it stays on top.
   from the note to the link — so you can see what every element looks
   like before adding your own. The picture and PDF are installed next to
   your board file on first launch, so they open wherever you run the app
-  from. Cards are rounded with a soft shadow; link cards get a coloured
-  tile with the domain's initial, PDF cards a red tile, swatches a white
+  from. Cards are flat and minimal: a hairline border, a soft corner,
+  no heavy shadow; link cards get a pastel tile with the domain's
+  initial in colour, PDF cards a pastel red tile, swatches a white
   hex pill.
 - **Pan:** drag with the Pan tool, hold `Space` and drag, or scroll without
   Ctrl. **Zoom:** `Ctrl` + scroll (keeps the point under the cursor fixed),
@@ -73,6 +74,13 @@ it stays on top.
 - **Select:** click an item, `Shift`-click to add to the selection, or drag
   a marquee around several items. Dragging one member of a group moves the
   whole group. `Ctrl/Cmd+G` groups the selection.
+- **Resize:** select exactly one item and drag the small handle at its
+  bottom-right corner. Everything resizes: notes, cards, images,
+  swatches, strokes (their points scale), and connectors (their free
+  endpoints scale; item-anchored ends stay pinned to their items).
+- **Canvas:** the sliders icon at the toolbar's right end opens a panel
+  with background colours (Paper, White, Sage, Sky, Ink) and grid styles
+  (lines, dots, off). Choices apply instantly and save with the board.
 - **Pen / Marker:** drag on the canvas. Marker is thicker and translucent.
 - **Connector:** drag from one item to another (or from empty space to
   empty space). Endpoints anchored to items follow them when they move.
@@ -90,13 +98,15 @@ it stays on top.
   bar appears under the canvas — play/pause and stop, playing inside
   QuickBoard (rodio). Double-click the card toggles play too. If the
   machine has no audio device, pressing play says so instead of crashing.
-- **Video:** a video file lands as a thumbnail-shaped card (16:9 tile
-  with a play button); a video link (a direct video file, or a
-  YouTube/Vimeo page) pasted into the link box becomes a video card
-  instead of a link card. Videos play in your system video player
-  (local files) or browser (links) — select the card and press play in
-  the transport bar, or double-click it. Decoding video frames inside
-  the canvas is a planned follow-up.
+- **Video:** a video file lands as a big preview card — a 16:9 thumb
+  with a play button on top, the name below; a video link (a direct
+  video file, or a YouTube/Vimeo page) pasted into the link box becomes
+  a video card instead of a link card. Short video cards (made before
+  this change, or resized small) keep a compact row layout instead.
+  Videos play in your system video player (local files) or browser
+  (links) — select the card and press play in the transport bar, or
+  double-click it. Decoding video frames inside the canvas is a
+  planned follow-up.
 - **Links:** the link icon, type a URL, `Enter`. The card shows the
   domain immediately and fills in the page title/description in the
   background when the fetch succeeds (Open Graph title/description

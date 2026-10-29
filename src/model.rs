@@ -406,6 +406,54 @@ impl Board {
         }
     }
 
+    /// Resize one item to `new_w` × `new_h` world units (clamped to a
+    /// 48-unit minimum). Strokes scale their points about the item's
+    /// top-left; connectors scale their free (Point) endpoints about
+    /// the connector's box origin, while item-anchored endpoints stay
+    /// pinned to their items; everything else just changes size.
+    pub fn resize_item(&mut self, id: ItemId, new_w: f32, new_h: f32) {
+        let new_w = new_w.max(48.0);
+        let new_h = new_h.max(48.0);
+        let Some(item) = self.get(id) else {
+            return;
+        };
+        let (ox, oy, ow, oh) = (item.pos.x, item.pos.y, item.size.w, item.size.h);
+        let Some(item) = self.get_mut(id) else {
+            return;
+        };
+        match &mut item.kind {
+            Kind::Stroke { points, .. } => {
+                if ow > 0.0 && oh > 0.0 {
+                    let sx = new_w / ow;
+                    let sy = new_h / oh;
+                    for p in points.iter_mut() {
+                        p.x = ox + (p.x - ox) * sx;
+                        p.y = oy + (p.y - oy) * sy;
+                    }
+                }
+            }
+            Kind::Connector { from, to, .. } => {
+                if ow > 0.0 && oh > 0.0 {
+                    let sx = new_w / ow;
+                    let sy = new_h / oh;
+                    if let Anchor::Point(p) = from {
+                        p.x = ox + (p.x - ox) * sx;
+                        p.y = oy + (p.y - oy) * sy;
+                    }
+                    if let Anchor::Point(p) = to {
+                        p.x = ox + (p.x - ox) * sx;
+                        p.y = oy + (p.y - oy) * sy;
+                    }
+                }
+            }
+            _ => {}
+        }
+        if matches!(item.kind, Kind::Stroke { .. }) {
+            item.refresh_stroke_bounds();
+        }
+        item.size = Size::new(new_w, new_h);
+    }
+
     pub fn delete_selection(&mut self) {
         self.items.retain(|i| !self.selected.contains(&i.id));
         self.selected.clear();
@@ -509,8 +557,8 @@ impl Board {
         self.items.push(Item {
             id,
             pos: at,
-            // Wider than other cards: the 16:9 thumb takes 96px.
-            size: Size::new(340.0, 96.0),
+            // Big preview card: a 16:9 thumb on top plus text below.
+            size: Size::new(360.0, 264.0),
             group: None,
             kind: Kind::Video {
                 source: source.to_string(),
@@ -739,6 +787,28 @@ mod tests {
             Pt::new(new_mid.x + 5.0, new_mid.y + 5.0),
         );
         assert!(hits.contains(&conn));
+    }
+
+    #[test]
+    fn resize_scales_strokes_and_cards() {
+        let mut b = Board::new();
+        let stroke = b
+            .add_stroke(vec![Pt::new(0.0, 0.0), Pt::new(100.0, 50.0)], "#000000", 3.0, false)
+            .unwrap();
+        b.resize_item(stroke, 200.0, 100.0);
+        let item = b.get(stroke).unwrap();
+        assert_eq!(item.size.w, 200.0);
+        assert_eq!(item.size.h, 100.0);
+        if let Kind::Stroke { points, .. } = &item.kind {
+            assert_eq!(points[1], Pt::new(200.0, 100.0));
+        } else {
+            panic!("expected a stroke");
+        }
+        let card = b.add_text(Pt::new(10.0, 10.0), "hi");
+        b.resize_item(card, 10.0, 10.0); // clamped to the minimum
+        let item = b.get(card).unwrap();
+        assert_eq!(item.size.w, 48.0);
+        assert_eq!(item.size.h, 48.0);
     }
 
     #[test]
