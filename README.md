@@ -48,10 +48,11 @@ Your board is stored as one JSON file and auto-saved on every change:
   platform.
 - **Minimal toolbar:** the bar shows only what you need right now —
   the pen palette appears only for the Pen/Marker tools, group/ungroup/
-  delete only appear while something is selected, and all the add
-  actions live behind the `+` button, which opens a small menu.
-  The accent throughout is macOS blue; on a Mac the interface also
-  picks up the system font and native window controls.
+  delete only appear while something is selected. There is no add
+  menu: adding is drag and drop (see below), plus double-clicking
+  empty space for a note. The accent throughout is macOS blue; on a
+  Mac the interface also picks up the system font and native window
+  controls.
 - **In-app hotkeys:** `V` select, `P` pen, `M` marker, `C` connector,
   `T` text, `Ctrl/Cmd+G` group, `Ctrl/Cmd+U` ungroup, `Delete` removes the
   selection, `+`/`-` zoom, `0` resets the view, hold `Space` to pan.
@@ -90,30 +91,31 @@ it stays on top.
 - **Pen / Marker:** drag on the canvas. Marker is thicker and translucent.
 - **Connector:** drag from one item to another (or from empty space to
   empty space). Endpoints anchored to items follow them when they move.
-- **Text:** `T` then click, or the note icon in the toolbar, type,
+- **Text:** `T` then click, or double-click empty space, type,
   `Enter` for a new line, `Esc` to finish. Double-click a note to edit
   it again. Bold/size editing for notes is in the toolbar's next pass;
   notes are plain or bold in the model already.
 - **Drop files onto the canvas:** images (PNG/JPG/GIF/WebP/BMP/SVG),
   PDFs, audio files (MP3/WAV/FLAC/OGG/M4A), video files
-  (MP4/MOV/WebM/MKV/AVI), and `.txt`/`.md` files become board items at
-  the drop point. You can also use the `+` menu and type or paste a
-  file path.
+  (MP4/MOV/WebM/MKV/AVI), `.txt`/`.md` files (become notes — a file
+  whose whole content is a colour code like `#FF6B35` becomes a swatch
+  instead), and `.url`/`.webloc` shortcut files (become link preview
+  cards; a video link becomes a video card). Drop several at once and
+  they fan out from the drop point. Double-click empty space to start
+  a note right there.
 - **Audio:** an audio file lands as a mini-player card — a pastel tile
   with a play button, the file name, and a waveform strip. Click the
   play button to play or pause it (the tile turns into pause bars while
-  playing). Select it and a transport bar appears under the canvas —
-  play/pause and stop, playing inside QuickBoard (rodio). If the
-  machine has no audio device, pressing play says so instead of crashing.
+  playing). It plays inside QuickBoard (rodio). If the machine has no
+  audio device, pressing play says so instead of crashing.
 - **Video:** a video file lands as a big preview card — a 16:9 thumb
   with a play button on top, the name below; a video link (a direct
   video file, or a YouTube/Vimeo page) pasted into the link box becomes
   a video card instead of a link card. Short video cards (made before
   this change, or resized small) keep a compact row layout instead.
   Videos play in your system video player (local files) or browser
-  (links) — click the thumb to play it, or select the card and press
-  play in the transport bar. Decoding video frames inside the canvas
-  is a planned follow-up.
+  (links) — click the thumb to play it. Decoding video frames inside
+  the canvas is a planned follow-up.
 - **Links:** the link icon, type a URL, `Enter`. The card shows the
   domain immediately and fills in the page title/description in the
   background when the fetch succeeds (Open Graph title/description

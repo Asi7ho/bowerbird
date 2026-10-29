@@ -10,7 +10,8 @@
 
 use quickboard::audio::{AudioPlayer, Playback};
 use quickboard::model::{
-    Anchor, Board, Camera, GridMode, Item, ItemId, Kind, Pt, normalise_hex, parse_hex,
+    Anchor, Board, Camera, DropKind, GridMode, Item, ItemId, Kind, Pt, drop_kind_for_ext,
+    extract_shortcut_url, parse_hex, swatch_hex_from_text,
 };
 use quickboard::preview::{domain_of, looks_like_video_url, parse_preview};
 use quickboard::store;
@@ -99,34 +100,10 @@ enum Drag {
     },
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum AddKind {
-    Text,
-    Url,
-    Swatch,
-    ImagePath,
-    PdfPath,
-    AudioPath,
-    VideoPath,
-}
-
-impl AddKind {
-    fn label(self) -> &'static str {
-        match self {
-            AddKind::Text => "Add text",
-            AddKind::Url => "Add link",
-            AddKind::Swatch => "Add colour swatch (e.g. #FF6B35)",
-            AddKind::ImagePath => "Add image — type or paste a file path",
-            AddKind::PdfPath => "Add PDF — type or paste a file path",
-            AddKind::AudioPath => "Add audio — type or paste a file path",
-            AddKind::VideoPath => "Add video — type or paste a file path",
-        }
-    }
-}
-
+/// The text-entry banner. Adding is drag-and-drop first, so this is
+/// only the Text tool's way in: click with T, type, Enter to place.
 #[derive(Clone, Debug)]
 struct AddPanel {
-    kind: AddKind,
     at: Pt,
     input: String,
 }
@@ -145,16 +122,8 @@ enum Icon {
     Marker,
     Text,
     Connector,
-    Note,
-    Link,
-    Swatch,
-    Image,
-    Pdf,
-    Audio,
-    Video,
     Play,
     Pause,
-    Stop,
     Group,
     Ungroup,
     Delete,
@@ -164,7 +133,6 @@ enum Icon {
     GridDots,
     GridOff,
     Close,
-    Plus,
 }
 
 impl Tool {
@@ -176,20 +144,6 @@ impl Tool {
             Tool::Marker => Icon::Marker,
             Tool::Text => Icon::Text,
             Tool::Connector => Icon::Connector,
-        }
-    }
-}
-
-impl AddKind {
-    fn icon(self) -> Icon {
-        match self {
-            AddKind::Text => Icon::Note,
-            AddKind::Url => Icon::Link,
-            AddKind::Swatch => Icon::Swatch,
-            AddKind::ImagePath => Icon::Image,
-            AddKind::PdfPath => Icon::Pdf,
-            AddKind::AudioPath => Icon::Audio,
-            AddKind::VideoPath => Icon::Video,
         }
     }
 }
@@ -299,52 +253,6 @@ fn icon_canvas(icon: Icon, hex: u32) -> impl IntoElement {
                     circle_path(&mut f, ox, oy, 4., 16., 2.4);
                     circle_path(&mut f, ox, oy, 16., 4., 2.4);
                 }
-                Icon::Note => {
-                    line!(5., 3.; 12., 3.; 15., 6.; 15., 17.; 5., 17.; 5., 3.);
-                    line!(12., 3.; 12., 6.; 15., 6.);
-                    line!(7., 10.; 13., 10.);
-                    line!(7., 13.; 13., 13.);
-                }
-                Icon::Link => {
-                    circle_path(&mut s, ox, oy, 7., 13., 3.);
-                    circle_path(&mut s, ox, oy, 13., 7., 3.);
-                    line!(9.2, 10.8; 10.8, 9.2);
-                }
-                Icon::Image => {
-                    line!(3., 5.; 17., 5.; 17., 15.; 3., 15.; 3., 5.);
-                    line!(5., 15.; 9., 9.; 12., 13.; 14., 10.; 17., 15.);
-                    circle_path(&mut f, ox, oy, 13.5, 8., 1.7);
-                }
-                Icon::Pdf => {
-                    line!(5., 3.; 12., 3.; 15., 6.; 15., 17.; 5., 17.; 5., 3.);
-                    line!(12., 3.; 12., 6.; 15., 6.);
-                    line!(7., 12.; 13., 12.);
-                }
-                Icon::Audio => {
-                    // Eighth note: filled head, stem, flag.
-                    f.move_to(pt(4., 14.));
-                    f.arc_to(
-                        point(px(3.), px(2.2)),
-                        px(0.),
-                        false,
-                        true,
-                        pt(10., 14.),
-                    );
-                    f.arc_to(
-                        point(px(3.), px(2.2)),
-                        px(0.),
-                        false,
-                        true,
-                        pt(4., 14.),
-                    );
-                    f.close();
-                    line!(10., 14.; 10., 5.);
-                    line!(10., 5.; 15., 7.);
-                }
-                Icon::Video => {
-                    line!(3., 6.; 17., 6.; 17., 14.; 3., 14.; 3., 6.);
-                    f.add_polygon(&[pt(8., 8.), pt(8., 12.), pt(13., 10.)], true);
-                }
                 Icon::Play => {
                     f.add_polygon(&[pt(7., 5.), pt(7., 15.), pt(16., 10.)], true);
                 }
@@ -355,16 +263,6 @@ fn icon_canvas(icon: Icon, hex: u32) -> impl IntoElement {
                     );
                     f.add_polygon(
                         &[pt(11., 5.), pt(14., 5.), pt(14., 15.), pt(11., 15.)],
-                        true,
-                    );
-                }
-                Icon::Plus => {
-                    line!(5., 10.; 15., 10.);
-                    line!(10., 5.; 10., 15.);
-                }
-                Icon::Stop => {
-                    f.add_polygon(
-                        &[pt(6., 6.), pt(14., 6.), pt(14., 14.), pt(6., 14.)],
                         true,
                     );
                 }
@@ -425,8 +323,8 @@ fn icon_canvas(icon: Icon, hex: u32) -> impl IntoElement {
                     s.cubic_bezier_to(pt(3., 10.), pt(13., 16.), pt(7., 16.));
                     circle_path(&mut f, ox, oy, 10., 10., 2.2);
                 }
-                // Text and Swatch are built from divs, not the canvas.
-                Icon::Text | Icon::Swatch => {}
+                // Text is built from a div, not the canvas.
+                Icon::Text => {}
             }
             if let Ok(p) = s.build() {
                 window.paint_path(p, rgb(hex));
@@ -447,31 +345,6 @@ fn icon_child(icon: Icon, hex: u32) -> gpui::AnyElement {
             .font_weight(FontWeight::BOLD)
             .text_color(rgb(hex))
             .child("T".to_string())
-            .into_any_element(),
-        Icon::Swatch => div()
-            .relative()
-            .w(px(20.))
-            .h(px(20.))
-            .child(
-                div()
-                    .absolute()
-                    .left(px(1.))
-                    .top(px(1.))
-                    .w(px(12.))
-                    .h(px(12.))
-                    .rounded(px(3.))
-                    .bg(rgb(0xFF6B35)),
-            )
-            .child(
-                div()
-                    .absolute()
-                    .right(px(1.))
-                    .bottom(px(1.))
-                    .w(px(12.))
-                    .h(px(12.))
-                    .rounded(px(3.))
-                    .bg(rgb(0x2E86AB)),
-            )
             .into_any_element(),
         _ => icon_canvas(icon, hex).into_any_element(),
     }
@@ -538,7 +411,6 @@ pub struct BoardView {
     editing: Option<(ItemId, String)>,
     add_panel: Option<AddPanel>,
     canvas_panel: bool,
-    add_menu: bool,
     // Kept for debugging; nothing on screen shows it anymore — the
     // bottom status bar was removed at the user's request.
     _status: String,
@@ -559,7 +431,6 @@ impl BoardView {
             editing: None,
             add_panel: None,
             canvas_panel: false,
-            add_menu: false,
             _status: "Board auto-saves on every change.".to_string(),
             viewport_w: 1024.0,
             viewport_h: 768.0,
@@ -598,13 +469,6 @@ impl BoardView {
     /// Board-area coordinates: the interaction div sits below the toolbar.
     fn window_to_world(&self, win: Pt) -> Pt {
         self.screen_to_world(Pt::new(win.x, win.y - TOOLBAR_H))
-    }
-
-    fn board_centre(&self) -> Pt {
-        self.screen_to_world(Pt::new(
-            self.viewport_w / 2.0,
-            (self.viewport_h - TOOLBAR_H) / 2.0,
-        ))
     }
 
     fn set_tool(&mut self, tool: Tool) {
@@ -797,143 +661,14 @@ impl BoardView {
         self.save();
     }
 
-    fn confirm_add(&mut self, panel: AddPanel, cx: &mut Context<Self>) {
+    fn confirm_add(&mut self, panel: AddPanel, _cx: &mut Context<Self>) {
         let input = panel.input.trim().to_string();
-        match panel.kind {
-            AddKind::Text => {
-                if input.is_empty() {
-                    self._status = "Nothing typed — no note added.".to_string();
-                    return;
-                }
-                self.shared.board.borrow_mut().add_text(panel.at, &input);
-                self._status = "Note added.".to_string();
-            }
-            AddKind::Url => {
-                if input.is_empty() {
-                    self._status = "No link typed.".to_string();
-                    return;
-                }
-                let url = if input.contains("://") {
-                    input
-                } else {
-                    format!("https://{}", input)
-                };
-                if looks_like_video_url(&url) {
-                    // Video links become video cards and open in the
-                    // browser/player on double-click — no preview fetch.
-                    self.shared
-                        .board
-                        .borrow_mut()
-                        .add_video(panel.at, &url, true, 0);
-                    self._status = format!("Video link added for {}.", domain_of(&url));
-                } else {
-                    let id = self.shared.board.borrow_mut().add_url(panel.at, &url);
-                    self._status = format!("Link card added for {}.", domain_of(&url));
-                    self.fetch_url_title(id, url, cx);
-                }
-            }
-            AddKind::Swatch => match normalise_hex(&input) {
-                Some(hex) => {
-                    self.shared.board.borrow_mut().add_swatch(panel.at, &hex);
-                    self._status = format!("Swatch {} added.", hex);
-                }
-                None => {
-                    self._status = "Not a colour — try #FF6B35.".to_string();
-                    self.add_panel = Some(AddPanel {
-                        input: panel.input,
-                        ..panel
-                    });
-                    return;
-                }
-            },
-            AddKind::ImagePath => {
-                let path = std::path::Path::new(&input);
-                if !path.is_file() {
-                    self._status = format!("No such file: {}", input);
-                    self.add_panel = Some(AddPanel {
-                        input: panel.input,
-                        ..panel
-                    });
-                    return;
-                }
-                let (w, h) = image::image_dimensions(path).unwrap_or((320, 240));
-                let scale = 320.0 / w.max(1) as f32;
-                let (w, h) = if scale < 1.0 {
-                    (320.0, h as f32 * scale)
-                } else {
-                    (w as f32, h as f32)
-                };
-                self.shared
-                    .board
-                    .borrow_mut()
-                    .add_image(panel.at, &input, w, h);
-                self._status = "Image added.".to_string();
-            }
-            AddKind::PdfPath => {
-                let path = std::path::Path::new(&input);
-                let is_pdf = path
-                    .extension()
-                    .map(|e| e.eq_ignore_ascii_case("pdf"))
-                    .unwrap_or(false);
-                if !path.is_file() || !is_pdf {
-                    self._status = "That is not a PDF file.".to_string();
-                    self.add_panel = Some(AddPanel {
-                        input: panel.input,
-                        ..panel
-                    });
-                    return;
-                }
-                let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
-                self.shared.board.borrow_mut().add_pdf(panel.at, &input, size);
-                self._status = "PDF card added — double-click it to open.".to_string();
-            }
-            AddKind::AudioPath => {
-                let path = std::path::Path::new(&input);
-                let is_audio = path
-                    .extension()
-                    .map(|e| {
-                        ["mp3", "wav", "flac", "ogg", "m4a"]
-                            .contains(&e.to_string_lossy().to_lowercase().as_str())
-                    })
-                    .unwrap_or(false);
-                if !path.is_file() || !is_audio {
-                    self._status = "That is not an audio file (mp3, wav, flac, ogg, m4a)."
-                        .to_string();
-                    self.add_panel = Some(AddPanel {
-                        input: panel.input,
-                        ..panel
-                    });
-                    return;
-                }
-                self.shared.board.borrow_mut().add_audio(panel.at, &input);
-                self._status = "Audio added — select it to play.".to_string();
-            }
-            AddKind::VideoPath => {
-                let path = std::path::Path::new(&input);
-                let is_video = path
-                    .extension()
-                    .map(|e| {
-                        ["mp4", "mov", "webm", "mkv", "avi", "m4v"]
-                            .contains(&e.to_string_lossy().to_lowercase().as_str())
-                    })
-                    .unwrap_or(false);
-                if !path.is_file() || !is_video {
-                    self._status = "That is not a video file (mp4, mov, webm, mkv, avi)."
-                        .to_string();
-                    self.add_panel = Some(AddPanel {
-                        input: panel.input,
-                        ..panel
-                    });
-                    return;
-                }
-                let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
-                self.shared
-                    .board
-                    .borrow_mut()
-                    .add_video(panel.at, &input, false, size);
-                self._status = "Video added — double-click it to play.".to_string();
-            }
+        if input.is_empty() {
+            self._status = "Nothing typed — no note added.".to_string();
+            return;
         }
+        self.shared.board.borrow_mut().add_text(panel.at, &input);
+        self._status = "Note added.".to_string();
         self.save();
     }
 
@@ -963,11 +698,6 @@ impl BoardView {
         }
     }
 
-    fn stop_audio(&mut self) {
-        self.shared.audio.borrow_mut().stop();
-        self._status = "Playback stopped.".to_string();
-    }
-
     /// Video plays in the system player (local file) or the browser
     /// (remote link) — QuickBoard does not decode video frames itself.
     fn play_video(&mut self, id: ItemId) {
@@ -994,18 +724,23 @@ impl BoardView {
         }
     }
 
-    fn drop_paths(&mut self, paths: &[std::path::PathBuf], at_window: Pt) {
+    fn drop_paths(
+        &mut self,
+        paths: &[std::path::PathBuf],
+        at_window: Pt,
+        cx: &mut Context<Self>,
+    ) {
         let mut at = self.window_to_world(at_window);
         let mut added = 0usize;
         let mut skipped = 0usize;
         for path in paths {
             let ext = path
                 .extension()
-                .map(|e| e.to_string_lossy().to_lowercase())
+                .map(|e| e.to_string_lossy().to_string())
                 .unwrap_or_default();
             let path_str = path.to_string_lossy().to_string();
-            match ext.as_str() {
-                "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "svg" => {
+            match drop_kind_for_ext(&ext) {
+                DropKind::Image => {
                     let (w, h) = image::image_dimensions(path).unwrap_or((320, 240));
                     let scale = 320.0 / w.max(1) as f32;
                     let (w, h) = if scale < 1.0 {
@@ -1016,16 +751,16 @@ impl BoardView {
                     self.shared.board.borrow_mut().add_image(at, &path_str, w, h);
                     added += 1;
                 }
-                "pdf" => {
+                DropKind::Pdf => {
                     let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
                     self.shared.board.borrow_mut().add_pdf(at, &path_str, size);
                     added += 1;
                 }
-                "mp3" | "wav" | "flac" | "ogg" | "m4a" => {
+                DropKind::Audio => {
                     self.shared.board.borrow_mut().add_audio(at, &path_str);
                     added += 1;
                 }
-                "mp4" | "mov" | "webm" | "mkv" | "avi" | "m4v" => {
+                DropKind::Video => {
                     let size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
                     self.shared
                         .board
@@ -1033,16 +768,42 @@ impl BoardView {
                         .add_video(at, &path_str, false, size);
                     added += 1;
                 }
-                "txt" | "md" => {
+                DropKind::Text => {
                     if let Ok(text) = std::fs::read_to_string(path) {
-                        let text: String = text.chars().take(2000).collect();
-                        self.shared.board.borrow_mut().add_text(at, &text);
+                        // A file whose whole content is a colour code
+                        // drops as a swatch, not a note.
+                        if let Some(hex) = swatch_hex_from_text(&text) {
+                            self.shared.board.borrow_mut().add_swatch(at, &hex);
+                        } else {
+                            let text: String = text.chars().take(2000).collect();
+                            self.shared.board.borrow_mut().add_text(at, &text);
+                        }
                         added += 1;
                     } else {
                         skipped += 1;
                     }
                 }
-                _ => skipped += 1,
+                DropKind::Shortcut => {
+                    let url =
+                        std::fs::read_to_string(path).ok().and_then(|c| extract_shortcut_url(&c));
+                    match url {
+                        Some(url) => {
+                            if looks_like_video_url(&url) {
+                                self.shared.board.borrow_mut().add_video(at, &url, true, 0);
+                                self._status =
+                                    format!("Video link added for {}.", domain_of(&url));
+                            } else {
+                                let id = self.shared.board.borrow_mut().add_url(at, &url);
+                                self._status =
+                                    format!("Link card added for {}.", domain_of(&url));
+                                self.fetch_url_title(id, url, cx);
+                            }
+                            added += 1;
+                        }
+                        None => skipped += 1,
+                    }
+                }
+                DropKind::Unknown => skipped += 1,
             }
             at.x += 24.0;
             at.y += 24.0;
@@ -1148,8 +909,9 @@ impl BoardView {
                     );
                 // Hard width: the text column may never push past the
                 // card edge, so long titles/URLs/descriptions clip
-                // instead of spilling onto the canvas.
-                let col_w = (w - 92.).max(40.);
+                // instead of spilling onto the canvas. The 100 is
+                // padding 16 on both sides + the 56 tile + the 12 gap.
+                let col_w = (w - 100.).max(40.);
                 let title_px = 14. * cam.zoom.max(0.7);
                 let mut col = div().flex().flex_col().gap(px(2.)).w(px(col_w));
                 col = col.child(
@@ -1183,7 +945,7 @@ impl BoardView {
                     .flex_row()
                     .items_center()
                     .gap(px(12.))
-                    .p(px(12.))
+                    .p(px(16.))
                     .child(tile)
                     .child(col)
             }
@@ -1602,80 +1364,6 @@ fn hex_to_hsla(hex: &str, alpha: f32) -> Hsla {
 }
 
 impl BoardView {
-    /// The "+" menu: every add action as an icon + label row, top-left
-    /// of the board. Picking one opens the same input banner the old
-    /// toolbar buttons opened, then the menu closes.
-    fn add_menu_el(&self, cx: &mut Context<Self>) -> Div {
-        let mut menu = div()
-            .absolute()
-            .left(px(16.))
-            .top(px(12.))
-            .w(px(220.))
-            .rounded(px(12.))
-            .bg(rgb(0xFFFFFF))
-            .border_1()
-            .border_color(rgb(0xE5E5EA))
-            .shadow(vec![BoxShadow {
-                color: Hsla {
-                    h: 0.0,
-                    s: 0.0,
-                    l: 0.0,
-                    a: 0.12,
-                },
-                offset: point(px(0.), px(4.)),
-                blur_radius: px(16.),
-                spread_radius: px(0.),
-            }])
-            .p(px(8.))
-            .flex()
-            .flex_col()
-            .gap(px(2.));
-        for (kind, label) in [
-            (AddKind::Text, "Note"),
-            (AddKind::Url, "Link"),
-            (AddKind::Swatch, "Colour swatch"),
-            (AddKind::ImagePath, "Image"),
-            (AddKind::PdfPath, "PDF"),
-            (AddKind::AudioPath, "Audio"),
-            (AddKind::VideoPath, "Video"),
-        ] {
-            let at = self.board_centre();
-            let icon_hex = if kind == AddKind::PdfPath {
-                0xC0392B
-            } else {
-                0x333333
-            };
-            menu = menu.child(
-                div()
-                    .flex()
-                    .flex_row()
-                    .items_center()
-                    .gap(px(8.))
-                    .px(px(8.))
-                    .py(px(6.))
-                    .rounded(px(8.))
-                    .child(icon_child(kind.icon(), icon_hex))
-                    .child(
-                        div()
-                            .text_size(px(13.))
-                            .text_color(rgb(0x1C1C1E))
-                            .child(label.to_string()),
-                    )
-                    .id(SharedString::from(format!("add-menu-{}", label)))
-                    .on_click(cx.listener(move |this, _event: &gpui::ClickEvent, _window, cx| {
-                        this.add_panel = Some(AddPanel {
-                            kind,
-                            at,
-                            input: String::new(),
-                        });
-                        this.add_menu = false;
-                        cx.notify();
-                    })),
-            );
-        }
-        menu
-    }
-
     /// The canvas customisation panel: background colours and grid
     /// style. Choices apply instantly and save with the board; the
     /// panel closes after a choice (a canvas click on the panel's
@@ -1831,7 +1519,6 @@ impl Render for BoardView {
         let board = self.shared.board.borrow().clone();
         let cam = board.camera;
         let selected = board.selected.clone();
-        let tool = self.tool;
         let pen_color = self.pen_color.clone();
         let drag = self.drag.clone();
         // Canvas appearance, from the board's own settings.
@@ -2181,12 +1868,6 @@ impl Render for BoardView {
                         cx.notify();
                         return;
                     }
-                    // Same for the add menu.
-                    if this.add_menu {
-                        this.add_menu = false;
-                        cx.notify();
-                        return;
-                    }
                     let world = this.window_to_world(win_pt);
                     let effective_tool = if this.space_down {
                         Tool::Pan
@@ -2216,7 +1897,6 @@ impl Render for BoardView {
                         }
                         Tool::Text => {
                             this.add_panel = Some(AddPanel {
-                                kind: AddKind::Text,
                                 at: world,
                                 input: String::new(),
                             });
@@ -2261,6 +1941,17 @@ impl Render for BoardView {
                                         // fire it a second time.
                                         _ => {}
                                     }
+                                } else {
+                                    // Double-click on empty space: drop
+                                    // a new empty note there and start
+                                    // editing it in place.
+                                    let id = this
+                                        .shared
+                                        .board
+                                        .borrow_mut()
+                                        .add_text(world, "");
+                                    this.editing = Some((id, String::new()));
+                                    this.save();
                                 }
                                 cx.notify();
                                 return;
@@ -2268,8 +1959,8 @@ impl Render for BoardView {
                             // Play buttons first: a single click on a
                             // video thumb plays it, and a single click
                             // on an audio tile toggles playback. The
-                            // item is selected too, so the transport
-                            // bar appears for audio.
+                            // item is selected too, so its card shows
+                            // the playing state.
                             if let Some(id) = this.with_board(|b| b.hit_test(world)) {
                                 let play_hit = this.with_board(|b| {
                                     b.get(id).map(|item| match &item.kind {
@@ -2480,7 +2171,7 @@ impl Render for BoardView {
                 let mouse = window.mouse_position();
                 let at = Pt::new(f32::from(mouse.x), f32::from(mouse.y));
                 let owned: Vec<std::path::PathBuf> = paths.paths().to_vec();
-                this.drop_paths(&owned, at);
+                this.drop_paths(&owned, at, cx);
                 cx.notify();
             }));
 
@@ -2558,18 +2249,6 @@ impl Render for BoardView {
             )));
             }
         }
-        toolbar = toolbar.child(toolbar_divider());
-        // One "+" button opens the add menu; the seven add actions
-        // live there instead of filling the toolbar.
-        toolbar = toolbar.child(
-            action_icon_button(Icon::Plus, 0x333333)
-                .id("btn-add")
-                .on_click(cx.listener(|this, _event: &gpui::ClickEvent, _window, cx| {
-                    this.add_menu = !this.add_menu;
-                    this.canvas_panel = false;
-                    cx.notify();
-                })),
-        );
         // Group/ungroup/delete only appear while something is selected.
         if !board.selected.is_empty() {
             toolbar = toolbar.child(toolbar_divider());
@@ -2615,7 +2294,6 @@ impl Render for BoardView {
                 .id("btn-canvas")
                 .on_click(cx.listener(|this, _event: &gpui::ClickEvent, _window, cx| {
                     this.canvas_panel = !this.canvas_panel;
-                    this.add_menu = false;
                     cx.notify();
                 })),
         );
@@ -2633,9 +2311,6 @@ impl Render for BoardView {
             .child(interaction);
         if self.canvas_panel {
             board_area = board_area.child(self.canvas_panel_el(cx));
-        }
-        if self.add_menu {
-            board_area = board_area.child(self.add_menu_el(cx));
         }
 
         // --- bottom bars ---
@@ -2659,12 +2334,7 @@ impl Render for BoardView {
                     cx.notify();
                     return;
                 }
-                // Esc closes the add menu, then the customisation panel.
-                if key == "escape" && this.add_menu {
-                    this.add_menu = false;
-                    cx.notify();
-                    return;
-                }
+                // Esc closes the customisation panel.
                 if key == "escape" && this.canvas_panel {
                     this.canvas_panel = false;
                     cx.notify();
@@ -2701,7 +2371,7 @@ impl Render for BoardView {
                         div()
                             .text_size(px(13.))
                             .font_weight(FontWeight::BOLD)
-                            .child(panel.kind.label().to_string()),
+                            .child("Add text".to_string()),
                     )
                     .child(div().text_size(px(13.)).child(text)),
             );
@@ -2724,119 +2394,6 @@ impl Render for BoardView {
                     )
                     .child(div().text_size(px(13.)).child(format!("{}▍", text))),
             );
-        }
-
-        // --- media transport bar: shown when exactly one audio/video item
-        // is selected. These buttons live outside the canvas, so unlike
-        // in-card buttons they actually receive clicks.
-        if board.selected.len() == 1 {
-            let sel_id = board.selected[0];
-            if let Some(item) = board.get(sel_id) {
-                match &item.kind {
-                    Kind::Audio { path } => {
-                        let name = std::path::Path::new(path)
-                            .file_name()
-                            .map(|n| n.to_string_lossy().to_string())
-                            .unwrap_or_else(|| path.clone());
-                        let state = self.shared.audio.borrow().state();
-                        let is_this_playing = self
-                            .shared
-                            .audio
-                            .borrow()
-                            .playing
-                            .map(|pid| pid == sel_id)
-                            .unwrap_or(false)
-                            && state == Playback::Playing;
-                        let label = match state {
-                            Playback::Playing if is_this_playing => {
-                                format!("{} — playing", name)
-                            }
-                            Playback::Paused if is_this_playing => {
-                                format!("{} — paused", name)
-                            }
-                            _ => format!("{} — stopped", name),
-                        };
-                        let play_icon = if is_this_playing {
-                            Icon::Pause
-                        } else {
-                            Icon::Play
-                        };
-                        root = root.child(
-                            div()
-                                .h(px(40.))
-                                .flex()
-                                .items_center()
-                                .gap(px(8.))
-                                .px(px(12.))
-                                .bg(rgb(0xFFFFFF))
-                                .border_t_1()
-                                .border_color(rgb(0xE5E5EA))
-                                .child(
-                                    action_icon_button(play_icon, 0x1C1C1E)
-                                        .id(SharedString::from("media-play"))
-                                        .on_click(cx.listener(move |this, _event: &gpui::ClickEvent, _window, cx| {
-                                            this.toggle_audio(sel_id);
-                                            cx.notify();
-                                        })),
-                                )
-                                .child(
-                                    action_icon_button(Icon::Stop, 0x1C1C1E)
-                                        .id(SharedString::from("media-stop"))
-                                        .on_click(cx.listener(move |this, _event: &gpui::ClickEvent, _window, cx| {
-                                            this.stop_audio();
-                                            cx.notify();
-                                        })),
-                                )
-                                .child(
-                                    div()
-                                        .text_size(px(13.))
-                                        .text_color(rgb(0x1C1C1E))
-                                        .child(label),
-                                ),
-                        );
-                    }
-                    Kind::Video { source, remote, .. } => {
-                        let name = if *remote {
-                            domain_of(source)
-                        } else {
-                            std::path::Path::new(source)
-                                .file_name()
-                                .map(|n| n.to_string_lossy().to_string())
-                                .unwrap_or_else(|| source.clone())
-                        };
-                        root = root.child(
-                            div()
-                                .h(px(40.))
-                                .flex()
-                                .items_center()
-                                .gap(px(8.))
-                                .px(px(12.))
-                                .bg(rgb(0xFFFFFF))
-                                .border_t_1()
-                                .border_color(rgb(0xE5E5EA))
-                                .child(
-                                    action_icon_button(Icon::Play, 0x1C1C1E)
-                                        .id(SharedString::from("media-play"))
-                                        .on_click(cx.listener(move |this, _event: &gpui::ClickEvent, _window, cx| {
-                                            this.play_video(sel_id);
-                                            cx.notify();
-                                        })),
-                                )
-                                .child(
-                                    div()
-                                        .text_size(px(13.))
-                                        .text_color(rgb(0x1C1C1E))
-                                        .child(format!(
-                                            "{} — plays in {}",
-                                            name,
-                                            if *remote { "your browser" } else { "your video player" }
-                                        )),
-                                ),
-                        );
-                    }
-                    _ => {}
-                }
-            }
         }
 
         root

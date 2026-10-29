@@ -233,6 +233,68 @@ pub fn normalise_hex(hex: &str) -> Option<String> {
     parse_hex(hex).map(|(r, g, b)| format!("#{:02X}{:02X}{:02X}", r, g, b))
 }
 
+/// Which board item a dropped file becomes, from its extension alone.
+/// The drop handler matches on this, so the mapping is tested here
+/// rather than living inline in the UI.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DropKind {
+    Image,
+    Pdf,
+    Audio,
+    Video,
+    Text,
+    Shortcut,
+    Unknown,
+}
+
+pub fn drop_kind_for_ext(ext: &str) -> DropKind {
+    match ext.to_ascii_lowercase().as_str() {
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "svg" => DropKind::Image,
+        "pdf" => DropKind::Pdf,
+        "mp3" | "wav" | "flac" | "ogg" | "m4a" => DropKind::Audio,
+        "mp4" | "mov" | "webm" | "mkv" | "avi" | "m4v" => DropKind::Video,
+        "txt" | "md" => DropKind::Text,
+        "url" | "webloc" => DropKind::Shortcut,
+        _ => DropKind::Unknown,
+    }
+}
+
+/// Pull a URL out of a dropped shortcut file: a Windows .url file
+/// (`URL=...` line), a macOS .webloc plist (first http(s) string), or
+/// a bare URL on its own. Anything else gives None.
+pub fn extract_shortcut_url(content: &str) -> Option<String> {
+    for line in content.lines() {
+        let line = line.trim();
+        if let Some(rest) = line.strip_prefix("URL=") {
+            let url = rest.trim();
+            if url.starts_with("http://") || url.starts_with("https://") {
+                return Some(url.to_string());
+            }
+        }
+    }
+    // Bare URL, or a URL embedded in XML (a .webloc plist): take the
+    // first http(s) token, cut at the first delimiter.
+    for needle in ["https://", "http://"] {
+        if let Some(pos) = content.find(needle) {
+            let rest = &content[pos..];
+            let end = rest
+                .find(|c: char| c.is_whitespace() || c == '<' || c == '"' || c == '\'')
+                .unwrap_or(rest.len());
+            let url = &rest[..end];
+            if url.len() > needle.len() + 1 {
+                return Some(url.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// A text file whose whole content is a colour code drops as a
+/// swatch instead of a note.
+pub fn swatch_hex_from_text(content: &str) -> Option<String> {
+    normalise_hex(content.trim())
+}
+
 /// How the canvas grid is drawn.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum GridMode {
@@ -514,7 +576,7 @@ impl Board {
         self.items.push(Item {
             id,
             pos: at,
-            size: Size::new(300.0, 96.0),
+            size: Size::new(300.0, 108.0),
             group: None,
             kind: Kind::UrlCard {
                 url: url.trim().to_string(),
@@ -675,6 +737,65 @@ impl Board {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn drop_kind_covers_every_supported_type() {
+        for ext in ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"] {
+            assert_eq!(drop_kind_for_ext(ext), DropKind::Image, "{ext}");
+        }
+        assert_eq!(drop_kind_for_ext("pdf"), DropKind::Pdf);
+        for ext in ["mp3", "wav", "flac", "ogg", "m4a"] {
+            assert_eq!(drop_kind_for_ext(ext), DropKind::Audio, "{ext}");
+        }
+        for ext in ["mp4", "mov", "webm", "mkv", "avi", "m4v"] {
+            assert_eq!(drop_kind_for_ext(ext), DropKind::Video, "{ext}");
+        }
+        for ext in ["txt", "md"] {
+            assert_eq!(drop_kind_for_ext(ext), DropKind::Text, "{ext}");
+        }
+        for ext in ["url", "webloc"] {
+            assert_eq!(drop_kind_for_ext(ext), DropKind::Shortcut, "{ext}");
+        }
+        assert_eq!(drop_kind_for_ext("zip"), DropKind::Unknown);
+        assert_eq!(drop_kind_for_ext(""), DropKind::Unknown);
+        // Case-insensitive: the handler need not lowercase first.
+        assert_eq!(drop_kind_for_ext("PNG"), DropKind::Image);
+        assert_eq!(drop_kind_for_ext("PDF"), DropKind::Pdf);
+    }
+
+    #[test]
+    fn shortcut_url_extraction() {
+        let url_file = "[InternetShortcut]\nURL=https://example.com/some/article\n";
+        assert_eq!(
+            extract_shortcut_url(url_file).as_deref(),
+            Some("https://example.com/some/article")
+        );
+        let webloc = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<plist><dict><key>URL</key><string>https://example.com/page</string></dict></plist>";
+        assert_eq!(
+            extract_shortcut_url(webloc).as_deref(),
+            Some("https://example.com/page")
+        );
+        assert_eq!(
+            extract_shortcut_url("https://example.com/bare").as_deref(),
+            Some("https://example.com/bare")
+        );
+        assert_eq!(extract_shortcut_url("just some notes"), None);
+        assert_eq!(extract_shortcut_url("[InternetShortcut]\nURL=not-a-url\n"), None);
+    }
+
+    #[test]
+    fn hex_text_file_becomes_a_swatch() {
+        assert_eq!(
+            swatch_hex_from_text("#FF6B35").as_deref(),
+            Some("#FF6B35")
+        );
+        assert_eq!(
+            swatch_hex_from_text("  ff6b35\n").as_deref(),
+            Some("#FF6B35")
+        );
+        assert_eq!(swatch_hex_from_text("hello world"), None);
+        assert_eq!(swatch_hex_from_text("#FF6B35 and more"), None);
+    }
 
     #[test]
     fn camera_round_trips_and_zoom_keeps_cursor_point() {
