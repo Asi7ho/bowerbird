@@ -5,6 +5,7 @@
 //! this.
 
 pub mod audio;
+pub mod markdown;
 pub mod model;
 pub mod preview;
 pub mod store;

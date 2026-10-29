@@ -93,8 +93,12 @@ it stays on top.
   empty space). Endpoints anchored to items follow them when they move.
 - **Text:** `T` then click, or double-click empty space, type,
   `Enter` for a new line, `Esc` to finish. Double-click a note to edit
-  it again. Bold/size editing for notes is in the toolbar's next pass;
-  notes are plain or bold in the model already.
+  it again. Notes render markdown automatically — `#` headings, `-`
+  bullets, `1.` lists, `>` quotes, fenced code blocks, and inline
+  **bold**, *italic*, `code`, [links](https://example.com) and
+  ~~strikethrough~~ — and while you edit, the note on the canvas shows
+  the formatted result live as you type; the banner at the bottom
+  holds the raw text.
 - **Drop files onto the canvas:** images (PNG/JPG/GIF/WebP/BMP/SVG),
   PDFs, audio files (MP3/WAV/FLAC/OGG/M4A), video files
   (MP4/MOV/WebM/MKV/AVI), `.txt`/`.md` files (become notes — a file

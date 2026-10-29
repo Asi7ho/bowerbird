@@ -3,6 +3,7 @@
 //! Everything in this file is unit-testable without a window, which is how
 //! the pan/zoom, hit-testing, grouping and persistence logic is verified.
 
+use crate::markdown::{Block, parse_markdown};
 use serde::{Deserialize, Serialize};
 
 /// A point in infinite board (world) coordinates.
@@ -346,6 +347,49 @@ impl Default for Board {
     }
 }
 
+/// Estimate a note's height at a given box width from its markdown:
+/// headings are taller, long lines wrap at the width, code blocks keep
+/// their lines. Rough on purpose — cards are resizable — but it keeps
+/// a formatted note from clipping the moment it is typed or edited.
+/// Line height follows the renderer's ~1.62x font size.
+pub fn estimate_text_height(text: &str, font_size: f32, width: f32) -> f32 {
+    let blocks = parse_markdown(text);
+    if blocks.is_empty() {
+        return 48.0;
+    }
+    let chars_fit = ((width - 24.0) / (font_size * 0.55)).max(20.0);
+    let mut h = 24.0; // card padding, top + bottom
+    for (i, block) in blocks.iter().enumerate() {
+        if i > 0 {
+            h += 4.0; // gap between blocks
+        }
+        match block {
+            Block::Heading { level, segments } => {
+                let len: usize = segments.iter().map(|s| s.text.chars().count()).sum();
+                let lines = (len as f32 / chars_fit).ceil().max(1.0);
+                let extra = match level {
+                    1 => 6.0,
+                    2 => 3.0,
+                    _ => 1.0,
+                };
+                h += lines * (font_size + extra) * 1.62;
+            }
+            Block::Code { lines } => {
+                h += lines.len().max(1) as f32 * font_size * 1.62 + 12.0;
+            }
+            Block::Bullet { segments }
+            | Block::Ordered { segments, .. }
+            | Block::Quote { segments }
+            | Block::Paragraph { segments } => {
+                let len: usize = segments.iter().map(|s| s.text.chars().count()).sum();
+                let lines = (len as f32 / chars_fit).ceil().max(1.0);
+                h += lines * font_size * 1.62;
+            }
+        }
+    }
+    h.max(48.0)
+}
+
 impl Board {
     pub fn new() -> Self {
         Self::default()
@@ -553,13 +597,14 @@ impl Board {
 
     pub fn add_text(&mut self, at: Pt, text: &str) -> ItemId {
         let id = self.alloc_id();
-        // Rough width estimate; the UI measures real text, this is the model box.
-        let lines = text.lines().count().max(1) as f32;
+        // Rough box estimate; the UI measures real text, this is the model box.
         let longest = text.lines().map(|l| l.chars().count()).max().unwrap_or(0) as f32;
+        let w = (longest * 9.0 + 24.0).max(120.0);
+        let h = estimate_text_height(text, 16.0, w);
         self.items.push(Item {
             id,
             pos: at,
-            size: Size::new((longest * 9.0 + 24.0).max(120.0), (lines * 27.0 + 22.0).max(48.0)),
+            size: Size::new(w, h),
             group: None,
             kind: Kind::Text {
                 text: text.to_string(),
@@ -795,6 +840,21 @@ mod tests {
         );
         assert_eq!(swatch_hex_from_text("hello world"), None);
         assert_eq!(swatch_hex_from_text("#FF6B35 and more"), None);
+    }
+
+    #[test]
+    fn text_height_counts_markdown_blocks() {
+        let plain = estimate_text_height("a short line", 16.0, 400.0);
+        let headed = estimate_text_height("# Title\na short line", 16.0, 400.0);
+        assert!(headed > plain + 20.0, "heading adds height: {headed} vs {plain}");
+        // A 200-char line at width 200 wraps to many lines.
+        let long = "x".repeat(200);
+        let wrapped = estimate_text_height(&long, 16.0, 200.0);
+        assert!(wrapped > 200.0, "wrapped height: {wrapped}");
+        // A 3-line code block is taller than a 1-line paragraph.
+        let code = estimate_text_height("```\na\nb\nc\n```", 16.0, 400.0);
+        assert!(code > 100.0 && code < 140.0, "code height: {code}");
+        assert_eq!(estimate_text_height("", 16.0, 400.0), 48.0);
     }
 
     #[test]

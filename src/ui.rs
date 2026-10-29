@@ -11,8 +11,9 @@
 use quickboard::audio::{AudioPlayer, Playback};
 use quickboard::model::{
     Anchor, Board, Camera, DropKind, GridMode, Item, ItemId, Kind, Pt, drop_kind_for_ext,
-    extract_shortcut_url, parse_hex, swatch_hex_from_text,
+    estimate_text_height, extract_shortcut_url, parse_hex, swatch_hex_from_text,
 };
+use quickboard::markdown::{Block, Segment, parse_markdown};
 use quickboard::preview::{domain_of, looks_like_video_url, parse_preview};
 use quickboard::store;
 use gpui::prelude::*;
@@ -419,6 +420,166 @@ pub struct BoardView {
     title_set: bool,
 }
 
+/// One markdown block as a div. Plain single-segment lines render as
+/// one text element so long lines wrap exactly like plain notes used
+/// to; mixed lines render as a wrapping row of styled segments.
+fn render_md_block(block: Block, base_size: f32, note_bold: bool, fg: impl Into<Hsla> + Copy, zoom: f32) -> Div {
+    // A block with one plain segment renders as plain text.
+    let single_plain = |segments: &Vec<Segment>| -> Option<String> {
+        if segments.len() == 1 && !segments[0].bold && !segments[0].italic
+            && !segments[0].code && !segments[0].link && !segments[0].strike
+        {
+            Some(segments[0].text.clone())
+        } else {
+            None
+        }
+    };
+    match block {
+        Block::Heading { level, segments } => {
+            let size = match level {
+                1 => base_size + 6.0,
+                2 => base_size + 3.0,
+                _ => base_size + 1.0,
+            };
+            if let Some(text) = single_plain(&segments) {
+                return div()
+                    .text_size(px(size * zoom))
+                    .font_weight(FontWeight::BOLD)
+                    .text_color(fg)
+                    .child(text);
+            }
+            let mut row = div().flex().flex_row().flex_wrap();
+            for seg in segments {
+                row = row.child(render_md_segment(seg, size, true, fg, zoom));
+            }
+            row
+        }
+        Block::Bullet { segments } => {
+            if let Some(text) = single_plain(&segments) {
+                return div()
+                    .text_size(px(base_size * zoom))
+                    .font_weight(if note_bold {
+                        FontWeight::BOLD
+                    } else {
+                        FontWeight::default()
+                    })
+                    .text_color(fg)
+                    .child(format!("• {}", text));
+            }
+            let mut row = div().flex().flex_row().flex_wrap();
+            row = row.child(
+                div()
+                    .text_size(px(base_size * zoom))
+                    .text_color(fg)
+                    .child("• ".to_string()),
+            );
+            for seg in segments {
+                row = row.child(render_md_segment(seg, base_size, note_bold, fg, zoom));
+            }
+            row
+        }
+        Block::Ordered { n, segments } => {
+            if let Some(text) = single_plain(&segments) {
+                return div()
+                    .text_size(px(base_size * zoom))
+                    .font_weight(if note_bold {
+                        FontWeight::BOLD
+                    } else {
+                        FontWeight::default()
+                    })
+                    .text_color(fg)
+                    .child(format!("{}. {}", n, text));
+            }
+            let mut row = div().flex().flex_row().flex_wrap();
+            row = row.child(
+                div()
+                    .text_size(px(base_size * zoom))
+                    .text_color(fg)
+                    .child(format!("{}. ", n)),
+            );
+            for seg in segments {
+                row = row.child(render_md_segment(seg, base_size, note_bold, fg, zoom));
+            }
+            row
+        }
+        Block::Quote { segments } => {
+            if let Some(text) = single_plain(&segments) {
+                return div()
+                    .text_size(px(base_size * zoom))
+                    .italic()
+                    .text_color(rgb(0x6E6E73))
+                    .child(text);
+            }
+            let mut row = div().flex().flex_row().flex_wrap();
+            for seg in segments {
+                let s = render_md_segment(seg, base_size, note_bold, fg, zoom)
+                    .italic()
+                    .text_color(rgb(0x6E6E73));
+                row = row.child(s);
+            }
+            row
+        }
+        Block::Code { lines } => {
+            let mut col = div()
+                .flex()
+                .flex_col()
+                .bg(rgb(0xF5F5F7))
+                .rounded(px(6.))
+                .p(px(6. * zoom));
+            for line in lines {
+                col = col.child(
+                    div()
+                        .text_size(px(base_size * zoom))
+                        .text_color(rgb(0x1C1C1E))
+                        .child(line),
+                );
+            }
+            col
+        }
+        Block::Paragraph { segments } => {
+            if let Some(text) = single_plain(&segments) {
+                return div()
+                    .text_size(px(base_size * zoom))
+                    .font_weight(if note_bold {
+                        FontWeight::BOLD
+                    } else {
+                        FontWeight::default()
+                    })
+                    .text_color(fg)
+                    .child(text);
+            }
+            let mut row = div().flex().flex_row().flex_wrap();
+            for seg in segments {
+                row = row.child(render_md_segment(seg, base_size, note_bold, fg, zoom));
+            }
+            row
+        }
+    }
+}
+
+fn render_md_segment(seg: Segment, size: f32, note_bold: bool, fg: impl Into<Hsla> + Copy, zoom: f32) -> Div {
+    let mut d = div().text_size(px(size * zoom)).text_color(fg);
+    if seg.bold || note_bold {
+        d = d.font_weight(FontWeight::BOLD);
+    }
+    if seg.italic {
+        d = d.italic();
+    }
+    if seg.strike {
+        d = d.line_through();
+    }
+    if seg.link {
+        d = d.text_color(rgb(0x2E86AB)).underline();
+    }
+    if seg.code {
+        d = d
+            .bg(rgb(0xF0F0F0))
+            .rounded(px(4.))
+            .px(px(3. * zoom));
+    }
+    d.child(seg.text)
+}
+
 impl BoardView {
     pub fn new(shared: Shared, cx: &mut Context<Self>) -> Self {
         Self {
@@ -648,13 +809,16 @@ impl BoardView {
     fn commit_text_edit(&mut self, id: ItemId, text: String) {
         let mut board = self.shared.board.borrow_mut();
         if let Some(item) = board.get_mut(id) {
-            if let Kind::Text { text: t, .. } = &mut item.kind {
+            if let Kind::Text {
+                text: t, size, ..
+            } = &mut item.kind
+            {
                 *t = text;
-                // Re-estimate the box so a longer edit still fits.
-                let lines = t.lines().count().max(1) as f32;
-                let longest = t.lines().map(|l| l.chars().count()).max().unwrap_or(0) as f32;
-                item.size.w = (longest * 9.0 + 24.0).max(120.0);
-                item.size.h = (lines * 22.0 + 16.0).max(40.0);
+                // Re-estimate the height so a longer edit still fits.
+                // The width stays as the user left it (cards are
+                // resizable) and long lines wrap inside it.
+                let w = item.size.w;
+                item.size.h = estimate_text_height(t, *size, w).max(40.0);
             }
         }
         drop(board);
@@ -846,14 +1010,21 @@ impl BoardView {
                 size,
                 color,
             } => {
-                let mut t = base.p(px(12. * cam.zoom)).text_size(px(size * cam.zoom));
-                if *bold {
-                    t = t.font_weight(FontWeight::BOLD);
+                // Notes render markdown automatically: headings, bullets,
+                // ordered lists, quotes, code blocks, and inline bold /
+                // italic / code / links / strikethrough.
+                let fg = parse_hex(color)
+                    .map(|(r, g, b)| rgb(((r as u32) << 16) | ((g as u32) << 8) | (b as u32)))
+                    .unwrap_or(rgb(0x1C1C1E));
+                let mut col = base
+                    .p(px(12. * cam.zoom))
+                    .flex()
+                    .flex_col()
+                    .gap(px(4. * cam.zoom));
+                for block in parse_markdown(text) {
+                    col = col.child(render_md_block(block, *size, *bold, fg, cam.zoom));
                 }
-                if let Some((r, g, b)) = parse_hex(color) {
-                    t = t.text_color(rgb(((r as u32) << 16) | ((g as u32) << 8) | (b as u32)));
-                }
-                t.child(text.clone())
+                col
             }
             Kind::Image { path } => {
                 if std::path::Path::new(path).is_file() {
@@ -996,7 +1167,7 @@ impl BoardView {
                                     .text_color(rgb(0x6E6E73))
                                     .truncate()
                                     .child(elide(
-                                        &format!("{} KB — double-click to open", kb),
+                                        &format!("{} KB", kb),
                                         (w - 92.).max(40.),
                                         12.0,
                                         false,
@@ -1035,7 +1206,7 @@ impl BoardView {
                             .child(icon_canvas(tile_icon, 0x6A4C93)),
                     );
                 // A mini player look: the name, then a waveform strip
-                // that reads as audio at a glance, then the play hint.
+                // that reads as audio at a glance.
                 let mut wave = div().flex().flex_row().items_end().gap(px(2.)).h(px(18.));
                 for (i, bh) in [
                     5., 9., 13., 7., 15., 11., 6., 13., 17., 10., 8., 14., 6., 12., 9., 5., 10.,
@@ -1052,44 +1223,38 @@ impl BoardView {
                             .bg(rgb(if i % 3 == 0 { 0xB8A6CC } else { 0x6A4C93 })),
                     );
                 }
+                // The state line is state, not an instruction: it only
+                // appears while this item is actually playing.
+                let mut col = div()
+                    .flex()
+                    .flex_col()
+                    .gap(px(4.))
+                    .w(px((w - 92.).max(40.)))
+                    .child(
+                        div()
+                            .text_size(px(14.))
+                            .font_weight(FontWeight::BOLD)
+                            .text_color(rgb(0x1C1C1E))
+                            .truncate()
+                            .child(elide(&name, (w - 92.).max(40.), 14.0, true)),
+                    )
+                    .child(wave);
+                if playing {
+                    col = col.child(
+                        div()
+                            .text_size(px(12.))
+                            .text_color(rgb(0x6E6E73))
+                            .truncate()
+                            .child("Now playing".to_string()),
+                    );
+                }
                 base.flex()
                     .flex_row()
                     .items_center()
                     .gap(px(12.))
                     .p(px(12.))
                     .child(tile)
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .gap(px(4.))
-                            .w(px((w - 92.).max(40.)))
-                            .child(
-                                div()
-                                    .text_size(px(14.))
-                                    .font_weight(FontWeight::BOLD)
-                                    .text_color(rgb(0x1C1C1E))
-                                    .truncate()
-                                    .child(elide(&name, (w - 92.).max(40.), 14.0, true)),
-                            )
-                            .child(wave)
-                            .child(
-                                div()
-                                    .text_size(px(12.))
-                                    .text_color(rgb(0x6E6E73))
-                                    .truncate()
-                                    .child(if playing {
-                                        "Now playing".to_string()
-                                    } else {
-                                        elide(
-                                            "Click play to listen",
-                                            (w - 92.).max(40.),
-                                            12.0,
-                                            false,
-                                        )
-                                    }),
-                            ),
-                    )
+                    .child(col)
             }
             Kind::Video {
                 source,
@@ -1106,9 +1271,9 @@ impl BoardView {
                 };
                 let kb = (*size_bytes as f64 / 1024.0).round() as u64;
                 let subline = if *remote {
-                    "Video link — click to play".to_string()
+                    "Video link".to_string()
                 } else {
-                    format!("{} KB — click to play", kb)
+                    format!("{} KB", kb)
                 };
                 // Big preview when the card is tall enough for a 16:9
                 // thumb plus text; otherwise the compact row layout.
@@ -1836,7 +2001,28 @@ impl Render for BoardView {
         for item in &board.items {
             match &item.kind {
                 Kind::Stroke { .. } | Kind::Connector { .. } => {}
-                _ => item_els.push(self.item_element(item, selected.contains(&item.id))),
+                _ => {
+                    // While a note is being edited, the canvas shows
+                    // the draft rendered as markdown — the automatic
+                    // preview — while the banner below holds the raw
+                    // text being typed.
+                    let preview = match &self.editing {
+                        Some((edit_id, draft)) if *edit_id == item.id => {
+                            let mut owned = item.clone();
+                            if let Kind::Text { text, .. } = &mut owned.kind {
+                                *text = draft.clone();
+                            }
+                            Some(owned)
+                        }
+                        _ => None,
+                    };
+                    match &preview {
+                        Some(owned) => item_els
+                            .push(self.item_element(owned, selected.contains(&item.id))),
+                        None => item_els
+                            .push(self.item_element(item, selected.contains(&item.id))),
+                    }
+                }
             }
         }
 
