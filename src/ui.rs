@@ -13,8 +13,8 @@ use quickboard::preview::{domain_of, parse_preview};
 use quickboard::store;
 use gpui::prelude::*;
 use gpui::{
-    AnyWindowHandle, App, Bounds, Context, Div, ExternalPaths, FocusHandle, FontWeight, Hsla,
-    MouseButton, PathBuilder, Render, ScrollDelta, SharedString, Styled, Window,
+    AnyWindowHandle, App, Bounds, BoxShadow, Context, Div, ExternalPaths, FocusHandle, FontWeight,
+    Hsla, MouseButton, PathBuilder, Render, ScrollDelta, SharedString, Styled, Window,
     WindowBounds, WindowKind, WindowOptions, canvas, div, img, point, px, rgb, size,
 };
 use std::cell::RefCell;
@@ -800,13 +800,25 @@ impl BoardView {
         let screen = cam.to_screen(item.pos);
         let w = item.size.w * cam.zoom;
         let h = item.size.h * cam.zoom;
-        let border = if selected { rgb(ACCENT) } else { rgb(0xD8D2C8) };
+        let border = if selected { rgb(ACCENT) } else { rgb(0xE5E5EA) };
         let base = div()
             .absolute()
             .left(px(screen.x))
             .top(px(screen.y))
             .w(px(w))
             .h(px(h))
+            .rounded(px(12.))
+            .shadow(vec![BoxShadow {
+                color: Hsla {
+                    h: 0.0,
+                    s: 0.0,
+                    l: 0.0,
+                    a: 0.12,
+                },
+                offset: point(px(0.), px(4.)),
+                blur_radius: px(16.),
+                spread_radius: px(0.),
+            }])
             .bg(rgb(0xFFFFFF))
             .border_1()
             .border_color(border);
@@ -817,7 +829,7 @@ impl BoardView {
                 size,
                 color,
             } => {
-                let mut t = base.p(px(8. * cam.zoom)).text_size(px(size * cam.zoom));
+                let mut t = base.p(px(12. * cam.zoom)).text_size(px(size * cam.zoom));
                 if *bold {
                     t = t.font_weight(FontWeight::BOLD);
                 }
@@ -828,12 +840,23 @@ impl BoardView {
             }
             Kind::Image { path } => {
                 if std::path::Path::new(path).is_file() {
-                    base.child(img(path.clone()).w(px(w)).h(px(h)))
+                    // NB: pass a PathBuf, not the String — GPUI treats a
+                    // String as an embedded-asset name and loads nothing.
+                    base.child(
+                        img(std::path::PathBuf::from(path.clone()))
+                            .w(px(w))
+                            .h(px(h))
+                            .rounded(px(12.)),
+                    )
                 } else {
-                    base.p(px(8.)).text_size(px(13.)).child(format!(
-                        "Image missing:\n{}",
-                        path
-                    ))
+                    base.bg(rgb(0xF5F5F7))
+                        .flex()
+                        .items_center()
+                        .justify_center()
+                        .p(px(12.))
+                        .text_size(px(13.))
+                        .text_color(rgb(0x8A8A8E))
+                        .child(format!("Image missing:\n{}", path))
                 }
             }
             Kind::UrlCard {
@@ -843,29 +866,60 @@ impl BoardView {
             } => {
                 let domain = domain_of(url);
                 let head = title.clone().unwrap_or_else(|| domain.clone());
-                let mut card = base.flex().flex_col().p(px(10.));
-                card = card.child(
+                // Unfurl look: a coloured tile with the domain's initial,
+                // like a chat app's link preview, next to the text.
+                let initial = domain
+                    .chars()
+                    .next()
+                    .unwrap_or('?')
+                    .to_ascii_uppercase()
+                    .to_string();
+                let tile = div()
+                    .w(px(56.))
+                    .h(px(56.))
+                    .rounded(px(10.))
+                    .bg(rgb(tile_color_for(&domain)))
+                    .flex()
+                    .items_center()
+                    .justify_center()
+                    .child(
+                        div()
+                            .text_size(px(24.))
+                            .font_weight(FontWeight::BOLD)
+                            .text_color(rgb(0xFFFFFF))
+                            .child(initial),
+                    );
+                let mut col = div().flex().flex_col().gap(px(2.)).flex_1();
+                col = col.child(
                     div()
-                        .text_size(px(13. * cam.zoom.max(0.7)))
+                        .text_size(px(14. * cam.zoom.max(0.7)))
                         .font_weight(FontWeight::BOLD)
+                        .text_color(rgb(0x1C1C1E))
                         .child(head),
                 );
-                if let Some(d) = description {
-                    if !d.is_empty() {
-                        card = card.child(
-                            div()
-                                .text_size(px(12.))
-                                .text_color(rgb(0x666666))
-                                .child(d.clone()),
-                        );
-                    }
-                }
-                card.child(
+                col = col.child(
                     div()
                         .text_size(px(12.))
                         .text_color(rgb(0x2E86AB))
                         .child(url.clone()),
-                )
+                );
+                if let Some(d) = description {
+                    if !d.is_empty() {
+                        col = col.child(
+                            div()
+                                .text_size(px(12.))
+                                .text_color(rgb(0x6E6E73))
+                                .child(d.clone()),
+                        );
+                    }
+                }
+                base.flex()
+                    .flex_row()
+                    .items_center()
+                    .gap(px(12.))
+                    .p(px(12.))
+                    .child(tile)
+                    .child(col)
             }
             Kind::PdfCard { path, size_bytes } => {
                 let name = std::path::Path::new(path)
@@ -873,39 +927,64 @@ impl BoardView {
                     .map(|n| n.to_string_lossy().to_string())
                     .unwrap_or_else(|| path.clone());
                 let kb = (*size_bytes as f64 / 1024.0).round() as u64;
-                base.flex()
-                    .flex_col()
-                    .p(px(10.))
+                let tile = div()
+                    .w(px(56.))
+                    .h(px(56.))
+                    .rounded(px(10.))
+                    .bg(rgb(0xE63946))
+                    .flex()
+                    .items_center()
+                    .justify_center()
                     .child(
                         div()
                             .text_size(px(13.))
                             .font_weight(FontWeight::BOLD)
-                            .child(format!("PDF  {}", name)),
-                    )
+                            .text_color(rgb(0xFFFFFF))
+                            .child("PDF".to_string()),
+                    );
+                base.flex()
+                    .flex_row()
+                    .items_center()
+                    .gap(px(12.))
+                    .p(px(12.))
+                    .child(tile)
                     .child(
                         div()
-                            .text_size(px(12.))
-                            .text_color(rgb(0x666666))
-                            .child(format!("{} KB — double-click to open", kb)),
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.))
+                            .flex_1()
+                            .child(
+                                div()
+                                    .text_size(px(14.))
+                                    .font_weight(FontWeight::BOLD)
+                                    .text_color(rgb(0x1C1C1E))
+                                    .child(name),
+                            )
+                            .child(
+                                div()
+                                    .text_size(px(12.))
+                                    .text_color(rgb(0x6E6E73))
+                                    .child(format!("{} KB — double-click to open", kb)),
+                            ),
                     )
             }
             Kind::Swatch { hex } => {
                 let (r, g, b) = parse_hex(hex).unwrap_or((0, 0, 0));
-                let luminance = 0.299 * r as f32 + 0.587 * g as f32 + 0.114 * b as f32;
-                let label_color = if luminance > 140.0 {
-                    rgb(0x1A1A1A)
-                } else {
-                    rgb(0xFFFFFF)
-                };
+                // The hex sits in a white pill so it reads on any colour.
                 base.bg(rgb(((r as u32) << 16) | ((g as u32) << 8) | (b as u32)))
                     .flex()
                     .items_end()
-                    .p(px(8.))
+                    .p(px(10.))
                     .child(
                         div()
-                            .text_size(px(13.))
+                            .bg(rgb(0xFFFFFF))
+                            .rounded(px(10.))
+                            .px(px(8.))
+                            .py(px(4.))
+                            .text_size(px(12.))
                             .font_weight(FontWeight::BOLD)
-                            .text_color(label_color)
+                            .text_color(rgb(0x1C1C1E))
                             .child(hex.clone()),
                     )
             }
@@ -916,6 +995,79 @@ impl BoardView {
         };
         el.into_any_element()
     }
+}
+
+/// Where the segment from `from` to `to` crosses a rectangle: its entry
+/// point (for the target item) or exit point (for the source item).
+/// Connectors anchor at item centres, so without this the line and its
+/// arrowhead would draw straight across the cards themselves.
+fn rect_crossing(from: Pt, to: Pt, pos: Pt, w: f32, h: f32, entry: bool) -> Option<Pt> {
+    let dx = to.x - from.x;
+    let dy = to.y - from.y;
+    let mut t0 = 0.0f32;
+    let mut t1 = 1.0f32;
+    for (o, d, lo, hi) in [
+        (from.x, dx, pos.x, pos.x + w),
+        (from.y, dy, pos.y, pos.y + h),
+    ] {
+        if d.abs() < f32::EPSILON {
+            if o < lo || o > hi {
+                return None;
+            }
+        } else {
+            let mut ta = (lo - o) / d;
+            let mut tb = (hi - o) / d;
+            if ta > tb {
+                std::mem::swap(&mut ta, &mut tb);
+            }
+            t0 = t0.max(ta);
+            t1 = t1.min(tb);
+            if t0 > t1 {
+                return None;
+            }
+        }
+    }
+    let t = if entry { t0 } else { t1 };
+    if !(0.0..=1.0).contains(&t) {
+        return None;
+    }
+    Some(Pt::new(from.x + dx * t, from.y + dy * t))
+}
+
+/// A connector's drawn endpoints: clipped to the anchored items' edges
+/// (point anchors keep their exact position).
+fn clipped_ends(board: &Board, from: Anchor, to: Anchor) -> Option<(Pt, Pt)> {
+    let a_raw = board.anchor_point(from)?;
+    let b_raw = board.anchor_point(to)?;
+    let mut a = a_raw;
+    let mut b = b_raw;
+    if let Anchor::Item(id) = from {
+        if let Some(it) = board.get(id) {
+            let (p, s) = it.bounds();
+            if let Some(p2) = rect_crossing(a_raw, b_raw, p, s.w, s.h, false) {
+                a = p2;
+            }
+        }
+    }
+    if let Anchor::Item(id) = to {
+        if let Some(it) = board.get(id) {
+            let (p, s) = it.bounds();
+            if let Some(p2) = rect_crossing(a_raw, b_raw, p, s.w, s.h, true) {
+                b = p2;
+            }
+        }
+    }
+    Some((a, b))
+}
+
+/// A stable tile colour for a link preview, picked from the domain name.
+fn tile_color_for(domain: &str) -> u32 {
+    const TILES: [u32; 6] = [0x2E86AB, 0x6A4C93, 0x2A9D8F, 0xFF6B35, 0xE63946, 0xB56576];
+    let mut h: u32 = 0;
+    for b in domain.bytes() {
+        h = h.wrapping_mul(31).wrapping_add(b as u32);
+    }
+    TILES[(h % TILES.len() as u32) as usize]
 }
 
 fn hex_to_hsla(hex: &str, alpha: f32) -> Hsla {
@@ -1089,8 +1241,7 @@ impl Render for BoardView {
             .iter()
             .filter_map(|item| match &item.kind {
                 Kind::Connector { from, to, .. } => {
-                    let a = board.anchor_point(*from)?;
-                    let b = board.anchor_point(*to)?;
+                    let (a, b) = clipped_ends(&board, *from, *to)?;
                     Some(ConnectorPaint {
                         from: a,
                         to: b,
@@ -1102,7 +1253,16 @@ impl Render for BoardView {
             .collect();
         let mut live_connector: Option<(Pt, Pt)> = None;
         if let Some(Drag::Connector { from, current }) = &drag {
-            if let Some(a) = board.anchor_point(*from) {
+            if let Some(a_raw) = board.anchor_point(*from) {
+                let mut a = a_raw;
+                if let Anchor::Item(id) = from {
+                    if let Some(it) = board.get(*id) {
+                        let (p, s) = it.bounds();
+                        if let Some(p2) = rect_crossing(a_raw, *current, p, s.w, s.h, false) {
+                            a = p2;
+                        }
+                    }
+                }
                 live_connector = Some((a, *current));
             }
         }

@@ -487,11 +487,23 @@ impl Board {
         let mut board = Self::new();
         board.add_text(
             Pt::new(40.0, 40.0),
-            "QuickBoard — your scratch board, one key away.\nDrag to pan (or Space + drag). Ctrl + scroll to zoom.\nV = select · P = pen · M = marker · C = connector · T = text\nUse the icons above to drop text, a link, a swatch or a file.",
+            "Welcome to QuickBoard\nEvery element, on one board:\na note, a link card, a swatch,\na PDF card and a picture.\nDrop your own files onto the canvas.",
         );
         board.add_swatch(Pt::new(40.0, 240.0), "#FF6B35");
         board.add_swatch(Pt::new(180.0, 240.0), "#2E86AB");
         board.add_url(Pt::new(340.0, 240.0), "https://example.com");
+        board
+    }
+
+    /// The welcome board plus the showcase pieces: a real PDF card, a
+    /// picture, and a connector from the note to the link card, so a first
+    /// run shows what every element looks like. Item ids in `welcome()` are
+    /// 1 (note), 2–3 (swatches), 4 (link), so the connector anchors 1 → 4.
+    pub fn welcome_showcase(image_path: &str, pdf_path: &str, pdf_bytes: u64) -> Self {
+        let mut board = Self::welcome();
+        board.add_pdf(Pt::new(660.0, 240.0), pdf_path, pdf_bytes);
+        board.add_image(Pt::new(40.0, 400.0), image_path, 360.0, 225.0);
+        board.add_connector(Anchor::Item(1), Anchor::Item(4));
         board
     }
 

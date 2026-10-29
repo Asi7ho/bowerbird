@@ -59,6 +59,14 @@ it stays on top.
 
 ## Using the board
 
+- **First run:** a fresh board opens as a showcase — a note, two colour
+  swatches, a link card, a real PDF card and a picture, with a connector
+  from the note to the link — so you can see what every element looks
+  like before adding your own. The picture and PDF are installed next to
+  your board file on first launch, so they open wherever you run the app
+  from. Cards are rounded with a soft shadow; link cards get a coloured
+  tile with the domain's initial, PDF cards a red tile, swatches a white
+  hex pill.
 - **Pan:** drag with the Pan tool, hold `Space` and drag, or scroll without
   Ctrl. **Zoom:** `Ctrl` + scroll (keeps the point under the cursor fixed),
   or `+`/`-`.
