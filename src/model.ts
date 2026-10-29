@@ -11,7 +11,7 @@ export type Anchor = { Point: Pt } | { Item: number };
 export type Kind =
   | { Text: { text: string; bold: boolean; size: number; color: string } }
   | { Image: { path: string } }
-  | { UrlCard: { url: string; title: string | null; description: string | null; embed?: boolean } }
+  | { UrlCard: { url: string; title: string | null; description: string | null; image?: string | null; icon?: string | null; embed?: boolean } }
   | { PdfCard: { path: string; size_bytes: number } }
   | { Swatch: { hex: string } }
   | { Audio: { path: string } }
@@ -39,7 +39,6 @@ export interface Board {
 }
 
 export const GRID = 100;
-export const HEADER_H = 32; // embedded card header, in world units
 
 export function kindName(item: Item): string {
   return Object.keys(item.kind)[0];
@@ -170,18 +169,6 @@ export function resizeItem(board: Board, id: number, newW: number, newH: number)
     if ("Point" in to) { to.Point.x = ox + (to.Point.x - ox) * sx; to.Point.y = oy + (to.Point.y - oy) * sy; }
   }
   it.size = { w: newW, h: newH };
-}
-
-// --- URL classification -------------------------------------------------
-// A dropped link becomes an embedded page unless it is clearly a file:
-// a direct download, an image, audio or video file stays a simple card
-// (video links already become video cards before this is consulted).
-const FILE_EXTS = ["pdf", "zip", "gz", "mp3", "wav", "flac", "ogg", "m4a", "mp4", "mov", "webm", "mkv", "avi", "m4v", "png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"];
-export function shouldEmbedUrl(url: string): boolean {
-  const lower = url.trim().toLowerCase();
-  if (!lower.startsWith("http://") && !lower.startsWith("https://")) return false;
-  const path = lower.split("?")[0].split("#")[0];
-  return !FILE_EXTS.some((ext) => path.endsWith("." + ext));
 }
 
 export function domainOf(url: string): string {

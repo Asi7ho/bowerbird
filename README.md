@@ -8,9 +8,9 @@ onto an infinite board. Pan and zoom freely, sketch with a pen,
 connect things with lines, and group items that belong together. The board
 auto-saves on every change, so closing it never loses anything.
 
-Built with [Electron](https://www.electronjs.org): one frameless window,
-a board view filling it, and every embedded page as its own Chromium
-view positioned at its card. The GPUI version that came before lives in
+Built with [Electron](https://www.electronjs.org): one frameless window
+with a board view filling it. Link cards are previews only — no
+embedded pages. The GPUI version that came before lives in
 `legacy-gpui/` for reference; it is not built by the Electron app.
 
 ## Run it
@@ -34,9 +34,9 @@ Your board is stored as one JSON file and auto-saved on every change:
 - Linux and macOS: `~/.local/share/bowerbird/board.json` (or `$XDG_DATA_HOME/bowerbird/board.json`)
 - Override for testing/portability: `BOWERBIRD_BOARD_PATH=/tmp/my-board.json npm run dev`
 - A board left in the pre-rename `quickboard` folder is still read from there.
-- Boards written by the GPUI version load as-is. Their link cards stay
-  simple unless you turn them into embedded pages; the new `embed`
-  flag defaults to off for old cards.
+- Boards written by the GPUI version load as-is, and old boards that
+  carry an `embed:true` link card now render that card as a preview
+  instead of a page.
 
 ## How the "quick reveal" works in v0.2
 
@@ -56,8 +56,7 @@ is what brings it back. There is no second handle window.
   welcome board is never hidden behind it.
 - **Settings (?):** a panel listing every keyboard shortcut, plus the
   canvas background (White, Paper, Sage, Sky, Ink) and grid
-  (Dots, Lines, Off). While settings are open, embedded pages are
-  hidden; they return when settings close.
+  (Dots, Lines, Off).
 - **In-app hotkeys:** `V` select, `P` pen, `A` arrow, `Ctrl/Cmd+G`
   group, `Ctrl/Cmd+U` ungroup, `Delete` removes the selection,
   `+`/`-` zoom, `0` resets the view, hold `Space` to pan, `h` hides,
@@ -87,8 +86,7 @@ Linux). Those are the next step, not something v0.2 pretends to do.
 - **Select:** click an item, `Shift`-click to add to the selection, or drag
   a marquee around several items. Dragging one member of a group moves the
   whole group. `Ctrl/Cmd+G` groups the selection. Clicking a card brings
-  it to the front, so an overlapping card cannot hide an embedded
-  card's header buttons.
+  it to the front.
 - **Resize:** drag the small handle at a card's bottom-right corner —
   it works on the first click, no need to select first. Everything
   resizes: notes, cards, images, swatches, strokes (their points
@@ -121,21 +119,15 @@ Linux). Those are the next step, not something v0.2 pretends to do.
 - **Video:** a video file lands as a preview card and opens in your
   system video player (local files) or browser (links) on click.
   Decoding video frames inside the canvas is a planned follow-up.
-- **Links — simple or embedded:** a link card starts simple (domain,
-  title/description when the fetch succeeds — Open Graph
-  title/description preferred, `<title>` as fallback). Click its
-  title or URL and Bowerbird decides for itself: an ordinary page
-  grows into a real, interactive page in place — a header (drag grip
-  and domain only) with the live page below it in its own Chromium
-  view, following the card on pan, zoom, move and resize — while a
-  direct file/video URL opens outside instead. Double-click an
-  embedded page's header to go back to a simple card (the page view
-  is destroyed). A page that blocks framing is not faked with a
-  screenshot. There are no Open or Embed buttons on link cards.
-  Because an embedded page is a native view, it always paints above
-  the board DOM: a page under the left toolbar can cover toolbar
-  pixels, so drag such a card by its header to move it out from under
-  the toolbar.
+- **Links — preview cards:** a link card shows what the site itself
+  provides — its preview image on top when it has one (Open Graph /
+  Twitter image), otherwise a clean text card — plus its title,
+  description, and a footer with its icon and domain. Click the
+  image, title or domain to open the site in your browser. A card
+  with no preview yet just shows its domain until the fetch lands;
+  a site with no image or icon falls back to a coloured initial tile.
+  Dropped links become preview cards automatically; a video link
+  becomes a video card instead.
 - **Long names never spill:** card text is clipped to the card — long
   file names, titles and URLs end with "…", descriptions are capped at
   two lines. Nothing ever runs onto the canvas or over a neighbour.
@@ -149,7 +141,7 @@ Linux). Those are the next step, not something v0.2 pretends to do.
 
 ```
 electron/
-  main.js     frameless BaseWindow, board view, embedded page views,
+  main.js     frameless BaseWindow, board view,
               board file, asset embedding, link previews, IPC
   preload.js  the only privileged surface the renderer sees
   dev.js      dev runner: Vite, then Electron pointed at it
@@ -173,12 +165,11 @@ npm run build      # production renderer bundle (dist/)
 ## Status / roadmap
 
 v0.2 — the Electron migration, verified on Linux under Xvfb (welcome
-board, toolbar, zoom, pen, note editing, delete, embed positioning and
-pan/zoom sync, Simple/Embed toggle, settings shortcuts, old GPUI board
-loading). Still to check on a Mac: real drag-and-drop from Finder and
-from a browser address bar, audio audibility, Cmd+G/U grouping,
-minimise/Dock behaviour, and embedded-page behaviour in WKWebView's
-Chromium counterpart.
+board, toolbar, zoom, pen, note editing, delete, settings shortcuts,
+old GPUI board loading, and link preview cards with image, icon and
+title). Still to check on a Mac: real drag-and-drop from Finder and
+from a browser address bar, audio audibility, Cmd+G/U grouping, and
+minimise/Dock behaviour.
 
 Next, in order: system-wide global hotkey + corner trigger on macOS,
 in-canvas PDF page rendering, in-canvas video playback, note formatting

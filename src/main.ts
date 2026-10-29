@@ -7,11 +7,7 @@ interface BowerbirdAPI {
   embedFile(path: string): Promise<string>;
   readTextFile(path: string): Promise<string>;
   fileSize(path: string): Promise<number>;
-  fetchPreview(url: string): Promise<{ title: string | null; description: string | null }>;
-  createEmbed(label: string, url: string, x: number, y: number, w: number, h: number): Promise<void>;
-  moveEmbed(label: string, x: number, y: number, w: number, h: number): Promise<void>;
-  hideEmbed(label: string): Promise<void>;
-  destroyEmbed(label: string): Promise<void>;
+  fetchPreview(url: string): Promise<{ title: string | null; description: string | null; image: string | null; icon: string | null }>;
   openExternal(target: string): Promise<void>;
   minimise(): Promise<void>;
   closeWindow(): Promise<void>;
@@ -24,10 +20,10 @@ declare global {
 }
 const api = window.bowerbird;
 import {
-  Anchor, Board, GRID, HEADER_H, Item, Pt,
+  Anchor, Board, GRID, Item, Pt,
   anchorPoint, boardGet, centre, clippedEnds, domainOf, elide, estimateTextHeight,
   hitTest, itemBounds, marquee, moveSelection, normaliseHex, parseHex, renderMarkdownHtml,
-  resizeItem, select, shouldEmbedUrl, tileColorFor, tint,
+  resizeItem, select, tileColorFor, tint,
 } from "./model";
 
 // ---------------------------------------------------------------- state
@@ -54,9 +50,8 @@ const SHORTCUTS: Array<[string, string]> = [
   ["Esc", "Close settings, commit a note, or clear the selection"],
   ["Double-click empty space", "New note"],
   ["Double-click a note", "Edit it in place"],
-  ["Click a link title or URL", "Embed the page here, or open it outside if it can't embed"],
-  ["Double-click a link", "Same as clicking its title"],
-  ["Double-click an embedded page header", "Back to a simple card"],
+  ["Click a link card", "Open it in your browser"],
+  ["Double-click a link card", "Open it in your browser"],
   ["Double-click a PDF or picture", "Open it outside Bowerbird"],
   ["Click a play tile", "Play or pause audio / open a video"],
   ["Drag a card corner", "Resize the card"],
@@ -87,7 +82,6 @@ let drag: null
 let liveStroke: Pt[] | null = null;
 let audioEl: HTMLAudioElement | null = null;
 let audioId: number | null = null;
-let embedRects = new Map<number, { x: number; y: number; w: number; h: number }>();
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 
 const boardEl = document.getElementById("board") as HTMLDivElement;
@@ -127,39 +121,26 @@ function allocId(): number {
   board.next_id += 1;
   return board.next_id;
 }
-function isEmbedded(item: Item): boolean {
-  return "UrlCard" in item.kind && item.kind.UrlCard.embed === true;
-}
 function openExternal(target: string): void {
   api.openExternal(target).catch((e) => toast(`Could not open ${target}: ${String(e)}`));
 }
 
-// Clicking a link decides for itself: an ordinary page embeds in place
-// on the board; a file, video or otherwise unembeddable URL opens
-// outside instead. There are no Open / Embed buttons to choose between.
-function openLinkCard(item: Item): void {
-  if (!("UrlCard" in item.kind)) return;
-  if (shouldEmbedUrl(item.kind.UrlCard.url)) {
-    if (item.kind.UrlCard.embed) return;
-    item.kind.UrlCard.embed = true;
-    item.size = { w: Math.max(item.size.w, 480), h: Math.max(item.size.h, 360) };
-    save(); render();
-  } else {
-    openExternal(item.kind.UrlCard.url);
+// Link cards are previews only: clicking one opens it in the browser.
+// The preview (image, icon, title) comes from the site itself, via
+// fetchPreview in the main process.
+function safeHttpUrl(u: string | null | undefined): string | null {
+  if (!u) return null;
+  try {
+    const parsed = new URL(u);
+    return parsed.protocol === "http:" || parsed.protocol === "https:" ? parsed.href : null;
+  } catch {
+    return null;
   }
-}
-
-function collapseEmbed(item: Item): void {
-  if (!("UrlCard" in item.kind)) return;
-  item.kind.UrlCard.embed = false;
-  item.size = { w: 300, h: 108 };
-  save(); render();
 }
 
 function bringToFront(ids: number[]): void {
   // Later items paint on top, so a clicked card (and its group) comes
-  // to the front. Without this, an overlapping card can hide an
-  // embedded card's header buttons, as the welcome board does.
+  // to the front.
   const front = board.items.filter((it) => ids.includes(it.id));
   const rest = board.items.filter((it) => !ids.includes(it.id));
   board.items = [...rest, ...front];
@@ -272,22 +253,29 @@ function cardHtml(item: Item, screen: Pt, w: number, h: number): string {
     return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner"><img src="${api.fileUrl(path)}" style="width:100%;height:100%;object-fit:cover;border-radius:12px" alt="" /></div></div>`;
   }
   if ("UrlCard" in item.kind) {
-    const { url, title, description } = item.kind.UrlCard;
+    const { url, title, description, image, icon } = item.kind.UrlCard;
     const domain = domainOf(url);
     const head = title ?? domain;
     const tile = tileColorFor(domain);
     const initial = (domain[0] ?? "?").toUpperCase();
-    if (isEmbedded(item)) {
-      return `<div class="${cls}" data-id="${item.id}" style="${style}">
-        <div class="embed-header" data-embed-header="${item.id}"><span class="drag" aria-hidden="true"><svg width="10" height="14" viewBox="0 0 10 14"><circle cx="2.5" cy="2.5" r="1.3" fill="#aeaeb2"/><circle cx="7.5" cy="2.5" r="1.3" fill="#aeaeb2"/><circle cx="2.5" cy="7" r="1.3" fill="#aeaeb2"/><circle cx="7.5" cy="7" r="1.3" fill="#aeaeb2"/><circle cx="2.5" cy="11.5" r="1.3" fill="#aeaeb2"/><circle cx="7.5" cy="11.5" r="1.3" fill="#aeaeb2"/></svg></span><span class="domain">${head}</span></div>
-      </div>`;
+    const img = safeHttpUrl(image);
+    const ico = safeHttpUrl(icon);
+    const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const footer = `<div class="link-footer"><a class="link-domain" data-action="open-link" data-id="${item.id}">${ico ? `<img class="favicon" src="${esc(ico)}" alt="" onerror="this.style.display='none';var f=this.nextElementSibling;if(f)f.style.display='flex'" /><span class="favicon-fallback" style="display:none;background:${tint(tile, 0.85)};color:${tile}">${initial}</span>` : `<span class="favicon-fallback" style="background:${tint(tile, 0.85)};color:${tile}">${initial}</span>`}<span>${domain}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" /></svg></a></div>`;
+    if (img) {
+      return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner link-card">
+        <a class="link-image" data-action="open-link" data-id="${item.id}"><img src="${esc(img)}" alt="" onerror="this.closest('.link-image').style.display='none'" /></a>
+        <div class="link-body">
+          <a class="link-title" data-action="open-link" data-id="${item.id}">${esc(head)}</a>
+          ${description ? `<div class="link-desc">${esc(description)}</div>` : ""}
+          ${footer}
+        </div></div></div>`;
     }
-    return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner row" style="padding:16px">
-      <div class="tile" style="background:${tint(tile, 0.85)};color:${tile};font-size:24px">${initial}</div>
-      <div class="col">
-        <a class="title link-open" data-action="open-link" data-id="${item.id}" style="font-size:${14 * Math.max(cam.zoom, 0.7)}px">${elide(head, w - 100, 14, true)}</a>
-        <a class="sub link-open url" data-action="open-link" data-id="${item.id}" style="font-size:12px">${elide(url, w - 100, 12, false)}</a>
-        ${description ? `<div class="desc" style="font-size:12px">${elide(description, (w - 100) * 2, 12, false)}</div>` : ""}
+    return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner link-card no-image">
+      <div class="link-body">
+        <a class="link-title" data-action="open-link" data-id="${item.id}">${esc(head)}</a>
+        ${description ? `<div class="link-desc">${esc(description)}</div>` : ""}
+        ${footer}
       </div></div></div>`;
   }
   if ("PdfCard" in item.kind) {
@@ -349,7 +337,6 @@ function render(): void {
   applyStacking();
   if (editingHtml) cardsEl.insertAdjacentHTML("beforeend", editingHtml);
   updateToolbar();
-  void syncEmbeds();
 }
 
 function updateToolbar(): void {
@@ -405,48 +392,6 @@ function applyStacking(): void {
     const el = child as HTMLElement;
     el.style.zIndex = String(order.get(Number(el.dataset.id)) ?? 0);
   }
-}
-
-// ---------------------------------------------------------------- embeds
-
-async function syncEmbeds(): Promise<void> {
-  const cam = board.camera;
-  const wanted = new Map<number, { x: number; y: number; w: number; h: number; url: string }>();
-  for (const item of board.items) {
-    if (!isEmbedded(item) || !("UrlCard" in item.kind)) continue;
-    const screen = toScreen(item.pos);
-    const w = item.size.w * cam.zoom, h = item.size.h * cam.zoom;
-    const headerH = HEADER_H * cam.zoom;
-    const rect = { x: Math.round(screen.x), y: Math.round(screen.y + headerH), w: Math.round(w), h: Math.round(h - headerH) };
-    if (settingsOpen || rect.w <= 0 || rect.h <= 0 || rect.x + rect.w < 0 || rect.y + rect.h < 0 || rect.x > window.innerWidth || rect.y > window.innerHeight) {
-      continue;
-    }
-    wanted.set(item.id, { ...rect, url: item.kind.UrlCard.url });
-  }
-  // Destroy webviews that are no longer wanted.
-  for (const id of Array.from(embedRects.keys())) {
-    if (!wanted.has(id)) {
-      embedRects.delete(id);
-      api.destroyEmbed(`embed-${id}`).catch(() => undefined);
-    }
-  }
-  for (const [id, rect] of wanted) {
-    const prev = embedRects.get(id);
-    if (prev && prev.x === rect.x && prev.y === rect.y && prev.w === rect.w && prev.h === rect.h) continue;
-    embedRects.set(id, rect);
-    if (prev) {
-      api.moveEmbed(`embed-${id}`, rect.x, rect.y, rect.w, rect.h).catch(() => undefined);
-    } else {
-      api.createEmbed(`embed-${id}`, rect.url, rect.x, rect.y, rect.w, rect.h).catch((e) => toast(`Embedded page failed: ${String(e)}`));
-    }
-  }
-}
-
-function destroyAllEmbeds(): void {
-  for (const id of Array.from(embedRects.keys())) {
-    api.destroyEmbed(`embed-${id}`).catch(() => undefined);
-  }
-  embedRects.clear();
 }
 
 // ---------------------------------------------------------------- editing
@@ -529,25 +474,6 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
   }
   const world = toWorld(winPt);
   if (spaceDown) { drag = { kind: "pan", last: winPt }; return; }
-  // Embedded card header drag: the header is DOM, the page below it is
-  // a native webview, so the header is the card's drag handle.
-  // Double-clicking it is the way back to a simple card — there are
-  // no header buttons any more.
-  const header = target.closest("[data-embed-header]") as HTMLElement | null;
-  if (header) {
-    const id = Number(header.dataset.embedHeader);
-    if (e.detail === 2) {
-      const it = boardGet(board, id);
-      if (it) collapseEmbed(it);
-      return;
-    }
-    selected = select(board, selected, id, e.shiftKey);
-    bringToFront(selected);
-    applyStacking();
-    updateSelection();
-    drag = { kind: "move", lastWorld: world };
-    return;
-  }
   if (tool === "pen") {
     drag = { kind: "stroke", points: [world] };
     liveStroke = [world];
@@ -569,12 +495,7 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
     if (hit !== null) {
       const it = boardGet(board, hit);
       if (it && "Text" in it.kind) { startTextEdit(hit); return; }
-      if (it && "UrlCard" in it.kind) {
-        // An embedded card collapses back to simple on double-click;
-        // a simple card opens automatically (embed or outside).
-        if (isEmbedded(it)) { collapseEmbed(it); return; }
-        openLinkCard(it); return;
-      }
+      if (it && "UrlCard" in it.kind) { openExternal(it.kind.UrlCard.url); return; }
       if (it && "PdfCard" in it.kind) { openExternal(it.kind.PdfCard.path); return; }
       if (it && "Image" in it.kind) { openExternal(it.kind.Image.path); return; }
     } else {
@@ -720,7 +641,7 @@ cardsEl.addEventListener("click", (e: MouseEvent) => {
   const action = btn.dataset.action;
   const it = boardGet(board, id);
   if (!it) return;
-  if (action === "open-link" && "UrlCard" in it.kind) openLinkCard(it);
+  if (action === "open-link" && "UrlCard" in it.kind) openExternal(it.kind.UrlCard.url);
   if (action === "play-audio" && "Audio" in it.kind) toggleAudio(id, it.kind.Audio.path);
   if (action === "play-video" && "Video" in it.kind) openExternal(it.kind.Video.source);
 });
@@ -893,9 +814,8 @@ async function addUrlAt(at: Pt, url: string): Promise<void> {
     save(); render();
     return;
   }
-  const embed = shouldEmbedUrl(url);
   const id = allocId();
-  board.items.push({ id, pos: at, size: embed ? { w: 480, h: 360 } : { w: 300, h: 108 }, group: null, kind: { UrlCard: { url: url.trim(), title: null, description: null, embed } } });
+  board.items.push({ id, pos: at, size: { w: 320, h: 132 }, group: null, kind: { UrlCard: { url: url.trim(), title: null, description: null, image: null, icon: null } } });
   save(); render();
   try {
     const preview = await api.fetchPreview(url);
@@ -903,6 +823,10 @@ async function addUrlAt(at: Pt, url: string): Promise<void> {
     if (it && "UrlCard" in it.kind) {
       it.kind.UrlCard.title = preview.title;
       it.kind.UrlCard.description = preview.description;
+      it.kind.UrlCard.image = preview.image;
+      it.kind.UrlCard.icon = preview.icon;
+      // A preview image makes the card taller: banner on top, text below.
+      if (preview.image) it.size = { w: 320, h: 300 };
       save(); render();
     }
   } catch { /* domain-only card is fine */ }
@@ -1012,8 +936,8 @@ function welcomeBoard(pdfSize: number): Board {
   add({ id: next(), pos: { x: 120, y: 40 }, size: { w: 260, h: estimateTextHeight(welcomeText, 16, 260) }, group: null, kind: { Text: { text: welcomeText, bold: false, size: 16, color: "#1A1A1A" } } });
   add({ id: next(), pos: { x: 120, y: 240 }, size: { w: 120, h: 120 }, group: null, kind: { Swatch: { hex: "#FF6B35" } } });
   add({ id: next(), pos: { x: 260, y: 240 }, size: { w: 120, h: 120 }, group: null, kind: { Swatch: { hex: "#2E86AB" } } });
-  add({ id: next(), pos: { x: 420, y: 240 }, size: { w: 300, h: 108 }, group: null, kind: { UrlCard: { url: "https://example.com", title: null, description: null, embed: false } } });
-  add({ id: next(), pos: { x: 740, y: 240 }, size: { w: 260, h: 96 }, group: null, kind: { PdfCard: { path: `${boardDir}/sample.pdf`, size_bytes: pdfSize } } });
+  add({ id: next(), pos: { x: 420, y: 240 }, size: { w: 320, h: 132 }, group: null, kind: { UrlCard: { url: "https://example.com", title: null, description: null, image: null, icon: null } } });
+  add({ id: next(), pos: { x: 760, y: 240 }, size: { w: 260, h: 96 }, group: null, kind: { PdfCard: { path: `${boardDir}/sample.pdf`, size_bytes: pdfSize } } });
   add({ id: next(), pos: { x: 120, y: 400 }, size: { w: 360, h: 225 }, group: null, kind: { Image: { path: `${boardDir}/welcome.png` } } });
   add({ id: next(), pos: { x: 120, y: 40 }, size: { w: 300, h: 200 }, group: null, kind: { Connector: { from: { Item: 1 }, to: { Item: 4 }, color: "#333333" } } });
   return b;
@@ -1031,7 +955,12 @@ async function init(): Promise<void> {
       board.grid = board.grid ?? "Dots";
       board.camera = board.camera ?? { x: 0, y: 0, zoom: 1 };
       for (const it of board.items) {
-        if ("UrlCard" in it.kind && it.kind.UrlCard.embed === undefined) it.kind.UrlCard.embed = false;
+        if ("UrlCard" in it.kind) {
+          // Old boards may carry embed:true from the embedded-page era;
+          // link cards are previews only now, so it is ignored.
+          it.kind.UrlCard.image = it.kind.UrlCard.image ?? null;
+          it.kind.UrlCard.icon = it.kind.UrlCard.icon ?? null;
+        }
       }
     } else {
       board = welcomeBoard(loaded.pdf_size_bytes);
@@ -1042,7 +971,33 @@ async function init(): Promise<void> {
     board = welcomeBoard(0);
   }
   render();
-  window.addEventListener("beforeunload", () => destroyAllEmbeds());
+  // Fill in previews for cards that never got one (welcome card, old
+  // boards): title, description, image and icon, in the background.
+  void refreshLinkPreviews();
+}
+
+async function refreshLinkPreviews(): Promise<void> {
+  const jobs: Promise<void>[] = [];
+  for (const it of board.items) {
+    if (!("UrlCard" in it.kind)) continue;
+    if (it.kind.UrlCard.title !== null && it.kind.UrlCard.image !== undefined) continue;
+    const url = it.kind.UrlCard.url;
+    const id = it.id;
+    jobs.push((async () => {
+      try {
+        const preview = await api.fetchPreview(url);
+        const current = boardGet(board, id);
+        if (!current || !("UrlCard" in current.kind)) return;
+        let changed = false;
+        if (preview.title && current.kind.UrlCard.title !== preview.title) { current.kind.UrlCard.title = preview.title; changed = true; }
+        if (preview.description && current.kind.UrlCard.description !== preview.description) { current.kind.UrlCard.description = preview.description; changed = true; }
+        if (preview.image && current.kind.UrlCard.image !== preview.image) { current.kind.UrlCard.image = preview.image; current.size = { w: 320, h: 300 }; changed = true; }
+        if (preview.icon && current.kind.UrlCard.icon !== preview.icon) { current.kind.UrlCard.icon = preview.icon; changed = true; }
+        if (changed) { save(); render(); }
+      } catch { /* keep the domain card */ }
+    })());
+  }
+  await Promise.all(jobs);
 }
 
 void init();

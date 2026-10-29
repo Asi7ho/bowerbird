@@ -1,12 +1,10 @@
 // Bowerbird on Electron.
-// One frameless BaseWindow. The board is a WebContentsView filling it,
-// and every embedded page is another WebContentsView positioned at its
-// card rect by the renderer (which owns pan/zoom/move geometry). This is
-// the shape Tauri's Linux child webviews could not do: on Linux, Tauri
-// packs children into a GtkBox and ignores their bounds, while
-// WebContentsView.setBounds is honoured on all three platforms.
+// One frameless BaseWindow. The board is a WebContentsView filling it.
+// Link cards are previews only — no embedded pages — so there is no
+// second view type: a link card shows the site's own image, icon and
+// title, and clicking it opens the site in the browser.
 // The board file format is unchanged from the GPUI board, so existing
-// boards load as-is.
+// boards load as-is (an old embed:true flag is simply ignored).
 
 const { app, BaseWindow, WebContentsView, ipcMain, shell, protocol } = require('electron');
 const fs = require('node:fs');
@@ -15,7 +13,6 @@ const { Readable } = require('node:stream');
 
 let win = null;
 let boardView = null;
-const embeds = new Map(); // label -> { view, visible }
 
 // ---------------------------------------------------------------- board file
 
@@ -113,6 +110,23 @@ function tagContent(html, tag) {
   return value || null;
 }
 
+// Href of the first <link> whose rel matches one of the wanted kinds
+// (e.g. "icon", "apple-touch-icon"), or null.
+function linkHref(html, kinds) {
+  const re = /<link[^>]*>/gi;
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const tag = m[0];
+    const rel = /rel=(?:"([^"]*)"|'([^']*)')/i.exec(tag);
+    const href = /href=(?:"([^"]*)"|'([^']*)')/i.exec(tag);
+    if (!rel || !href) continue;
+    const relLower = (rel[1] ?? rel[2] ?? '').toLowerCase();
+    const hrefValue = decodeEntities((href[1] ?? href[2] ?? '').trim());
+    if (hrefValue && kinds.some((k) => relLower.includes(k))) return hrefValue;
+  }
+  return null;
+}
+
 const MIME = {
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
   '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
@@ -155,30 +169,7 @@ function createWindow() {
   win.on('closed', () => {
     win = null;
     boardView = null;
-    embeds.clear();
   });
-}
-
-function addEmbed(label, url, x, y, w, h) {
-  if (!win) return;
-  let entry = embeds.get(label);
-  if (!entry) {
-    const view = new WebContentsView({
-      webPreferences: { contextIsolation: true, nodeIntegration: false },
-    });
-    view.webContents.setWindowOpenHandler(({ url: nextUrl }) => {
-      shell.openExternal(nextUrl).catch(() => undefined);
-      return { action: 'deny' };
-    });
-    view.webContents.loadURL(url);
-    entry = { view, visible: false };
-    embeds.set(label, entry);
-  }
-  entry.view.setBounds({ x: Math.round(x), y: Math.round(y), width: Math.round(w), height: Math.round(h) });
-  if (!entry.visible) {
-    win.contentView.addChildView(entry.view);
-    entry.visible = true;
-  }
 }
 
 // ---------------------------------------------------------------- IPC
@@ -234,38 +225,34 @@ function registerIpc() {
       signal: AbortSignal.timeout(6000),
     });
     const text = (await res.text()).slice(0, 300000);
-    return {
-      title: tagContent(text, 'title') || metaContent(text, 'og:title'),
-      description: metaContent(text, 'og:description') || metaContent(text, 'description'),
+    // Resolve a possibly-relative image/icon URL against the page URL,
+    // and only ever hand the renderer an http(s) URL.
+    const resolveHttp = (href) => {
+      if (!href) return null;
+      try {
+        const u = new URL(href, url);
+        return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : null;
+      } catch {
+        return null;
+      }
     };
-  });
-
-  ipcMain.handle('bowerbird:create-embed', (_event, label, url, x, y, w, h) => addEmbed(label, url, x, y, w, h));
-  ipcMain.handle('bowerbird:move-embed', (_event, label, x, y, w, h) => {
-    const entry = embeds.get(label);
-    if (!entry || !win) return;
-    entry.view.setBounds({ x: Math.round(x), y: Math.round(y), width: Math.round(w), height: Math.round(h) });
-    if (!entry.visible) {
-      win.contentView.addChildView(entry.view);
-      entry.visible = true;
+    const image = resolveHttp(
+      metaContent(text, 'og:image') || metaContent(text, 'twitter:image') || metaContent(text, 'og:image:secure_url')
+    );
+    let icon = resolveHttp(linkHref(text, ['icon', 'apple-touch-icon']));
+    if (!icon) {
+      try {
+        icon = `https://${new URL(url).hostname}/favicon.ico`;
+      } catch {
+        icon = null;
+      }
     }
-  });
-  ipcMain.handle('bowerbird:hide-embed', (_event, label) => {
-    const entry = embeds.get(label);
-    if (!entry || !win || !entry.visible) return;
-    win.contentView.removeChildView(entry.view);
-    entry.visible = false;
-  });
-  ipcMain.handle('bowerbird:destroy-embed', (_event, label) => {
-    const entry = embeds.get(label);
-    if (!entry) return;
-    if (win && entry.visible) win.contentView.removeChildView(entry.view);
-    try {
-      entry.view.webContents.destroy();
-    } catch {
-      // Already gone; the reference drop below is enough.
-    }
-    embeds.delete(label);
+    return {
+      title: metaContent(text, 'og:title') || metaContent(text, 'twitter:title') || tagContent(text, 'title'),
+      description: metaContent(text, 'og:description') || metaContent(text, 'twitter:description') || metaContent(text, 'description'),
+      image,
+      icon,
+    };
   });
 
   ipcMain.handle('bowerbird:open-external', (_event, target) => {
