@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('bowerbird', {
   getAppSettings: () => ipcRenderer.invoke('bowerbird:get-app-settings'),
   setCorner: (corner) => ipcRenderer.invoke('bowerbird:set-corner', corner),
   collapse: () => ipcRenderer.invoke('bowerbird:collapse'),
+  moveWindow: (dx, dy) => ipcRenderer.invoke('bowerbird:move-window', dx, dy),
   restore: () => ipcRenderer.invoke('bowerbird:restore'),
   minimise: () => ipcRenderer.invoke('bowerbird:minimise'),
   closeWindow: () => ipcRenderer.invoke('bowerbird:close-window'),

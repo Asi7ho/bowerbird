@@ -13,6 +13,7 @@ interface BowerbirdAPI {
   getAppSettings(): Promise<{ corner: string }>;
   setCorner(corner: string): Promise<string>;
   collapse(): Promise<void>;
+  moveWindow(dx: number, dy: number): Promise<void>;
   minimise(): Promise<void>;
   closeWindow(): Promise<void>;
   quit(): Promise<void>;
@@ -51,6 +52,7 @@ const SHORTCUTS: Array<[string, string]> = [
   ["Scroll", "Pan the canvas"],
   ["Space + drag", "Pan the canvas"],
   ["H", "Hide the board (minimise)"],
+  ["Drag corner button", "Move the window"],
   ["?", "Open settings"],
   ["Esc", "Close settings, commit a note, or clear the selection"],
   ["Tab", "Go to the next element"],
@@ -91,6 +93,41 @@ let drag: null
   | { kind: "resize"; id: number; startWorld: Pt; origW: number; origH: number; moved: boolean } = null;
 let audioEl: HTMLAudioElement | null = null;
 let audioId: number | null = null;
+const audioDurations = new Map<string, number>();
+const audioProbing = new Set<string>();
+function formatAudioTime(sec: number): string {
+  if (!isFinite(sec) || sec < 0) return "–:––";
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+function updateAudioProgress(): void {
+  if (!audioEl || audioId === null) return;
+  const dur = audioEl.duration;
+  const cur = audioEl.currentTime;
+  const timeEl = cardsEl.querySelector(`[data-audio-time="${audioId}"]`);
+  if (timeEl) timeEl.textContent = formatAudioTime(cur);
+  const durEl = cardsEl.querySelector(`[data-audio-dur="${audioId}"]`);
+  if (durEl && isFinite(dur)) durEl.textContent = formatAudioTime(dur);
+  const seekEl = cardsEl.querySelector(`[data-audio-seek="${audioId}"]`) as HTMLInputElement | null;
+  if (seekEl && isFinite(dur) && dur > 0 && document.activeElement !== seekEl) {
+    seekEl.value = String(Math.round((cur / dur) * 1000));
+  }
+}
+function loadAudioDuration(id: number, path: string): void {
+  if (audioDurations.has(path) || audioProbing.has(path)) return;
+  audioProbing.add(path);
+  const probe = new Audio(api.fileUrl(path));
+  probe.preload = "metadata";
+  probe.onloadedmetadata = () => {
+    audioProbing.delete(path);
+    if (isFinite(probe.duration)) {
+      audioDurations.set(path, probe.duration);
+      const durEl = cardsEl.querySelector(`[data-audio-dur="${id}"]`);
+      if (durEl) durEl.textContent = formatAudioTime(probe.duration);
+    }
+  };
+}
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 let wheelSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let lastToolbarKey = "";
@@ -334,10 +371,18 @@ function cardHtml(item: Item): string {
     const { path } = item.kind.Audio;
     const name = path.split("/").pop() ?? path;
     const playing = audioId === item.id && audioEl && !audioEl.paused;
-    const bars = [5, 9, 13, 7, 15, 11, 6, 13, 17, 10, 8, 14, 6, 12, 9, 5, 10, 13].map((bh, i) => `<i style="height:${bh}px;background:${i % 3 === 0 ? "#b8a6cc" : "#6a4c93"}"></i>`).join("");
-    return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner row" style="padding:12px">
-      <div class="audio-tile clickable" data-action="play-audio" data-id="${item.id}" style="background:${tint("#6A4C93", 0.88)};color:#6a4c93;font-size:18px">${playing ? "❚❚" : "▶"}</div>
-      <div class="col"><div class="title" style="font-size:14px">${elide(name, ww - 92, 14, true)}</div><div class="wave">${bars}</div>${playing ? `<div class="sub" style="font-size:12px">Now playing</div>` : ""}</div></div></div>`;
+    const isCurrent = audioId === item.id && audioEl;
+    const dur = isCurrent && isFinite(audioEl!.duration) ? audioEl!.duration : (audioDurations.get(path) ?? NaN);
+    const cur = isCurrent ? audioEl!.currentTime : 0;
+    const seekVal = isFinite(dur) && dur > 0 ? Math.round((cur / dur) * 1000) : 0;
+    if (!isCurrent) loadAudioDuration(item.id, path);
+    return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner" style="padding:10px 12px;display:flex;flex-direction:column;gap:6px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="audio-tile clickable" data-action="play-audio" data-id="${item.id}" style="background:${tint("#6A4C93", 0.88)};color:#6a4c93;font-size:16px">${playing ? "\u275a\u275a" : "\u25b6"}</div>
+        <div class="col"><div class="title" style="font-size:14px">${elide(name, ww - 92, 14, true)}</div></div>
+      </div>
+      <div class="audio-progress"><span data-audio-time="${item.id}">${formatAudioTime(cur)}</span><input class="audio-seek" type="range" min="0" max="1000" value="${seekVal}" data-audio-seek="${item.id}" aria-label="Seek"><span data-audio-dur="${item.id}">${formatAudioTime(dur)}</span></div>
+    </div></div>`;
   }
   if ("Video" in item.kind) {
     const { source, remote, size_bytes } = item.kind.Video;
@@ -563,7 +608,7 @@ function cornerHit(id: number, world: Pt): boolean {
 
 boardEl.addEventListener("mousedown", (e: MouseEvent) => {
   const target = e.target as HTMLElement;
-  if (target.closest("#toolbar, #settings-backdrop, #toast, #btn-collapse, video")) return;
+  if (target.closest("#toolbar, #settings-backdrop, #toast, #btn-collapse, video, input")) return;
   // A board click or drag must never start a native text selection
   // across the cards (bug: clicking anywhere highlighted all text).
   if (!target.closest("textarea.note-edit")) window.getSelection()?.removeAllRanges();
@@ -835,7 +880,19 @@ cardsEl.addEventListener("click", (e: MouseEvent) => {
   if (!it) return;
   if (action === "open-link" && "UrlCard" in it.kind) openExternal(it.kind.UrlCard.url);
   if (action === "play-audio" && "Audio" in it.kind) toggleAudio(id, it.kind.Audio.path);
+
   if (action === "play-video" && "Video" in it.kind) openExternal(it.kind.Video.source);
+});
+
+// Audio seek slider (delegated; the slider lives in the card DOM,
+// which render() rebuilds, so a direct listener would be lost).
+cardsEl.addEventListener("input", (e: Event) => {
+  const seek = (e.target as HTMLElement).closest("[data-audio-seek]") as HTMLInputElement | null;
+  if (!seek) return;
+  const id = Number(seek.dataset.audioSeek);
+  if (!audioEl || audioId !== id || !isFinite(audioEl.duration) || audioEl.duration <= 0) return;
+  audioEl.currentTime = (Number(seek.value) / 1000) * audioEl.duration;
+  updateAudioProgress();
 });
 
 function toggleAudio(id: number, path: string): void {
@@ -847,6 +904,11 @@ function toggleAudio(id: number, path: string): void {
   if (audioEl) audioEl.pause();
   audioEl = new Audio(api.fileUrl(path));
   audioId = id;
+  audioEl.onloadedmetadata = () => {
+    if (audioEl && isFinite(audioEl.duration)) audioDurations.set(path, audioEl.duration);
+    updateAudioProgress();
+  };
+  audioEl.ontimeupdate = () => updateAudioProgress();
   audioEl.play().catch((err) => {
     // Do not leave the card saying "Now playing" for a file that
     // failed to load.
@@ -1067,11 +1129,38 @@ function renderCollapseButton(): void {
   const el = document.getElementById("btn-collapse") as HTMLButtonElement | null;
   if (!el) return;
   el.className = `corner-${cornerReveal}`;
-  el.title = cornerReveal === "off" ? "Corner is off" : `Hide into the ${cornerReveal.replace("-", " ")} corner`;
+  el.title = cornerReveal === "off" ? "Corner is off" : `Drag to move the window, click to hide into the ${cornerReveal.replace("-", " ")} corner`;
   el.setAttribute("aria-label", el.title);
 }
+// The corner button is also the window's drag handle, because the
+// window has no title bar: dragging it moves the window, a plain
+// click (no drag) hides the board. A drag must not collapse on
+// mouseup, so the click is suppressed when the pointer moved.
+let collapseDragged = false;
+document.getElementById("btn-collapse")?.addEventListener("mousedown", (e) => {
+  if (e.button !== 0) return;
+  collapseDragged = false;
+  let lastX = e.clientX, lastY = e.clientY;
+  let moved = 0;
+  const onMove = (me: MouseEvent) => {
+    const dx = me.clientX - lastX, dy = me.clientY - lastY;
+    lastX = me.clientX; lastY = me.clientY;
+    moved += Math.abs(dx) + Math.abs(dy);
+    if (moved > 5) {
+      collapseDragged = true;
+      api.moveWindow(dx, dy).catch(() => undefined);
+    }
+  };
+  const onUp = () => {
+    window.removeEventListener("mousemove", onMove);
+    window.removeEventListener("mouseup", onUp);
+  };
+  window.addEventListener("mousemove", onMove);
+  window.addEventListener("mouseup", onUp);
+});
 document.getElementById("btn-collapse")?.addEventListener("click", (e) => {
   e.stopPropagation();
+  if (collapseDragged) { collapseDragged = false; return; }
   commitEditingIfAny();
   save();
   api.collapse().catch(() => undefined);

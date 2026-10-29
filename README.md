@@ -186,11 +186,12 @@ really restores the board.
 
 ## Icon
 
-Bowerbird has its own icon, not a framework default: a full
-blue squircle with a white board and flat colour cards inside,
-in the app's palette — no bird, no pale outer ring, so it reads
-at full size next to other Dock icons. The vector source is
-`assets/icon.svg`;
+Bowerbird has its own icon, not a framework default: a blue
+squircle with a white board and flat colour cards inside, in
+the app's palette — no bird, no pale outer ring. The squircle
+is inset to 75% of its canvas, so in the Dock it reads the
+same size as other icons instead of dominating them. The
+vector source is `assets/icon.svg`;
 `assets/icon.png` is the 1024px export, `assets/icon.ico` is the
 Windows multi-size icon, and `assets/icon.iconset/` is the macOS
 iconset. The app uses it for its window icon (Linux/Windows
