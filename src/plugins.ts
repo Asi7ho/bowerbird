@@ -41,6 +41,9 @@ export interface PluginManifest {
     panels?: Array<{ id: string; title: string }>;
     views?: Array<{ id: string; title: string }>;
     commands?: Array<{ id: string; title: string }>;
+    overlays?: Array<{ id: string; title: string }>;
+    settingsSections?: Array<{ id: string; title: string }>;
+    shortcuts?: Array<{ key: string; title: string }>;
   };
 }
 
@@ -84,6 +87,23 @@ export interface PluginCommandDef {
   run: () => void | Promise<void>;
 }
 
+export interface PluginOverlayDef {
+  id: string;
+  render: (container: HTMLElement) => void;
+}
+
+export interface PluginSettingsSectionDef {
+  id: string;
+  title: string;
+  render: (container: HTMLElement) => void;
+}
+
+export interface PluginShortcutDef {
+  key: string;
+  title: string;
+  run: () => void | Promise<void>;
+}
+
 // The bridge methods plugins need, as a structural subset of the
 // preload API. main.ts passes its `api` object here; it satisfies
 // this interface once preload exposes the plugin IPC methods.
@@ -100,6 +120,16 @@ export interface PluginBridge {
   pluginStorageGet(pluginId: string, key: string): Promise<unknown>;
   pluginStorageSet(pluginId: string, key: string, value: unknown): Promise<void>;
   pluginStorageDelete(pluginId: string, key: string): Promise<void>;
+  // Window primitives: the main process owns the window and the
+  // peek icon, so these are the only way a plugin can hide, show
+  // or move the window. They are the existing preload bridge
+  // methods, now available to plugins through api.window.
+  collapse: () => Promise<void>;
+  restore: () => Promise<void>;
+  minimise: () => Promise<void>;
+  moveWindow: (dx: number, dy: number) => void;
+  getAppSettings: () => Promise<{ corner: string }>;
+  setCorner: (corner: string) => Promise<string>;
 }
 
 // What the core provides to the plugin system. All board mutation
@@ -126,6 +156,9 @@ export interface PluginHost {
   pluginViewEl: HTMLElement;
   boardCanvasEls: HTMLElement[];
   viewSwitcherEl: HTMLElement;
+  overlaysEl: HTMLElement;
+  settingsSectionsEl: HTMLElement;
+  commitEditing: () => void;
 }
 
 export interface PluginContext {
@@ -144,6 +177,15 @@ export interface PluginContext {
     removeItem: (id: number) => boolean;
     save: () => void;
     render: () => void;
+    commitEditing: () => void;
+  };
+  window: {
+    hide: () => Promise<void>;
+    show: () => Promise<void>;
+    minimise: () => Promise<void>;
+    move: (dx: number, dy: number) => void;
+    getCorner: () => Promise<string>;
+    setCorner: (corner: string) => Promise<string>;
   };
   view: {
     getCamera: () => Camera;
@@ -159,6 +201,9 @@ export interface PluginContext {
     registerPanel: (def: PluginPanelDef) => void;
     registerCommand: (def: PluginCommandDef) => void;
     registerView: (def: PluginViewDef) => void;
+    registerOverlay: (def: PluginOverlayDef) => void;
+    registerSettingsSection: (def: PluginSettingsSectionDef) => void;
+    registerShortcut: (def: PluginShortcutDef) => void;
     showPanel: (id: string) => void;
     hidePanel: (id: string) => void;
     getPanelElement: (id: string) => HTMLElement | null;
@@ -200,6 +245,9 @@ const tools = new Map<string, PluginToolDef & { pluginId: string; fullId: string
 const panels = new Map<string, PluginPanelDef & { pluginId: string; el: HTMLElement; body: HTMLElement }>();
 const views = new Map<string, PluginViewDef & { pluginId: string }>();
 const commands = new Map<string, PluginCommandDef & { pluginId: string }>();
+const overlays = new Map<string, PluginOverlayDef & { pluginId: string; el: HTMLElement }>();
+const settingsSections = new Map<string, PluginSettingsSectionDef & { pluginId: string }>();
+const shortcuts = new Map<string, PluginShortcutDef & { pluginId: string }>();
 const loaded = new Map<string, LoadedPlugin>();
 const listeners = new Map<string, Set<() => void>>();
 
@@ -275,7 +323,7 @@ function createContext(manifest: PluginManifest): PluginContext {
       // Capabilities in v1: every domain documented in PLUGIN_API.md.
       // A future core may add more; a plugin should check before
       // using a capability that was added after v1.
-      return ["board", "view", "ui", "cards", "files", "storage", "events", "tools", "panels", "commands", "views"].includes(capability);
+      return ["board", "view", "window", "ui", "cards", "files", "storage", "events", "tools", "panels", "commands", "views", "overlays", "settingsSections", "shortcuts"].includes(capability);
     },
     board: {
       get: () => {
@@ -323,6 +371,36 @@ function createContext(manifest: PluginManifest): PluginContext {
         host!.save();
       },
       render: () => host!.render(),
+      commitEditing: () => {
+        require("board:write");
+        host!.commitEditing();
+      },
+    },
+    window: {
+      hide: async () => {
+        require("window");
+        return bridge!.collapse();
+      },
+      show: async () => {
+        require("window");
+        return bridge!.restore();
+      },
+      minimise: async () => {
+        require("window");
+        return bridge!.minimise();
+      },
+      move: (dx: number, dy: number) => {
+        require("window");
+        bridge!.moveWindow(dx, dy);
+      },
+      getCorner: async () => {
+        require("window");
+        return (await bridge!.getAppSettings()).corner;
+      },
+      setCorner: async (corner: string) => {
+        require("window");
+        return bridge!.setCorner(corner);
+      },
     },
     view: {
       getCamera: () => ({ ...host!.getCamera() }),
@@ -345,6 +423,9 @@ function createContext(manifest: PluginManifest): PluginContext {
         require("view:replace");
         registerView(pluginId, def);
       },
+      registerOverlay: (def: PluginOverlayDef) => registerOverlay(pluginId, def),
+      registerSettingsSection: (def: PluginSettingsSectionDef) => registerSettingsSection(pluginId, def),
+      registerShortcut: (def: PluginShortcutDef) => registerShortcut(pluginId, def),
       showPanel: (id: string) => {
         const p = panels.get(`${pluginId}:${id}`);
         if (p) p.el.style.display = "";
@@ -466,6 +547,93 @@ function registerCommand(pluginId: string, def: PluginCommandDef): void {
 function registerView(pluginId: string, def: PluginViewDef): void {
   views.set(def.id, { ...def, pluginId });
   renderViewSwitcher();
+}
+
+function registerOverlay(pluginId: string, def: PluginOverlayDef): void {
+  if (!host) return;
+  // An overlay container covers the board area but takes no
+  // clicks itself (pointer-events: none in CSS). Interactive
+  // elements a plugin puts inside it must set pointer-events:
+  // auto on themselves, so board clicks pass through everywhere
+  // except on the plugin's own controls. That is how a corner
+  // button can sit in a corner without blocking the board.
+  const wrap = document.createElement("div");
+  wrap.className = "plugin-overlay";
+  wrap.dataset.plugin = pluginId;
+  wrap.dataset.overlay = def.id;
+  host.overlaysEl.appendChild(wrap);
+  overlays.set(`${pluginId}:${def.id}`, { ...def, pluginId, el: wrap });
+  try {
+    def.render(wrap);
+  } catch (e) {
+    wrap.textContent = `Overlay failed to render: ${String(e)}`;
+  }
+}
+
+function registerSettingsSection(pluginId: string, def: PluginSettingsSectionDef): void {
+  // Stored only; the core renders sections when Settings opens
+  // (see renderSettingsSections), so a section registered while
+  // Settings is already open appears on the next open, or when
+  // the core re-renders sections after a plugin toggle.
+  settingsSections.set(`${pluginId}:${def.id}`, { ...def, pluginId });
+}
+
+export function renderSettingsSections(): void {
+  if (!host) return;
+  const el = host.settingsSectionsEl;
+  el.innerHTML = "";
+  for (const s of settingsSections.values()) {
+    const wrap = document.createElement("div");
+    wrap.className = "plugin-settings-section";
+    wrap.dataset.plugin = s.pluginId;
+    const head = document.createElement("h3");
+    head.textContent = s.title;
+    const body = document.createElement("div");
+    wrap.appendChild(head);
+    wrap.appendChild(body);
+    el.appendChild(wrap);
+    try {
+      s.render(body);
+    } catch (e) {
+      body.textContent = `Settings section failed to render: ${String(e)}`;
+    }
+  }
+}
+
+function registerShortcut(pluginId: string, def: PluginShortcutDef): void {
+  // Shortcuts in v1 are single keys, no modifiers. Core keys win:
+  // the core checks its own shortcuts first, and handlePluginShortcut
+  // is only called for keys the core did not handle, with Ctrl/Cmd
+  // held keys excluded, so a plugin cannot steal Ctrl+G or similar.
+  shortcuts.set(`${pluginId}:${def.key.toLowerCase()}`, { ...def, pluginId });
+}
+
+export function listPluginShortcuts(): Array<PluginShortcutDef & { pluginId: string; pluginName: string }> {
+  const out: Array<PluginShortcutDef & { pluginId: string; pluginName: string }> = [];
+  for (const s of shortcuts.values()) {
+    const lp = loaded.get(s.pluginId);
+    out.push({ ...s, pluginName: lp?.manifest.name ?? s.pluginId });
+  }
+  return out;
+}
+
+export function handlePluginShortcut(key: string): boolean {
+  // The core has already applied its guards (not in a textarea or
+  // search box, Settings closed, not editing). Tab, Escape and
+  // Space are core-owned and never reach here from the core handler.
+  const lower = key.toLowerCase();
+  if (lower === "tab" || lower === "escape" || lower === " ") return false;
+  for (const s of shortcuts.values()) {
+    if (s.key.toLowerCase() !== lower) continue;
+    try {
+      const r = s.run();
+      if (r instanceof Promise) r.catch(() => undefined);
+    } catch (e) {
+      host?.toast(`Plugin shortcut failed: ${String(e)}`);
+    }
+    return true;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------- views
@@ -667,6 +835,18 @@ function unregisterPlugin(pluginId: string): void {
   }
   for (const key of Array.from(commands.keys())) {
     if (key.startsWith(`${pluginId}:`)) commands.delete(key);
+  }
+  for (const [key, o] of Array.from(overlays.entries())) {
+    if (o.pluginId === pluginId) {
+      overlays.delete(key);
+      o.el.remove();
+    }
+  }
+  for (const key of Array.from(settingsSections.keys())) {
+    if (key.startsWith(`${pluginId}:`)) settingsSections.delete(key);
+  }
+  for (const [key, s] of Array.from(shortcuts.entries())) {
+    if (s.pluginId === pluginId) shortcuts.delete(key);
   }
   if (host && activeView !== "board") {
     const v = views.get(activeView);

@@ -140,6 +140,31 @@ saves immediately, like a core drag or note commit. Undo for plugin
 actions is a future API addition, not something to fake with a
 private stack.
 
+### Window — `api.window`
+
+Requires the `window` permission. These are the main-process
+primitives a renderer plugin cannot do itself: hiding the window,
+showing the peek icon, moving the window, and remembering the
+corner for the peek. The Hide plugin is built on exactly these.
+
+- `hide()` — hide the board window and show the peek icon at the
+  stored corner. A no-op if the corner is `off` (the main process
+  has no peek bounds then, so it does nothing).
+- `show()` — destroy the peek icon and restore the board to its
+  saved bounds, focused.
+- `minimise()` — minimise the window through the OS.
+- `move(dx, dy)` — move the window by a screen-coordinate delta,
+  fire-and-forget, like the old drag handle. Screen coordinates,
+  not client coordinates: client coordinates move when the window
+  itself moves, which fed a move-back loop.
+- `getCorner()` / `setCorner(corner)` — read and write the stored
+  corner (`bottom-left`, `bottom-right`, `top-left`, `top-right`,
+  `off`). `setCorner` returns the stored value (validated by the
+  main process), which is what the plugin should use, not the
+  value it asked for. The corner lives in the app's settings file,
+  not in plugin storage, because the peek icon (a main-process
+  window) needs it even while the board window is hidden.
+
 ### View and camera — `api.view`
 
 - `getCamera()`, `setCamera({ x, y, zoom })`
@@ -155,8 +180,7 @@ A view is registered with `api.ui.registerView({ id, title, render,
 onShow, onHide })`. When the view is active, the core hides the
 2D canvas layers (grid, strokes/connectors layer, cards) and shows
 the view's container, which fills the board area. The toolbar,
-search, collapse button and Settings stay core-owned and stay
-reachable. The plugin's `render(container, board)` is called on
+search and Settings stay core-owned and stay reachable. The plugin's `render(container, board)` is called on
 activation and whenever the board changes while the view is
 active. The plugin must pause expensive work (WebGL, video) when
 `onHide` fires; the core does not do that for it.
@@ -200,6 +224,25 @@ the board.
   Settings → Plugins under this plugin, with a Run button. There
   is no command palette in v1; commands are run from Settings,
   from a panel, or from a tool. A command's `run` may be async.
+- `registerOverlay({ id, render })` — a full-board overlay layer
+  that takes no clicks itself (pointer-events: none). Interactive
+  elements a plugin puts inside it must set pointer-events: auto
+  on themselves, so board clicks pass through everywhere except
+  on the plugin's own controls. This is how a corner button can
+  sit in a corner without blocking the board.
+- `registerSettingsSection({ id, title, render })` — a section in
+  Settings, rendered with its own heading when Settings opens.
+  Use it for plugin settings that are app-level, not board-level
+  (for example the Hide plugin's corner picker). Board-level
+  controls belong in a panel, not here.
+- `registerShortcut({ key, title, run })` — a single-key shortcut,
+  no modifiers, listed in Settings' shortcuts table with the
+  plugin's name. Core keys win: the core checks its own shortcuts
+  first, and a plugin shortcut is only tried for keys the core did
+  not handle, with Ctrl/Cmd held keys excluded, so a plugin cannot
+  steal Ctrl+G or similar. Shortcuts do not fire in a textarea,
+  in the search box, while editing, or while Settings is open —
+  the same guards as core shortcuts.
 - `registerView({ id, title, render, onShow, onHide })` — see View
   above. Requires `view:replace` in permissions for any view that
   replaces the canvas; a view that only adds a read-only alternate
@@ -324,11 +367,21 @@ plugin's own containers (the core prefixes panel and view
 containers with `data-plugin="<id>"`; use that as your selector
 root).
 
+## Bundled plugins
+
+Plugins in `plugins/` in this repo ship inside the app, are listed
+in Settings → Plugins as "Built in", and update with the app.
+They use exactly this API — no backdoors. The first one is `hide/`:
+the corner button, the corner picker in Settings, and H to
+minimise, moved out of the core into a plugin. The main process
+still owns what a renderer plugin cannot do (hiding the window,
+showing the peek icon, remembering the corner), and everything
+the user sees lives in the plugin.
+
 ## What is not in v1
 
 - No drag tools (click tools only; see Tools above).
-- No command palette, no menu bar contributions, no keyboard
-  shortcut registration by plugins (core shortcuts stay core).
+- No command palette, no menu bar contributions.
 - No undo for plugin actions.
 - No network access except through `fetchPreview`.
 - No main-process plugins, no Node access, no direct filesystem
@@ -336,7 +389,9 @@ root).
 - No plugin store, no paid plugins, no auto-update.
 - No deactivate cleanup for event listeners: handlers registered in
   `activate` stay registered after `deactivate` in v1, so they must
-  guard on missing panel/view elements (the sample plugin does).
+  guard on missing panel/view/overlay elements (the sample plugin
+  does; the Hide plugin's button listeners die with its removed
+  overlay DOM).
   A future version will pass the API object to `deactivate` for
   cleanup.
 - No sandboxing stronger than the contract above: a locally

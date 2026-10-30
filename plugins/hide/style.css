@@ -1,0 +1,24 @@
+/* Hide plugin styles. Same frosted circle the core used to draw,
+   now scoped to .hide-button. Uses core CSS variables
+   (--shadow-md, --ink), so it follows Bowerbird's design system. */
+.hide-button {
+  position: absolute; width: 44px; height: 44px; border: none; border-radius: 50%;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(0, 0, 0, 0.08); box-shadow: var(--shadow-md);
+  display: flex; align-items: center; justify-content: center;
+  cursor: grab; color: var(--ink); pointer-events: auto;
+}
+.hide-button:active { cursor: grabbing; }
+.hide-button:hover { background: #fff; }
+.hide-button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.hide-button.corner-bottom-left { left: 16px; bottom: 16px; }
+.hide-button.corner-bottom-right { right: 16px; bottom: 16px; }
+.hide-button.corner-top-left { left: 16px; top: 16px; }
+.hide-button.corner-top-right { right: 16px; top: 16px; }
+.hide-button.corner-off { display: none; }
+.hide-button.corner-bottom-right svg { transform: rotate(0deg); }
+.hide-button.corner-bottom-left svg { transform: rotate(90deg); }
+.hide-button.corner-top-left svg { transform: rotate(180deg); }
+.hide-button.corner-top-right svg { transform: rotate(270deg); }

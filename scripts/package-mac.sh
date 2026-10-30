@@ -64,6 +64,12 @@ mv "$APP/Contents/MacOS/Electron" "$APP/Contents/MacOS/Bowerbird"
 # board copies from (assetsDir() looks for sample.pdf in assets/).
 mkdir -p "$APP/Contents/Resources/app"
 cp -r dist electron "$APP/Contents/Resources/app/"
+# Bundled plugins (see plugins/README.md): same API as user plugins,
+# shipped inside the app. Copy only if the folder exists, so a
+# checkout without bundled plugins still packages cleanly.
+if [ -d plugins ]; then
+  cp -r plugins "$APP/Contents/Resources/app/"
+fi
 mkdir -p "$APP/Contents/Resources/app/assets"
 cp assets/icon.png assets/sample.pdf assets/welcome-bower.jpg \
    assets/welcome-birdsong.mp3 assets/welcome-video.mp4 \

@@ -14,6 +14,7 @@
       <div id="cards"></div>
       <div id="plugin-view" style="display:none"></div>
       <div id="plugin-panels"></div>
+      <div id="plugin-overlays"></div>
       <div id="view-switcher" style="display:none"></div>
       <div id="resize-handle" aria-hidden="true"></div>
       <div id="toolbar-wrap">
@@ -39,7 +40,6 @@
         <span id="search-count" aria-live="polite"></span>
         <button id="search-clear" title="Clear search (Esc)" aria-label="Clear search">×</button>
       </div>
-      <button id="btn-collapse" title="Drag to move the window, click to hide into the corner" aria-label="Hide into the corner"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5l14 14" /><path d="M12 19h7v-7" /></svg></button>
       <div id="settings-backdrop">
         <div id="settings">
           <button class="close" id="settings-close" title="Close (Esc)">×</button>
@@ -50,9 +50,7 @@
           <h3>Canvas</h3>
           <div class="canvas-opt" id="bg-opts"></div>
           <div class="canvas-opt" id="grid-opts"></div>
-          <h3>Corner reveal</h3>
-          <div class="canvas-opt" id="corner-opts"></div>
-          <p class="meta">The board hides into this corner, and clicking its corner opens it again.</p>
+          <div id="plugin-settings-sections"></div>
           <h3>Plugins</h3>
           <p class="meta">Plugins are local folders, not a store. Drop a plugin folder into your plugins folder, then reopen Settings. A plugin that is off cannot add cards, tools, panels or views, and its cards show as placeholders with their data kept. See PLUGIN_API.md in the repo.</p>
           <div id="plugin-list"></div>

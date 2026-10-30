@@ -14,6 +14,7 @@ interface BowerbirdAPI {
   getAppSettings(): Promise<{ corner: string }>;
   setCorner(corner: string): Promise<string>;
   collapse(): Promise<void>;
+  restore(): Promise<void>;
   moveWindow(dx: number, dy: number): void;
   minimise(): Promise<void>;
   closeWindow(): Promise<void>;
@@ -40,8 +41,9 @@ import {
 } from "./model";
 import {
   emitPluginEvent, getActiveView, getCardHtml, getPluginCardSearchText,
-  getPluginTool, handlePluginCardAction, handlePluginCardDoubleClick, initPlugins,
-  listLoadedPlugins, listPluginCommands, refreshActiveView, runPluginCommand,
+  getPluginTool, handlePluginCardAction, handlePluginCardDoubleClick, handlePluginShortcut,
+  initPlugins, listLoadedPlugins, listPluginCommands, listPluginShortcuts,
+  refreshActiveView, renderSettingsSections, runPluginCommand,
   setPluginEnabled, syncPluginToolButtons,
   type PluginHost, type PluginManifest,
 } from "./plugins";
@@ -68,8 +70,6 @@ const SHORTCUTS: Array<[string, string]> = [
   ["Ctrl / Cmd + scroll", "Zoom at the cursor"],
   ["Scroll", "Pan the canvas"],
   ["Space + drag", "Pan the canvas"],
-  ["H", "Hide the board (minimise)"],
-  ["Drag corner button", "Move the window"],
   ["?", "Open settings"],
   ["Esc", "Close settings, commit a note, or clear the selection"],
   ["Tab", "Go to the next element"],
@@ -85,7 +85,6 @@ const SHORTCUTS: Array<[string, string]> = [
   ["Double-click a PDF or picture", "Open it outside Bowerbird"],
   ["Click a play tile", "Play audio / video"],
   ["Drag a card corner", "Resize the card (nwse cursor on hover)"],
-  ["Click the corner button", "Hide the board into its corner"],
   ["Click the board's corner", "Open the board again"],
   ["Shift + click", "Add to the selection"],
   ["Drag on empty space", "Marquee-select"],
@@ -104,7 +103,6 @@ let selected: number[] = [];
 let spaceDown = false;
 let editingId: number | null = null;
 let settingsOpen = false;
-let cornerReveal = "bottom-left";
 // Search: matches are board item ids in board order, in the same
 // spirit as Tab navigation (strokes and connectors are skipped:
 // they carry no searchable text). searchIndex is -1 until the user
@@ -700,7 +698,7 @@ function cornerHit(id: number, world: Pt): boolean {
 
 boardEl.addEventListener("mousedown", (e: MouseEvent) => {
   const target = e.target as HTMLElement;
-  if (target.closest("#toolbar, #settings-backdrop, #toast, #btn-collapse, #search-box, video, input")) return;
+  if (target.closest("#toolbar, #settings-backdrop, #toast, #plugin-overlays, #search-box, video, input")) return;
   // A board click or drag must never start a native text selection
   // across the cards (bug: clicking anywhere highlighted all text).
   if (!target.closest("textarea.note-edit")) window.getSelection()?.removeAllRanges();
@@ -1121,10 +1119,6 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   }
   const ctrl = e.ctrlKey || e.metaKey;
   if (e.key === " " || e.key === " ") spaceDown = true;
-  if (e.key === "h" && editingId === null && !settingsOpen) {
-    api.minimise().catch(() => undefined);
-    return;
-  }
   if (e.key === "?") { setSettings(true); return; }
   if (e.key === "Escape") {
     if (settingsOpen) { setSettings(false); return; }
@@ -1163,6 +1157,10 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   } else if (e.key === "+" || e.key === "=") { zoomCentre(1.2); save(); render(); }
   else if (e.key === "-") { zoomCentre(1 / 1.2); save(); render(); }
   else if (e.key === "0") { board.camera = { x: 0, y: 0, zoom: 1 }; save(); render(); }
+  // Plugin shortcuts, last: core keys above win, so a plugin cannot
+  // steal V, P, A, Ctrl+G/U, Delete, zoom or reset. The core guards
+  // above (textarea, search box, Settings open) already applied.
+  else if (editingId === null && !settingsOpen && !ctrl && handlePluginShortcut(e.key)) { /* plugin handled it */ }
 });
 window.addEventListener("keyup", (e: KeyboardEvent) => {
   if (e.key === " ") spaceDown = false;
@@ -1358,6 +1356,9 @@ function renderPluginSettings(): void {
     for (const c of m.contributions?.panels ?? []) parts.push(`Panel: ${c.title}`);
     for (const c of m.contributions?.views ?? []) parts.push(`View: ${c.title}`);
     for (const c of m.contributions?.commands ?? []) parts.push(`Command: ${c.title}`);
+    for (const c of m.contributions?.overlays ?? []) parts.push(`Overlay: ${c.title}`);
+    for (const c of m.contributions?.settingsSections ?? []) parts.push(`Settings: ${c.title}`);
+    for (const c of m.contributions?.shortcuts ?? []) parts.push(`Shortcut: ${c.key.toUpperCase()} — ${c.title}`);
     const state = lp.failed ? "Failed" : lp.active ? "On" : "Off";
     const cmds = commands.filter((c) => c.pluginId === m.id);
     html += `<div class="plugin-row"><div><strong>${m.name}</strong> <span class="meta">${m.version} · ${m.source === "bundled" ? "Built in" : "User"} · ${state}</span></div>`;
@@ -1378,6 +1379,8 @@ function renderPluginSettings(): void {
       const lp = listLoadedPlugins().find((x) => x.manifest.id === id);
       if (!lp) return;
       await setPluginEnabled(id, !lp.active);
+      renderShortcutsTable();
+      renderSettingsSections();
       renderPluginSettings();
       render();
     });
@@ -1392,6 +1395,14 @@ function renderPluginSettings(): void {
   }
 }
 
+function renderShortcutsTable(): void {
+  const table = document.getElementById("shortcuts-table") as HTMLTableElement;
+  if (!table) return;
+  const allShortcuts: Array<[string, string]> = [...SHORTCUTS];
+  for (const s of listPluginShortcuts()) allShortcuts.push([s.key.toUpperCase(), `${s.title} (${s.pluginName})`]);
+  table.innerHTML = allShortcuts.map(([k, v]) => `<tr><td><kbd>${k}</kbd></td><td>${v}</td></tr>`).join("");
+}
+
 function setSettings(open: boolean): void {
   settingsOpen = open;
   const backdrop = document.getElementById("settings-backdrop") as HTMLDivElement;
@@ -1401,15 +1412,13 @@ function setSettings(open: boolean): void {
     const resetBtn = document.getElementById("btn-reset") as HTMLButtonElement;
     if (confirmEl) confirmEl.style.display = "none";
     if (resetBtn) resetBtn.style.display = "";
-    const table = document.getElementById("shortcuts-table") as HTMLTableElement;
-    table.innerHTML = SHORTCUTS.map(([k, v]) => `<tr><td><kbd>${k}</kbd></td><td>${v}</td></tr>`).join("");
+    renderShortcutsTable();
     const pathEl = document.getElementById("settings-board-path") as HTMLElement;
     pathEl.textContent = DEMO ? "Demo — nothing is saved, and nothing is written to disk." : `Board file: ${boardPath}`;
     renderBgOpts();
     renderGridOpts();
-    renderCornerOpts();
+    renderSettingsSections();
     renderPluginSettings();
-    api.getAppSettings().then((s) => { cornerReveal = s.corner; renderCornerOpts(); renderCollapseButton(); }).catch(() => undefined);
   }
   render();
 }
@@ -1426,68 +1435,6 @@ function renderBgOpts(): void {
     el.appendChild(b);
   }
 }
-function renderCornerOpts(): void {
-  const opts: Array<[string, string]> = [["Bottom-left", "bottom-left"], ["Bottom-right", "bottom-right"], ["Top-left", "top-left"], ["Top-right", "top-right"], ["Off", "off"]];
-  const el = document.getElementById("corner-opts") as HTMLDivElement;
-  if (!el) return;
-  el.innerHTML = "";
-  for (const [label, value] of opts) {
-    const b = document.createElement("button");
-    b.textContent = label;
-    if (cornerReveal === value) b.classList.add("active");
-    b.addEventListener("click", async () => {
-      try { cornerReveal = await api.setCorner(value); } catch { /* keep old value */ }
-      renderCornerOpts(); renderCollapseButton();
-    });
-    el.appendChild(b);
-  }
-}
-function renderCollapseButton(): void {
-  const el = document.getElementById("btn-collapse") as HTMLButtonElement | null;
-  if (!el) return;
-  el.className = `corner-${cornerReveal}`;
-  el.title = cornerReveal === "off" ? "Corner is off" : `Drag to move the window, click to hide into the ${cornerReveal.replace("-", " ")} corner`;
-  el.setAttribute("aria-label", el.title);
-}
-// The corner button is also the window's drag handle, because the
-// window has no title bar: dragging it moves the window, a plain
-// click (no drag) hides the board. A drag must not collapse on
-// mouseup, so the click is suppressed when the pointer moved.
-let collapseDragged = false;
-document.getElementById("btn-collapse")?.addEventListener("mousedown", (e) => {
-  if (e.button !== 0) return;
-  collapseDragged = false;
-  // Screen coordinates, not client coordinates: client coordinates
-  // move when the window itself moves, so a window move fires a
-  // mousemove that moves the window back — that feedback loop is
-  // what made dragging shake. Screen coordinates stay put when
-  // the window moves under a stationary mouse, so a move-induced
-  // mousemove has dx = dy = 0 and is skipped.
-  let lastX = e.screenX, lastY = e.screenY;
-  let moved = 0;
-  const onMove = (me: MouseEvent) => {
-    const dx = me.screenX - lastX, dy = me.screenY - lastY;
-    lastX = me.screenX; lastY = me.screenY;
-    moved += Math.abs(dx) + Math.abs(dy);
-    if (moved > 5) {
-      collapseDragged = true;
-      if (dx !== 0 || dy !== 0) api.moveWindow(dx, dy);
-    }
-  };
-  const onUp = () => {
-    window.removeEventListener("mousemove", onMove);
-    window.removeEventListener("mouseup", onUp);
-  };
-  window.addEventListener("mousemove", onMove);
-  window.addEventListener("mouseup", onUp);
-});
-document.getElementById("btn-collapse")?.addEventListener("click", (e) => {
-  e.stopPropagation();
-  if (collapseDragged) { collapseDragged = false; return; }
-  commitEditingIfAny();
-  save();
-  api.collapse().catch(() => undefined);
-});
 function renderGridOpts(): void {
   const opts: Array<[string, Board["grid"]]> = [["Dots", "Dots"], ["Lines", "Lines"], ["Off", "Off"]];
   const el = document.getElementById("grid-opts") as HTMLDivElement;
@@ -1726,7 +1673,6 @@ async function init(): Promise<void> {
     toast(`Could not load the board: ${String(err)}`);
     board = welcomeBoard(0, 0);
   }
-  try { cornerReveal = (await api.getAppSettings()).corner; } catch { /* default stands */ }
   const pluginHost: PluginHost = {
     getBoard: () => board,
     getSelected: () => selected,
@@ -1774,6 +1720,7 @@ async function init(): Promise<void> {
       save(); render();
     },
     toast: (msg: string) => toast(msg),
+    commitEditing: () => commitEditingIfAny(),
     toolbarToolsEl: document.getElementById("tools") as HTMLElement,
     panelsEl: document.getElementById("plugin-panels") as HTMLElement,
     pluginViewEl: document.getElementById("plugin-view") as HTMLElement,
@@ -1783,9 +1730,10 @@ async function init(): Promise<void> {
       cardsEl,
     ],
     viewSwitcherEl: document.getElementById("view-switcher") as HTMLElement,
+    overlaysEl: document.getElementById("plugin-overlays") as HTMLElement,
+    settingsSectionsEl: document.getElementById("plugin-settings-sections") as HTMLElement,
   };
   await initPlugins(pluginHost, api);
-  renderCollapseButton();
   render();
   if (DEMO) toast("Demo \u2014 try anything, nothing is saved");
   // Fill in previews for cards that never got one (welcome card, old
