@@ -17,7 +17,13 @@ export type Kind =
   | { Audio: { path: string } }
   | { Video: { source: string; remote: boolean; size_bytes: number } }
   | { Stroke: { points: Pt[]; color: string; width: number; marker: boolean } }
-  | { Connector: { from: Anchor; to: Anchor; color: string } };
+  | { Connector: { from: Anchor; to: Anchor; color: string } }
+  // Plugin cards (see PLUGIN_API.md): namespaced so the core never
+  // has to know a plugin's data shape. `data` is always JSON. If
+  // the plugin is missing or disabled, the core renders a
+  // placeholder and carries `data` through load and save verbatim
+  // — uninstalling a plugin never deletes its cards' data.
+  | { Plugin: { plugin: string; kind: string; data: unknown } };
 
 export interface Item {
   id: number;

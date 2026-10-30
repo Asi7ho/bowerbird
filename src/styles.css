@@ -382,3 +382,64 @@ button { font-family: inherit; }
 #btn-collapse.corner-bottom-left svg { transform: rotate(90deg); }
 #btn-collapse.corner-top-left svg { transform: rotate(180deg); }
 #btn-collapse.corner-top-right svg { transform: rotate(270deg); }
+
+/* Plugins (see PLUGIN_API.md): a right dock for plugin panels, a
+   full-board container for plugin views, and a bottom-centre view
+   switcher. Panels and the switcher use the same frosted style as
+   the toolbar, so plugin chrome looks like Bowerbird; what a plugin
+   draws inside its panel or view is its own content. */
+#plugin-panels {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; gap: 12px; width: 260px;
+  max-height: 80vh; overflow: auto; pointer-events: none; z-index: 10;
+}
+#plugin-panels::-webkit-scrollbar { display: none; }
+.plugin-panel {
+  pointer-events: auto; background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 16px;
+  box-shadow: var(--shadow-md); overflow: hidden;
+}
+.plugin-panel-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 12px; font-size: 13px; font-weight: 600;
+  border-bottom: 1px solid var(--separator);
+}
+.plugin-panel-head button {
+  border: none; background: transparent; cursor: pointer; font-size: 16px;
+  line-height: 1; color: var(--grey); padding: 2px 6px; border-radius: 6px;
+}
+.plugin-panel-head button:hover { background: rgba(0, 0, 0, 0.05); }
+.plugin-panel-body { padding: 12px; font-size: 13px; line-height: 1.5; }
+.plugin-panel-body button {
+  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
+  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
+}
+#plugin-view {
+  position: absolute; inset: 0; background: #fff; overflow: auto; z-index: 5;
+  padding: 24px; font-size: 14px; line-height: 1.6;
+}
+#view-switcher {
+  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+  gap: 4px; padding: 4px; z-index: 15;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 12px;
+  box-shadow: var(--shadow-md);
+}
+#view-switcher button {
+  border: none; background: transparent; border-radius: 9px;
+  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
+}
+#view-switcher button.active { background: #fff; box-shadow: var(--shadow-sm); }
+#settings .plugin-row {
+  border: 1px solid var(--separator); border-radius: 10px;
+  padding: 10px 12px; margin: 8px 0;
+}
+#settings .plugin-row button {
+  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
+  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
+  margin: 4px 4px 0 0;
+}

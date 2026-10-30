@@ -1,0 +1,17 @@
+{
+  "id": "hello-card",
+  "name": "Hello Card",
+  "version": "0.1.0",
+  "apiVersion": "1",
+  "description": "The smallest plugin that uses every v1 surface: a card, a tool, a panel, a command and a view. Copy this folder to start a new plugin.",
+  "permissions": ["board:write", "files:embed", "storage", "view:replace"],
+  "main": "main.js",
+  "styles": ["style.css"],
+  "contributions": {
+    "cards": [{ "kind": "Hello", "title": "Hello card" }],
+    "tools": [{ "id": "stamp", "title": "Hello stamp" }],
+    "panels": [{ "id": "hello", "title": "Hello" }],
+    "views": [{ "id": "list", "title": "List view" }],
+    "commands": [{ "id": "add-hello", "title": "Add a hello card" }]
+  }
+}

@@ -12,6 +12,9 @@
       <div id="grid"></div>
       <svg id="canvas-svg"><g id="world"></g></svg>
       <div id="cards"></div>
+      <div id="plugin-view" style="display:none"></div>
+      <div id="plugin-panels"></div>
+      <div id="view-switcher" style="display:none"></div>
       <div id="resize-handle" aria-hidden="true"></div>
       <div id="toolbar-wrap">
         <div id="toolbar">
@@ -50,6 +53,9 @@
           <h3>Corner reveal</h3>
           <div class="canvas-opt" id="corner-opts"></div>
           <p class="meta">The board hides into this corner, and clicking its corner opens it again.</p>
+          <h3>Plugins</h3>
+          <p class="meta">Plugins are local folders, not a store. Drop a plugin folder into your plugins folder, then reopen Settings. A plugin that is off cannot add cards, tools, panels or views, and its cards show as placeholders with their data kept. See PLUGIN_API.md in the repo.</p>
+          <div id="plugin-list"></div>
           <h3>Data</h3>
           <p class="meta">Delete everything saved in this whiteboard: all notes, photos, links, files and sketches. The board starts again as a fresh welcome board. The corner setting above is kept.</p>
           <button id="btn-reset">Delete all board data</button>

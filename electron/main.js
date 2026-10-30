@@ -378,6 +378,133 @@ function createWindow() {
   });
 }
 
+// ---------------------------------------------------------------- plugins
+
+// Plugin discovery (see PLUGIN_API.md). Order matters: the first
+// plugin with a given id wins, and duplicates are skipped.
+//   1. BOWERBIRD_PLUGINS_DIR, if set (development / testing)
+//   2. The user plugins folder next to the board data
+//   3. Bundled plugins inside the app (app/plugins, or plugins/
+//      next to the repo root when running from source)
+// A plugin is a subfolder with a manifest.json. Invalid manifests
+// are skipped, never fatal: one bad plugin must not break the list.
+const pluginDirs = new Map(); // id -> folder, refreshed by listPlugins
+
+function pluginCandidates() {
+  const out = [];
+  if (process.env.BOWERBIRD_PLUGINS_DIR) {
+    out.push({ dir: process.env.BOWERBIRD_PLUGINS_DIR, source: "user" });
+  }
+  const base = process.env.XDG_DATA_HOME
+    ? process.env.XDG_DATA_HOME
+    : path.join(process.env.HOME || ".", ".local", "share");
+  out.push({ dir: path.join(base, "bowerbird", "plugins"), source: "user" });
+  for (const dir of [
+    path.join(app.getAppPath(), "plugins"),
+    path.join(process.cwd(), "plugins"),
+    path.join(__dirname, "..", "plugins"),
+  ]) {
+    out.push({ dir, source: "bundled" });
+  }
+  return out;
+}
+
+function pluginEnabledPath() {
+  return path.join(app.getPath("userData"), "plugins.json");
+}
+
+function loadPluginEnabled() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(pluginEnabledPath(), "utf8"));
+    if (parsed && typeof parsed.enabled === "object" && parsed.enabled !== null) {
+      return parsed.enabled;
+    }
+  } catch {
+    // No file yet: everything defaults to enabled.
+  }
+  return {};
+}
+
+function savePluginEnabled(enabled) {
+  try {
+    const file = pluginEnabledPath();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const tmp = file + ".tmp";
+    fs.writeFileSync(tmp, JSON.stringify({ enabled }));
+    fs.renameSync(tmp, file);
+  } catch {
+    // Plugin toggles are a convenience, not board data.
+  }
+}
+
+function listPlugins() {
+  const enabled = loadPluginEnabled();
+  const seen = new Set();
+  const out = [];
+  pluginDirs.clear();
+  for (const { dir, source } of pluginCandidates()) {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      continue; // Folder does not exist yet: fine, not an error.
+    }
+    entries.sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const folder = path.join(dir, entry.name);
+      let manifest;
+      try {
+        manifest = JSON.parse(fs.readFileSync(path.join(folder, "manifest.json"), "utf8"));
+      } catch {
+        continue; // No manifest, or broken JSON: skip, do not fail the list.
+      }
+      if (!manifest || typeof manifest.id !== "string" || !/^[a-z0-9-]+$/.test(manifest.id)) continue;
+      if (typeof manifest.name !== "string" || typeof manifest.version !== "string") continue;
+      if (typeof manifest.apiVersion !== "string" || typeof manifest.main !== "string") continue;
+      if (seen.has(manifest.id)) continue; // First place wins.
+      seen.add(manifest.id);
+      pluginDirs.set(manifest.id, folder);
+      out.push({
+        id: manifest.id,
+        name: manifest.name,
+        version: manifest.version,
+        apiVersion: manifest.apiVersion,
+        description: typeof manifest.description === "string" ? manifest.description : "",
+        permissions: Array.isArray(manifest.permissions) ? manifest.permissions : [],
+        main: manifest.main,
+        styles: Array.isArray(manifest.styles) ? manifest.styles : [],
+        contributions: manifest.contributions && typeof manifest.contributions === "object" ? manifest.contributions : {},
+        source,
+        enabled: enabled[manifest.id] !== false,
+      });
+    }
+  }
+  return out;
+}
+
+function pluginStoragePath() {
+  return path.join(app.getPath("userData"), "plugin-storage.json");
+}
+
+function loadPluginStorage() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(pluginStoragePath(), "utf8"));
+    if (parsed && typeof parsed === "object") return parsed;
+  } catch {
+    // No file yet.
+  }
+  return {};
+}
+
+function savePluginStorage(data) {
+  const file = pluginStoragePath();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = file + ".tmp";
+  fs.writeFileSync(tmp, JSON.stringify(data));
+  fs.renameSync(tmp, file);
+}
+
 // ---------------------------------------------------------------- IPC
 
 function registerIpc() {
@@ -502,6 +629,51 @@ function registerIpc() {
     return shell.openPath(target);
   });
   ipcMain.handle('bowerbird:get-app-settings', () => ({ corner: cornerReveal }));
+  ipcMain.handle('bowerbird:list-plugins', () => listPlugins());
+  ipcMain.handle('bowerbird:read-plugin-file', (_event, pluginId, relativePath) => {
+    if (typeof pluginId !== "string" || typeof relativePath !== "string") {
+      throw new Error("bad plugin file request");
+    }
+    let dir = pluginDirs.get(pluginId);
+    if (!dir) {
+      listPlugins();
+      dir = pluginDirs.get(pluginId);
+    }
+    if (!dir) throw new Error(`unknown plugin ${pluginId}`);
+    const ext = path.extname(relativePath).toLowerCase();
+    if (![".js", ".css", ".json"].includes(ext)) {
+      throw new Error(`plugin file type not allowed: ${ext}`);
+    }
+    const resolved = path.resolve(dir, relativePath);
+    if (resolved !== dir && !resolved.startsWith(dir + path.sep)) {
+      throw new Error("plugin file path escapes its folder");
+    }
+    return fs.readFileSync(resolved, "utf8");
+  });
+  ipcMain.handle('bowerbird:set-plugin-enabled', (_event, pluginId, enabled) => {
+    const map = loadPluginEnabled();
+    map[pluginId] = enabled === true;
+    savePluginEnabled(map);
+    return map[pluginId];
+  });
+  ipcMain.handle('bowerbird:plugin-storage-get', (_event, pluginId, key) => {
+    const data = loadPluginStorage();
+    const per = data[pluginId];
+    return per && typeof per === "object" ? (per[key] ?? null) : null;
+  });
+  ipcMain.handle('bowerbird:plugin-storage-set', (_event, pluginId, key, value) => {
+    const data = loadPluginStorage();
+    if (!data[pluginId] || typeof data[pluginId] !== "object") data[pluginId] = {};
+    data[pluginId][key] = value;
+    savePluginStorage(data);
+  });
+  ipcMain.handle('bowerbird:plugin-storage-delete', (_event, pluginId, key) => {
+    const data = loadPluginStorage();
+    if (data[pluginId] && typeof data[pluginId] === "object") {
+      delete data[pluginId][key];
+      savePluginStorage(data);
+    }
+  });
   ipcMain.handle('bowerbird:set-corner', (_event, corner) => {
     if (!CORNERS.includes(corner)) return cornerReveal;
     cornerReveal = corner;

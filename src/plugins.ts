@@ -1,0 +1,804 @@
+// Bowerbird Plugin API v1 — renderer side (see PLUGIN_API.md).
+//
+// A plugin is a folder with a manifest.json and a single-file
+// main.js module. The main process discovers plugins and serves
+// their files through IPC; this module loads them, builds the
+// per-plugin API object, and owns the registries for cards, tools,
+// panels, views and commands. The core (src/main.ts) owns the board
+// state and the DOM; it passes a Host with closures over that state
+// into initPlugins, and calls back into this module at the points
+// where a plugin can contribute (card rendering, tool clicks,
+// double-clicks, card actions, search text, toolbar state, render).
+//
+// Trust model, stated honestly: a locally installed plugin runs in
+// the renderer with this API object. It does not get Node or the
+// filesystem directly — every privileged call goes through the
+// preload bridge — but it does run in the same renderer as the
+// core, so installing a plugin is trusting its code, like an
+// Obsidian or VS Code extension. The API is the supported
+// contract; reaching past it into core DOM is unsupported and may
+// break. A future version may sandbox panels and views harder;
+// v1 does not pretend otherwise.
+
+import type { Board, Camera, Item, Kind, Pt, Size } from "./model";
+
+// ---------------------------------------------------------------- types
+
+export interface PluginManifest {
+  id: string;
+  name: string;
+  version: string;
+  apiVersion: string;
+  description?: string;
+  permissions?: string[];
+  main: string;
+  styles?: string[];
+  source?: string;
+  enabled?: boolean;
+  contributions?: {
+    cards?: Array<{ kind: string; title: string }>;
+    tools?: Array<{ id: string; title: string }>;
+    panels?: Array<{ id: string; title: string }>;
+    views?: Array<{ id: string; title: string }>;
+    commands?: Array<{ id: string; title: string }>;
+  };
+}
+
+export interface PluginCardDef {
+  kind: string;
+  title: string;
+  // Handlers receive the full board item AND the plugin's data
+  // separately, so a plugin author never has to dig through
+  // item.kind.Plugin.data: render(item, data) is the easy path.
+  render: (item: Item, data: unknown) => string;
+  onDoubleClick?: (item: Item, data: unknown) => void;
+  onAction?: (action: string, item: Item, data: unknown) => void;
+  searchText?: (data: unknown) => string;
+}
+
+export interface PluginToolDef {
+  id: string;
+  title: string;
+  icon?: string;
+  onMouseDown?: (world: Pt) => void;
+  onMouseUp?: (world: Pt) => void;
+}
+
+export interface PluginPanelDef {
+  id: string;
+  title: string;
+  render: (container: HTMLElement) => void;
+}
+
+export interface PluginViewDef {
+  id: string;
+  title: string;
+  render: (container: HTMLElement, board: Board) => void;
+  onShow?: () => void;
+  onHide?: () => void;
+}
+
+export interface PluginCommandDef {
+  id: string;
+  title: string;
+  run: () => void | Promise<void>;
+}
+
+// The bridge methods plugins need, as a structural subset of the
+// preload API. main.ts passes its `api` object here; it satisfies
+// this interface once preload exposes the plugin IPC methods.
+export interface PluginBridge {
+  fileUrl(path: string): string;
+  embedFile(path: string): Promise<string>;
+  readTextFile(path: string): Promise<string>;
+  fileSize(path: string): Promise<number>;
+  fetchPreview(url: string): Promise<{ title: string | null; description: string | null; image: string | null; icon: string | null }>;
+  openExternal(target: string): Promise<void>;
+  listPlugins(): Promise<PluginManifest[]>;
+  readPluginFile(pluginId: string, relativePath: string): Promise<string>;
+  setPluginEnabled(pluginId: string, enabled: boolean): Promise<boolean>;
+  pluginStorageGet(pluginId: string, key: string): Promise<unknown>;
+  pluginStorageSet(pluginId: string, key: string, value: unknown): Promise<void>;
+  pluginStorageDelete(pluginId: string, key: string): Promise<void>;
+}
+
+// What the core provides to the plugin system. All board mutation
+// goes through here, so plugins never touch core state directly
+// and core save/render/undo-adjacent behaviour stays in one place.
+export interface PluginHost {
+  getBoard: () => Board;
+  getSelected: () => number[];
+  setSelected: (ids: number[]) => void;
+  addItem: (kind: Kind, pos: Pt, size: Size) => number;
+  updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown }) => boolean;
+  removeItem: (id: number) => boolean;
+  save: () => void;
+  render: () => void;
+  setTool: (tool: string) => void;
+  getCamera: () => Camera;
+  setCamera: (cam: Camera) => void;
+  centreOn: (id: number) => void;
+  toast: (msg: string) => void;
+  // DOM the plugin system is allowed to manage. The core passes
+  // these elements in; plugins never query core DOM themselves.
+  toolbarToolsEl: HTMLElement;
+  panelsEl: HTMLElement;
+  pluginViewEl: HTMLElement;
+  boardCanvasEls: HTMLElement[];
+  viewSwitcherEl: HTMLElement;
+}
+
+export interface PluginContext {
+  version: string;
+  plugin: { id: string; name: string; version: string };
+  has: (capability: string) => boolean;
+  board: {
+    get: () => Board;
+    getItems: () => Item[];
+    getItem: (id: number) => Item | undefined;
+    getSelected: () => number[];
+    setSelected: (ids: number[]) => void;
+    addItem: (kind: Kind, pos: Pt, size: Size) => number;
+    addPluginCard: (kind: string, data: unknown, pos: Pt, size: Size) => number;
+    updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown }) => boolean;
+    removeItem: (id: number) => boolean;
+    save: () => void;
+    render: () => void;
+  };
+  view: {
+    getCamera: () => Camera;
+    setCamera: (cam: Camera) => void;
+    centreOn: (id: number) => void;
+    getView: () => string;
+    setView: (id: string) => void;
+    listViews: () => Array<{ id: string; title: string; plugin: string | null }>;
+  };
+  ui: {
+    toast: (msg: string) => void;
+    registerTool: (def: PluginToolDef) => void;
+    registerPanel: (def: PluginPanelDef) => void;
+    registerCommand: (def: PluginCommandDef) => void;
+    registerView: (def: PluginViewDef) => void;
+    showPanel: (id: string) => void;
+    hidePanel: (id: string) => void;
+    getPanelElement: (id: string) => HTMLElement | null;
+  };
+  cards: {
+    register: (def: PluginCardDef) => void;
+  };
+  files: {
+    embedFile: (path: string) => Promise<string>;
+    fileUrl: (path: string) => string;
+    readTextFile: (path: string) => Promise<string>;
+    fileSize: (path: string) => Promise<number>;
+    openExternal: (target: string) => Promise<void>;
+    fetchPreview: (url: string) => Promise<{ title: string | null; description: string | null; image: string | null; icon: string | null }>;
+  };
+  storage: {
+    get: (key: string) => Promise<unknown>;
+    set: (key: string, value: unknown) => Promise<void>;
+    delete: (key: string) => Promise<void>;
+  };
+  events: {
+    on: (event: string, handler: () => void) => void;
+    off: (event: string, handler: () => void) => void;
+  };
+}
+
+interface LoadedPlugin {
+  manifest: PluginManifest;
+  active: boolean;
+  failed: boolean;
+  error: string | null;
+  module: { activate?: (api: PluginContext) => void | Promise<void>; deactivate?: () => void | Promise<void> } | null;
+}
+
+// ---------------------------------------------------------------- state
+
+const cards = new Map<string, PluginCardDef & { pluginId: string }>();
+const tools = new Map<string, PluginToolDef & { pluginId: string; fullId: string }>();
+const panels = new Map<string, PluginPanelDef & { pluginId: string; el: HTMLElement; body: HTMLElement }>();
+const views = new Map<string, PluginViewDef & { pluginId: string }>();
+const commands = new Map<string, PluginCommandDef & { pluginId: string }>();
+const loaded = new Map<string, LoadedPlugin>();
+const listeners = new Map<string, Set<() => void>>();
+
+let host: PluginHost | null = null;
+let bridge: PluginBridge | null = null;
+let activeView = "board";
+let pluginsReady = false;
+
+export function pluginsLoaded(): boolean {
+  return pluginsReady;
+}
+
+export function listLoadedPlugins(): LoadedPlugin[] {
+  return Array.from(loaded.values());
+}
+
+// ---------------------------------------------------------------- events
+
+export function emitPluginEvent(event: string): void {
+  const set = listeners.get(event);
+  if (!set) return;
+  for (const fn of Array.from(set)) {
+    try {
+      fn();
+    } catch {
+      // A plugin event handler must never break the core.
+    }
+  }
+}
+
+function onEvent(event: string, handler: () => void): void {
+  let set = listeners.get(event);
+  if (!set) {
+    set = new Set();
+    listeners.set(event, set);
+  }
+  set.add(handler);
+}
+
+function offEvent(event: string, handler: () => void): void {
+  listeners.get(event)?.delete(handler);
+}
+
+// ---------------------------------------------------------------- helpers
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function domId(pluginId: string, kind: string, id: string): string {
+  return `${kind}-plugin-${pluginId}-${id}`.replace(/[^A-Za-z0-9_-]/g, "-");
+}
+
+function requirePerm(manifest: PluginManifest, perm: string): void {
+  const perms = manifest.permissions ?? [];
+  if (perms.includes(perm)) return;
+  throw new Error(`Plugin ${manifest.id} lacks permission ${perm}`);
+}
+
+function isPluginCard(item: Item): item is Item & { kind: { Plugin: { plugin: string; kind: string; data: unknown } } } {
+  return "Plugin" in item.kind;
+}
+
+// ---------------------------------------------------------------- API builder
+
+function createContext(manifest: PluginManifest): PluginContext {
+  const pluginId = manifest.id;
+  const require = (perm: string) => requirePerm(manifest, perm);
+  return {
+    version: "1",
+    plugin: { id: manifest.id, name: manifest.name, version: manifest.version },
+    has: (capability: string) => {
+      // Capabilities in v1: every domain documented in PLUGIN_API.md.
+      // A future core may add more; a plugin should check before
+      // using a capability that was added after v1.
+      return ["board", "view", "ui", "cards", "files", "storage", "events", "tools", "panels", "commands", "views"].includes(capability);
+    },
+    board: {
+      get: () => {
+        const b = host!.getBoard();
+        return JSON.parse(JSON.stringify(b)) as Board;
+      },
+      getItems: () => JSON.parse(JSON.stringify(host!.getBoard().items)) as Item[],
+      getItem: (id: number) => {
+        const it = host!.getBoard().items.find((i) => i.id === id);
+        return it ? (JSON.parse(JSON.stringify(it)) as Item) : undefined;
+      },
+      getSelected: () => host!.getSelected(),
+      setSelected: (ids: number[]) => host!.setSelected(ids),
+      addItem: (kind: Kind, pos: Pt, size: Size) => {
+        require("board:write");
+        const id = host!.addItem(kind, pos, size);
+        return id;
+      },
+      addPluginCard: (kind: string, data: unknown, pos: Pt, size: Size) => {
+        require("board:write");
+        const id = host!.addItem({ Plugin: { plugin: pluginId, kind, data } }, pos, size);
+        return id;
+      },
+      updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown }) => {
+        require("board:write");
+        // A plugin may only rewrite its own plugin card data. Core
+        // pos/size/group edits are allowed for any card, because
+        // moving a card is not editing its content.
+        if (patch.data !== undefined) {
+          const it = host!.getBoard().items.find((i) => i.id === id);
+          if (!it || !isPluginCard(it) || it.kind.Plugin.plugin !== pluginId) {
+            throw new Error(`Plugin ${pluginId} cannot edit another plugin's card data`);
+          }
+        }
+        const ok = host!.updateItem(id, patch);
+        return ok;
+      },
+      removeItem: (id: number) => {
+        require("board:write");
+        const ok = host!.removeItem(id);
+        return ok;
+      },
+      save: () => {
+        require("board:write");
+        host!.save();
+      },
+      render: () => host!.render(),
+    },
+    view: {
+      getCamera: () => ({ ...host!.getCamera() }),
+      setCamera: (cam: Camera) => host!.setCamera(cam),
+      centreOn: (id: number) => host!.centreOn(id),
+      getView: () => activeView,
+      setView: (id: string) => setActiveView(id),
+      listViews: () => {
+        const out: Array<{ id: string; title: string; plugin: string | null }> = [{ id: "board", title: "Board", plugin: null }];
+        for (const v of views.values()) out.push({ id: v.id, title: v.title, plugin: v.pluginId });
+        return out;
+      },
+    },
+    ui: {
+      toast: (msg: string) => host!.toast(msg),
+      registerTool: (def: PluginToolDef) => registerTool(pluginId, def),
+      registerPanel: (def: PluginPanelDef) => registerPanel(pluginId, def),
+      registerCommand: (def: PluginCommandDef) => registerCommand(pluginId, def),
+      registerView: (def: PluginViewDef) => {
+        require("view:replace");
+        registerView(pluginId, def);
+      },
+      showPanel: (id: string) => {
+        const p = panels.get(`${pluginId}:${id}`);
+        if (p) p.el.style.display = "";
+      },
+      hidePanel: (id: string) => {
+        const p = panels.get(`${pluginId}:${id}`);
+        if (p) p.el.style.display = "none";
+      },
+      getPanelElement: (id: string) => {
+        const p = panels.get(`${pluginId}:${id}`);
+        return p ? p.body : null;
+      },
+    },
+    cards: {
+      register: (def: PluginCardDef) => {
+        cards.set(`${pluginId}:${def.kind}`, { ...def, pluginId });
+      },
+    },
+    files: {
+      embedFile: async (path: string) => {
+        require("files:embed");
+        return bridge!.embedFile(path);
+      },
+      fileUrl: (path: string) => bridge!.fileUrl(path),
+      readTextFile: async (path: string) => {
+        require("files:read");
+        return bridge!.readTextFile(path);
+      },
+      fileSize: async (path: string) => {
+        require("files:read");
+        return bridge!.fileSize(path);
+      },
+      openExternal: async (target: string) => {
+        require("files:read");
+        return bridge!.openExternal(target);
+      },
+      fetchPreview: async (url: string) => {
+        require("files:read");
+        return bridge!.fetchPreview(url);
+      },
+    },
+    storage: {
+      get: async (key: string) => {
+        require("storage");
+        return bridge!.pluginStorageGet(pluginId, key);
+      },
+      set: async (key: string, value: unknown) => {
+        require("storage");
+        return bridge!.pluginStorageSet(pluginId, key, value);
+      },
+      delete: async (key: string) => {
+        require("storage");
+        return bridge!.pluginStorageDelete(pluginId, key);
+      },
+    },
+    events: {
+      on: (event: string, handler: () => void) => onEvent(event, handler),
+      off: (event: string, handler: () => void) => offEvent(event, handler),
+    },
+  };
+}
+
+// ---------------------------------------------------------------- registration
+
+function registerTool(pluginId: string, def: PluginToolDef): void {
+  const fullId = `plugin:${pluginId}:${def.id}`;
+  tools.set(fullId, { ...def, pluginId, fullId });
+  if (!host) return;
+  const btn = document.createElement("button");
+  btn.id = domId(pluginId, "tool", def.id);
+  btn.title = def.title;
+  btn.setAttribute("aria-label", def.title);
+  if (def.icon) {
+    if (/<script/i.test(def.icon)) throw new Error(`Plugin ${pluginId} tool icon contains <script>`);
+    btn.innerHTML = def.icon;
+  } else {
+    btn.textContent = def.title.slice(0, 1).toUpperCase();
+  }
+  btn.addEventListener("click", () => host!.setTool(fullId));
+  host.toolbarToolsEl.appendChild(btn);
+}
+
+function registerPanel(pluginId: string, def: PluginPanelDef): void {
+  if (!host) return;
+  const wrap = document.createElement("div");
+  wrap.className = "plugin-panel";
+  wrap.dataset.plugin = pluginId;
+  wrap.dataset.panel = def.id;
+  const head = document.createElement("div");
+  head.className = "plugin-panel-head";
+  const title = document.createElement("span");
+  title.textContent = def.title;
+  const close = document.createElement("button");
+  close.textContent = "×";
+  close.title = "Close panel";
+  close.setAttribute("aria-label", "Close panel");
+  close.addEventListener("click", () => {
+    wrap.style.display = "none";
+  });
+  head.appendChild(title);
+  head.appendChild(close);
+  const body = document.createElement("div");
+  body.className = "plugin-panel-body";
+  wrap.appendChild(head);
+  wrap.appendChild(body);
+  host.panelsEl.appendChild(wrap);
+  panels.set(`${pluginId}:${def.id}`, { ...def, pluginId, el: wrap, body });
+  try {
+    def.render(body);
+  } catch (e) {
+    body.textContent = `Panel failed to render: ${String(e)}`;
+  }
+}
+
+function registerCommand(pluginId: string, def: PluginCommandDef): void {
+  commands.set(`${pluginId}:${def.id}`, { ...def, pluginId });
+}
+
+function registerView(pluginId: string, def: PluginViewDef): void {
+  views.set(def.id, { ...def, pluginId });
+  renderViewSwitcher();
+}
+
+// ---------------------------------------------------------------- views
+
+export function getActiveView(): string {
+  return activeView;
+}
+
+export function listViewsForUI(): Array<{ id: string; title: string; plugin: string | null }> {
+  const out: Array<{ id: string; title: string; plugin: string | null }> = [{ id: "board", title: "Board", plugin: null }];
+  for (const v of views.values()) out.push({ id: v.id, title: v.title, plugin: v.pluginId });
+  return out;
+}
+
+function renderViewSwitcher(): void {
+  if (!host) return;
+  const el = host.viewSwitcherEl;
+  el.innerHTML = "";
+  if (views.size === 0) {
+    el.style.display = "none";
+    return;
+  }
+  el.style.display = "flex";
+  const mk = (id: string, title: string) => {
+    const b = document.createElement("button");
+    b.textContent = title;
+    b.classList.toggle("active", activeView === id);
+    b.addEventListener("click", () => setActiveView(id));
+    el.appendChild(b);
+  };
+  mk("board", "Board");
+  for (const v of views.values()) mk(v.id, v.title);
+}
+
+export function setActiveView(id: string): void {
+  if (!host) return;
+  if (id !== "board" && !views.has(id)) return;
+  const prev = views.get(activeView);
+  if (prev?.onHide) {
+    try {
+      prev.onHide();
+    } catch {
+      // A view's onHide must never trap the user in the view.
+    }
+  }
+  activeView = id;
+  if (id === "board") {
+    for (const el of host.boardCanvasEls) el.style.display = "";
+    host.pluginViewEl.style.display = "none";
+    host.pluginViewEl.innerHTML = "";
+  } else {
+    for (const el of host.boardCanvasEls) el.style.display = "none";
+    host.pluginViewEl.style.display = "";
+    const v = views.get(id)!;
+    host.pluginViewEl.innerHTML = "";
+    host.pluginViewEl.dataset.plugin = v.pluginId;
+    try {
+      v.render(host.pluginViewEl, host.getBoard());
+    } catch (e) {
+      host.pluginViewEl.textContent = `View failed to render: ${String(e)}`;
+    }
+    if (v.onShow) {
+      try {
+        v.onShow();
+      } catch {
+        // See onHide above.
+      }
+    }
+  }
+  renderViewSwitcher();
+  emitPluginEvent("view");
+  host.render();
+}
+
+export function refreshActiveView(): void {
+  if (!host || activeView === "board") return;
+  const v = views.get(activeView);
+  if (!v) {
+    setActiveView("board");
+    return;
+  }
+  try {
+    v.render(host.pluginViewEl, host.getBoard());
+  } catch (e) {
+    host.pluginViewEl.textContent = `View failed to render: ${String(e)}`;
+  }
+}
+
+// ---------------------------------------------------------------- core callbacks
+
+export function getCardRenderer(item: Item): PluginCardDef | null {
+  if (!isPluginCard(item)) return null;
+  return cards.get(`${item.kind.Plugin.plugin}:${item.kind.Plugin.kind}`) ?? null;
+}
+
+export function getCardHtml(item: Item): string | null {
+  if (!isPluginCard(item)) return null;
+  const def = getCardRenderer(item);
+  // Selection class and card chrome are applied by the core
+  // wrapper in main.ts; this returns inner HTML only.
+  if (!def) {
+    const { plugin, kind } = item.kind.Plugin;
+    return `<div style="padding:12px"><div class="title" style="font-size:14px">Plugin card</div><div class="sub" style="font-size:12px">${escapeHtml(plugin)} — ${escapeHtml(kind)}</div><div class="sub" style="font-size:12px">Install the plugin to view this card. Your data is kept.</div></div>`;
+  }
+  try {
+    return def.render(item, item.kind.Plugin.data);
+  } catch (e) {
+    return `<div style="padding:12px"><div class="title" style="font-size:14px">Plugin card failed to render</div><div class="sub" style="font-size:12px">${escapeHtml(String(e))}</div></div>`;
+  }
+}
+
+export function getPluginCardSearchText(item: Item): string | null {
+  if (!isPluginCard(item)) return null;
+  const def = getCardRenderer(item);
+  if (def?.searchText) {
+    try {
+      return def.searchText(item.kind.Plugin.data);
+    } catch {
+      return null;
+    }
+  }
+  return `${item.kind.Plugin.plugin} ${item.kind.Plugin.kind} ${JSON.stringify(item.kind.Plugin.data ?? "")}`;
+}
+
+export function handlePluginCardDoubleClick(item: Item): boolean {
+  if (!isPluginCard(item)) return false;
+  const def = getCardRenderer(item);
+  if (!def?.onDoubleClick) return false;
+  try {
+    def.onDoubleClick(item, item.kind.Plugin.data);
+  } catch (e) {
+    host?.toast(`Plugin card failed: ${String(e)}`);
+  }
+  return true;
+}
+
+export function handlePluginCardAction(action: string, item: Item): boolean {
+  if (!isPluginCard(item)) return false;
+  const def = getCardRenderer(item);
+  if (!def?.onAction) return false;
+  try {
+    def.onAction(action, item, item.kind.Plugin.data);
+  } catch (e) {
+    host?.toast(`Plugin action failed: ${String(e)}`);
+  }
+  return true;
+}
+
+export function getPluginTool(fullId: string): (PluginToolDef & { pluginId: string; fullId: string }) | null {
+  return tools.get(fullId) ?? null;
+}
+
+export function syncPluginToolButtons(activeTool: string): void {
+  for (const t of tools.values()) {
+    const btn = document.getElementById(domId(t.pluginId, "tool", t.id));
+    if (btn) btn.classList.toggle("active", activeTool === t.fullId);
+  }
+}
+
+export function listPluginCommands(): Array<PluginCommandDef & { pluginId: string; pluginName: string }> {
+  const out: Array<PluginCommandDef & { pluginId: string; pluginName: string }> = [];
+  for (const c of commands.values()) {
+    const lp = loaded.get(c.pluginId);
+    out.push({ ...c, pluginName: lp?.manifest.name ?? c.pluginId });
+  }
+  return out;
+}
+
+export async function runPluginCommand(pluginId: string, commandId: string): Promise<void> {
+  const c = commands.get(`${pluginId}:${commandId}`);
+  if (!c) return;
+  try {
+    await c.run();
+  } catch (e) {
+    host?.toast(`Plugin command failed: ${String(e)}`);
+  }
+}
+
+// ---------------------------------------------------------------- loading
+
+function unregisterPlugin(pluginId: string): void {
+  for (const key of Array.from(cards.keys())) {
+    if (key.startsWith(`${pluginId}:`)) cards.delete(key);
+  }
+  for (const [fullId, t] of Array.from(tools.entries())) {
+    if (t.pluginId === pluginId) {
+      tools.delete(fullId);
+      document.getElementById(domId(pluginId, "tool", t.id))?.remove();
+    }
+  }
+  for (const [key, p] of Array.from(panels.entries())) {
+    if (p.pluginId === pluginId) {
+      panels.delete(key);
+      p.el.remove();
+    }
+  }
+  for (const [key, v] of Array.from(views.entries())) {
+    if (v.pluginId === pluginId) views.delete(key);
+  }
+  for (const key of Array.from(commands.keys())) {
+    if (key.startsWith(`${pluginId}:`)) commands.delete(key);
+  }
+  if (host && activeView !== "board") {
+    const v = views.get(activeView);
+    if (!v) setActiveView("board");
+  }
+  renderViewSwitcher();
+}
+
+async function activatePlugin(manifest: PluginManifest): Promise<void> {
+  const lp = loaded.get(manifest.id);
+  if (!lp || !bridge) return;
+  // Styles first, so the plugin's first render already looks right.
+  for (const stylePath of manifest.styles ?? []) {
+    try {
+      const css = await bridge.readPluginFile(manifest.id, stylePath);
+      const style = document.createElement("style");
+      style.dataset.plugin = manifest.id;
+      style.textContent = css;
+      document.head.appendChild(style);
+    } catch (e) {
+      // A missing stylesheet must not block the plugin.
+      console.warn(`Plugin ${manifest.id} stylesheet ${stylePath} failed: ${String(e)}`);
+    }
+  }
+  const code = await bridge.readPluginFile(manifest.id, manifest.main);
+  const blob = new Blob([code], { type: "text/javascript" });
+  const url = URL.createObjectURL(blob);
+  try {
+    const mod = (await import(/* @vite-ignore */ url)) as {
+      activate?: (api: PluginContext) => void | Promise<void>;
+      deactivate?: () => void | Promise<void>;
+    };
+    if (typeof mod.activate !== "function") {
+      throw new Error(`Plugin ${manifest.id} main.js does not export activate(api)`);
+    }
+    lp.module = mod;
+    const api = createContext(manifest);
+    await mod.activate(api);
+    lp.active = true;
+    lp.failed = false;
+    lp.error = null;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function deactivatePlugin(manifest: PluginManifest): Promise<void> {
+  const lp = loaded.get(manifest.id);
+  if (!lp) return;
+  if (lp.module?.deactivate) {
+    try {
+      await lp.module.deactivate();
+    } catch {
+      // Deactivate failures must not trap the user with the plugin on.
+    }
+  }
+  lp.module = null;
+  lp.active = false;
+  unregisterPlugin(manifest.id);
+  document.querySelectorAll(`style[data-plugin="${manifest.id}"]`).forEach((el) => el.remove());
+}
+
+export async function initPlugins(h: PluginHost, b: PluginBridge): Promise<void> {
+  host = h;
+  bridge = b;
+  let manifests: PluginManifest[] = [];
+  try {
+    manifests = await b.listPlugins();
+  } catch (e) {
+    h.toast(`Could not list plugins: ${String(e)}`);
+    pluginsReady = true;
+    return;
+  }
+  for (const m of manifests) {
+    loaded.set(m.id, { manifest: m, active: false, failed: false, error: null, module: null });
+  }
+  for (const m of manifests) {
+    if (m.enabled === false) continue;
+    if (m.apiVersion !== "1") {
+      const lp = loaded.get(m.id)!;
+      lp.failed = true;
+      lp.error = `Requires plugin API ${m.apiVersion}, this app provides 1`;
+      continue;
+    }
+    try {
+      await activatePlugin(m);
+    } catch (e) {
+      const lp = loaded.get(m.id)!;
+      lp.failed = true;
+      lp.error = String(e);
+      lp.active = false;
+      unregisterPlugin(m.id);
+      h.toast(`Plugin ${m.name} failed to load: ${String(e)}`);
+    }
+  }
+  renderViewSwitcher();
+  pluginsReady = true;
+}
+
+export async function setPluginEnabled(id: string, enabled: boolean): Promise<void> {
+  if (!bridge || !host) return;
+  await bridge.setPluginEnabled(id, enabled);
+  const lp = loaded.get(id);
+  if (!lp) return;
+  lp.manifest.enabled = enabled;
+  if (enabled && !lp.active && !lp.failed) {
+    // A previously failed plugin gets one retry on re-enable; a
+    // plugin that failed to load is not retried silently on every
+    // toggle — the user re-enabling it is the retry.
+    try {
+      await activatePlugin(lp.manifest);
+    } catch (e) {
+      lp.failed = true;
+      lp.error = String(e);
+      lp.active = false;
+      unregisterPlugin(id);
+      host.toast(`Plugin ${lp.manifest.name} failed to load: ${String(e)}`);
+    }
+  } else if (!enabled && lp.active) {
+    await deactivatePlugin(lp.manifest);
+  } else if (enabled && lp.failed) {
+    lp.failed = false;
+    lp.error = null;
+    try {
+      await activatePlugin(lp.manifest);
+    } catch (e) {
+      lp.failed = true;
+      lp.error = String(e);
+      lp.active = false;
+      unregisterPlugin(id);
+      host.toast(`Plugin ${lp.manifest.name} failed to load: ${String(e)}`);
+    }
+  }
+  host.render();
+}

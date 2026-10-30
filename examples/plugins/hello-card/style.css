@@ -1,0 +1,5 @@
+/* Hello Card sample styles. Scope plugin CSS to the plugin's own
+   classes and containers; do not restyle core UI from a plugin. */
+.plugin-panel[data-plugin="hello-card"] .plugin-panel-body button {
+  margin-top: 8px;
+}

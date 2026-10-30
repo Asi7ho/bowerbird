@@ -21,6 +21,12 @@ interface BowerbirdAPI {
   fullscreen(): Promise<void>;
   getPathForFile(file: File): string;
   fileUrl(path: string): string;
+  listPlugins(): Promise<PluginManifest[]>;
+  readPluginFile(pluginId: string, relativePath: string): Promise<string>;
+  setPluginEnabled(pluginId: string, enabled: boolean): Promise<boolean>;
+  pluginStorageGet(pluginId: string, key: string): Promise<unknown>;
+  pluginStorageSet(pluginId: string, key: string, value: unknown): Promise<void>;
+  pluginStorageDelete(pluginId: string, key: string): Promise<void>;
 }
 declare global {
   interface Window { bowerbird: BowerbirdAPI }
@@ -32,10 +38,20 @@ import {
   hitTest, itemBounds, marquee, moveSelection, normaliseHex, parseHex, renderMarkdownHtml,
   resizeItem, select, tileColorFor, tint,
 } from "./model";
+import {
+  emitPluginEvent, getActiveView, getCardHtml, getPluginCardSearchText,
+  getPluginTool, handlePluginCardAction, handlePluginCardDoubleClick, initPlugins,
+  listLoadedPlugins, listPluginCommands, refreshActiveView, runPluginCommand,
+  setPluginEnabled, syncPluginToolButtons,
+  type PluginHost, type PluginManifest,
+} from "./plugins";
 
 // ---------------------------------------------------------------- state
 
-type Tool = "select" | "pen" | "connector";
+// Core tools are select/pen/connector. Plugin tools are strings of
+// the form "plugin:<pluginId>:<toolId>" (see src/plugins.ts); the
+// type stays open so a plugin tool is a valid Tool.
+type Tool = string;
 const PALETTE = ["#1A1A1A", "#E63946", "#2E86AB", "#FF6B35", "#6A4C93", "#2A9D8F"];
 const ACCENT = "#007AFF";
 
@@ -103,6 +119,7 @@ let drag: null
   | { kind: "connector"; from: Anchor; current: Pt }
   | { kind: "marquee"; start: Pt; current: Pt }
   | { kind: "resize"; id: number; startWorld: Pt; origW: number; origH: number; moved: boolean } = null;
+let pluginToolDown = false;
 let audioEl: HTMLAudioElement | null = null;
 let audioId: number | null = null;
 const audioDurations = new Map<string, number>();
@@ -189,6 +206,7 @@ function save(): void {
   // no-ops save-board in demo mode, as a second guard.
   if (DEMO) return;
   api.saveBoard(JSON.stringify(board)).catch((e) => toast(`Save failed: ${String(e)}`));
+  emitPluginEvent("board");
 }
 function allocId(): number {
   board.next_id += 1;
@@ -344,6 +362,12 @@ function cachedMarkdown(item: Item, text: string, size: number): string {
 function cardHtml(item: Item): string {
   const sel = selected.includes(item.id);
   const cls = sel ? "card selected" : "card";
+  if ("Plugin" in item.kind) {
+    const ww0 = item.size.w, hh0 = item.size.h;
+    const style0 = `left:${item.pos.x}px;top:${item.pos.y}px;width:${ww0}px;height:${hh0}px;`;
+    const inner = getCardHtml(item) ?? "";
+    return `<div class="${cls}" data-id="${item.id}" style="${style0}"><div class="inner">${inner}</div></div>`;
+  }
   // Cards live in world coordinates; the whole #cards layer is
   // transformed once by the camera (see applyCamera). Per-card
   // screen positions and per-card scale transforms used to force a
@@ -516,6 +540,7 @@ function render(): void {
     else v.addEventListener("loadedmetadata", restore, { once: true });
   }
   if (editingHtml) cardsEl.insertAdjacentHTML("beforeend", editingHtml);
+  refreshActiveView();
   updateToolbar();
   lastContentKey = visibleKey();
   applyCamera();
@@ -550,6 +575,7 @@ function updateToolbar(): void {
   setActive("tool-select", tool === "select");
   setActive("tool-pen", tool === "pen");
   setActive("tool-connector", tool === "connector");
+  syncPluginToolButtons(tool);
   const palette = document.getElementById("palette") as HTMLDivElement;
   palette.style.display = tool === "pen" ? "flex" : "none";
   if (tool === "pen" && palette.childElementCount === 0) {
@@ -579,7 +605,7 @@ function updateToolbar(): void {
 // removes and re-inserts it, which cancels the pending click in
 // Chromium. Stacking is therefore done with z-index, which changes
 // paint order without touching the node at all.
-function updateSelection(): void {
+function updateSelectionInner(): void {
   for (const child of Array.from(cardsEl.children)) {
     const el = child as HTMLElement;
     el.classList.toggle("selected", selected.includes(Number(el.dataset.id)));
@@ -589,6 +615,11 @@ function updateSelection(): void {
   // Selection changes without a full render (a plain click) still
   // need the resize handle to appear / disappear immediately.
   updateResizeHandle();
+}
+
+function updateSelection(): void {
+  updateSelectionInner();
+  emitPluginEvent("selection");
 }
 
 function applyStacking(): void {
@@ -681,6 +712,19 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
     return;
   }
   const world = toWorld(winPt);
+  // A plugin view owns its own viewport: core board clicks, pan and
+  // tools must not run while it is active. The plugin's own
+  // listeners on its container handle clicks there.
+  if (getActiveView() !== "board" && target.closest("#plugin-view")) return;
+  if (tool.startsWith("plugin:")) {
+    const pt = getPluginTool(tool);
+    if (pt?.onMouseDown) {
+      try { pt.onMouseDown(world); } catch (e) { toast(`Plugin tool failed: ${String(e)}`); }
+      pluginToolDown = true;
+      return;
+    }
+    return;
+  }
   if (spaceDown) { drag = { kind: "pan", last: winPt }; return; }
   if (tool === "pen") {
     drag = { kind: "stroke", points: [world] };
@@ -702,6 +746,7 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
     const hit = hitTest(board, world);
     if (hit !== null) {
       const it = boardGet(board, hit);
+      if (it && "Plugin" in it.kind && handlePluginCardDoubleClick(it)) return;
       if (it && "Text" in it.kind) { startTextEdit(hit); return; }
       if (it && "UrlCard" in it.kind) { openExternal(it.kind.UrlCard.url); return; }
       if (it && "PdfCard" in it.kind) { openExternal(it.kind.PdfCard.path); return; }
@@ -859,6 +904,14 @@ window.addEventListener("mousemove", (e: MouseEvent) => {
 });
 
 window.addEventListener("mouseup", (e: MouseEvent) => {
+  if (pluginToolDown) {
+    pluginToolDown = false;
+    const pt = getPluginTool(tool);
+    if (pt?.onMouseUp) {
+      try { pt.onMouseUp(toWorld({ x: e.clientX, y: e.clientY })); } catch (err) { toast(`Plugin tool failed: ${String(err)}`); }
+    }
+    return;
+  }
   if (!drag) return;
   const world = toWorld({ x: e.clientX, y: e.clientY });
   const d = drag;
@@ -943,6 +996,12 @@ cardsEl.addEventListener("click", (e: MouseEvent) => {
   const target = e.target as HTMLElement;
   const link = target.closest("a[data-url]") as HTMLElement | null;
   if (link) { e.preventDefault(); openExternal(link.dataset.url ?? ""); return; }
+  const pbtn = target.closest("[data-plugin-action]") as HTMLElement | null;
+  if (pbtn) {
+    const pid = Number(pbtn.dataset.id);
+    const pit = boardGet(board, pid);
+    if (pit && handlePluginCardAction(pbtn.dataset.pluginAction ?? "", pit)) return;
+  }
   const btn = target.closest("[data-action]") as HTMLElement | null;
   if (!btn) return;
   const id = Number(btn.dataset.id);
@@ -1135,6 +1194,10 @@ function searchText(item: Item): string {
   if ("Audio" in k) return base(k.Audio.path);
   if ("Video" in k) return base(k.Video.source);
   if ("Swatch" in k) return k.Swatch.hex;
+  if ("Plugin" in k) {
+    const pt = getPluginCardSearchText(item);
+    return pt ?? `${k.Plugin.plugin} ${k.Plugin.kind}`;
+  }
   return "";
 }
 
@@ -1277,6 +1340,58 @@ document.getElementById("settings-backdrop")?.addEventListener("click", (e) => {
   if ((e.target as HTMLElement).id === "settings-backdrop") setSettings(false);
 });
 
+function renderPluginSettings(): void {
+  const list = document.getElementById("plugin-list") as HTMLDivElement | null;
+  if (!list) return;
+  const plugins = listLoadedPlugins();
+  const commands = listPluginCommands();
+  if (plugins.length === 0) {
+    list.innerHTML = `<p class="meta">No plugins found. Drop a plugin folder into your plugins folder, then reopen Settings. See PLUGIN_API.md in the repo for the format.</p>`;
+    return;
+  }
+  let html = "";
+  for (const lp of plugins) {
+    const m = lp.manifest;
+    const parts: string[] = [];
+    for (const c of m.contributions?.cards ?? []) parts.push(`Card: ${c.title}`);
+    for (const c of m.contributions?.tools ?? []) parts.push(`Tool: ${c.title}`);
+    for (const c of m.contributions?.panels ?? []) parts.push(`Panel: ${c.title}`);
+    for (const c of m.contributions?.views ?? []) parts.push(`View: ${c.title}`);
+    for (const c of m.contributions?.commands ?? []) parts.push(`Command: ${c.title}`);
+    const state = lp.failed ? "Failed" : lp.active ? "On" : "Off";
+    const cmds = commands.filter((c) => c.pluginId === m.id);
+    html += `<div class="plugin-row"><div><strong>${m.name}</strong> <span class="meta">${m.version} · ${m.source === "bundled" ? "Built in" : "User"} · ${state}</span></div>`;
+    if (m.description) html += `<p class="meta">${m.description}</p>`;
+    if (parts.length > 0) html += `<p class="meta">${parts.join(" · ")}</p>`;
+    if (lp.failed && lp.error) html += `<p class="meta"><strong>${lp.error}</strong></p>`;
+    html += `<button data-plugin-toggle="${m.id}">${lp.active ? "Disable" : "Enable"}</button>`;
+    for (const c of cmds) {
+      if (!lp.active) continue;
+      html += ` <button data-plugin-command="${m.id}:${c.id}">Run: ${c.title}</button>`;
+    }
+    html += `</div>`;
+  }
+  list.innerHTML = html;
+  for (const btn of Array.from(list.querySelectorAll("[data-plugin-toggle]"))) {
+    btn.addEventListener("click", async () => {
+      const id = (btn as HTMLElement).dataset.pluginToggle ?? "";
+      const lp = listLoadedPlugins().find((x) => x.manifest.id === id);
+      if (!lp) return;
+      await setPluginEnabled(id, !lp.active);
+      renderPluginSettings();
+      render();
+    });
+  }
+  for (const btn of Array.from(list.querySelectorAll("[data-plugin-command]"))) {
+    btn.addEventListener("click", async () => {
+      const [pid, cid] = ((btn as HTMLElement).dataset.pluginCommand ?? "").split(":");
+      if (!pid || !cid) return;
+      await runPluginCommand(pid, cid);
+      render();
+    });
+  }
+}
+
 function setSettings(open: boolean): void {
   settingsOpen = open;
   const backdrop = document.getElementById("settings-backdrop") as HTMLDivElement;
@@ -1293,6 +1408,7 @@ function setSettings(open: boolean): void {
     renderBgOpts();
     renderGridOpts();
     renderCornerOpts();
+    renderPluginSettings();
     api.getAppSettings().then((s) => { cornerReveal = s.corner; renderCornerOpts(); renderCollapseButton(); }).catch(() => undefined);
   }
   render();
@@ -1611,6 +1727,64 @@ async function init(): Promise<void> {
     board = welcomeBoard(0, 0);
   }
   try { cornerReveal = (await api.getAppSettings()).corner; } catch { /* default stands */ }
+  const pluginHost: PluginHost = {
+    getBoard: () => board,
+    getSelected: () => selected,
+    setSelected: (ids: number[]) => { selected = ids; updateSelection(); },
+    addItem: (kind, pos, size) => {
+      const id = allocId();
+      board.items.push({ id, pos, size, group: null, kind });
+      save(); render();
+      return id;
+    },
+    updateItem: (id, patch) => {
+      const it = boardGet(board, id);
+      if (!it) return false;
+      if (patch.pos) it.pos = patch.pos;
+      if (patch.size) it.size = patch.size;
+      if (patch.group !== undefined) it.group = patch.group;
+      if (patch.data !== undefined && "Plugin" in it.kind) it.kind.Plugin.data = patch.data;
+      save(); render();
+      return true;
+    },
+    removeItem: (id) => {
+      const before = board.items.length;
+      board.items = board.items.filter((it) => it.id !== id);
+      if (board.items.length === before) return false;
+      selected = selected.filter((s) => s !== id);
+      save(); render();
+      return true;
+    },
+    save: () => save(),
+    render: () => render(),
+    setTool: (toolName: string) => setTool(toolName),
+    getCamera: () => board.camera,
+    setCamera: (cam) => {
+      if (!isFinite(cam.x) || !isFinite(cam.y) || !isFinite(cam.zoom)) return;
+      board.camera = { x: cam.x, y: cam.y, zoom: Math.max(0.1, Math.min(8, cam.zoom)) };
+      save(); render();
+    },
+    centreOn: (id) => {
+      const it = boardGet(board, id);
+      if (!it) return;
+      selected = select(board, [], id, false);
+      const c = centre(it);
+      board.camera.x = c.x - window.innerWidth / 2 / board.camera.zoom;
+      board.camera.y = c.y - window.innerHeight / 2 / board.camera.zoom;
+      save(); render();
+    },
+    toast: (msg: string) => toast(msg),
+    toolbarToolsEl: document.getElementById("tools") as HTMLElement,
+    panelsEl: document.getElementById("plugin-panels") as HTMLElement,
+    pluginViewEl: document.getElementById("plugin-view") as HTMLElement,
+    boardCanvasEls: [
+      gridEl,
+      document.getElementById("canvas-svg") as HTMLElement,
+      cardsEl,
+    ],
+    viewSwitcherEl: document.getElementById("view-switcher") as HTMLElement,
+  };
+  await initPlugins(pluginHost, api);
   renderCollapseButton();
   render();
   if (DEMO) toast("Demo \u2014 try anything, nothing is saved");

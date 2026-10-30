@@ -23,4 +23,13 @@ contextBridge.exposeInMainWorld('bowerbird', {
   fullscreen: () => ipcRenderer.invoke('bowerbird:fullscreen'),
   getPathForFile: (file) => webUtils.getPathForFile(file),
   fileUrl: (filePath) => 'app-file://' + filePath.split('/').map(encodeURIComponent).join('/'),
+  // Plugins (see PLUGIN_API.md): discovery, file serving and
+  // per-plugin storage, all through the main process. The renderer
+  // never reads plugin folders directly.
+  listPlugins: () => ipcRenderer.invoke('bowerbird:list-plugins'),
+  readPluginFile: (pluginId, relativePath) => ipcRenderer.invoke('bowerbird:read-plugin-file', pluginId, relativePath),
+  setPluginEnabled: (pluginId, enabled) => ipcRenderer.invoke('bowerbird:set-plugin-enabled', pluginId, enabled),
+  pluginStorageGet: (pluginId, key) => ipcRenderer.invoke('bowerbird:plugin-storage-get', pluginId, key),
+  pluginStorageSet: (pluginId, key, value) => ipcRenderer.invoke('bowerbird:plugin-storage-set', pluginId, key, value),
+  pluginStorageDelete: (pluginId, key) => ipcRenderer.invoke('bowerbird:plugin-storage-delete', pluginId, key),
 });
