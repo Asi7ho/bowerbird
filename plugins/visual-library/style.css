@@ -53,13 +53,6 @@
    same row is one line in the wide whiteboard view and two
    lines in the narrow panel, with no separate layouts. */
 .vl-controls { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
-.vl-controls .vl-add {
-  flex: 1 1 auto; padding: 6px 8px; border-radius: 8px; box-sizing: border-box;
-  border: 1px solid rgba(0, 0, 0, 0.12); background: #fff;
-  cursor: pointer; font: inherit;
-}
-.vl-controls .vl-add:hover:not(:disabled) { background: #f2f2f7; }
-.vl-controls .vl-add:disabled { opacity: 0.5; cursor: default; }
 .vl-newcat { flex: 2 1 160px; display: flex; gap: 6px; min-width: 0; }
 .vl-newcat input {
   flex: 1; min-width: 0; padding: 6px 8px; box-sizing: border-box;
@@ -88,7 +81,6 @@
 .vl-category-count { color: var(--grey); font-weight: 400; }
 .vl-category.vl-drop-target .vl-category-head { background: rgba(0, 122, 255, 0.10); border-radius: 8px; }
 .vl-category-body { position: relative; }
-.vl-empty-category { margin: 0; padding: 8px 4px; min-height: 48px; box-sizing: border-box; border: 1px dashed rgba(0, 0, 0, 0.16); border-radius: 12px; }
 /* The one library card, in both modes. Images keep their
    natural aspect ratio; PDF tiles keep 4:3 via aspect-ratio,
    so height scales with column width and nothing is cropped. */

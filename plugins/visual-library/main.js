@@ -41,7 +41,6 @@ let currentRenderSeq = 0;
 // Panel refs (built once by initPanel).
 let panelSearch = null;
 let panelSections = null;
-let panelAdd = null;
 let panelNewCat = null;
 
 // View refs (built on each activation, cleared on hide).
@@ -49,7 +48,6 @@ let viewContainer = null;
 let viewBuilt = false;
 let viewSearch = null;
 let viewSections = null;
-let viewAdd = null;
 let viewNewCat = null;
 
 let focusHandler = null;
@@ -301,18 +299,7 @@ async function layoutMasonry(container, list, minColWidth, gap, seq) {
 function renderSections(container, mode, seq) {
   container.innerHTML = "";
   const sections = sectionsList();
-  if (items.length === 0) {
-    const msg = document.createElement("p");
-    msg.className = "meta";
-    msg.textContent = "Library is empty. Select an image or PDF on the board and use Add selected to library.";
-    container.appendChild(msg);
-    return;
-  }
   if (sections.length === 0) {
-    const msg = document.createElement("p");
-    msg.className = "meta";
-    msg.textContent = "No matches.";
-    container.appendChild(msg);
     return;
   }
   const minColWidth = mode === "panel" ? 110 : 240;
@@ -355,12 +342,8 @@ function renderSections(container, mode, seq) {
     if (isCollapsed) {
       body.style.display = "none";
     } else if (section.items.length === 0) {
-      const empty = document.createElement("p");
-      empty.className = "meta vl-empty-category";
-      empty.textContent = section.key === "uncategorized"
-        ? "No uncategorized items — drag items here to remove them from a category."
-        : "Empty category — drag items here.";
-      body.appendChild(empty);
+      // No text for an empty category: just the header. The
+      // header itself is the drop target for dragging items in.
     } else {
       layoutMasonry(body, section.items, minColWidth, gap, seq);
     }
@@ -384,39 +367,6 @@ function updateAllDynamic() {
   const seq = ++currentRenderSeq;
   renderPanelDynamic(seq);
   renderViewDynamic(seq);
-  updateAddButtons();
-}
-
-function selectedBoardFiles() {
-  const selected = new Set(apiRef.board.getSelected());
-  const toAdd = [];
-  for (const it of apiRef.board.getItems()) {
-    if (!selected.has(it.id)) continue;
-    if ("Image" in it.kind) toAdd.push(it.kind.Image.path);
-    else if ("PdfCard" in it.kind) toAdd.push(it.kind.PdfCard.path);
-  }
-  return toAdd;
-}
-
-function updateAddButtons() {
-  let n = 0;
-  try { n = selectedBoardFiles().length; } catch { n = 0; }
-  for (const btn of [panelAdd, viewAdd]) {
-    if (!btn) continue;
-    btn.disabled = n === 0;
-    btn.textContent = n === 0 ? "Add selected to library" : `Add selected to library (${n})`;
-  }
-}
-
-async function addSelectedToLibrary() {
-  const toAdd = selectedBoardFiles();
-  if (toAdd.length === 0) return;
-  let added = 0;
-  for (const p of toAdd) {
-    try { await apiRef.files.addToLibrary(p); added += 1; } catch { /* skip one bad file, keep the rest */ }
-  }
-  apiRef.ui.toast(added === 1 ? "Added 1 item to library" : `Added ${added} items to library`);
-  await refresh();
 }
 
 async function createCategoryFrom(input) {
@@ -500,12 +450,6 @@ function searchRow(mode) {
 function controlsRow() {
   const wrap = document.createElement("div");
   wrap.className = "vl-controls";
-  const addBtn = document.createElement("button");
-  addBtn.className = "vl-add";
-  addBtn.disabled = true;
-  addBtn.textContent = "Add selected to library";
-  addBtn.addEventListener("click", () => addSelectedToLibrary());
-  wrap.appendChild(addBtn);
   const nc = document.createElement("div");
   nc.className = "vl-newcat";
   const input = document.createElement("input");
@@ -520,7 +464,7 @@ function controlsRow() {
   nc.appendChild(input);
   nc.appendChild(btn);
   wrap.appendChild(nc);
-  return { wrap, addBtn, input };
+  return { wrap, input };
 }
 
 function initPanel(body) {
@@ -528,14 +472,11 @@ function initPanel(body) {
   panelSearch = sr.input;
   body.appendChild(sr.row);
   const cr = controlsRow();
-  panelAdd = cr.addBtn;
   panelNewCat = cr.input;
   body.appendChild(cr.wrap);
   panelSections = document.createElement("div");
   panelSections.className = "vl-sections";
   body.appendChild(panelSections);
-  apiRef.events.on("selection", updateAddButtons);
-  apiRef.events.on("board", updateAddButtons);
   refresh();
 }
 
@@ -549,7 +490,6 @@ function buildView(container) {
   viewSearch = sr.input;
   head.appendChild(sr.row);
   const cr = controlsRow();
-  viewAdd = cr.addBtn;
   viewNewCat = cr.input;
   head.appendChild(cr.wrap);
   container.appendChild(head);
@@ -567,8 +507,7 @@ function renderView(container) {
   if (viewBuilt && viewContainer === container) {
     const seq = ++currentRenderSeq;
     renderViewDynamic(seq);
-    updateAddButtons();
-    return;
+      return;
   }
   container.innerHTML = "";
   buildView(container);
@@ -638,8 +577,7 @@ export function activate(api) {
       viewContainer = null;
       viewSearch = null;
       viewSections = null;
-      viewAdd = null;
-      viewNewCat = null;
+          viewNewCat = null;
       refresh();
     },
   });
@@ -661,12 +599,10 @@ export function deactivate() {
   apiRef = null;
   panelSearch = null;
   panelSections = null;
-  panelAdd = null;
   panelNewCat = null;
   viewContainer = null;
   viewBuilt = false;
   viewSearch = null;
   viewSections = null;
-  viewAdd = null;
   viewNewCat = null;
 }
