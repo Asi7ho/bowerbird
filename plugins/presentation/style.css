@@ -130,14 +130,14 @@
   flex: none; display: block;
 }
 /* Export sits at the bottom of the panel, below the
-   slide list, at Play's width — calc((100% - 8px) / 2)
-   matches a button in the Play/Draw pair — so it does
-   not disturb that pair, and is not a wide bar across
-   the panel. Same quiet core panel button style, no
-   accent colour. */
+   slide list, and uses the panel's full width — it is
+   the one full-width button in the panel, a footer
+   action for the whole presentation, distinct from the
+   Play/Draw pair at the top. Same quiet core panel
+   button style, no accent colour. */
 .plugin-panel-body .pres-panel-export {
   display: flex; align-items: center; justify-content: center;
-  gap: 6px; width: calc((100% - 8px) / 2);
+  gap: 6px; width: 100%;
   border: 1px solid var(--separator); background: #fff;
   border-radius: 9px; padding: 8px 6px; margin-top: 12px;
   cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink);

@@ -946,8 +946,7 @@ function initPanel(body) {
   exportBtn.className = "pres-panel-export";
   // A download arrow, matching Draw's icon style, and a
   // short label: Export sits at the bottom of the panel,
-  // below the slide list, at Play's width, so it does
-  // not disturb the Play/Draw pair at the top.
+  // below the slide list, at the panel's full width.
   exportBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/></svg><span>Export</span>`;
   exportBtn.title = "Export all slides as a single HTML file";
   exportBtn.setAttribute("aria-label", "Export slides");
