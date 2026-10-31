@@ -468,15 +468,19 @@ The library-folder methods above (`listLibrary`,
 `moveLibraryItem`) remain in the API for other plugins; the
 bundled library does not use them, and a `board/library/`
 folder from an earlier version is ignored, not deleted.
-The third is `palette/`: a panel of curated colour
-palettes, not a library of the board's own cards. Click a
-colour to place a 120x120 swatch at the camera centre,
-drag it to place it at the drop point, the same
-interaction as Visual Library. Placed swatches are
-ordinary board Swatch items, so they survive disabling
-the plugin. Palettes are static and bundled in the plugin
-file, with no network and no storage, and the plugin needs
-only `board:write`.
+The third is `palette/`: a colour wheel panel, not a
+library of the board's own cards and not a fixed palette
+list. Pick a colour on the wheel (hue round the wheel,
+saturation from centre to edge, lightness on the slider)
+and five palettes are made from it live, following colour
+theory: Monochromatic, Analogous, Complementary, Split
+complementary, Triadic, five colours each. Click a colour
+in a palette, or the preview swatch, to place a 120x120
+swatch at the camera centre, drag it to place it at the
+drop point, the same interaction as Visual Library.
+Placed swatches are ordinary board Swatch items, so they
+survive disabling the plugin. No network, no storage,
+and the plugin needs only `board:write`.
 
 ## What is not in v1
 

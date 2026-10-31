@@ -8,7 +8,7 @@
       }
     ]
   },
-  "description": "Colour palettes to place as swatches: click a colour to place it at the camera centre, drag it to place it at the drop point.",
+  "description": "A colour wheel: pick a colour and five palettes are made from it, following colour theory. Click or drag a colour to place it as a swatch.",
   "id": "palette",
   "main": "main.js",
   "name": "Palette",
@@ -18,5 +18,5 @@
   "styles": [
     "style.css"
   ],
-  "version": "1.0.0"
+  "version": "2.0.0"
 }

@@ -1,30 +1,62 @@
 /* Palette panel styles, scoped to .pal-* classes and to this
-   plugin's panel. The tiles themselves are just colours: no
-   text on a tile, the hex is in the title on hover, and the
-   placed board swatch shows its hex pill. */
+   plugin's panel. Tiles are just colours: no text on a tile,
+   the hex is in the title on hover, and the placed board
+   swatch shows its hex pill. */
 /* Panel mode: the panel fills the full height of the flush
-   dock. The panel body is a flex column so the palettes
-   scroll inside it while the panel head stays visible. */
+   dock, sharing it with any other open panel. The panel
+   body itself scrolls: the wheel is too tall to fix at the
+   top and still leave room for palettes when another panel
+   is open (a fixed wheel filled the panel, hid the slider
+   and left the palettes at height 0), so wheel, slider and
+   palettes scroll together in the body, all reachable. */
 .plugin-panel[data-panel="palette"] {
   flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0;
 }
 .plugin-panel[data-panel="palette"] .plugin-panel-body {
   display: flex; flex-direction: column; flex: 1 1 auto;
-  min-height: 0; overflow: hidden;
+  min-height: 0; overflow-y: auto; overflow-x: hidden;
 }
+.pal-wheel-section {
+  flex: none; padding-bottom: 12px; margin-bottom: 12px;
+  border-bottom: 1px solid var(--separator);
+}
+.pal-wheel-wrap {
+  position: relative; width: 180px; height: 180px; margin: 4px auto 12px;
+  cursor: crosshair; touch-action: none;
+}
+.pal-wheel { display: block; border-radius: 50%; }
+.pal-marker {
+  position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px;
+  border-radius: 50%; border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+  pointer-events: none;
+}
+.pal-preview-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.pal-preview {
+  flex: none; width: 48px; height: 48px; border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.08); cursor: pointer; padding: 0;
+}
+.plugin-panel-body .pal-preview { padding: 0; }
+.pal-hex { font-weight: 600; font-size: 14px; }
+.pal-slider-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 4px;
+}
+.pal-slider-label { font-weight: 600; }
+.pal-slider-value { color: var(--grey); }
+.pal-slider { width: 100%; box-sizing: border-box; margin: 0; cursor: pointer; }
 .plugin-panel[data-panel="palette"] .pal-sections {
-  flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; min-height: 0;
+  flex: none;
   /* 15px on the right is the scrollbar's own lane, not tile
-     space: an overlay scrollbar would otherwise float over
-     the last tile's right edge, and a classic scrollbar
-     would sit hard against it. */
+     space, now for the body's scrollbar, not a nested one:
+     an overlay scrollbar would otherwise float over the
+     last tile's right edge, and a classic scrollbar would
+     sit hard against it. */
   padding-right: 15px;
 }
 .pal-palette { margin-bottom: 20px; }
-.pal-head {
-  font-weight: 600; padding: 6px 4px; margin-bottom: 8px;
-  text-align: left;
-}
+.pal-head { font-weight: 600; padding: 6px 4px 0; text-align: left; }
+.pal-desc { color: var(--grey); font-size: 12px; padding: 0 4px 8px; text-align: left; }
 .pal-row { display: flex; gap: 8px; }
 .pal-tile {
   flex: 1 1 auto; aspect-ratio: 1; min-width: 0;
