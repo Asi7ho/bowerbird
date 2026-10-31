@@ -314,38 +314,55 @@ function attachCardInteractions(wrap, item, mode) {
 }
 
 function layoutMasonry(container, items, mode) {
+  // Spanning masonry, in both modes, so small cards pack
+  // tightly instead of floating in wide columns. The grid is
+  // built from small columns (~117px): a small card (a swatch,
+  // board width within 1.5x a small column) spans one column,
+  // every other card spans two, which is ~250px — the card
+  // size the library has always used. A card is scaled
+  // uniformly to its span width, capped at its board size,
+  // so aspect is exact and nothing is ever upscaled beyond
+  // the board: a swatch stays ~120px, centred in its span
+  // only when the span is wider than the card. The previous
+  // one-column-per-card layout centred a 120px swatch in a
+  // 250px column, leaving 149px between two side-by-side
+  // swatches; with small columns two consecutive swatches
+  // sit in adjacent columns, 16px apart, like a palette.
+  // No third-party package: this is thirty lines, the plugin
+  // stays a single local file, and it works offline.
   const containerWidth = container.clientWidth;
-  const minColWidth = mode === "panel" ? 1000 : 240;
+  const smallTarget = 117;
   const gap = 16;
-  const colCount = Math.max(1, Math.floor((containerWidth + gap) / (minColWidth + gap)));
+  const colCount = Math.max(1, Math.floor((containerWidth + gap) / (smallTarget + gap)));
   const colWidth = (containerWidth - gap * (colCount - 1)) / colCount;
   const colHeights = new Array(colCount).fill(0);
   for (const item of items) {
-    // The card HTML is the core's own rendering, at the board
-    // item's size. Scaling it uniformly to the column width
-    // keeps its aspect ratio exactly: height follows width by
-    // the board item's own ratio, never the file's. The scale
-    // is capped at 1: a card is scaled down to fit the column,
-    // never scaled up beyond its board size. Without the cap,
-    // a 120px swatch becomes a 250px square in the library —
-    // the largest card in the grid, where on the board it is
-    // the smallest — with its hex pill blown up to match. A
-    // capped card keeps its board size and sits centred in
-    // its column, so the grid stays balanced.
     const html = apiRef.board.renderCard(item.id);
     if (!html) continue;
-    const scale = Math.min(1, colWidth / item.size.w);
-    const w = item.size.w * scale;
+    const span = Math.min(colCount, item.size.w <= colWidth * 1.5 ? 1 : 2);
+    const spanWidth = span * colWidth + (span - 1) * gap;
+    // Library width: the span width, capped at board width
+    // (never upscale). A large card fills its span exactly;
+    // a swatch in a slightly wider span stays board size,
+    // centred in the span.
+    const w = Math.min(item.size.w, spanWidth);
+    const scale = w / item.size.w;
     const h = item.size.h * scale;
-    let col = 0;
-    for (let i = 1; i < colCount; i++) {
-      if (colHeights[i] < colHeights[col]) col = i;
+    // Place at the start column whose spanned columns are
+    // shortest (leftmost on a tie), so consecutive small
+    // cards pair side by side and order stays top-to-bottom.
+    let start = 0;
+    let best = Infinity;
+    for (let s = 0; s + span <= colCount; s++) {
+      let m = 0;
+      for (let c = s; c < s + span; c++) m = Math.max(m, colHeights[c]);
+      if (m < best) { best = m; start = s; }
     }
     const wrap = document.createElement("div");
     wrap.className = "vl-board-wrap";
     wrap.dataset.boardId = String(item.id);
-    wrap.style.left = `${col * (colWidth + gap) + (colWidth - w) / 2}px`;
-    wrap.style.top = `${colHeights[col]}px`;
+    wrap.style.left = `${start * (colWidth + gap) + (spanWidth - w) / 2}px`;
+    wrap.style.top = `${best}px`;
     wrap.style.width = `${w}px`;
     wrap.style.height = `${h}px`;
     wrap.innerHTML = html;
@@ -357,7 +374,7 @@ function layoutMasonry(container, items, mode) {
     attachCardInteractions(wrap, item, mode);
     if ("Audio" in item.kind) loadLibraryAudioDuration(wrap, item);
     container.appendChild(wrap);
-    colHeights[col] += h + gap;
+    for (let c = start; c < start + span; c++) colHeights[c] = best + h + gap;
   }
   container.style.height = `${Math.max(0, Math.max(...colHeights) - gap)}px`;
 }

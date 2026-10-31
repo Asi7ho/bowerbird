@@ -428,11 +428,14 @@ the board's own elements: every card on the whiteboard
 (text, images, links, PDFs, swatches, audio, video, plugin
 cards; strokes and connectors are not cards and are not
 shown), rendered by the core via `renderCard`, scaled
-uniformly to the masonry column width so the aspect ratio is
-the board item's, unchanged — scaled down to fit the column,
-never up beyond the board size, so a 120px swatch stays
-120px, centred in its column, instead of becoming a 250px
-square. Panel mode is a panel flush
+uniformly to its span width so the aspect ratio is
+the board item's, unchanged — scaled down to fit, never up
+beyond the board size. The grid is spanning masonry from
+small (~117px) columns: a small card (a swatch) spans one
+column, every other card spans two (~250px), so two
+consecutive swatches sit side by side, 16px apart, instead
+of a 120px swatch centred in a 250px column leaving 149px
+between them. Panel mode is a panel flush
 against the right edge, full height, over the board, one
 column, with search, click-to-duplicate at the camera centre
 and drag-to-duplicate at the drop point. Whiteboard mode is

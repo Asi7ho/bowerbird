@@ -27,10 +27,13 @@
 }
 .plugin-panel[data-panel="library"] .vl-sections {
   flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; min-height: 0;
-  /* Reserve the scrollbar gutter always, so the first sections
-     do not measure wider than later ones once the scrollbar
-     appears mid-layout. */
-  scrollbar-gutter: stable;
+  /* No reserved scrollbar gutter: on macOS scrollbars overlay
+     and take no layout space, so a reserved gutter is 15px of
+     empty space on the right, cards shifted left and narrower
+     than the panel allows, for no benefit. On a classic
+     scrollbar the width may vary slightly with scrollbar
+     visibility, which is not visible at a glance across
+     stacked sections. */
 }
 /* Search row: search input plus a single icon button for the
    mode switch. The button matches the search input's height. */
