@@ -88,15 +88,17 @@ There is no handle tab.
   for pen, connector and marquee) instead of rebuilding the board,
   cursor hints run at most once per frame, and content is only
   rebuilt when the visible set actually changes.
-- **Settings (?):** three vertical tabs on the left, one
-  section at a time on the right, not one long window:
-  General (every keyboard shortcut, the canvas background
-  and grid, Data, and Quit Bowerbird), Plugins to turn
-  plugins on and off, and Plugin settings (one section per
-  activated plugin that has settings, Hide's corner picker
-  among them). Each setting has a one-line description. The
-  corner choice is saved in the app's settings file and
-  survives restarts.
+- **Settings (?):** a two-pane window with a fixed height:
+  a clean tab list on the left (General, Plugins, Plugin
+  settings) with a hairline divider, one section at a time
+  on the right, scrolling while the tabs stay put. General
+  holds every keyboard shortcut, the canvas background and
+  grid, Data, and Quit Bowerbird; Plugins turns plugins on
+  and off as a list, not bordered cards; Plugin settings
+  holds one section per activated plugin that has settings,
+  Hide's corner picker among them. Each setting has a
+  one-line description. The corner choice is saved in the
+  app's settings file and survives restarts.
 - **In-app hotkeys:** `V` select, `P` pen, `A` arrow, `Ctrl/Cmd+G`
   group, `Ctrl/Cmd+U` ungroup, `Delete` removes the selection,
   `+`/`-` zoom, `0` resets the view, hold `Space` to pan, `h` hides,
@@ -201,10 +203,10 @@ really restores the board.
 
 ## Icon
 
-Bowerbird has its own icon, not a framework default: a simple
-black and white bird, stylized — a black silhouette (body,
-head, beak, tail) with a white eye, on a white squircle. No
-colour, no detail that disappears at small sizes. The
+Bowerbird has its own icon, not a framework default: an
+abstract black and white bird — two curved wings and a
+small body, as a single black shape on a white squircle.
+No eye, no beak, no literal silhouette. The
 vector source is `assets/icon.svg`;
 `assets/icon.png` is the 1024px export, `assets/icon.ico` is the
 Windows multi-size icon, and `assets/icon.iconset/` is the macOS

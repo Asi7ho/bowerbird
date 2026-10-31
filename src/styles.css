@@ -290,46 +290,59 @@ button { font-family: inherit; }
   display: none; align-items: center; justify-content: center; padding: 24px; z-index: 20;
 }
 #settings-backdrop.open { display: flex; }
+/* Settings as a proper two-pane window, not a popup that
+   resizes to its content: a fixed height, a header with a
+   hairline underneath, a clean tab list on the left with a
+   hairline divider, and a scrolling content pane on the
+   right. The window never jumps when switching tabs, and
+   the tabs never scroll away. The tab list is quiet text,
+   not a grey pill block: inactive tabs are grey, the active
+   one is black on a light fill, with no shadow. */
 #settings {
-  width: min(760px, 92vw); max-height: calc(100% - 48px); overflow: auto;
-  scrollbar-width: none;
+  width: min(760px, 92vw); height: min(680px, calc(100% - 48px));
+  display: flex; flex-direction: column; overflow: hidden;
   background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 14px;
-  padding: 22px 24px; box-shadow: var(--shadow-lg);
+  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 16px;
+  padding: 20px 24px 24px; box-shadow: var(--shadow-lg);
 }
-#settings::-webkit-scrollbar { display: none; }
-#settings h2 { margin: 0 0 4px; font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
-#settings h3 { margin: 20px 0 8px; font-size: 13px; font-weight: 600; color: var(--ink); }
-#plugin-settings-sections .plugin-settings-section:first-child h3 { margin-top: 8px; }
-.settings-section > h3:first-child { margin-top: 8px; }
-/* Settings tabs: the same segmented control as the canvas
-   options, not a new chrome style, turned vertical: a list
-   on the left, one section at a time on the right. Sticky,
-   so the tabs stay visible while a long section scrolls. */
-#settings-layout { display: flex; gap: 24px; align-items: flex-start; }
-#settings-content { flex: 1 1 auto; min-width: 0; }
+#settings-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding-bottom: 16px; border-bottom: 1px solid var(--separator);
+  margin-bottom: 20px; flex: none;
+}
+#settings h2 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+#settings h3 { margin: 24px 0 8px; font-size: 13px; font-weight: 600; color: var(--ink); }
+#plugin-settings-sections .plugin-settings-section:first-child h3 { margin-top: 0; }
+.settings-section > h3:first-child { margin-top: 0; }
+#settings-layout { display: flex; flex: 1 1 auto; min-height: 0; }
+#settings-content {
+  flex: 1 1 auto; min-width: 0; overflow: auto; padding-left: 24px;
+  scrollbar-width: none;
+}
+#settings-content::-webkit-scrollbar { display: none; }
 #settings-tabs {
-  display: flex; flex-direction: column; gap: 2px; background: var(--fill);
-  border-radius: 9px; padding: 2px; margin-top: 8px; flex: none; width: 160px;
-  position: sticky; top: 0;
+  display: flex; flex-direction: column; gap: 2px; background: transparent;
+  flex: none; width: 180px; padding-right: 16px;
+  border-right: 1px solid var(--separator);
 }
 #settings-tabs button {
-  border: none; background: transparent; border-radius: 7px;
-  padding: 8px 12px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--ink);
+  border: none; background: transparent; border-radius: 8px;
+  padding: 8px 12px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--grey);
   text-align: left;
 }
+#settings-tabs button:hover { background: var(--fill); }
 #settings-tabs button.active {
-  background: #fff; color: var(--ink);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  background: var(--fill); color: var(--ink); font-weight: 600;
+  box-shadow: none;
 }
 #settings .close {
-  float: right; border: none; background: var(--fill); width: 26px; height: 26px;
+  border: none; background: var(--fill); width: 26px; height: 26px; flex: none;
   border-radius: 50%; font-size: 16px; line-height: 1; cursor: pointer; color: var(--grey);
-  display: flex; align-items: center; justify-content: center;
+  display: flex; align-items: center; justify-content: center; margin: 0;
 }
 #settings .close:hover { background: rgba(0, 0, 0, 0.1); }
 #settings table { width: 100%; border-collapse: collapse; font-size: 13px; }
-#settings td { padding: 4px 0; vertical-align: top; }
+#settings td { padding: 6px 0; vertical-align: top; }
 #settings td:first-child { width: 42%; color: var(--grey); }
 #settings td kbd {
   background: #fff; border: 1px solid var(--separator); border-bottom-width: 2px;
@@ -486,12 +499,19 @@ button { font-family: inherit; }
   padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
 }
 #view-switcher button.active { background: #fff; box-shadow: var(--shadow-sm); }
+/* Plugin rows as a list, not bordered cards: name and
+   description on the left, the toggle on the right, rows
+   separated by a hairline. */
 #settings .plugin-row {
-  border: 1px solid var(--separator); border-radius: 10px;
-  padding: 10px 12px; margin: 8px 0;
+  display: flex; align-items: center; gap: 12px;
+  border-bottom: 1px solid var(--separator);
+  padding: 12px 0; margin: 0;
 }
+#settings .plugin-row:last-child { border-bottom: none; }
+#settings .plugin-row-text { flex: 1 1 auto; min-width: 0; }
+#settings .plugin-row-text .meta { margin: 4px 0 0; }
 #settings .plugin-row button {
   border: 1px solid var(--separator); background: #fff; border-radius: 9px;
   padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
-  margin: 4px 4px 0 0;
+  margin: 0; flex: none;
 }

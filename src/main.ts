@@ -1404,11 +1404,11 @@ function renderPluginSettings(): void {
     const m = lp.manifest;
     const state = lp.failed ? "Failed" : lp.active ? "On" : "Off";
     const cmds = commands.filter((c) => c.pluginId === m.id);
-    html += `<div class="plugin-row"><div><strong>${m.name}</strong> <span class="meta">${state}</span></div>`;
+    html += `<div class="plugin-row"><div class="plugin-row-text"><div><strong>${m.name}</strong> <span class="meta">${state}</span></div>`;
     const desc = descriptions[m.id];
     if (desc) html += `<p class="meta">${desc}</p>`;
     if (lp.failed && lp.error) html += `<p class="meta"><strong>${lp.error}</strong></p>`;
-    html += `<button data-plugin-toggle="${m.id}">${lp.active ? "Disable" : "Enable"}</button>`;
+    html += `</div><button data-plugin-toggle="${m.id}">${lp.active ? "Disable" : "Enable"}</button>`;
     for (const c of cmds) {
       if (!lp.active) continue;
       html += ` <button data-plugin-command="${m.id}:${c.id}">Run: ${c.title}</button>`;
@@ -1458,8 +1458,8 @@ function setSettingsTab(tab: string): void {
     const el = document.getElementById(id) as HTMLElement | null;
     if (el) el.style.display = key === tab ? "" : "none";
   }
-  const dialog = document.getElementById("settings") as HTMLElement | null;
-  if (dialog) dialog.scrollTop = 0;
+  const content = document.getElementById("settings-content") as HTMLElement | null;
+  if (content) content.scrollTop = 0;
 }
 
 function renderShortcutsTable(): void {
