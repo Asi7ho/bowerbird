@@ -429,7 +429,10 @@ the board's own elements: every card on the whiteboard
 cards; strokes and connectors are not cards and are not
 shown), rendered by the core via `renderCard`, scaled
 uniformly to the masonry column width so the aspect ratio is
-the board item's, unchanged. Panel mode is a panel flush
+the board item's, unchanged — scaled down to fit the column,
+never up beyond the board size, so a 120px swatch stays
+120px, centred in its column, instead of becoming a 250px
+square. Panel mode is a panel flush
 against the right edge, full height, over the board, one
 column, with search, click-to-duplicate at the camera centre
 and drag-to-duplicate at the drop point. Whiteboard mode is

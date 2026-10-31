@@ -20,7 +20,9 @@ proof that the API can build that feature.
   click-to-duplicate). The library is the board's own cards
   (text, images, links, PDFs, swatches, audio, video, plugin
   cards), rendered by the core at the board item's aspect
-  ratio, all in a single Uncategorized section in board
+  ratio, scaled down to the column but never up beyond
+  board size (swatches stay 120px, centred), all in a
+  single Uncategorized section in board
   order — no categories are created for the user. Duplicates
   are ordinary board items of the same kind and size, so
   they appear in the library too, in Uncategorized. There is

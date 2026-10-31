@@ -324,11 +324,19 @@ function layoutMasonry(container, items, mode) {
     // The card HTML is the core's own rendering, at the board
     // item's size. Scaling it uniformly to the column width
     // keeps its aspect ratio exactly: height follows width by
-    // the board item's own ratio, never the file's.
+    // the board item's own ratio, never the file's. The scale
+    // is capped at 1: a card is scaled down to fit the column,
+    // never scaled up beyond its board size. Without the cap,
+    // a 120px swatch becomes a 250px square in the library —
+    // the largest card in the grid, where on the board it is
+    // the smallest — with its hex pill blown up to match. A
+    // capped card keeps its board size and sits centred in
+    // its column, so the grid stays balanced.
     const html = apiRef.board.renderCard(item.id);
     if (!html) continue;
-    const scale = colWidth / item.size.w;
-    const scaledH = item.size.h * scale;
+    const scale = Math.min(1, colWidth / item.size.w);
+    const w = item.size.w * scale;
+    const h = item.size.h * scale;
     let col = 0;
     for (let i = 1; i < colCount; i++) {
       if (colHeights[i] < colHeights[col]) col = i;
@@ -336,10 +344,10 @@ function layoutMasonry(container, items, mode) {
     const wrap = document.createElement("div");
     wrap.className = "vl-board-wrap";
     wrap.dataset.boardId = String(item.id);
-    wrap.style.left = `${col * (colWidth + gap)}px`;
+    wrap.style.left = `${col * (colWidth + gap) + (colWidth - w) / 2}px`;
     wrap.style.top = `${colHeights[col]}px`;
-    wrap.style.width = `${colWidth}px`;
-    wrap.style.height = `${scaledH}px`;
+    wrap.style.width = `${w}px`;
+    wrap.style.height = `${h}px`;
     wrap.innerHTML = html;
     const inner = wrap.firstElementChild;
     if (inner) {
@@ -349,7 +357,7 @@ function layoutMasonry(container, items, mode) {
     attachCardInteractions(wrap, item, mode);
     if ("Audio" in item.kind) loadLibraryAudioDuration(wrap, item);
     container.appendChild(wrap);
-    colHeights[col] += scaledH + gap;
+    colHeights[col] += h + gap;
   }
   container.style.height = `${Math.max(0, Math.max(...colHeights) - gap)}px`;
 }

@@ -18,11 +18,12 @@
      library, so search, headers and counts read the same. */
   font-size: 14px; line-height: 1.6;
 }
-/* Match the view head, not a dialog header: same size as the
-   view's type, no rule under the title. The close button stays
-   (it is how the panel closes); only its title and rule change. */
+/* Match the view head, not a dialog header: the same 20px
+   bold title the whiteboard view uses, no rule under it.
+   The close button stays (it is how the panel closes);
+   only the title size, weight and rule change. */
 .plugin-panel[data-panel="library"] .plugin-panel-head {
-  font-size: 14px; padding: 12px; border-bottom: none;
+  font-size: 20px; font-weight: 700; padding: 12px; border-bottom: none;
 }
 .plugin-panel[data-panel="library"] .vl-sections {
   flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; min-height: 0;
