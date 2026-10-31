@@ -104,12 +104,13 @@
    button in the panel: core accent fill, white text.
    Draw stays a quiet core panel button, with a dashed
    rectangle icon matching the slide frame itself. Both
-   are full-width, same height, centred, so the pair
-   reads as one control, not two competing buttons. */
+   are the same, deliberately narrow width, left-aligned
+   with the panel text — not full-width bars across the
+   panel — so the pair reads as two buttons, not a banner. */
 .plugin-panel-body .pres-panel-play,
 .plugin-panel-body .pres-panel-draw {
   display: flex; align-items: center; justify-content: center;
-  gap: 8px; width: 100%; border-radius: 9px; padding: 8px 12px;
+  gap: 8px; width: 180px; border-radius: 9px; padding: 8px 12px;
   cursor: pointer; font-size: 13px; font-weight: 600;
   margin-bottom: 8px;
 }
