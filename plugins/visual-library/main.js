@@ -19,11 +19,10 @@
 // icon button beside it (masonry icon for whiteboard, sidebar
 // icon for panel).
 //
-// Categories are the board's element kinds, shown as dropdown
-// sections (Audio, Images, Links, PDFs, Plugin cards, Swatches,
-// Text, Video, alphabetically by label). A kind cannot change
-// by dragging, so drag no longer moves anything between
-// categories — it duplicates, as click does.
+// There is one category, Uncategorized, holding every board
+// item in board order. Nothing is auto-categorised by kind.
+// Drag therefore never moves anything between categories —
+// it duplicates, as click does.
 //
 // Clicking a library card duplicates that board element onto
 // the board, at the camera centre. Dragging it duplicates it
@@ -71,11 +70,14 @@ let libAudioSeek = null;
 let libAudioTime = null;
 let libAudioDur = null;
 
-// Kinds, in label-alphabetical order (the section order).
-const KIND_ORDER = ["Audio", "Image", "UrlCard", "PdfCard", "Plugin", "Swatch", "Text", "Video"];
-const KIND_LABEL = { Audio: "Audio", Image: "Images", UrlCard: "Links", PdfCard: "PDFs", Plugin: "Plugin cards", Swatch: "Swatches", Text: "Text", Video: "Video" };
+// No categories are created for the user: every board item
+// goes, by default, in a single "Uncategorized" section, in
+// board order. A future category system (user-created
+// categories, drag to move) would add sections here; for now
+// there is exactly one, so the library never invents an
+// organisation the user did not ask for.
 const KIND_SINGULAR = { Audio: "audio", Image: "image", UrlCard: "link", PdfCard: "PDF", Plugin: "plugin card", Swatch: "swatch", Text: "text note", Video: "video" };
-const LIBRARY_KINDS = new Set(KIND_ORDER);
+const LIBRARY_KINDS = new Set(["Audio", "Image", "UrlCard", "PdfCard", "Plugin", "Swatch", "Text", "Video"]);
 
 function kindKey(item) {
   return Object.keys(item.kind)[0];
@@ -119,17 +121,12 @@ function searchText(item) {
 
 function sectionsList() {
   const q = query.trim().toLowerCase();
-  const out = [];
-  for (const key of KIND_ORDER) {
-    const inKind = boardItems.filter((it) => kindKey(it) === key);
-    const filtered = q ? inKind.filter((it) => searchText(it).toLowerCase().includes(q)) : inKind;
-    // Searching hides kinds with no matches, so a search with
-    // no matches leaves a blank sections area. With no query,
-    // even an empty kind renders as a header (no text).
-    if (q && filtered.length === 0) continue;
-    out.push({ key, label: KIND_LABEL[key], items: filtered });
-  }
-  return out;
+  const filtered = q ? boardItems.filter((it) => searchText(it).toLowerCase().includes(q)) : boardItems;
+  // A search with no matches leaves a blank sections area.
+  // With no query, even an empty library renders as a single
+  // Uncategorized header (no text).
+  if (q && filtered.length === 0) return [];
+  return [{ key: "uncategorized", label: "Uncategorized", items: filtered }];
 }
 
 function signature(items) {
@@ -319,7 +316,7 @@ function attachCardInteractions(wrap, item, mode) {
 function layoutMasonry(container, items, mode) {
   const containerWidth = container.clientWidth;
   const minColWidth = mode === "panel" ? 1000 : 240;
-  const gap = mode === "panel" ? 12 : 16;
+  const gap = 16;
   const colCount = Math.max(1, Math.floor((containerWidth + gap) / (minColWidth + gap)));
   const colWidth = (containerWidth - gap * (colCount - 1)) / colCount;
   const colHeights = new Array(colCount).fill(0);

@@ -20,9 +20,10 @@ proof that the API can build that feature.
   click-to-duplicate). The library is the board's own cards
   (text, images, links, PDFs, swatches, audio, video, plugin
   cards), rendered by the core at the board item's aspect
-  ratio. Categories are the element kinds, shown as dropdown
-  sections. Duplicates are ordinary board items of the same
-  kind and size, so they appear in the library too. There is
+  ratio, all in a single Uncategorized section in board
+  order — no categories are created for the user. Duplicates
+  are ordinary board items of the same kind and size, so
+  they appear in the library too, in Uncategorized. There is
   no library folder.
 
 Packaging: `scripts/package-mac.sh` copies this folder into the

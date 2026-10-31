@@ -13,6 +13,16 @@
 .plugin-panel[data-panel="library"] .plugin-panel-body {
   display: flex; flex-direction: column; flex: 1 1 auto;
   min-height: 0; overflow: hidden;
+  /* Match the whiteboard view's type, not the core panel
+     default (13px/1.5): the panel and the view are the same
+     library, so search, headers and counts read the same. */
+  font-size: 14px; line-height: 1.6;
+}
+/* Match the view head, not a dialog header: same size as the
+   view's type, no rule under the title. The close button stays
+   (it is how the panel closes); only its title and rule change. */
+.plugin-panel[data-panel="library"] .plugin-panel-head {
+  font-size: 14px; padding: 12px; border-bottom: none;
 }
 .plugin-panel[data-panel="library"] .vl-sections {
   flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; min-height: 0;

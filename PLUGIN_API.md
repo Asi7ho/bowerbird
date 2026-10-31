@@ -435,20 +435,22 @@ column, with search, click-to-duplicate at the camera centre
 and drag-to-duplicate at the drop point. Whiteboard mode is
 a view replacing the canvas, laid out like Pinterest, which
 hides the panel while it is active and shows it again on the
-way back to the board. Categories are the board's element
-kinds (Audio, Images, Links, PDFs, Plugin cards, Swatches,
-Text, Video), shown as dropdown sections in both modes; a
-kind cannot change by dragging, so drag duplicates like
-click does. A duplicate is an ordinary board item of the
-same kind and the same size as the original, so it appears
-in the library too. There are no Refresh, Open folder,
-folder-path, New category or Add controls in the UI: the
-library refreshes automatically when the board is saved (the
-Refresh command remains in Settings → Plugins). Panels in
-general are now a flush sidebar in the core CSS (opaque
-white, hairline left border, no frost or floating shadow), so
-a panel reads as part of the app, not an overlay card. The
-library-folder methods above (`listLibrary`,
+way back to the board. There is one category,
+Uncategorized, holding every board item in board order; no
+categories are created for the user, by kind or otherwise,
+and there is no New category control for now. A duplicate
+is an ordinary board item of the same kind and the same size
+as the original, so it appears in the library too, in
+Uncategorized. There are no Refresh, Open folder,
+folder-path or Add controls in the UI: the library
+refreshes automatically when the board is saved (the Refresh
+command remains in Settings → Plugins). Panels in general
+are now a flush sidebar in the core CSS (opaque white,
+hairline left border, no frost or floating shadow), 290px
+wide so a panel card is ~250px wide — the same size as a
+whiteboard-view card, with the same 14px type and 16px gaps
+— so a panel reads as part of the app, not an overlay card.
+The library-folder methods above (`listLibrary`,
 `addToLibrary`, `createLibraryCategory`,
 `moveLibraryItem`) remain in the API for other plugins; the
 bundled library does not use them, and a `board/library/`

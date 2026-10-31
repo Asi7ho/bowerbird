@@ -374,9 +374,12 @@ button { font-family: inherit; }
   /* Flush sidebar, not a floating card: panels dock against
      the right edge, top to bottom, with no gap to the window.
      A panel that wants the full height (Visual Library)
-     stretches with flex; others stay auto. */
+     stretches with flex; others stay auto. 290px, not 260px,
+     so a panel card is ~250px wide once body padding and the
+     scrollbar gutter are taken out — the same size as a
+     whiteboard-view card, with the same readable type. */
   position: absolute; right: 0; top: 0; bottom: 0;
-  display: flex; flex-direction: column; gap: 0; width: 260px;
+  display: flex; flex-direction: column; gap: 0; width: 290px;
   overflow: auto; pointer-events: none; z-index: 10;
 }
 #plugin-panels::-webkit-scrollbar { display: none; }
