@@ -1,17 +1,8 @@
 # Bowerbird Plugin API — v1
 
-Plugins extend Bowerbird. A plugin can contribute many things at once:
-card kinds, tools, panels, a view that replaces the canvas, a card editor,
-commands, drop handlers, and a settings section. A plugin can also
-*transform* the canvas: a view mode takes over the main viewport, with a
-core-owned way back to the 2D board that the plugin cannot remove.
+Plugins extend Bowerbird. A plugin can add card kinds, tools, panels, a view that replaces the canvas, a card editor, commands, drop handlers and a settings section, all at once.
 
-This is v1. It is deliberately local and simple: no store, no accounts,
-no auto-update. Installing a plugin is trusting its code, the way
-installing an Obsidian or VS Code extension is. The API below is the
-supported contract. A plugin that reaches past it into core DOM or
-internals may break in a later version, and a later version may sandbox
-plugins harder. Do not rely on anything not documented here.
+This is v1. It is local and simple: no store, no accounts, no auto-update. Installing a plugin is trusting its code, the way installing an Obsidian or VS Code extension is. The API below is the supported contract. A plugin that reaches past it into core DOM or internals may break in a later version.
 
 ## What a plugin is
 
@@ -46,25 +37,12 @@ my-plugin/
 }
 ```
 
-- `id` must be unique, lowercase, letters/digits/`-` only. It names
-  the plugin everywhere: in board JSON, in storage, in the UI.
-- `apiVersion` is `"1"` for this API. A plugin that needs a newer
-  API version is listed as incompatible and is not loaded.
-- `permissions` gates the API object (below). A method that needs a
-  permission the manifest did not declare throws, it does not silently
-  succeed. `board:read` is always allowed. Everything else must be
-  declared.
-- `contributions` is a summary for the Settings → Plugins list and
-  for the core to know what to expect. The code in `main.js` is what
-  actually registers each contribution through the API. The two must
-  agree; if they don't, the registered contributions win and the
-  manifest list is just out of date in the UI.
+- `id` is unique, lowercase, letters, digits and `-` only. It names the plugin in board JSON, in storage and in the UI.
+- `apiVersion` is `"1"`. A plugin that needs a newer API is listed as incompatible and is not loaded.
+- `permissions` gates the API object. A method that needs a permission the manifest did not declare throws. `board:read` is always allowed. Everything else must be declared.
+- `contributions` is a summary for Settings. The code in `main.js` is what actually registers each contribution. If the two disagree, the registered contributions win.
 
-`main.js` is a JavaScript module. It must export `activate(api)` and
-may export `deactivate()`. It is loaded with a dynamic import from a
-blob URL, so it is a single file with no relative imports in v1. It
-may bundle its own libraries inside that one file (for example a
-bundled Three.js build for a 3D view).
+`main.js` is a JavaScript module. It must export `activate(api)` and may export `deactivate()`. It is loaded by dynamic import from a blob URL, so it is a single file with no relative imports in v1. It may bundle its own libraries inside that one file.
 
 ```js
 export function activate(api) {
@@ -83,566 +61,176 @@ export function activate(api) {
 
 ## Where plugins live
 
-- Bundled plugins (the 1st-party ones, when they exist) live in the
-  app bundle's `plugins/` folder. They are listed in Settings as
-  "Built in" and update with the app.
-- User plugins live in the plugins folder next to the board data:
-  `~/.local/share/bowerbird/plugins/` on Linux, the equivalent
-  Application Support folder on macOS. Each plugin is a subfolder
-  with a `manifest.json`.
-- `BOWERBIRD_PLUGINS_DIR`, if set, replaces the user plugins folder
-  with the folder it names. This is for development and testing.
-- A plugin with the same id in two places is loaded once; the first
-  place wins in the order env folder, user folder, bundled folder,
-  and the duplicate is skipped (logged to the console, not toasted).
+Plugins are loaded once, first place wins, in this order:
 
-Enable/disable is per plugin, in Settings → Plugins. Disabling
-unregisters its tools, panels, commands and views, removes its
-buttons, and re-renders the board so its cards become placeholders
-(see Board-safe below). Re-enabling re-runs `activate`.
+1. The folder named by `BOWERBIRD_PLUGINS_DIR`, if set. This is for development and testing.
+2. The user plugins folder next to the board data: `~/.local/share/bowerbird/plugins/` on Linux, the equivalent Application Support folder on macOS.
+3. The bundled `plugins/` folder in the app.
+
+Bundled plugins are listed in Settings as "Built in" and update with the app. A duplicate id in a later folder is skipped, not loaded twice.
+
+Enable and disable are per plugin, in Settings → Plugins. Disabling unregisters its tools, panels, commands and views, and re-renders the board so its cards become placeholders (see Board-safe below). Re-enabling re-runs `activate`.
 
 ## The API object
 
-`activate(api)` receives one object, per plugin, filtered to the
-manifest's permissions. `api.version` is `"1"`. `api.has(cap)`
-reports whether a capability exists in this core version, so a
-plugin can degrade gracefully instead of crashing on an older core.
+`activate(api)` receives one object, per plugin, filtered to the manifest's permissions. `api.version` is `"1"`. `api.has(cap)` reports whether a capability exists in this core version, so a plugin can degrade gracefully on an older core.
 
 ### Board — `api.board`
 
-- `get()` — a read-only snapshot of the board: items, camera, bg, grid.
-  Do not mutate the snapshot; use the methods below.
-- `getItems()` — the board's items, as plain data.
-- `getItem(id)`, `getSelected()`, `setSelected(ids)`
-- `renderCard(id)` — the board item's card HTML, rendered by the
-  core exactly as it renders on the board: same markup, same
-  classes, same size, at position 0,0, with no selection ring and
-  no editing state, and with audio shown neutral (not playing).
-  A plugin can already read the item via `getItems()`, so this
-  needs no extra permission. Strokes and connectors return
-  `null` (they are not cards). Use this to show a board card in
-  a panel or view without re-rendering it a second, different
-  way — the aspect ratio is the board item's width/height, not
-  the file's natural ratio.
-- `addItem(kind, pos, size)` — add a core card kind, e.g.
-  `api.board.addItem({ Text: { text: "Hi", bold: false, size: 16, color: "#1A1A1A" } }, { x: 100, y: 100 }, { w: 260, h: 48 })`.
-  Requires `board:write`.
-- `addPluginCard(kind, data, pos, size)` — add one of this plugin's
-  own card kinds. Requires `board:write`.
-- `updateItem(id, patch)` — patch `pos`, `size`, `group`, or, for a
-  plugin card of this plugin, `data`. Requires `board:write`.
+- `get()` — a read-only snapshot of the board: items, camera, bg, grid. Do not mutate it. Use the methods below.
+- `getItems()`, `getItem(id)`, `getSelected()`, `setSelected(ids)`
+- `renderCard(id)` — the item's card HTML, rendered by the core exactly as on the board: same markup, same classes, same size, at position 0,0, with no selection ring and audio shown neutral. No extra permission is needed, since a plugin can already read the item. Strokes and connectors return `null`.
+- `addItem(kind, pos, size)` — add a core card kind. Requires `board:write`.
+- `addPluginCard(kind, data, pos, size)` — add one of this plugin's own card kinds. Requires `board:write`.
+- `updateItem(id, patch)` — patch `pos`, `size`, `group`, or, for a plugin card of this plugin, `data`. Requires `board:write`.
 - `removeItem(id)` — requires `board:write`.
-- `save()` — save the board through the core's save path
-  (write-then-rename, demo-mode no-op included). Requires
-  `board:write`. Most board methods save automatically; call this
-  after a batch of changes made without a method call.
-- `render()` — re-render the board (for example after a plugin
-  changed how a card should look).
+- `save()` — save through the core's save path, including the demo-mode no-op. Most board methods save automatically. Call this after a batch of changes made without a method call. Requires `board:write`.
+- `render()` — re-render the board.
 
-Board methods validate their input and throw on bad ids, bad
-positions, or a plugin trying to edit another plugin's card data.
-A plugin may read any card, but it may only write its own plugin
-cards, plus core kinds through `addItem`/`updateItem` for pos/size/
-group. It may not rewrite another plugin's data.
+Board methods validate their input and throw on bad ids, bad positions, or a plugin trying to edit another plugin's card data. A plugin may read any card, but may only write its own plugin cards, plus core kinds for position, size and group.
 
-There is no undo stack in v1, core or plugin. A plugin board change
-saves immediately, like a core drag or note commit. Undo for plugin
-actions is a future API addition, not something to fake with a
-private stack.
+There is no undo in v1, core or plugin. A plugin board change saves immediately, like a core drag or note commit.
 
 ### Window — `api.window`
 
-Requires the `window` permission. These are the main-process
-primitives a renderer plugin cannot do itself: hiding the window,
-showing the peek icon, moving the window, and remembering the
-corner for the peek. The Hide plugin is built on exactly these.
+Requires the `window` permission. These are main-process primitives a renderer plugin cannot do itself. The Hide plugin is built on exactly these.
 
-- `hide()` — hide the board window and show the peek icon at the
-  stored corner. A no-op if the corner is `off` (the main process
-  has no peek bounds then, so it does nothing).
-- `show()` — destroy the peek icon and restore the board to its
-  saved bounds, focused.
+- `hide()` — hide the board window and show the peek icon at the stored corner. A no-op if the corner is `off`.
+- `show()` — destroy the peek icon and restore the board to its saved bounds, focused.
 - `minimise()` — minimise the window through the OS.
-- `move(dx, dy)` — move the window by a screen-coordinate delta,
-  fire-and-forget. Screen coordinates, not client coordinates:
-  client coordinates move when the window itself moves, which
-  fed a move-back loop. The Hide plugin no longer uses this —
-  the title bar is the window drag region now, via
-  `-webkit-app-region: drag` — but the primitive stays for
-  any plugin that needs to move the window itself.
-- `getCorner()` / `setCorner(corner)` — read and write the stored
-  corner (`bottom-left`, `bottom-right`, `top-left`, `top-right`,
-  `off`). `setCorner` returns the stored value (validated by the
-  main process), which is what the plugin should use, not the
-  value it asked for. The corner lives in the app's settings file,
-  not in plugin storage, because the peek icon (a main-process
-  window) needs it even while the board window is hidden.
+- `move(dx, dy)` — move the window by a screen-coordinate delta, fire-and-forget. The Hide plugin no longer uses this: the title bar is the window drag region now.
+- `getCorner()` / `setCorner(corner)` — read and write the stored corner: `bottom-left`, `bottom-right`, `top-left`, `top-right`, `off`. `setCorner` returns the stored value, validated by the main process. Use that, not the value you asked for. The corner lives in the app's settings file, not in plugin storage, because the peek icon needs it while the board window is hidden.
 
 ### View and camera — `api.view`
 
 - `getCamera()`, `setCamera({ x, y, zoom })`
 - `centreOn(itemId)` — move the camera like Tab does.
 - `getView()` — `"board"` or a registered view id.
-- `setView(id)` — switch views. `"board"` always exists and is
-  always the way back. A plugin view cannot remove it, and the
-  core draws the view switcher itself, so the exit control is
-  never inside plugin code.
+- `setView(id)` — switch views. `"board"` always exists and is always the way back. A plugin view cannot remove it, and the core draws the view switcher itself, so the exit control is never inside plugin code.
 - `listViews()` — `[{ id, title, plugin }]`.
 
-A view is registered with `api.ui.registerView({ id, title, render,
-onShow, onHide })`. When the view is active, the core hides the
-2D canvas layers (grid, strokes/connectors layer, cards) and shows
-the view's container, which fills the board area. The toolbar,
-search and Settings stay core-owned and stay reachable. The plugin's `render(container, board)` is called on
-activation and whenever the board changes while the view is
-active. The plugin must pause expensive work (WebGL, video) when
-`onHide` fires; the core does not do that for it.
+A view is registered with `api.ui.registerView({ id, title, render, onShow, onHide })`. When the view is active, the core hides the 2D canvas layers and shows the view's container, which fills the board area. The toolbar, search and Settings stay core-owned and reachable. `render(container, board)` is called on activation and whenever the board changes while the view is active. Pause expensive work (WebGL, video) when `onHide` fires. The core does not do that for you.
 
-A view is a *view of the board*, not a separate app. A 3D view
-shows the same board items in 3D, with extra per-item data (depth,
-rotation) stored in that plugin's namespace, never overwriting the
-2D position and size. Switching back to `"board"` must restore the
-2D layout exactly. A view that needs its own separate scene should
-store that scene as a plugin card's data, not as a replacement for
-the board.
+A view is a view of the board, not a separate app. Extra per-item data (depth, rotation) lives in that plugin's namespace, never overwriting the 2D position and size. Switching back to `"board"` must restore the 2D layout exactly. A view that needs its own separate scene should store that scene as a plugin card's data, not as a replacement for the board.
 
 ### UI — `api.ui`
 
 - `toast(message)` — the core toast, 4 seconds, same style as core.
-- `registerTool({ id, title, icon, onMouseDown, onMouseUp })` —
-  adds a button to the toolbar's tool segment, after the core
-  tools. `icon` is an SVG string (no `<script>`; the core rejects
-  icons containing one). `onMouseDown(world, event)` is called
-  instead of core tool handling when this tool is active and the
-  user presses on the board. Tools in v1 are click tools, not
-  drag tools: core drag state (pen strokes, connectors, marquee,
-  move, resize) is not handed to plugins yet. A tool that needs
-  dragging should be built as a card editor or a view for now.
-  Requires the `ui:tools` permission (declared by listing the
-  tool in the manifest; the permission name in the manifest is
-  `board:write` for tools that write, plus the tool contribution
-  itself).
-- `registerPanel({ id, title, icon, render })` — adds a panel to the
-  right dock, full window height, as a mini tab in the dock's
-  tab bar. The dock is core-owned: one panel is shown at a
-  time, switched by its tab; the tab is the panel's header,
-  there is no per-panel header. Tabs are icons only: `icon`
-  is an SVG string, as a tool icon, shown at 20px in a
-  32px tab; the title stays as the tab's tooltip and
-  aria-label. A panel with no icon falls back to its
-  title text in the tab. A close button in the tab
-  bar hides the whole dock, and a panels toggle in the
-  title bar shows it again with its tabs and active panel
-  intact. `render(container)` is called when the panel is
-  created; the plugin should listen to `api.events` and
-  update its own panel DOM from there. Panels are contextual by
-  convention: show the panel's content only when it is relevant
-  (for example a photo panel only when a photo is selected) by
-  calling `showPanel`/`hidePanel`, or by rendering an empty state.
-  The core does not guess relevance for a plugin.
-- `showPanel(id)`, `hidePanel(id)`, `getPanelElement(id)` —
-  showing a panel also activates its tab; hiding the active
-  panel switches to another shown panel.
-- `registerCommand({ id, title, run })` — a command listed in
-  Settings → Plugins under this plugin, with a Run button. There
-  is no command palette in v1; commands are run from Settings,
-  from a panel, or from a tool. A command's `run` may be async.
-- `registerOverlay({ id, render })` — a full-board overlay layer
-  that takes no clicks itself (pointer-events: none). Interactive
-  elements a plugin puts inside it must set pointer-events: auto
-  on themselves, so board clicks pass through everywhere except
-  on the plugin's own controls. This is how a corner button can
-  sit in a corner without blocking the board.
-- `registerSettingsSection({ id, title, render })` — a section in
-  the Settings → Plugin settings tab, rendered with its own heading
-  when that tab is shown, and only for plugins that are on.
-  Use it for plugin settings that are app-level, not board-level
-  (for example the Hide plugin's corner picker). Board-level
-  controls belong in a panel, not here.
-- `registerShortcut({ key, title, run })` — a single-key shortcut,
-  no modifiers, listed in Settings' shortcuts table with the
-  plugin's name. Core keys win: the core checks its own shortcuts
-  first, and a plugin shortcut is only tried for keys the core did
-  not handle, with Ctrl/Cmd held keys excluded, so a plugin cannot
-  steal Ctrl+G or similar. Shortcuts do not fire in a textarea,
-  in the search box, while editing, or while Settings is open —
-  the same guards as core shortcuts.
-- `registerView({ id, title, render, onShow, onHide })` — see View
-  above. Requires `view:replace` in permissions for any view that
-  replaces the canvas; a view that only adds a read-only alternate
-  layout still registers the same way, and the permission name
-  is the same, because the core cannot tell the difference from
-  the outside.
+- `registerTool({ id, title, icon, onMouseDown, onMouseUp })` — adds a button to the toolbar's tool segment, after the core tools. `icon` is an SVG string. The core rejects icons containing `<script>`. Tools in v1 are click tools, not drag tools: core drag state (pen strokes, connectors, marquee, move, resize) is not handed to plugins. A tool that needs dragging should be built as a card editor or a view for now. Tools that write need `board:write`.
+- `registerPanel({ id, title, icon, render })` — adds a panel to the right dock, full window height, as a mini tab in the dock's tab bar. The dock is core-owned: one panel is shown at a time, switched by its tab. There is no per-panel header. Tabs are icons only: `icon` is an SVG string, shown at 20px in a 32px tab. The title stays as the tab's tooltip and aria-label. A panel with no icon falls back to its title text in the tab. A close button in the tab bar hides the whole dock, and a panels toggle in the title bar shows it again with its tabs and active panel intact. `render(container)` is called when the panel is created. Listen to `api.events` and update your own panel DOM from there. Panels are contextual by convention: show content only when it is relevant, by calling `showPanel` / `hidePanel`, or by rendering an empty state. The core does not guess relevance for you.
+- `showPanel(id)`, `hidePanel(id)`, `getPanelElement(id)` — showing a panel also activates its tab. Hiding the active panel switches to another shown panel.
+- `registerCommand({ id, title, run })` — a command listed in Settings → Plugins under this plugin, with a Run button. There is no command palette in v1. Commands are run from Settings, from a panel, or from a tool. `run` may be async.
+- `registerOverlay({ id, render })` — a full-board overlay layer that takes no clicks itself (pointer-events: none). Interactive elements inside it must set pointer-events: auto on themselves, so board clicks pass through everywhere except on your own controls. This is how a corner button can sit in a corner without blocking the board.
+- `registerSettingsSection({ id, title, render })` — a section in Settings → Plugin settings, rendered with its own heading when that tab is shown, and only for plugins that are on. Use it for app-level settings, like the Hide plugin's corner picker. Board-level controls belong in a panel, not here.
+- `registerShortcut({ key, title, run })` — a single-key shortcut, no modifiers, listed in Settings' shortcuts table with the plugin's name. Core keys win: the core checks its own shortcuts first, and a plugin shortcut is only tried for keys the core did not handle, with Ctrl/Cmd held keys excluded, so a plugin cannot steal Ctrl+G. Shortcuts do not fire in a textarea, in the search box, while editing, or while Settings is open.
+- `registerView({ id, title, render, onShow, onHide })` — see View above. Requires `view:replace`.
 
 ### Cards — `api.cards`
 
-- `register({ kind, title, render, onDoubleClick, onAction, searchText })`
-  - `render(item, data)` returns an HTML string for the card's inner
-    content, where `data` is this card's plugin data (the same
-    object stored in board JSON, so the plugin never has to dig
-    through `item.kind.Plugin.data`). The core wraps it in the
-    standard card chrome (position, size, selection ring). The
-    plugin is responsible for escaping its own data in that HTML,
-    the way core card rendering escapes note text.
-  - `onDoubleClick(item, data)` is called on double-click of the
-    card, instead of core double-click handling. Use it for a card
-    editor: for example a photo card that opens an editing mode.
-  - `onAction(action, item, data)` is called when an element inside
-    the card with `data-plugin-action="..."` is clicked. The core
-    routes the click by card id; the plugin does not attach its
-    own global click listeners for card buttons.
-  - `searchText(data)` returns searchable text for the card, or
-    the core falls back to the plugin id, kind and JSON data.
-- Card data is always JSON. Large files go in the board's `assets`
-  folder by reference (see Files), never inline in JSON.
+`register({ kind, title, render, onDoubleClick, onAction, searchText })`
+
+- `render(item, data)` returns an HTML string for the card's inner content, where `data` is this card's plugin data, the same object stored in board JSON. The core wraps it in the standard card chrome (position, size, selection ring). The plugin is responsible for escaping its own data in that HTML, the way core card rendering escapes note text.
+- `onDoubleClick(item, data)` is called on double-click of the card, instead of core double-click handling. Use it for a card editor.
+- `onAction(action, item, data)` is called when an element inside the card with `data-plugin-action="..."` is clicked. The core routes the click by card id. Do not attach your own global click listeners for card buttons.
+- `searchText(data)` returns searchable text for the card. Without it, the core falls back to the plugin id, kind and JSON data.
+
+Card data is always JSON. Large files go in the board's `assets` folder by reference (see Files), never inline in JSON.
 
 ### Files — `api.files`
 
-All file access goes through the core, never directly. Requires
-`files:embed` for writes, `files:read` for reads (reads are the
-same bridge the core uses for its own cards).
+All file access goes through the core, never directly. Writes need `files:embed`, reads need `files:read`.
 
-- `embedFile(path)` — copy a file into the board's `assets`
-  folder and return its board-owned path, exactly like a dropped
-  file. In demo mode it returns the original path and copies
-  nothing, like core drops.
-- `listLibrary()` — list a library folder, recursively (the
-  bundled Visual Library no longer uses this: it shows board
-  items, not a folder — see below):
-  images and PDFs only, sorted by name, capped at 1000, each
-  with `name`, `path`, `relativePath` (forward slashes, relative
-  to the library), `ext`, `kind` (`image` or `pdf`), `category`
-  and `size_bytes` and `mtime_ms`, plus the folder `path`
-  itself, `categories` (immediate subfolders, each with a
-  `name` and a file `count`, including empty folders) and
-  `uncategorizedCount` (files in the library root). A category
-  is an immediate subfolder: a file's category is the first
-  segment of its path under the library, or `null` for files in
-  the root. The folder is `board/library/` (temp folder in demo,
-  so a demo never reads the real library). Listing is scoped to
-  that one folder: a plugin never gets an arbitrary folder to
-  list.
-- `addToLibrary(path)` — copy a file into the library folder
-  (deduplicated like `embedFile`, `stem-1` suffix on a name
-  clash) and return its library path, or the path unchanged if
-  it is already in the library. Requires `files:embed`.
-- `createLibraryCategory(name)` — create a subfolder of the
-  library folder and return its path. The name must be a single
-  folder name (no `/`, `\` or `..`, not starting with `.`, at
-  most 100 characters); `All` and `Uncategorized` are reserved
-  because they are the virtual categories in the UI. Requires
-  `files:embed`.
-- `moveLibraryItem(relativePath, category)` — move a library
-  file to another category (a subfolder, created if needed),
-  or to the library root when `category` is `null`
-  (Uncategorized). The source must already be inside the
-  library, the destination stays inside it, and only library
-  extensions move; a name clash at the destination is
-  deduplicated (`stem-1`, `stem-2`, …) like `addToLibrary`.
-  Returns the destination path, relative to the library.
-  Requires `files:embed`.
-- `fileUrl(path)` — the `app-file://` URL the renderer can use
-  for an image, audio or video source.
+- `embedFile(path)` — copy a file into the board's `assets` folder and return its board-owned path, exactly like a dropped file. In demo mode it returns the original path and copies nothing, like core drops.
+- `listLibrary()` — list the library folder, recursively: images and PDFs only, sorted by name, capped at 1000, each with `name`, `path`, `relativePath` (forward slashes, relative to the library), `ext`, `kind` (`image` or `pdf`), `category` and `size_bytes` and `mtime_ms`, plus the folder `path`, `categories` (immediate subfolders, each with a `name` and a file `count`, including empty folders) and `uncategorizedCount` (files in the library root). A category is an immediate subfolder: a file's category is the first segment of its path under the library, or `null` for files in the root. The folder is `board/library/` (a temp folder in demo, so a demo never reads the real library). Listing is scoped to that one folder. A plugin never gets an arbitrary folder to list. The bundled Visual Library no longer uses this: it shows board items, not a folder.
+- `addToLibrary(path)` — copy a file into the library folder (deduplicated like `embedFile`, `stem-1` suffix on a name clash) and return its library path, or the path unchanged if it is already in the library. Requires `files:embed`.
+- `createLibraryCategory(name)` — create a subfolder of the library folder and return its path. The name must be a single folder name: no `/`, `\` or `..`, not starting with `.`, at most 100 characters. `All` and `Uncategorized` are reserved. Requires `files:embed`.
+- `moveLibraryItem(relativePath, category)` — move a library file to another category (a subfolder, created if needed), or to the library root when `category` is `null`. The source must already be inside the library, the destination stays inside it, and only library extensions move. A name clash at the destination is deduplicated like `addToLibrary`. Returns the destination path, relative to the library. Requires `files:embed`.
+- `fileUrl(path)` — the `app-file://` URL the renderer can use for an image, audio or video source.
 - `readTextFile(path)`, `fileSize(path)`
-- `openExternal(target)` — open a URL or a file outside the app,
-  through the core's shell guard (http(s) URLs and local paths
-  only, as core does).
-- `fetchPreview(url)` — the core's link-preview fetch, with its
-  timeout and http(s)-only resolution. A plugin must not fetch
-  arbitrary URLs from the renderer itself; use this, or declare
-  and justify a network need in a later API version.
+- `openExternal(target)` — open a URL or a file outside the app, through the core's guard: https URLs in the browser, board-local files in their system app, anything else refused.
+- `fetchPreview(url)` — the core's link-preview fetch, with its timeout and public http(s)-only rule. A plugin must not fetch arbitrary URLs from the renderer itself.
 
 ### Storage — `api.storage`
 
-Plugin-scoped settings, kept out of board JSON, in the app's
-userData folder, one file per app, keyed by plugin id. Requires
-the `storage` permission. `get(key)`, `set(key, value)`,
-`delete(key)` are async. Values must be JSON. Do not store
-secrets, tokens or passwords here; there is no encryption in v1,
-and plugin storage is not a vault.
+Plugin-scoped settings, kept out of board JSON, in the app's userData folder, one file per app, keyed by plugin id. Requires the `storage` permission. `get(key)`, `set(key, value)`, `delete(key)` are async. Values must be JSON. Do not store secrets, tokens or passwords here. There is no encryption in v1, and plugin storage is not a vault.
 
 ### Events — `api.events`
 
-- `on(event, handler)`, `off(event, handler)`. Events in v1:
-  `selection`, `board`, `view`. `board` fires after a board
-  change that the core saved or rendered (a plugin's own board
-  writes fire it too, after the write). Handlers must not write
-  to the board synchronously inside a `board` handler in a way
-  that loops; if a handler needs to react by writing, it should
-  guard against its own last write (for example by comparing ids
-  or by a flag), or the core will re-render in a loop that the
-  plugin created. This is documented because it is easy to get
-  wrong, not because the core will prevent it in v1.
+`on(event, handler)`, `off(event, handler)`. Events in v1: `selection`, `board`, `view`. `board` fires after a board change that the core saved or rendered. A plugin's own board writes fire it too, after the write. Do not write to the board synchronously inside a `board` handler in a way that loops. If a handler needs to react by writing, guard against your own last write, for example by comparing ids or by a flag. The core will not prevent a loop you create in v1.
 
 ### Geometry — `api.geometry`
 
-Pure geometry, from the core's `src/model.ts`. No permission
-needed, because these read nothing and write nothing — they
-take points and rectangles and return points and booleans.
-Use them instead of copying the math into a plugin: an
-earlier version of Presentation copied `rectCrossing` and
-clipped ends by hand, and the copies were a second place
-to keep correct. Adding this domain did not change
-`apiVersion` — it stays `"1"`, because additive additions
-do not break existing plugins.
+Pure geometry, from the core's `src/model.ts`. No permission is needed, because these read nothing and write nothing. They take points and rectangles and return points and booleans. Use them instead of copying the math into a plugin.
+
+Adding this domain did not change `apiVersion`. It stays `"1"`, because additive additions do not break existing plugins.
 
 - `centre(item)` — the centre of a card's rect.
-- `anchorPoint(anchor)` — a connector endpoint: a raw
-  point, or the centre of the item it points to, or `null`
-  if that item is gone.
-- `rectCrossing(from, to, pos, w, h, entry)` — where a
-  segment crosses a rectangle, entry (first) or exit
-  (second), or `null` if it does not cross.
-- `clippedEnds(from, to)` — a connector's ends, clipped
-  to the cards it joins, or `null` if an endpoint is gone.
-- `segmentIntersectsRect(a, b, rect)` — whether a
-  segment enters a rectangle at all, however briefly.
-- `rectsOverlap(a, b)` — strict rect overlap: touching
-  an edge, with no area inside, does not count.
+- `anchorPoint(anchor)` — a connector endpoint: a raw point, or the centre of the item it points to, or `null` if that item is gone.
+- `rectCrossing(from, to, pos, w, h, entry)` — where a segment crosses a rectangle, entry (first) or exit (second), or `null` if it does not cross.
+- `clippedEnds(from, to)` — a connector's ends, clipped to the cards it joins, or `null` if an endpoint is gone.
+- `segmentIntersectsRect(a, b, rect)` — whether a segment enters a rectangle at all, however briefly.
+- `rectsOverlap(a, b)` — strict rect overlap. Touching an edge, with no area inside, does not count.
 
 ### Errors and failure
 
-A plugin that throws during `activate`, or whose module fails to
-import, is recorded as failed, listed in Settings → Plugins with
-its error, and does not stop other plugins or the board from
-loading. A plugin that throws during a card render falls back to
-the missing-plugin placeholder for that card, not a blank board.
-A plugin that throws during a tool, command or panel render shows
-a toast and is otherwise left running; repeated failures are the
-plugin author's bug to fix, and disabling the plugin in Settings
-is the user's escape hatch.
+A plugin that throws during `activate`, or whose module fails to import, is recorded as failed, listed in Settings → Plugins with its error, and does not stop other plugins or the board from loading. A plugin that throws during a card render falls back to the missing-plugin placeholder for that card, not a blank board. A plugin that throws during a tool, command or panel render shows a toast and is otherwise left running. Disabling the plugin in Settings is the user's escape hatch.
 
-## Board-safe rules (testable guarantees)
+## Board-safe rules
 
-1. **Uninstall is not delete.** Plugin card data is stored as
-   `{ "Plugin": { "plugin": "<id>", "kind": "<kind>", "data": {...} } }`
-   in board JSON. The core never strips a `Plugin` item it does
-   not recognise, on load or on save. It is carried through
-   verbatim.
-2. **Open without the plugin is not lose.** A `Plugin` item whose
-   plugin is missing or disabled renders as a placeholder card
-   naming the plugin and kind, with the note that its data is
-   kept. It can still be moved, grouped, connected and deleted
-   like any other card. Deleting the placeholder deletes the
-   data, the same as deleting any card — that is the user's
-   choice, not an accident of opening the board.
-3. **Views never overwrite 2D data.** A view's extra per-item
-   data lives in that plugin's namespace, separate from `pos`
-   and `size`. Returning to `"board"` restores the 2D layout.
-4. **Edits are non-destructive where the plugin claims they are.**
-   A photo plugin that edits an image must keep the original
-   asset and store edits as plugin data on top of it, so the
-   fallback (plugin missing) is the original, not a corrupted
-   edit. A plugin that destructively overwrites an asset must
-   say so in its description, and must not do it silently.
-5. **Plugin storage is not board data.** Disabling or removing a
-   plugin does not delete board items, and deleting a board does
-   not delete plugin storage. They are separate on purpose.
+1. **Uninstall is not delete.** Plugin card data is stored as `{ "Plugin": { "plugin": "<id>", "kind": "<kind>", "data": {...} } }` in board JSON. The core never strips a `Plugin` item it does not recognise, on load or on save. It is carried through verbatim.
+2. **Open without the plugin is not lose.** A `Plugin` item whose plugin is missing or disabled renders as a placeholder card naming the plugin and kind, with the note that its data is kept. It can still be moved, grouped, connected and deleted like any other card. Deleting the placeholder deletes the data, the same as deleting any card.
+3. **Views never overwrite 2D data.** A view's extra per-item data lives in that plugin's namespace, separate from `pos` and `size`. Returning to `"board"` restores the 2D layout.
+4. **Edits are non-destructive where the plugin claims they are.** A plugin that edits an image must keep the original asset and store edits as plugin data on top of it, so the fallback (plugin missing) is the original, not a corrupted edit. A plugin that destructively overwrites an asset must say so in its description, and must not do it silently.
+5. **Plugin storage is not board data.** Disabling or removing a plugin does not delete board items, and deleting a board does not delete plugin storage. They are separate on purpose.
 
 ## Styling
 
-Plugin panels, tool buttons and card chrome follow Bowerbird's
-design system, using the core tokens, not hard-coded copies:
-SF type, ink `#1D1D1F`, grey `#86868B`, hairline
-`rgba(0,0,0,0.08)`, separator `rgba(0,0,0,0.10)`, fill
-`rgba(120,120,128,0.12)`, quiet grey field `#F5F5F7`, and
-the core shadows. Panels are opaque white, hairline on the
-left, no frost or floating shadow; the tab bar is 48px, as
-the title bar, with a hairline underneath and a hairline
-on the left — the vertical separation between the panel
-dock and the title bar, continuous with the panel's left
-edge — its tabs are a segmented control (fill-grey pill,
-32px icon tabs, active tab white with the segmented
-active shadow), and a panel body is the core panel body
-(13px/1.5). A full-board view is a
-different surface: it uses the core view type (14px/1.6,
-padding 24px) with a document title (17px/700), not the
-tab bar forced to match it. Cards are white, 12px radius,
-hairline border, soft shadow. Search fields are quiet grey
-fields with no border, icon buttons are borderless with a
-9px radius, text buttons are bordered white with a 9px
-radius, and small circular controls are white with a
-hairline border and a soft shadow. Same surface, same style
-— a panel in one plugin looks like a panel in another.
-A plugin's *content* — what it draws inside its canvas, view
-or card — is its own: a 3D scene looks like a 3D scene, a
-photo editor looks like a photo editor. Do not restyle core
-UI from a plugin, do not add branding, ads or a second
-toolbar inside a panel, and scope plugin CSS to the
-plugin's own containers (the core prefixes panel and view
-containers with `data-plugin="<id>"`; use that as your selector
-root).
+Plugin panels, tool buttons and card chrome follow Bowerbird's design system, using the core tokens, not hard-coded copies: SF type, ink `#1D1D1F`, grey `#86868B`, hairline `rgba(0,0,0,0.08)`, separator `rgba(0,0,0,0.10)`, fill `rgba(120,120,128,0.12)`, quiet grey field `#F5F5F7`, and the core shadows.
+
+Panels are opaque white, hairline on the left, no frost or floating shadow. The tab bar is 48px, with a hairline underneath and a hairline on the left. Its tabs are a segmented control: fill-grey pill, 32px icon tabs, active tab white with the segmented active shadow. A panel body is the core panel body (13px/1.5).
+
+A full-board view is a different surface. It uses the core view type (14px/1.6, padding 24px) with a document title (17px/700), not the tab bar forced to match it.
+
+Cards are white, 12px radius, hairline border, soft shadow. Search fields are quiet grey fields with no border, icon buttons are borderless with a 9px radius, text buttons are bordered white with a 9px radius, and small circular controls are white with a hairline border and a soft shadow.
+
+Same surface, same style: a panel in one plugin looks like a panel in another. A plugin's content, what it draws inside its canvas, view or card, is its own: a 3D scene looks like a 3D scene, a photo editor looks like a photo editor. Do not restyle core UI from a plugin, do not add branding, ads or a second toolbar inside a panel, and scope plugin CSS to the plugin's own containers. The core prefixes panel and view containers with `data-plugin="<id>"`. Use that as your selector root.
 
 ## Bundled plugins
 
-Plugins in `plugins/` in this repo ship inside the app, are listed
-in Settings → Plugins as "Built in", and update with the app.
-They use exactly this API — no backdoors. The first one is `hide/`:
-the corner button, the corner picker in Settings, and H to
-minimise, moved out of the core into a plugin. The main process
-still owns what a renderer plugin cannot do (hiding the window,
-showing the peek icon, remembering the corner), and everything
-the user sees lives in the plugin. The second is
-`visual-library/`: two modes over the same board, with
-the same board card in both — not a folder. The library is
-the board's own elements: every card on the whiteboard
-(text, images, links, PDFs, swatches, audio, video, plugin
-cards; strokes and connectors are not cards and are not
-shown), rendered by the core via `renderCard`, scaled
-uniformly to its span width so the aspect ratio is
-the board item's, unchanged — scaled down to fit, never up
-beyond the board size. The grid is spanning masonry from
-small columns: a small card (a swatch) spans one column,
-every other card spans two (~250px), so two consecutive
-swatches sit side by side, 16px apart, instead of a 120px
-swatch centred in a 250px column leaving 149px between
-them. The panel sections keep 15px of right padding as
-the scrollbar's lane, so an overlay scrollbar never floats
-over a card's right edge. Panel mode is a tab in the dock,
-flush against the right edge, full height, over the board, one
-column, with search, click-to-duplicate at the camera centre
-and drag-to-duplicate at the drop point. Whiteboard mode is
-a view replacing the canvas, laid out like Pinterest, which
-hides the panel while it is active and shows it again on the
-way back to the board. There is one category,
-Uncategorized, holding every board item in board order; no
-categories are created for the user, by kind or otherwise,
-and there is no New category control for now. A duplicate
-is an ordinary board item of the same kind and the same size
-as the original, so it appears in the library too, in
-Uncategorized. There are no Refresh, Open folder,
-folder-path or Add controls in the UI: the library
-refreshes automatically when the board is saved, so no
-manual refresh control exists. Panels in general
-are now a flush sidebar in the core CSS (opaque white,
-hairline left border, no frost or floating shadow), 290px
-wide so a panel card is ~250px wide — the same size as a
-whiteboard-view card, with the same 14px type and 16px gaps
-— so a panel reads as part of the app, not an overlay card.
-The library-folder methods above (`listLibrary`,
-`addToLibrary`, `createLibraryCategory`,
-`moveLibraryItem`) remain in the API for other plugins; the
-bundled library does not use them, and a `board/library/`
-folder from an earlier version is ignored, not deleted.
-The third is `palette/`: a colour wheel panel, not a
-library of the board's own cards and not a fixed palette
-list. Pick a colour on the wheel (hue round the wheel,
-saturation from centre to edge, lightness on the slider)
-and five palettes are made from it live, following colour
-theory: Monochromatic, Analogous, Complementary, Split
-complementary, Triadic, five colours each. Click a colour
-in a palette, or the preview swatch, to place a 120x120
-swatch at the camera centre, drag it to place it at the
-drop point, the same interaction as Visual Library.
-Placed swatches are ordinary board Swatch items, so they
-survive disabling the plugin. No network, no storage,
-and the plugin needs only `board:write`.
-The fourth is `presentation/`: slides are frames on the
-board, not cards. Draw a rectangle around cards to make
-a slide, then play it: the panel lists slides in frame
-creation order, with Play, Draw a slide, and per-slide
-Play and Delete, and double-clicking a frame on the
-board plays from that slide. Export, pinned to the very
-bottom of the same panel, below a scrolling slide list,
-downloads all slides, in order, as a single HTML file
-that shows one slide at a time, with arrows and a
-counter to move between slides: images, audio and
-video are embedded as data URLs, so the file works
-offline and contains no app-file URLs; link cards
-become real links, audio cards become native audio
-players, and print CSS gives one slide per page, so
-the export can be opened anywhere and printed to PDF
-from a browser. Playing shows a frame's area, scaled to fit, almost
-as a screenshot of that area: every card that overlaps
-the frame at all, every pen stroke that enters it,
-and every connector segment that enters it, in their
-board positions, cropped to the frame, drawing under
-cards as on the board; a video plays in place,
-an audio card plays in place through the plugin's own
-player, a link opens outside the app, and clicking
-anywhere else on a slide does nothing. It hides nothing
-but the board itself — panels, the toolbar and the view
-switcher stay where the user left them, so a clean
-full-width presentation starts by hiding the dock with
-the title-bar toggle. It needs `board:write` (for
-frames), `view:replace` and `files:read` (for opening
-links).
+Plugins in `plugins/` ship inside the app, are listed in Settings as "Built in", and update with the app. They use exactly this API, no backdoors. See `plugins/README.md` for detail.
+
+- `hide/` — the corner button, the corner picker in Settings, and H to minimise. The main process still owns what a renderer plugin cannot do: hiding the window, showing the peek icon, remembering the corner.
+- `visual-library/` — the library is the board. Every board card except strokes and connectors, in board order, under a single Uncategorized section. Click duplicates at the camera centre, drag duplicates at the drop point. A view shows the same cards as a masonry board, and hides the panel while it is active.
+- `palette/` — a colour wheel panel. Pick a colour and five palettes are made from it live: Monochromatic, Analogous, Complementary, Split complementary, Triadic, five colours each. Click a colour, or the preview swatch, to place a 120x120 swatch at the camera centre. Drag to place it at the drop point. Placed swatches are ordinary board Swatch items, so they survive disabling the plugin. Needs only `board:write`.
+- `presentation/` — slides are frames on the board. Draw a rectangle around cards to make a slide, then play it. The panel lists slides in frame creation order, with Play and Draw a slide at the top, per-slide Play and Delete, and Export pinned to the very bottom, below a scrolling slide list. Double-clicking a frame on the board plays from that slide. Export downloads all slides, in order, as a single HTML file that shows one slide at a time, with arrows and a counter: images, audio and video are embedded, links become real links, and print CSS gives one slide per page. Playing shows a frame's area, scaled to fit, cropped to the frame: every card that overlaps it at all, every pen stroke and connector segment that enters it, drawing under cards. Video and audio play in place, a link opens outside, other clicks do nothing. Needs `board:write`, `view:replace` and `files:read`.
 
 ## Frame cards
 
-A plugin card can be a frame, by setting `frame: true`
-in its card def. A frame is a container, not content:
-on the board it renders as a transparent dashed border
-only, never hiding the cards inside it, and in board
-interaction it is hit-tested after every other card, so
-clicking a card inside a frame selects the card, not
-the frame, and clicking empty space inside a frame
-selects the frame. Frames are never brought to the
-front on click, so their board order — and therefore
-any frame-based order, like a presentation's slide
-order — never changes just by selecting a frame.
-Frame cards should use kind `"slide"` by convention, so
-library-style plugins can exclude them from content
-lists, as Visual Library does: a slide border is not a
-library card.
+A plugin card can be a frame, by setting `frame: true` in its card def. A frame is a container, not content: on the board it renders as a transparent dashed border only, never hiding the cards inside it. In board interaction it is hit-tested after every other card, so clicking a card inside a frame selects the card, not the frame, and clicking empty space inside a frame selects the frame. Frames are never brought to the front on click, so their board order, and therefore any frame-based order like a presentation's slide order, never changes just by selecting a frame.
+
+Frame cards should use kind `"slide"` by convention, so library-style plugins can exclude them from content lists, as Visual Library does: a slide border is not a library card.
 
 ## What is not in v1
 
-- No drag tools (click tools only; see Tools above).
+- No drag tools. Click tools only.
 - No command palette, no menu bar contributions.
 - No undo for plugin actions.
 - No network access except through `fetchPreview`.
-- No main-process plugins, no Node access, no direct filesystem
-  or shell access.
+- No main-process plugins, no Node access, no direct filesystem or shell access.
 - No plugin store, no paid plugins, no auto-update.
-- No deactivate cleanup for event listeners: handlers registered in
-  `activate` stay registered after `deactivate` in v1, so they must
-  guard on missing panel/view/overlay elements (the sample plugin
-  does; the Hide plugin's button listeners die with its removed
-  overlay DOM).
-  A future version will pass the API object to `deactivate` for
-  cleanup.
-- No sandboxing stronger than the contract above: a locally
-  installed plugin runs in the renderer with the API object, and
-  like any locally installed extension it must be trusted by the
-  person who installed it. A future version may move plugin
-  panels and views into isolated frames; v1 does not, and does
-  not pretend otherwise.
+- No deactivate cleanup for event listeners. Handlers registered in `activate` stay registered after `deactivate` in v1, so they must guard on missing panel, view or overlay elements. A future version will pass the API object to `deactivate` for cleanup.
+- No sandboxing stronger than the contract above. A locally installed plugin runs in the renderer with the API object, and like any locally installed extension it must be trusted by the person who installed it. A future version may move plugin panels and views into isolated frames. V1 does not, and does not pretend otherwise.
 
 ## Security boundaries
 
-These are enforced in the main process, not in the renderer,
-because renderer code can be replaced by a crafted board:
+These are enforced in the main process, not in the renderer, because renderer code can be replaced by a crafted board:
 
-- Board JSON, file names and link-preview data are untrusted.
-  Card rendering coerces positions and sizes to numbers,
-  only allows strict hex colours, and escapes file names,
-  link domains, titles and descriptions before they reach
-  HTML, so a crafted board or a file named like markup
-  cannot break out of an attribute or inject a script.
-- The `app-file` scheme only serves board-local files and
-  app assets. Any other path is a 404, even if the renderer
-  asked for it by full path.
-- `api.files.openExternal` opens https URLs in the browser
-  and board-local files in their system app. Anything else
-  (a local app, a script, a `file://` URL outside the board)
-  is refused, so a click on a link card cannot open an
-  arbitrary local file.
-- `api.files.fetchPreview` only fetches public http(s)
-  URLs. Localhost, `.local` names and private or loopback
-  IP literals are refused, as is a redirect that lands on
-  one. A DNS name that resolves to a private address after
-  the check (DNS rebinding) is not covered by this check.
-- The plugin permission checks in `src/plugins.ts` are a
-  contract for well-behaved plugins, not a sandbox against
-  a malicious one: a plugin runs in the same renderer as
-  the core, so installing a plugin is trusting its code.
+- Board JSON, file names and link-preview data are untrusted. Card rendering coerces positions and sizes to numbers, only allows strict hex colours, and escapes file names, link domains, titles and descriptions before they reach HTML, so a crafted board or a file named like markup cannot break out of an attribute or inject a script.
+- The `app-file` scheme only serves board-local files and app assets. Any other path is a 404, even if the renderer asked for it by full path.
+- `api.files.openExternal` opens https URLs in the browser and board-local files in their system app. Anything else (a local app, a script, a `file://` URL outside the board) is refused, so a click on a link card cannot open an arbitrary local file.
+- `api.files.fetchPreview` only fetches public http(s) URLs. Localhost, `.local` names and private or loopback IP literals are refused, as is a redirect that lands on one. A DNS name that resolves to a private address after the check (DNS rebinding) is not covered by this check.
+- The plugin permission checks in `src/plugins.ts` are a contract for well-behaved plugins, not a sandbox against a malicious one: a plugin runs in the same renderer as the core, so installing a plugin is trusting its code.
 
 ## Sample plugin
 
-`examples/plugins/hello-card/` in this repo is the smallest
-plugin that uses the card, tool, panel, command and view
-surfaces: a card kind, a tool, a panel, a command and a view.
-Copy that folder into your plugins folder to try it, or copy
-it as the starting point for a new plugin. It is an example,
-not a bundled plugin, and it is not copied into packaged apps.
+`examples/plugins/hello-card/` is the smallest plugin that uses the card, tool, panel, command and view surfaces. Copy that folder into your plugins folder to try it, or copy it as the starting point for a new plugin. It is an example, not a bundled plugin, and it is not copied into packaged apps.
