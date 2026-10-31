@@ -431,11 +431,13 @@ shown), rendered by the core via `renderCard`, scaled
 uniformly to its span width so the aspect ratio is
 the board item's, unchanged — scaled down to fit, never up
 beyond the board size. The grid is spanning masonry from
-small (~117px) columns: a small card (a swatch) spans one
-column, every other card spans two (~250px), so two
-consecutive swatches sit side by side, 16px apart, instead
-of a 120px swatch centred in a 250px column leaving 149px
-between them. Panel mode is a panel flush
+small columns: a small card (a swatch) spans one column,
+every other card spans two (~250px), so two consecutive
+swatches sit side by side, 16px apart, instead of a 120px
+swatch centred in a 250px column leaving 149px between
+them. The panel sections keep 15px of right padding as
+the scrollbar's lane, so an overlay scrollbar never floats
+over a card's right edge. Panel mode is a panel flush
 against the right edge, full height, over the board, one
 column, with search, click-to-duplicate at the camera centre
 and drag-to-duplicate at the drop point. Whiteboard mode is

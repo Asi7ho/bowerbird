@@ -27,17 +27,19 @@
 }
 .plugin-panel[data-panel="library"] .vl-sections {
   flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; min-height: 0;
-  /* No reserved scrollbar gutter: on macOS scrollbars overlay
-     and take no layout space, so a reserved gutter is 15px of
-     empty space on the right, cards shifted left and narrower
-     than the panel allows, for no benefit. On a classic
-     scrollbar the width may vary slightly with scrollbar
-     visibility, which is not visible at a glance across
-     stacked sections. */
+  /* 15px on the right is the scrollbar's own lane, not card
+     space: the panel sections element is itself the scroller,
+     so an overlay scrollbar would otherwise float over the
+     cards' right edge and hide parts of them, and a classic
+     scrollbar would sit hard against them. The masonry below
+     lays out in the content width (clientWidth minus padding),
+     so cards end at the content edge and the scrollbar — in
+     either form — sits in this padding, never over a card. */
+  padding-right: 15px;
 }
 /* Search row: search input plus a single icon button for the
    mode switch. The button matches the search input's height. */
-.vl-search-row { display: flex; gap: 6px; margin-bottom: 6px; }
+.vl-search-row { display: flex; gap: 6px; margin-bottom: 12px; }
 .vl-search {
   flex: 1; min-width: 0; box-sizing: border-box; padding: 6px 8px;
   border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 8px;
@@ -73,17 +75,31 @@
   content: ""; position: absolute; top: 0; right: 0; bottom: 0;
   width: 5px; background: #1d1d1f; border-radius: 0 1px 1px 0;
 }
-/* Kind sections: a header button (arrow, name, count) and a
+/* Sections: a header button (arrow, name, count) and a
    masonry body. The body is position relative so scaled
-   cards are placed with left/top. An empty kind has no body
-   content at all — just the header. */
+   cards are placed with left/top. An empty section has no
+   body content at all — just the header. */
 .vl-category { margin-bottom: 16px; }
-.vl-category-head {
+/* The header rule is prefixed with its section class so it
+   beats the core .plugin-panel-body button rule, exactly as
+   the icon button rule above does. Without the prefix the
+   core rule wins on specificity (class + element beats a
+   lone class) and the panel header becomes a bordered white
+   button box — 1px border, 9px radius, 6px/12px padding,
+   13px type — while the view header, which has no core
+   panel rule to fight, stays clean text. With the prefix the
+   panel header is the same clean text header as the view:
+   no border, transparent background, 6px/4px padding, 14px
+   type. The 12px margin below it is the breathing room
+   between the category name and the first card, which was
+   only the button's own 6px padding before. */
+.vl-category .vl-category-head {
   display: flex; align-items: center; gap: 6px; width: 100%;
-  padding: 6px 4px; background: none; border: none; cursor: pointer;
+  padding: 6px 4px; margin-bottom: 12px; background: none; border: none;
+  border-radius: 0; cursor: pointer;
   font: inherit; font-weight: 600; text-align: left; box-sizing: border-box;
 }
-.vl-category-head:hover { background: #f2f2f7; border-radius: 8px; }
+.vl-category .vl-category-head:hover { background: #f2f2f7; border-radius: 8px; border: none; }
 .vl-arrow { width: 12px; flex: none; text-align: center; }
 .vl-category-name { flex: 1 1 auto; min-width: 0; }
 .vl-count { color: #6e6e73; font-weight: 400; }

@@ -316,22 +316,33 @@ function attachCardInteractions(wrap, item, mode) {
 function layoutMasonry(container, items, mode) {
   // Spanning masonry, in both modes, so small cards pack
   // tightly instead of floating in wide columns. The grid is
-  // built from small columns (~117px): a small card (a swatch,
-  // board width within 1.5x a small column) spans one column,
-  // every other card spans two, which is ~250px — the card
-  // size the library has always used. A card is scaled
-  // uniformly to its span width, capped at its board size,
-  // so aspect is exact and nothing is ever upscaled beyond
-  // the board: a swatch stays ~120px, centred in its span
-  // only when the span is wider than the card. The previous
+  // built from small columns: a small card (a swatch, board
+  // width within 1.5x a small column) spans one column, every
+  // other card spans two, which is ~250px — the card size
+  // the library has always used. A card is scaled uniformly
+  // to its span width, capped at its board size, so aspect
+  // is exact and nothing is ever upscaled beyond the board:
+  // a swatch stays ~120px, centred in its span only when the
+  // span is wider than the card. The previous
   // one-column-per-card layout centred a 120px swatch in a
   // 250px column, leaving 149px between two side-by-side
   // swatches; with small columns two consecutive swatches
   // sit in adjacent columns, 16px apart, like a palette.
   // No third-party package: this is thirty lines, the plugin
   // stays a single local file, and it works offline.
-  const containerWidth = container.clientWidth;
-  const smallTarget = 117;
+  // Width is the content width, not clientWidth: the panel
+  // sections carry 15px of right padding as the scrollbar's
+  // lane (see style.css), and laying out in clientWidth
+  // would push cards back under the scrollbar. The targets
+  // differ by mode so the column count stays put on both
+  // scrollbar kinds: panel 105px keeps 2 columns whether
+  // the content width is 250px (overlay scrollbar) or 235px
+  // (classic scrollbar plus padding); view 110px keeps 10
+  // columns at 1317–1332px.
+  const cs = getComputedStyle(container);
+  const containerWidth = container.clientWidth
+    - parseFloat(cs.paddingLeft || "0") - parseFloat(cs.paddingRight || "0");
+  const smallTarget = mode === "panel" ? 105 : 110;
   const gap = 16;
   const colCount = Math.max(1, Math.floor((containerWidth + gap) / (smallTarget + gap)));
   const colWidth = (containerWidth - gap * (colCount - 1)) / colCount;
