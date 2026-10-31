@@ -191,6 +191,18 @@ function toScreen(p: Pt): Pt {
 function toWorld(s: Pt): Pt {
   return { x: s.x / board.camera.zoom + board.camera.x, y: s.y / board.camera.zoom + board.camera.y };
 }
+// The board no longer fills the window: the title bar sits
+// above it, so board-local size and points differ from window
+// size and client points by the bar's height. Every camera
+// centre, cull and input conversion below goes through these,
+// never window.innerWidth/innerHeight or raw clientX/Y.
+function boardSize(): Pt {
+  return { x: boardEl.clientWidth, y: boardEl.clientHeight };
+}
+function boardPoint(clientX: number, clientY: number): Pt {
+  const r = boardEl.getBoundingClientRect();
+  return { x: clientX - r.left, y: clientY - r.top };
+}
 function zoomAt(screen: Pt, factor: number): void {
   const before = toWorld(screen);
   board.camera.zoom = Math.max(0.1, Math.min(8, board.camera.zoom * factor));
@@ -199,7 +211,8 @@ function zoomAt(screen: Pt, factor: number): void {
   board.camera.y += before.y - after.y;
 }
 function zoomCentre(factor: number): void {
-  zoomAt({ x: window.innerWidth / 2, y: window.innerHeight / 2 }, factor);
+  const s = boardSize();
+  zoomAt({ x: s.x / 2, y: s.y / 2 }, factor);
 }
 const DEMO = api.isDemo === true;
 function save(): void {
@@ -258,7 +271,8 @@ function applyGrid(): void {
   const lum = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
   const color = lum > 140 ? "#d8d8de" : "#55555a";
   let step = GRID;
-  while ((window.innerWidth / cam.zoom) / step > 40 || (window.innerHeight / cam.zoom) / step > 40) step *= 2;
+  const bs = boardSize();
+  while ((bs.x / cam.zoom) / step > 40 || (bs.y / cam.zoom) / step > 40) step *= 2;
   const size = step * cam.zoom;
   const offX = (Math.floor(cam.x / step) * step - cam.x) * cam.zoom;
   const offY = (Math.floor(cam.y / step) * step - cam.y) * cam.zoom;
@@ -492,8 +506,8 @@ function visibleRect(): { x0: number; y0: number; x1: number; y1: number } {
   const m = 200;
   return {
     x0: cam.x - m, y0: cam.y - m,
-    x1: cam.x + window.innerWidth / cam.zoom + m,
-    y1: cam.y + window.innerHeight / cam.zoom + m,
+    x1: cam.x + boardSize().x / cam.zoom + m,
+    y1: cam.y + boardSize().y / cam.zoom + m,
   };
 }
 function isVisibleItem(item: Item, v: { x0: number; y0: number; x1: number; y1: number }): boolean {
@@ -556,7 +570,8 @@ function updateResizeHandle(): void {
   if (!it || "Connector" in it.kind) { el.style.display = "none"; return; }
   const [p, s] = itemBounds(board, it);
   const screen = toScreen({ x: p.x + s.w, y: p.y + s.h });
-  if (screen.x < 0 || screen.y < 0 || screen.x > window.innerWidth || screen.y > window.innerHeight) {
+  const bs = boardSize();
+  if (screen.x < 0 || screen.y < 0 || screen.x > bs.x || screen.y > bs.y) {
     el.style.display = "none"; return;
   }
   el.style.left = `${screen.x}px`;
@@ -702,12 +717,12 @@ function cornerHit(id: number, world: Pt): boolean {
 
 boardEl.addEventListener("mousedown", (e: MouseEvent) => {
   const target = e.target as HTMLElement;
-  if (target.closest("#toolbar, #settings-backdrop, #toast, #plugin-overlays, #search-box, video, input")) return;
+  if (target.closest("#toolbar, #settings-backdrop, #toast, #plugin-overlays, #search-box, #title-bar, video, input")) return;
   // A board click or drag must never start a native text selection
   // across the cards (bug: clicking anywhere highlighted all text).
   if (!target.closest("textarea.note-edit")) window.getSelection()?.removeAllRanges();
   if (e.button !== 0) return;
-  const winPt: Pt = { x: e.clientX, y: e.clientY };
+  const winPt: Pt = boardPoint(e.clientX, e.clientY);
   if (editingId !== null && !target.closest("textarea.note-edit")) {
     commitEditingIfAny();
     render();
@@ -825,7 +840,7 @@ function updateDraggedCards(ids: number[]): void {
 }
 
 window.addEventListener("mousemove", (e: MouseEvent) => {
-  const winPt: Pt = { x: e.clientX, y: e.clientY };
+  const winPt: Pt = boardPoint(e.clientX, e.clientY);
   const world = toWorld(winPt);
   if (!drag) {
     // Cursor hints run at most once per frame: hitTest walks every
@@ -910,12 +925,12 @@ window.addEventListener("mouseup", (e: MouseEvent) => {
     pluginToolDown = false;
     const pt = getPluginTool(tool);
     if (pt?.onMouseUp) {
-      try { pt.onMouseUp(toWorld({ x: e.clientX, y: e.clientY })); } catch (err) { toast(`Plugin tool failed: ${String(err)}`); }
+      try { pt.onMouseUp(toWorld(boardPoint(e.clientX, e.clientY))); } catch (err) { toast(`Plugin tool failed: ${String(err)}`); }
     }
     return;
   }
   if (!drag) return;
-  const world = toWorld({ x: e.clientX, y: e.clientY });
+  const world = toWorld(boardPoint(e.clientX, e.clientY));
   const d = drag;
   drag = null;
   if (d.kind === "stroke") {
@@ -964,11 +979,11 @@ window.addEventListener("mouseup", (e: MouseEvent) => {
 });
 
 window.addEventListener("wheel", (e: WheelEvent) => {
-  if ((e.target as HTMLElement).closest("#settings, #toolbar")) return;
+  if ((e.target as HTMLElement).closest("#settings, #toolbar, #title-bar")) return;
   e.preventDefault();
   if (e.ctrlKey || e.metaKey) {
     const factor = Math.exp(-e.deltaY * 0.0015);
-    zoomAt({ x: e.clientX, y: e.clientY }, factor);
+    zoomAt(boardPoint(e.clientX, e.clientY), factor);
   } else {
     // Pan follows standard Mac scrolling: scrolling down moves
     // the content up, as in Safari, Notes and every other Mac
@@ -1088,8 +1103,9 @@ function navigateElements(dir: 1 | -1): void {
   } else {
     c = centre(target);
   }
-  board.camera.x = c.x - window.innerWidth / 2 / board.camera.zoom;
-  board.camera.y = c.y - window.innerHeight / 2 / board.camera.zoom;
+  const bs = boardSize();
+  board.camera.x = c.x - bs.x / 2 / board.camera.zoom;
+  board.camera.y = c.y - bs.y / 2 / board.camera.zoom;
   save(); render();
 }
 
@@ -1267,8 +1283,9 @@ function jumpToSearch(dir: 1 | -1): void {
   } else {
     c = centre(target);
   }
-  board.camera.x = c.x - window.innerWidth / 2 / board.camera.zoom;
-  board.camera.y = c.y - window.innerHeight / 2 / board.camera.zoom;
+  const bs = boardSize();
+  board.camera.x = c.x - bs.x / 2 / board.camera.zoom;
+  board.camera.y = c.y - bs.y / 2 / board.camera.zoom;
   save();
   render();
 }
@@ -1576,11 +1593,12 @@ async function dropPaths(paths: string[], atScreen: Pt): Promise<void> {
 // preload bridge turns each File into its real path via webUtils.
 window.addEventListener("drop", (e) => {
   const files = e.dataTransfer?.files;
+  if ((e.target as HTMLElement).closest("#title-bar")) { e.preventDefault(); return; }
   if (files && files.length > 0) {
     const paths = Array.from(files).map((f) => api.getPathForFile(f)).filter((p) => p);
     if (paths.length > 0) {
       e.preventDefault();
-      void dropPaths(paths, { x: e.clientX, y: e.clientY });
+      void dropPaths(paths, boardPoint(e.clientX, e.clientY));
     }
   }
 });
@@ -1592,8 +1610,9 @@ window.addEventListener("drop", (e) => {
   e.preventDefault();
   const uri = e.dataTransfer?.getData("text/uri-list")?.split("\n")[0]?.trim()
     ?? e.dataTransfer?.getData("text/plain")?.trim() ?? "";
+  if ((e.target as HTMLElement).closest("#title-bar")) return;
   if (/^https?:\/\//.test(uri)) {
-    void addUrlAt(toWorld({ x: e.clientX, y: e.clientY }), uri);
+    void addUrlAt(toWorld(boardPoint(e.clientX, e.clientY)), uri);
   }
 });
 
@@ -1603,7 +1622,8 @@ window.addEventListener("paste", (e: ClipboardEvent) => {
   const text = e.clipboardData?.getData("text")?.trim() ?? "";
   if (/^https?:\/\//.test(text)) {
     e.preventDefault();
-    void addUrlAt(toWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 }), text);
+    const bs = boardSize();
+    void addUrlAt(toWorld({ x: bs.x / 2, y: bs.y / 2 }), text);
   }
 });
 
@@ -1726,8 +1746,9 @@ async function init(): Promise<void> {
       if (!it) return;
       selected = select(board, [], id, false);
       const c = centre(it);
-      board.camera.x = c.x - window.innerWidth / 2 / board.camera.zoom;
-      board.camera.y = c.y - window.innerHeight / 2 / board.camera.zoom;
+      const bs = boardSize();
+      board.camera.x = c.x - bs.x / 2 / board.camera.zoom;
+      board.camera.y = c.y - bs.y / 2 / board.camera.zoom;
       save(); render();
     },
     toast: (msg: string) => toast(msg),

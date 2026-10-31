@@ -1,15 +1,35 @@
 {
   "id": "hide",
   "name": "Hide",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "apiVersion": "1",
-  "description": "The corner button that hides Bowerbird into a corner, plus H to minimise. Drag the button to move the window, click it to hide. This is a bundled plugin: it ships inside the app and is on by default.",
-  "permissions": ["window", "board:write"],
+  "description": "The corner button that hides Bowerbird into a corner, plus H to minimise. Click it to hide; drag the top bar to move the window. This is a bundled plugin: it ships inside the app and is on by default.",
+  "permissions": [
+    "window",
+    "board:write"
+  ],
   "main": "main.js",
-  "styles": ["style.css"],
+  "styles": [
+    "style.css"
+  ],
   "contributions": {
-    "overlays": [{ "id": "corner-button", "title": "Corner button" }],
-    "settingsSections": [{ "id": "corner", "title": "Hide" }],
-    "shortcuts": [{ "key": "h", "title": "Hide the board (minimise)" }]
+    "overlays": [
+      {
+        "id": "corner-button",
+        "title": "Corner button"
+      }
+    ],
+    "settingsSections": [
+      {
+        "id": "corner",
+        "title": "Hide"
+      }
+    ],
+    "shortcuts": [
+      {
+        "key": "h",
+        "title": "Hide the board (minimise)"
+      }
+    ]
   }
 }

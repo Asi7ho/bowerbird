@@ -164,9 +164,12 @@ corner for the peek. The Hide plugin is built on exactly these.
   saved bounds, focused.
 - `minimise()` — minimise the window through the OS.
 - `move(dx, dy)` — move the window by a screen-coordinate delta,
-  fire-and-forget, like the old drag handle. Screen coordinates,
-  not client coordinates: client coordinates move when the window
-  itself moves, which fed a move-back loop.
+  fire-and-forget. Screen coordinates, not client coordinates:
+  client coordinates move when the window itself moves, which
+  fed a move-back loop. The Hide plugin no longer uses this —
+  the title bar is the window drag region now, via
+  `-webkit-app-region: drag` — but the primitive stays for
+  any plugin that needs to move the window itself.
 - `getCorner()` / `setCorner(corner)` — read and write the stored
   corner (`bottom-left`, `bottom-right`, `top-left`, `top-right`,
   `off`). `setCorner` returns the stored value (validated by the

@@ -46,6 +46,13 @@ focused minimises it, and the floating button in a corner of the
 board hides it into that corner (see Collapse to a corner below).
 There is no handle tab.
 
+- **Title bar, top:** an opaque white bar, 48px tall, with a hairline
+  underneath — Bowerbird on the left, the board search centred in
+  it, and nothing else. The bar is the window drag region; the
+  search field and its controls opt out of dragging, so typing
+  never moves the window. The bar is layout, not an overlay:
+  the board, its panels and its views start below it, so nothing
+  in the app ever slides over it or hides under it.
 - **Vertical toolbar, left side:** a frosted vertical bar, centred on
   the left edge — Select, Pen,
   Arrow (connectors), the pen palette (only while Pen is active),
@@ -116,8 +123,8 @@ really restores the board.
   PDF cards a pastel red tile, swatches a white hex pill.
 - **Pan:** hold `Space` and drag, or scroll without Ctrl. **Zoom:**
   `Ctrl` + scroll (keeps the point under the cursor fixed), or `+`/`-`,
-  or the toolbar zoom buttons. The canvas fills the whole window and
-  the toolbar floats over its left edge.
+  or the toolbar zoom buttons. The canvas fills the window below
+  the title bar and the toolbar floats over its left edge.
 - **Select:** click an item, `Shift`-click to add to the selection, or drag
   a marquee around several items. Dragging one member of a group moves the
   whole group. `Ctrl/Cmd+G` groups the selection. Clicking a card brings

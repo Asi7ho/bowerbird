@@ -26,8 +26,32 @@ html, body {
   color: var(--ink);
   background: #fff;
 }
+/* The window is a column: the title bar on top, the board
+   below it. Nothing in the board can slide over the bar,
+   because the board's area starts below it. */
+body { display: flex; flex-direction: column; }
 button { font-family: inherit; }
-#board { position: absolute; inset: 0; overflow: hidden; user-select: none; -webkit-user-select: none; }
+#board { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; user-select: none; -webkit-user-select: none; }
+
+/* Custom title bar: opaque white, hairline underneath, the
+   window's drag region. It is a layout sibling above the
+   board, not an overlay on top of it, so board content,
+   cards, panels and views can never slide under it or over
+   it — the board area simply starts below it. The bar's
+   own controls opt out of dragging; everything else on the
+   bar drags the window. */
+#title-bar {
+  position: relative; z-index: 50; flex: none; height: 48px;
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  gap: 12px; padding: 0 16px;
+  background: #fff; border-bottom: 1px solid var(--separator);
+  -webkit-app-region: drag;
+}
+#title-bar-name {
+  font-size: 13px; font-weight: 600; white-space: nowrap;
+  -webkit-app-region: drag;
+}
+#title-bar-spacer { -webkit-app-region: drag; }
 #canvas-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 #grid { position: absolute; inset: 0; pointer-events: none; }
 /* #cards must NOT have overflow:hidden: cards live in world
@@ -325,21 +349,18 @@ button { font-family: inherit; }
 }
 #toast.show { display: block; }
 
-/* Floating search box: top centre, above the board, frosted like
-   the toolbar. It does not scroll with the camera — it is a
-   viewport overlay, like the toolbar and the collapse button.
-   Width is capped at 60vw so it never collides with the toolbar
-   on the app's small default window. */
+/* Search box, now in the title bar: centred in the bar, a
+   quiet grey field on the opaque white bar, not a floating
+   frosted card over the board. The field and its controls
+   opt out of the bar's drag region, so typing, clearing and
+   clicking the count never move the window. */
 #search-box {
-  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
   display: flex; align-items: center; gap: 6px; width: min(360px, 60vw);
-  padding: 6px 8px 6px 12px; z-index: 15;
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 12px;
-  box-shadow: var(--shadow-md);
+  padding: 6px 8px 6px 12px;
+  background: var(--bg-system); border: none; border-radius: 8px;
+  -webkit-app-region: no-drag;
 }
+#search-box input, #search-box button { -webkit-app-region: no-drag; }
 #search-input {
   flex: 1; min-width: 0; border: none; background: transparent;
   font-size: 14px; color: var(--ink); outline: none;

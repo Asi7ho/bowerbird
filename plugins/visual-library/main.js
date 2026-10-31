@@ -165,17 +165,31 @@ function refresh() {
   syncFromBoard(true);
 }
 
+// Board geometry lives in #board now, below the title bar:
+// its client size is the visible board, and its top edge is
+// the board's origin in client coordinates. Centre and drop
+// points go through it, never window size or raw client
+// coordinates, or a duplicate lands 48px low.
+function boardGeometry() {
+  const el = document.getElementById("board");
+  if (!el) return { w: window.innerWidth, h: window.innerHeight, left: 0, top: 0 };
+  const r = el.getBoundingClientRect();
+  return { w: el.clientWidth, h: el.clientHeight, left: r.left, top: r.top };
+}
+
 function cameraCentreWorld() {
   const cam = apiRef.view.getCamera();
+  const b = boardGeometry();
   return {
-    x: cam.x + window.innerWidth / 2 / cam.zoom,
-    y: cam.y + window.innerHeight / 2 / cam.zoom,
+    x: cam.x + b.w / 2 / cam.zoom,
+    y: cam.y + b.h / 2 / cam.zoom,
   };
 }
 
 function dropWorld(clientX, clientY) {
   const cam = apiRef.view.getCamera();
-  return { x: clientX / cam.zoom + cam.x, y: clientY / cam.zoom + cam.y };
+  const b = boardGeometry();
+  return { x: (clientX - b.left) / cam.zoom + cam.x, y: (clientY - b.top) / cam.zoom + cam.y };
 }
 
 function duplicateAt(item, point, showToast) {
@@ -299,12 +313,16 @@ function attachCardInteractions(wrap, item, mode) {
         // duplicates. A drop back onto any UI cancels.
         const el = document.elementFromPoint(me.clientX, me.clientY);
         if (!el) return;
-        if (el.closest && (el.closest('[data-panel="library"]') || el.closest("#toolbar") || el.closest("#plugin-view") || el.closest("#view-switcher") || el.closest("#search-box") || el.closest("#settings-sheet") || el.closest(".plugin-panel"))) return;
+        if (el.closest && (el.closest('[data-panel="library"]') || el.closest("#toolbar") || el.closest("#plugin-view") || el.closest("#view-switcher") || el.closest("#search-box") || el.closest("#title-bar") || el.closest("#settings-sheet") || el.closest(".plugin-panel"))) return;
         duplicateAt(item, dropWorld(me.clientX, me.clientY), false);
       } else {
         // Whiteboard mode: the board is hidden behind the view,
         // so any drop duplicates at the drop point in camera
-        // coordinates, with a toast, as a click does.
+        // coordinates, with a toast, as a click does — except
+        // a drop onto the title bar, which is not the board
+        // and must not create a card hidden under it.
+        const el = document.elementFromPoint(me.clientX, me.clientY);
+        if (el && el.closest && el.closest("#title-bar")) return;
         duplicateAt(item, dropWorld(me.clientX, me.clientY), true);
       }
     };

@@ -8,9 +8,10 @@
 // hiding the window, showing the peek icon, and remembering the
 // corner for the peek (electron/main.js, collapse/restore/peek,
 // and the corner setting file). Everything the user sees — the
-// button, its drag-to-move behaviour, the corner picker, the H
-// shortcut — lives in this file and talks to the core only through
-// api.window, api.board and api.ui.
+// button, the corner picker, the H shortcut — lives in this file
+// and talks to the core only through api.window, api.board and
+// api.ui. The button used to drag the window too; that moved to
+// the title bar, so the button is click-to-hide only now.
 const CORNERS = ["bottom-left", "bottom-right", "top-left", "top-right", "off"];
 const OPTIONS = [
   ["Bottom-left", "bottom-left"],
@@ -23,14 +24,13 @@ const OPTIONS = [
 let apiRef = null;
 let corner = "bottom-left";
 let button = null;
-let dragged = false;
 
 function positionButton() {
   if (!button) return;
   button.className = `hide-button corner-${corner}`;
   button.title = corner === "off"
     ? "Corner is off"
-    : `Drag to move the window, click to hide into the ${corner.replace("-", " ")} corner`;
+    : `Click to hide into the ${corner.replace("-", " ")} corner`;
   button.setAttribute("aria-label", button.title);
   button.style.display = corner === "off" ? "none" : "";
 }
@@ -42,35 +42,11 @@ function createButton(container) {
   container.appendChild(button);
   positionButton();
 
-  // Drag handle, same logic the core used to own: screen
-  // coordinates, not client coordinates, so a window move does
-  // not feed back into itself and shake. Past 5px it is a drag,
-  // and the following click is suppressed, so a drag never
-  // collapses on release.
-  button.addEventListener("mousedown", (e) => {
-    if (e.button !== 0) return;
-    dragged = false;
-    let lastX = e.screenX, lastY = e.screenY;
-    let moved = 0;
-    const onMove = (me) => {
-      const dx = me.screenX - lastX, dy = me.screenY - lastY;
-      lastX = me.screenX; lastY = me.screenY;
-      moved += Math.abs(dx) + Math.abs(dy);
-      if (moved > 5) {
-        dragged = true;
-        if (dx !== 0 || dy !== 0) apiRef.window.move(dx, dy);
-      }
-    };
-    const onUp = () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  });
+  // Click hides only. Moving the window is the title bar's
+  // job now, so there is no drag tracking here and no
+  // api.window.move call: a plain click hides, full stop.
   button.addEventListener("click", (e) => {
     e.stopPropagation();
-    if (dragged) { dragged = false; return; }
     // Same order the core used: commit any note being edited,
     // save, then hide. Without the commit, an edit open at hide
     // time would stay uncommitted in the board JSON.
@@ -84,7 +60,7 @@ function renderSettings(container) {
   container.innerHTML = "";
   const intro = document.createElement("p");
   intro.className = "meta";
-  intro.textContent = "Drag the corner button to move the window, click it to hide into the corner.";
+  intro.textContent = "Click the corner button to hide into the corner. Drag the top bar to move the window.";
   container.appendChild(intro);
   const opts = document.createElement("div");
   opts.className = "canvas-opt";
