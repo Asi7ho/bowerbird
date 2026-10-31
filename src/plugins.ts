@@ -120,6 +120,8 @@ export interface PluginBridge {
   pluginStorageGet(pluginId: string, key: string): Promise<unknown>;
   pluginStorageSet(pluginId: string, key: string, value: unknown): Promise<void>;
   pluginStorageDelete(pluginId: string, key: string): Promise<void>;
+  listLibrary: () => Promise<{ path: string; items: Array<{ name: string; path: string; ext: string; kind: string; size_bytes: number; mtime_ms: number }> }>;
+  addToLibrary: (filePath: string) => Promise<string>;
   // Window primitives: the main process owns the window and the
   // peek icon, so these are the only way a plugin can hide, show
   // or move the window. They are the existing preload bridge
@@ -213,6 +215,8 @@ export interface PluginContext {
   };
   files: {
     embedFile: (path: string) => Promise<string>;
+    listLibrary: () => Promise<{ path: string; items: Array<{ name: string; path: string; ext: string; kind: string; size_bytes: number; mtime_ms: number }> }>;
+    addToLibrary: (path: string) => Promise<string>;
     fileUrl: (path: string) => string;
     readTextFile: (path: string) => Promise<string>;
     fileSize: (path: string) => Promise<number>;
@@ -323,7 +327,7 @@ function createContext(manifest: PluginManifest): PluginContext {
       // Capabilities in v1: every domain documented in PLUGIN_API.md.
       // A future core may add more; a plugin should check before
       // using a capability that was added after v1.
-      return ["board", "view", "window", "ui", "cards", "files", "storage", "events", "tools", "panels", "commands", "views", "overlays", "settingsSections", "shortcuts"].includes(capability);
+      return ["board", "view", "window", "ui", "cards", "files", "storage", "events", "tools", "panels", "commands", "views", "overlays", "settingsSections", "shortcuts", "library"].includes(capability);
     },
     board: {
       get: () => {
@@ -448,6 +452,14 @@ function createContext(manifest: PluginManifest): PluginContext {
       embedFile: async (path: string) => {
         require("files:embed");
         return bridge!.embedFile(path);
+      },
+      listLibrary: async () => {
+        require("files:read");
+        return bridge!.listLibrary();
+      },
+      addToLibrary: async (path: string) => {
+        require("files:embed");
+        return bridge!.addToLibrary(path);
       },
       fileUrl: (path: string) => bridge!.fileUrl(path),
       readTextFile: async (path: string) => {

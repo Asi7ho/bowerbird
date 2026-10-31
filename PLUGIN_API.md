@@ -282,6 +282,17 @@ same bridge the core uses for its own cards).
   folder and return its board-owned path, exactly like a dropped
   file. In demo mode it returns the original path and copies
   nothing, like core drops.
+- `listLibrary()` — list the Visual Library folder: images and
+  PDFs only, sorted by name, capped at 1000, each with `name`,
+  `path`, `ext`, `kind` (`image` or `pdf`), `size_bytes` and
+  `mtime_ms`, plus the folder `path` itself. The folder is
+  `board/library/` (temp folder in demo, so a demo never reads
+  the real library). Listing is scoped to that one folder: a
+  plugin never gets an arbitrary folder to list.
+- `addToLibrary(path)` — copy a file into the library folder
+  (deduplicated like `embedFile`, `stem-1` suffix on a name
+  clash) and return its library path, or the path unchanged if
+  it is already in the library. Requires `files:embed`.
 - `fileUrl(path)` — the `app-file://` URL the renderer can use
   for an image, audio or video source.
 - `readTextFile(path)`, `fileSize(path)`
@@ -376,7 +387,11 @@ the corner button, the corner picker in Settings, and H to
 minimise, moved out of the core into a plugin. The main process
 still owns what a renderer plugin cannot do (hiding the window,
 showing the peek icon, remembering the corner), and everything
-the user sees lives in the plugin.
+the user sees lives in the plugin. The second is
+`visual-library/`: a panel over the library folder, with search,
+click-to-place at the camera centre and drag-to-place at the
+drop point, as ordinary Image and PDF cards. Its listing and
+copying are scoped to the library folder through the core.
 
 ## What is not in v1
 
@@ -404,8 +419,8 @@ the user sees lives in the plugin.
 ## Sample plugin
 
 `examples/plugins/hello-card/` in this repo is the smallest
-plugin that uses every v1 surface: a card kind, a tool, a panel,
-a command and a view. Copy that folder into your plugins folder
-to try it, or copy it as the starting point for a new plugin.
-It is an example, not a bundled plugin, and it is not copied
-into packaged apps.
+plugin that uses the card, tool, panel, command and view
+surfaces: a card kind, a tool, a panel, a command and a view.
+Copy that folder into your plugins folder to try it, or copy
+it as the starting point for a new plugin. It is an example,
+not a bundled plugin, and it is not copied into packaged apps.

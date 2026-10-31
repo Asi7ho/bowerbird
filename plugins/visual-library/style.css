@@ -1,0 +1,36 @@
+/* Visual Library panel styles, scoped to .vl-* classes. */
+.vl-search {
+  width: 100%; box-sizing: border-box; padding: 6px 8px;
+  border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 8px;
+  font: inherit; margin-bottom: 6px;
+}
+.vl-row { display: flex; gap: 6px; margin-bottom: 6px; }
+.vl-row button, .vl-add {
+  flex: 1; padding: 6px 8px; border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.12); background: #fff;
+  cursor: pointer; font: inherit;
+}
+.vl-row button:hover, .vl-add:hover:not(:disabled) { background: #f2f2f7; }
+.vl-add { width: 100%; margin-top: 8px; }
+.vl-add:disabled { opacity: 0.5; cursor: default; }
+.vl-path { word-break: break-all; }
+.vl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.vl-item {
+  background: #fff; border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px; padding: 6px; cursor: pointer;
+  text-align: left; font: inherit;
+}
+.vl-item:hover { border-color: rgba(0, 122, 255, 0.5); }
+.vl-item img { width: 100%; height: 72px; object-fit: cover; border-radius: 4px; display: block; }
+.vl-pdf {
+  width: 100%; height: 72px; display: flex; align-items: center; justify-content: center;
+  background: #f2f2f7; border-radius: 4px; font-weight: 600; color: #007AFF;
+}
+.vl-name { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 4px; }
+.vl-size { font-size: 11px; color: #8a8a8e; }
+.vl-ghost {
+  position: fixed; z-index: 100; pointer-events: none; opacity: 0.9;
+  background: #fff; border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 8px;
+  padding: 4px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); width: 120px;
+}
+.vl-ghost img { width: 100%; height: 72px; object-fit: cover; border-radius: 4px; display: block; }

@@ -565,6 +565,61 @@ function registerIpc() {
     return installShowcaseAssets(dir);
   });
 
+  // Visual Library folder: a user's personal collection of images
+  // and PDFs, next to the board (board/library/). In demo mode it
+  // lives under the demo's temp userData, so a demo never reads
+  // or writes the real library. Listing and copying are scoped to
+  // this one folder only: a plugin never gets an arbitrary path
+  // to list or an arbitrary destination to copy to.
+  function libraryDir() {
+    if (DEMO) return path.join(app.getPath('userData'), 'library');
+    return path.join(boardDir(), 'library');
+  }
+  const LIBRARY_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf']);
+  ipcMain.handle('bowerbird:list-library', () => {
+    const dir = libraryDir();
+    let names = [];
+    try { names = fs.readdirSync(dir); } catch { names = []; }
+    const items = [];
+    for (const name of names.sort()) {
+      if (name.startsWith('.')) continue;
+      const full = path.join(dir, name);
+      let st;
+      try { st = fs.statSync(full); } catch { continue; }
+      if (!st.isFile()) continue;
+      const ext = path.extname(name).toLowerCase();
+      if (!LIBRARY_EXTS.has(ext)) continue;
+      items.push({
+        name,
+        path: full,
+        ext,
+        kind: ext === '.pdf' ? 'pdf' : 'image',
+        size_bytes: st.size,
+        mtime_ms: st.mtimeMs,
+      });
+      if (items.length >= 1000) break;
+    }
+    return { path: dir, items };
+  });
+  ipcMain.handle('bowerbird:add-to-library', (_event, filePath) => {
+    const dir = libraryDir();
+    fs.mkdirSync(dir, { recursive: true });
+    const resolved = path.resolve(filePath);
+    const resolvedDir = path.resolve(dir);
+    if (resolved.startsWith(resolvedDir + path.sep)) return filePath;
+    const clean = sanitise(path.basename(filePath));
+    let dest = path.join(dir, clean);
+    let n = 1;
+    while (fs.existsSync(dest)) {
+      const ext = path.extname(clean);
+      const stem = path.basename(clean, ext);
+      dest = path.join(dir, ext ? `${stem}-${n}${ext}` : `${stem}-${n}`);
+      n += 1;
+    }
+    fs.copyFileSync(filePath, dest);
+    return dest;
+  });
+
   ipcMain.handle('bowerbird:embed-file', (_event, filePath) => {
     if (DEMO) return filePath;
     const assets = path.join(boardDir(), 'assets');

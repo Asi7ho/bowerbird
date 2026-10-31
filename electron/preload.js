@@ -32,4 +32,6 @@ contextBridge.exposeInMainWorld('bowerbird', {
   pluginStorageGet: (pluginId, key) => ipcRenderer.invoke('bowerbird:plugin-storage-get', pluginId, key),
   pluginStorageSet: (pluginId, key, value) => ipcRenderer.invoke('bowerbird:plugin-storage-set', pluginId, key, value),
   pluginStorageDelete: (pluginId, key) => ipcRenderer.invoke('bowerbird:plugin-storage-delete', pluginId, key),
+  listLibrary: () => ipcRenderer.invoke('bowerbird:list-library'),
+  addToLibrary: (filePath) => ipcRenderer.invoke('bowerbird:add-to-library', filePath),
 });

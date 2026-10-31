@@ -12,6 +12,10 @@ proof that the API can build that feature.
   into a plugin. The main process still owns what a renderer
   plugin cannot do: hiding the window, showing the peek icon,
   and remembering the corner for the peek.
+- `visual-library/` — a panel over a library folder on disk, with
+  search, click-to-place and drag-to-place as ordinary Image and
+  PDF cards. Listing and copying are scoped to the library folder
+  through the core.
 
 Packaging: `scripts/package-mac.sh` copies this folder into the
 app bundle (`Contents/Resources/app/plugins/`), and

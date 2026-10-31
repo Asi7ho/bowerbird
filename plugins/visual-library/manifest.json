@@ -1,0 +1,14 @@
+{
+  "id": "visual-library",
+  "name": "Visual Library",
+  "version": "1.0.0",
+  "apiVersion": "1",
+  "description": "Your personal collection of images and PDFs, in a panel. Search by filename, click to place at the camera centre, drag onto the board to place at the drop point, as ordinary Image or PDF cards. Drop files into the library folder to grow it; add selected board images and PDFs back into it. This is a bundled plugin: it ships inside the app and is on by default.",
+  "permissions": ["board:write", "files:read", "files:embed"],
+  "main": "main.js",
+  "styles": ["style.css"],
+  "contributions": {
+    "panels": [{ "id": "library", "title": "Visual Library" }],
+    "commands": [{ "id": "refresh-library", "title": "Refresh Visual Library" }]
+  }
+}
