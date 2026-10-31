@@ -69,7 +69,7 @@ There is no handle tab.
   corner. Only a small round icon stays visible there, with an
   arrow pointing away from the corner into the screen. Clicking
   that icon opens the board again, back in its saved bounds.
-  Change the corner in Settings, under Corner reveal
+  Change the corner in Settings, under Plugin settings → Hide
   (Bottom-left, Bottom-right, Top-left, Top-right, or Off) — the
   floating button moves to the chosen corner, and Off hides it.
   Cards scale with the zoom: a card is laid out in world units
@@ -88,10 +88,11 @@ There is no handle tab.
   for pen, connector and marquee) instead of rebuilding the board,
   cursor hints run at most once per frame, and content is only
   rebuilt when the visible set actually changes.
-- **Settings (?):** a panel listing every keyboard shortcut, plus the
-  canvas background (White, Paper, Sage, Sky, Ink) and grid
-  (Dots, Lines, Off), the corner the board collapses into, a
-  Data section, and a Quit Bowerbird button under App. The corner
+- **Settings (?):** app settings first (every keyboard shortcut,
+  plus the canvas background and grid), then Plugins to turn
+  plugins on and off, then Plugin settings (one section per
+  plugin that has settings, Hide's corner picker among them),
+  then Data and App (Quit Bowerbird) at the bottom. The corner
   choice is saved in the app's settings file and survives restarts.
 - **In-app hotkeys:** `V` select, `P` pen, `A` arrow, `Ctrl/Cmd+G`
   group, `Ctrl/Cmd+U` ungroup, `Delete` removes the selection,

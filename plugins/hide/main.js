@@ -58,10 +58,6 @@ function createButton(container) {
 
 function renderSettings(container) {
   container.innerHTML = "";
-  const intro = document.createElement("p");
-  intro.className = "meta";
-  intro.textContent = "Click the corner button to hide into the corner. Drag the top bar to move the window.";
-  container.appendChild(intro);
   const opts = document.createElement("div");
   opts.className = "canvas-opt";
   for (const [label, value] of OPTIONS) {
@@ -78,10 +74,6 @@ function renderSettings(container) {
     opts.appendChild(b);
   }
   container.appendChild(opts);
-  const note = document.createElement("p");
-  note.className = "meta";
-  note.textContent = "The board hides into this corner, and clicking its corner opens it again.";
-  container.appendChild(note);
 }
 
 export async function activate(api) {

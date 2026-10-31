@@ -300,6 +300,7 @@ button { font-family: inherit; }
 #settings::-webkit-scrollbar { display: none; }
 #settings h2 { margin: 0 0 4px; font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
 #settings h3 { margin: 20px 0 8px; font-size: 13px; font-weight: 600; color: var(--ink); }
+#plugin-settings-sections .plugin-settings-section:first-child h3 { margin-top: 8px; }
 #settings .close {
   float: right; border: none; background: var(--fill); width: 26px; height: 26px;
   border-radius: 50%; font-size: 16px; line-height: 1; cursor: pointer; color: var(--grey);

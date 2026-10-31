@@ -48,18 +48,16 @@
         <div id="settings">
           <button class="close" id="settings-close" title="Close (Esc)">×</button>
           <h2>Settings</h2>
-          <p class="meta" id="settings-board-path"></p>
           <h3>Keyboard shortcuts</h3>
           <table id="shortcuts-table"></table>
           <h3>Canvas</h3>
           <div class="canvas-opt" id="bg-opts"></div>
           <div class="canvas-opt" id="grid-opts"></div>
-          <div id="plugin-settings-sections"></div>
           <h3>Plugins</h3>
-          <p class="meta">Plugins are local folders, not a store. Drop a plugin folder into your plugins folder, then reopen Settings. A plugin that is off cannot add cards, tools, panels or views, and its cards show as placeholders with their data kept. See PLUGIN_API.md in the repo.</p>
           <div id="plugin-list"></div>
+          <h3 id="plugin-settings-heading">Plugin settings</h3>
+          <div id="plugin-settings-sections"></div>
           <h3>Data</h3>
-          <p class="meta">Delete everything saved in this whiteboard: all notes, photos, links, files and sketches. The board starts again as a fresh welcome board. The corner setting above is kept.</p>
           <button id="btn-reset">Delete all board data</button>
           <div id="reset-confirm" style="display:none">
             <p class="meta"><strong>This cannot be undone.</strong> Delete everything on this board?</p>

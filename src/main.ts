@@ -99,7 +99,6 @@ let board: Board = {
   items: [], camera: { x: 0, y: 0, zoom: 1 }, next_id: 0, next_group: 0,
   bg: "#FFFFFF", grid: "Dots",
 };
-let boardPath = "";
 let boardDir = "";
 let tool: Tool = "select";
 let penColor = PALETTE[0];
@@ -1396,20 +1395,9 @@ function renderPluginSettings(): void {
   let html = "";
   for (const lp of plugins) {
     const m = lp.manifest;
-    const parts: string[] = [];
-    for (const c of m.contributions?.cards ?? []) parts.push(`Card: ${c.title}`);
-    for (const c of m.contributions?.tools ?? []) parts.push(`Tool: ${c.title}`);
-    for (const c of m.contributions?.panels ?? []) parts.push(`Panel: ${c.title}`);
-    for (const c of m.contributions?.views ?? []) parts.push(`View: ${c.title}`);
-    for (const c of m.contributions?.commands ?? []) parts.push(`Command: ${c.title}`);
-    for (const c of m.contributions?.overlays ?? []) parts.push(`Overlay: ${c.title}`);
-    for (const c of m.contributions?.settingsSections ?? []) parts.push(`Settings: ${c.title}`);
-    for (const c of m.contributions?.shortcuts ?? []) parts.push(`Shortcut: ${c.key.toUpperCase()} — ${c.title}`);
     const state = lp.failed ? "Failed" : lp.active ? "On" : "Off";
     const cmds = commands.filter((c) => c.pluginId === m.id);
-    html += `<div class="plugin-row"><div><strong>${m.name}</strong> <span class="meta">${m.version} · ${m.source === "bundled" ? "Built in" : "User"} · ${state}</span></div>`;
-    if (m.description) html += `<p class="meta">${m.description}</p>`;
-    if (parts.length > 0) html += `<p class="meta">${parts.join(" · ")}</p>`;
+    html += `<div class="plugin-row"><div><strong>${m.name}</strong> <span class="meta">${state}</span></div>`;
     if (lp.failed && lp.error) html += `<p class="meta"><strong>${lp.error}</strong></p>`;
     html += `<button data-plugin-toggle="${m.id}">${lp.active ? "Disable" : "Enable"}</button>`;
     for (const c of cmds) {
@@ -1426,7 +1414,7 @@ function renderPluginSettings(): void {
       if (!lp) return;
       await setPluginEnabled(id, !lp.active);
       renderShortcutsTable();
-      renderSettingsSections();
+      renderPluginSettingsSections();
       renderPluginSettings();
       render();
     });
@@ -1439,6 +1427,13 @@ function renderPluginSettings(): void {
       render();
     });
   }
+}
+
+function renderPluginSettingsSections(): void {
+  renderSettingsSections();
+  const head = document.getElementById("plugin-settings-heading") as HTMLElement | null;
+  const el = document.getElementById("plugin-settings-sections") as HTMLElement | null;
+  if (head && el) head.style.display = el.children.length > 0 ? "" : "none";
 }
 
 function renderShortcutsTable(): void {
@@ -1459,11 +1454,9 @@ function setSettings(open: boolean): void {
     if (confirmEl) confirmEl.style.display = "none";
     if (resetBtn) resetBtn.style.display = "";
     renderShortcutsTable();
-    const pathEl = document.getElementById("settings-board-path") as HTMLElement;
-    pathEl.textContent = DEMO ? "Demo — nothing is saved, and nothing is written to disk." : `Board file: ${boardPath}`;
     renderBgOpts();
     renderGridOpts();
-    renderSettingsSections();
+    renderPluginSettingsSections();
     renderPluginSettings();
   }
   render();
@@ -1698,7 +1691,6 @@ function welcomeBoard(pdfSize: number, videoSize: number): Board {
 async function init(): Promise<void> {
   try {
     const loaded = await api.loadBoard();
-    boardPath = loaded.board_path;
     boardDir = loaded.board_dir;
     if (loaded.json) {
       const parsed = JSON.parse(loaded.json) as Board;
