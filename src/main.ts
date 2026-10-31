@@ -39,7 +39,7 @@ declare global {
 const api = window.bowerbird;
 import {
   Anchor, Board, GRID, Item, Pt,
-  anchorPoint, boardGet, centre, clippedEnds, domainOf, elide, estimateTextHeight,
+  anchorPoint, boardGet, centre, clippedEnds, domainOf, elide, escapeHtml, estimateTextHeight,
   hitTest, itemBounds, marquee, moveSelection, normaliseHex, parseHex, renderMarkdownHtml,
   resizeItem, select, tileColorFor, tint,
 } from "./model";
@@ -402,14 +402,35 @@ function cachedMarkdown(item: Item, text: string, size: number): string {
 }
 
 function cardHtml(item: Item, plain = false): string {
-  const sel = plain ? false : selected.includes(item.id);
+  // Board JSON is untrusted input for this function: a board
+  // shared by someone else, or a file dropped with a crafted
+  // name, can carry any string in any field. This HTML is
+  // inserted with innerHTML, so every value that lands in
+  // an attribute or as text must be coerced or escaped
+  // here, not trusted from the board. Numbers are forced
+  // through Number() (a string like `0" onmouseover="…`
+  // becomes NaN, then the fallback, instead of breaking
+  // out of the style attribute), colours must match a
+  // strict hex pattern, and names, domains and titles are
+  // escaped with escapeHtml() before they are interpolated.
+  // Markdown text is already escaped by renderMarkdownHtml;
+  // image/video sources go through fileUrl(), which
+  // encodes each path segment.
+  const num = (v: unknown, fallback: number): number => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
+  const safeColor = (v: unknown, fallback: string): string =>
+    typeof v === "string" && /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(v) ? v : fallback;
+  const id = num(item.id, 0);
+  const sel = plain ? false : selected.includes(id);
   const cls = sel ? "card selected" : "card";
   if ("Plugin" in item.kind) {
-    const ww0 = item.size.w, hh0 = item.size.h;
-    const style0 = `left:${item.pos.x}px;top:${item.pos.y}px;width:${ww0}px;height:${hh0}px;`;
+    const ww0 = num(item.size.w, 0), hh0 = num(item.size.h, 0);
+    const style0 = `left:${num(item.pos.x, 0)}px;top:${num(item.pos.y, 0)}px;width:${ww0}px;height:${hh0}px;`;
     const inner = getCardHtml(item) ?? "";
     const frameCls = getCardRenderer(item)?.frame === true ? " plugin-frame" : "";
-    return `<div class="${cls}${frameCls}" data-id="${item.id}" style="${style0}"><div class="inner">${inner}</div></div>`;
+    return `<div class="${cls}${frameCls}" data-id="${id}" style="${style0}"><div class="inner">${inner}</div></div>`;
   }
   // Cards live in world coordinates; the whole #cards layer is
   // transformed once by the camera (see applyCamera). Per-card
@@ -417,16 +438,17 @@ function cardHtml(item: Item, plain = false): string {
   // full reposition of every card on every pan/zoom frame — that
   // was the main source of lag. Content still scales with zoom,
   // because the layer itself is scaled.
-  const ww = item.size.w, hh = item.size.h;
-  const style = `left:${item.pos.x}px;top:${item.pos.y}px;width:${ww}px;height:${hh}px;`;
+  const ww = num(item.size.w, 0), hh = num(item.size.h, 0);
+  const style = `left:${num(item.pos.x, 0)}px;top:${num(item.pos.y, 0)}px;width:${ww}px;height:${hh}px;`;
   if ("Text" in item.kind) {
-    if (!plain && editingId === item.id) return ""; // the editor DOM is managed separately
+    if (!plain && editingId === id) return ""; // the editor DOM is managed separately
     const { text, size, color } = item.kind.Text;
-    return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner note-body" style="font-size:${size}px;color:${color}">${cachedMarkdown(item, text, size)}</div></div>`;
+    const safeSize = num(size, 16);
+    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner note-body" style="font-size:${safeSize}px;color:${safeColor(color, "#1A1A1A")}">${cachedMarkdown(item, text, safeSize)}</div></div>`;
   }
   if ("Image" in item.kind) {
     const { path } = item.kind.Image;
-    return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner"><img src="${api.fileUrl(path)}" draggable="false" style="width:100%;height:100%;object-fit:cover;border-radius:12px" alt="" /></div></div>`;
+    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner"><img src="${api.fileUrl(path)}" draggable="false" style="width:100%;height:100%;object-fit:cover;border-radius:12px" alt="" /></div></div>`;
   }
   if ("UrlCard" in item.kind) {
     const { url, title, description, image, icon } = item.kind.UrlCard;
@@ -437,19 +459,19 @@ function cardHtml(item: Item, plain = false): string {
     const img = safeHttpUrl(image);
     const ico = safeHttpUrl(icon);
     const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-    const footer = `<div class="link-footer"><a class="link-domain" data-action="open-link" data-id="${item.id}">${ico ? `<img class="favicon" src="${esc(ico)}" alt="" onerror="this.style.display='none';var f=this.nextElementSibling;if(f)f.style.display='flex'" /><span class="favicon-fallback" style="display:none;background:${tint(tile, 0.85)};color:${tile}">${initial}</span>` : `<span class="favicon-fallback" style="background:${tint(tile, 0.85)};color:${tile}">${initial}</span>`}<span>${domain}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" /></svg></a></div>`;
+    const footer = `<div class="link-footer"><a class="link-domain" data-action="open-link" data-id="${id}">${ico ? `<img class="favicon" src="${esc(ico)}" alt="" onerror="this.style.display='none';var f=this.nextElementSibling;if(f)f.style.display='flex'" /><span class="favicon-fallback" style="display:none;background:${tint(tile, 0.85)};color:${tile}">${esc(initial)}</span>` : `<span class="favicon-fallback" style="background:${tint(tile, 0.85)};color:${tile}">${esc(initial)}</span>`}<span>${esc(domain)}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" /></svg></a></div>`;
     if (img) {
-      return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner link-card">
-        <a class="link-image" data-action="open-link" data-id="${item.id}"><img src="${esc(img)}" draggable="false" alt="" onerror="this.closest('.link-image').style.display='none'" /></a>
+      return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner link-card">
+        <a class="link-image" data-action="open-link" data-id="${id}"><img src="${esc(img)}" draggable="false" alt="" onerror="this.closest('.link-image').style.display='none'" /></a>
         <div class="link-body">
-          <a class="link-title" data-action="open-link" data-id="${item.id}">${esc(head)}</a>
+          <a class="link-title" data-action="open-link" data-id="${id}">${esc(head)}</a>
           ${description ? `<div class="link-desc">${esc(description)}</div>` : ""}
           ${footer}
         </div></div></div>`;
     }
-    return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner link-card no-image">
+    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner link-card no-image">
       <div class="link-body">
-        <a class="link-title" data-action="open-link" data-id="${item.id}">${esc(head)}</a>
+        <a class="link-title" data-action="open-link" data-id="${id}">${esc(head)}</a>
         ${description ? `<div class="link-desc">${esc(description)}</div>` : ""}
         ${footer}
       </div></div></div>`;
@@ -457,42 +479,42 @@ function cardHtml(item: Item, plain = false): string {
   if ("PdfCard" in item.kind) {
     const { path, size_bytes } = item.kind.PdfCard;
     const name = path.split("/").pop() ?? path;
-    const kb = Math.round(size_bytes / 1024);
-    return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner row" style="padding:12px">
+    const kb = Math.round(num(size_bytes, 0) / 1024);
+    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner row" style="padding:12px">
       <div class="tile" style="background:${tint("#E63946", 0.88)};color:#E63946;font-size:13px">PDF</div>
-      <div class="col"><div class="title" style="font-size:14px">${elide(name, ww - 92, 14, true)}</div><div class="sub" style="font-size:12px">${kb} KB</div></div></div></div>`;
+      <div class="col"><div class="title" style="font-size:14px">${escapeHtml(elide(name, ww - 92, 14, true))}</div><div class="sub" style="font-size:12px">${kb} KB</div></div></div></div>`;
   }
   if ("Swatch" in item.kind) {
     const { hex } = item.kind.Swatch;
-    return `<div class="${cls}" data-id="${item.id}" style="${style};background:${hex}"><div class="swatch-pill">${hex}</div></div>`;
+    return `<div class="${cls}" data-id="${id}" style="${style};background:${safeColor(hex, "#1A1A1A")}"><div class="swatch-pill">${escapeHtml(safeColor(hex, "#1A1A1A"))}</div></div>`;
   }
   if ("Audio" in item.kind) {
     const { path } = item.kind.Audio;
     const name = path.split("/").pop() ?? path;
-    const playing = !plain && audioId === item.id && audioEl && !audioEl.paused;
-    const isCurrent = !plain && audioId === item.id && audioEl;
+    const playing = !plain && audioId === id && audioEl && !audioEl.paused;
+    const isCurrent = !plain && audioId === id && audioEl;
     const dur = isCurrent && isFinite(audioEl!.duration) ? audioEl!.duration : (audioDurations.get(path) ?? NaN);
     const cur = isCurrent ? audioEl!.currentTime : 0;
     const seekVal = isFinite(dur) && dur > 0 ? Math.round((cur / dur) * 1000) : 0;
     const seekPct = isFinite(dur) && dur > 0 ? Math.round((cur / dur) * 100) : 0;
-    if (!isCurrent) loadAudioDuration(item.id, path);
+    if (!isCurrent) loadAudioDuration(id, path);
     // Like the other media cards: a tile, a title, and the time as
     // a quiet grey sub-line — the same shape as the PDF card's
     // "1 KB". The seek control is a thin track in the tile's own
     // purple, not a chunky browser slider in blue.
     const tile = hh >= 104 ? 56 : 48;
-    return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
+    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
       <div style="display:flex;align-items:center;gap:12px">
-        <div class="audio-tile clickable" data-action="play-audio" data-id="${item.id}" style="width:${tile}px;height:${tile}px;background:${tint("#6A4C93", 0.88)};color:#6a4c93;font-size:${tile === 56 ? 18 : 16}px">${playing ? "\u275a\u275a" : "\u25b6"}</div>
-        <div class="col"><div class="title" style="font-size:14px">${elide(name, ww - 92, 14, true)}</div><div class="sub" style="font-size:12px"><span data-audio-time="${item.id}">${formatAudioTime(cur)}</span> / <span data-audio-dur="${item.id}">${formatAudioTime(dur)}</span></div></div>
+        <div class="audio-tile clickable" data-action="play-audio" data-id="${id}" style="width:${tile}px;height:${tile}px;background:${tint("#6A4C93", 0.88)};color:#6a4c93;font-size:${tile === 56 ? 18 : 16}px">${playing ? "\u275a\u275a" : "\u25b6"}</div>
+        <div class="col"><div class="title" style="font-size:14px">${escapeHtml(elide(name, ww - 92, 14, true))}</div><div class="sub" style="font-size:12px"><span data-audio-time="${id}">${formatAudioTime(cur)}</span> / <span data-audio-dur="${id}">${formatAudioTime(dur)}</span></div></div>
       </div>
-      <input class="audio-seek" type="range" min="0" max="1000" value="${seekVal}" style="--seek-pct:${seekPct}%" data-audio-seek="${item.id}" aria-label="Seek">
+      <input class="audio-seek" type="range" min="0" max="1000" value="${seekVal}" style="--seek-pct:${seekPct}%" data-audio-seek="${id}" aria-label="Seek">
     </div></div>`;
   }
   if ("Video" in item.kind) {
     const { source, remote, size_bytes } = item.kind.Video;
     const name = remote ? domainOf(source) : (source.split("/").pop() ?? source);
-    const sub = remote ? "Video link" : `${Math.round(size_bytes / 1024)} KB`;
+    const sub = remote ? "Video link" : `${Math.round(num(size_bytes, 0) / 1024)} KB`;
     const thumbH = (ww - 24) * 9 / 16;
     // A local video in a format Chromium can play plays right here
     // in the board, with its real first frame as the thumbnail —
@@ -504,22 +526,22 @@ function cardHtml(item: Item, plain = false): string {
     if (inline) {
       const src = api.fileUrl(source);
       if (hh >= thumbH + 70) {
-        return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
+        return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
           <video controls preload="metadata" playsinline src="${src}" style="width:${ww - 24}px;height:${thumbH}px;object-fit:cover;border-radius:10px;background:#1d1d1f;pointer-events:auto"></video>
-          <div class="title" style="font-size:14px">${elide(name, ww - 24, 14, true)}</div><div class="sub" style="font-size:12px">${sub}</div></div></div>`;
+          <div class="title" style="font-size:14px">${escapeHtml(elide(name, ww - 24, 14, true))}</div><div class="sub" style="font-size:12px">${sub}</div></div></div>`;
       }
-      return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner row" style="padding:12px">
+      return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner row" style="padding:12px">
         <video controls preload="metadata" playsinline src="${src}" style="width:96px;height:56px;object-fit:cover;border-radius:10px;background:#1d1d1f;pointer-events:auto"></video>
-        <div class="col"><div class="title" style="font-size:14px">${elide(name, ww - 132, 14, true)}</div><div class="sub" style="font-size:12px">${sub}</div></div></div></div>`;
+        <div class="col"><div class="title" style="font-size:14px">${escapeHtml(elide(name, ww - 132, 14, true))}</div><div class="sub" style="font-size:12px">${sub}</div></div></div></div>`;
     }
     if (hh >= thumbH + 70) {
-      return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
-        <div class="video-thumb clickable" data-action="play-video" data-id="${item.id}" style="width:${ww - 24}px;height:${thumbH}px;font-size:28px">▶</div>
-        <div class="title" style="font-size:14px">${elide(name, ww - 24, 14, true)}</div><div class="sub" style="font-size:12px">${sub}</div></div></div>`;
+      return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
+        <div class="video-thumb clickable" data-action="play-video" data-id="${id}" style="width:${ww - 24}px;height:${thumbH}px;font-size:28px">▶</div>
+        <div class="title" style="font-size:14px">${escapeHtml(elide(name, ww - 24, 14, true))}</div><div class="sub" style="font-size:12px">${sub}</div></div></div>`;
     }
-    return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner row" style="padding:12px">
-      <div class="video-thumb clickable" data-action="play-video" data-id="${item.id}" style="width:96px;height:56px;font-size:20px">▶</div>
-      <div class="col"><div class="title" style="font-size:14px">${elide(name, ww - 132, 14, true)}</div><div class="sub" style="font-size:12px">${sub}</div></div></div></div>`;
+    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner row" style="padding:12px">
+      <div class="video-thumb clickable" data-action="play-video" data-id="${id}" style="width:96px;height:56px;font-size:20px">▶</div>
+      <div class="col"><div class="title" style="font-size:14px">${escapeHtml(elide(name, ww - 132, 14, true))}</div><div class="sub" style="font-size:12px">${sub}</div></div></div></div>`;
   }
   return "";
 }
@@ -667,11 +689,16 @@ function updateSelection(): void {
 }
 
 function applyStacking(): void {
-  const order = new Map<number, number>();
-  board.items.forEach((it, i) => order.set(it.id, i));
+  // Only relative order matters for paint: cards are built
+  // into #cards in board order by render(), so a child's
+  // DOM index already is its stacking order among the
+  // cards that are actually on screen. The old version
+  // built a Map over every board item on every render,
+  // including thousands of off-screen items that have no
+  // DOM node and need no z-index at all.
+  let i = 0;
   for (const child of Array.from(cardsEl.children)) {
-    const el = child as HTMLElement;
-    el.style.zIndex = String(order.get(Number(el.dataset.id)) ?? 0);
+    (child as HTMLElement).style.zIndex = String(i++);
   }
 }
 
@@ -1434,14 +1461,14 @@ function renderPluginSettings(): void {
     const m = lp.manifest;
     const state = lp.failed ? "Failed" : lp.active ? "On" : "Off";
     const cmds = commands.filter((c) => c.pluginId === m.id);
-    html += `<div class="plugin-row"><div class="plugin-row-text"><div><strong>${m.name}</strong> <span class="meta">${state}</span></div>`;
+    html += `<div class="plugin-row"><div class="plugin-row-text"><div><strong>${escapeHtml(m.name)}</strong> <span class="meta">${state}</span></div>`;
     const desc = descriptions[m.id];
     if (desc) html += `<p class="meta">${desc}</p>`;
-    if (lp.failed && lp.error) html += `<p class="meta"><strong>${lp.error}</strong></p>`;
+    if (lp.failed && lp.error) html += `<p class="meta"><strong>${escapeHtml(lp.error)}</strong></p>`;
     html += `</div><button data-plugin-toggle="${m.id}">${lp.active ? "Disable" : "Enable"}</button>`;
     for (const c of cmds) {
       if (!lp.active) continue;
-      html += ` <button data-plugin-command="${m.id}:${c.id}">Run: ${c.title}</button>`;
+      html += ` <button data-plugin-command="${m.id}:${c.id}">Run: ${escapeHtml(c.title)}</button>`;
     }
     html += `</div>`;
   }
@@ -1497,7 +1524,7 @@ function renderShortcutsTable(): void {
   if (!table) return;
   const allShortcuts: Array<[string, string]> = [...SHORTCUTS];
   for (const s of listPluginShortcuts()) allShortcuts.push([s.key.toUpperCase(), `${s.title} (${s.pluginName})`]);
-  table.innerHTML = allShortcuts.map(([k, v]) => `<tr><td><kbd>${k}</kbd></td><td>${v}</td></tr>`).join("");
+  table.innerHTML = allShortcuts.map(([k, v]) => `<tr><td><kbd>${escapeHtml(k)}</kbd></td><td>${escapeHtml(v)}</td></tr>`).join("");
 }
 
 function setSettings(open: boolean): void {

@@ -1,1 +1,1 @@
-{"devDependencies":{"electron":"^40","typescript":"~6.0.3","vite":"^8.0.16"},"main":"electron/main.js","name":"bowerbird","private":true,"scripts":{"build":"tsc && vite build","dev":"node electron/dev.js","start":"electron .","demo":"BOWERBIRD_DEMO=1 electron ."},"version":"0.2.0"}
+{"devDependencies":{"electron":"^45.2.1","typescript":"^7.0.2","vite":"^8.3.5"},"main":"electron/main.js","name":"bowerbird","private":true,"scripts":{"build":"tsc && vite build","dev":"node electron/dev.js","start":"electron .","demo":"BOWERBIRD_DEMO=1 electron ."},"version":"0.2.0"}

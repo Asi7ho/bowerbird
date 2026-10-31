@@ -507,6 +507,54 @@ function savePluginStorage(data) {
 
 // ---------------------------------------------------------------- IPC
 
+// Security boundaries for the renderer. The renderer (and any
+// plugin running in it) can call the bridge, so the main process
+// is the only place a path or URL check can be enforced:
+//  - app-file: only board files and app assets are served.
+//    Without this, any renderer code could fetch
+//    app-file:///etc/passwd or a private key and read it
+//    through the scheme, bypassing the plugin files:read
+//    permission entirely (the scheme has no permission check).
+//    Legitimate media is always board-owned: dropped files
+//    are copied into boardDir()/assets, the welcome board
+//    lives in boardDir(), and demo mode uses assetsDir().
+//  - openExternal: https URLs open in the browser; anything
+//    else must be a board-local file (a PDF, image or video
+//    card). A shared board must not be able to make a click
+//    on what looks like a web link open a local app or script.
+//  - fetchPreview: only public http(s) URLs. A link card is
+//    user-initiated, but a shared board or a pasted URL must
+//    not turn the main process into a probe for localhost
+//    or private-network services. This blocks IP literals
+//    and localhost names; a DNS name that resolves to a
+//    private address after this check (DNS rebinding) is
+//    still out of scope, and is noted in PLUGIN_API.md.
+function isBoardLocal(filePath) {
+  try {
+    const resolved = path.resolve(filePath);
+    for (const root of [boardDir(), assetsDir()]) {
+      const r = path.resolve(root);
+      if (resolved === r || resolved.startsWith(r + path.sep)) return true;
+    }
+  } catch { /* not a path: not board-local */ }
+  return false;
+}
+function isPrivateHost(host) {
+  const h = String(host || "").toLowerCase().replace(/\.$/, "");
+  if (!h || h === "localhost" || h.endsWith(".local") || h === "0.0.0.0") return true;
+  const v4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(h);
+  if (v4) {
+    const [a, b] = [Number(v4[1]), Number(v4[2])];
+    if (a === 10) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 127 || (a === 169 && b === 254)) return true;
+    return false;
+  }
+  if (h === "::1" || h.startsWith("fe80:") || h.startsWith("fc00:") || h.startsWith("fd00:") || h.startsWith("::ffff:127.") || h.startsWith("::ffff:10.") || h.startsWith("::ffff:192.168.")) return true;
+  return false;
+}
+
 function registerIpc() {
   ipcMain.handle('bowerbird:load-board', () => {
     if (DEMO) {
@@ -725,10 +773,28 @@ function registerIpc() {
   ipcMain.handle('bowerbird:file-size', (_event, filePath) => fs.statSync(filePath).size);
 
   ipcMain.handle('bowerbird:fetch-preview', async (_event, url) => {
+    let parsed;
+    try {
+      parsed = new URL(url);
+    } catch {
+      throw new Error('preview URL is not a valid URL');
+    }
+    if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || isPrivateHost(parsed.hostname)) {
+      throw new Error('preview URL is not a public web address');
+    }
     const res = await fetch(url, {
       headers: { 'User-Agent': 'Bowerbird/0.1' },
       signal: AbortSignal.timeout(6000),
     });
+    // fetch follows redirects, so a public URL could redirect
+    // to a private one; check where it actually landed too.
+    try {
+      if (res.url && isPrivateHost(new URL(res.url).hostname)) {
+        throw new Error('preview URL redirected to a private address');
+      }
+    } catch (e) {
+      if (e.message && e.message.includes('private address')) throw e;
+    }
     const text = (await res.text()).slice(0, 300000);
     // Resolve a possibly-relative image/icon URL against the page URL,
     // and only ever hand the renderer an http(s) URL.
@@ -761,8 +827,17 @@ function registerIpc() {
   });
 
   ipcMain.handle('bowerbird:open-external', (_event, target) => {
+    if (typeof target !== 'string' || !target) throw new Error('nothing to open');
     if (/^https?:\/\//.test(target)) return shell.openExternal(target);
-    return shell.openPath(target);
+    // Local files: only board-local files (see isBoardLocal).
+    // A file:// URL is unwrapped first, so file:///etc/passwd
+    // does not slip past the check as a non-https string.
+    let local = target;
+    if (target.startsWith('file://')) {
+      try { local = decodeURIComponent(new URL(target).pathname); } catch { throw new Error('not a board-local file'); }
+    }
+    if (isBoardLocal(local)) return shell.openPath(local);
+    throw new Error('not a public web address or a board-local file');
   });
   ipcMain.handle('bowerbird:get-app-settings', () => ({ corner: cornerReveal }));
   ipcMain.handle('bowerbird:list-plugins', () => listPlugins());
@@ -869,6 +944,13 @@ app.whenReady().then(() => {
           return seg;
         }
       }).join('/');
+      // Only board-local files are served (see isBoardLocal
+      // above). Any other path — /etc/passwd, a private key,
+      // another app's data — is a 404, not a file, even
+      // though the renderer asked for it by full path.
+      if (!isBoardLocal(filePath)) {
+        return new Response('not found', { status: 404 });
+      }
       const ext = path.extname(filePath).toLowerCase();
       const type = MIME[ext] || 'application/octet-stream';
       // Chromium's media player asks for byte ranges and refuses a

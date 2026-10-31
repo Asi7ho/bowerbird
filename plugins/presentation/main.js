@@ -261,7 +261,22 @@ function signature(list) {
       parts.push(`${it.id}:${JSON.stringify(it.kind)}:${it.pos.x},${it.pos.y},${it.size.w}x${it.size.h}`);
     }
     for (const it of slide.drawings) {
-      parts.push(`${it.id}:${JSON.stringify(it.kind)}`);
+      // Drawings are not stringified whole: a pen stroke
+      // can hold hundreds of points, and stringifying them
+      // on every board event is the signature's main cost.
+      // A stroke's points are fixed once it is drawn; the
+      // only changes after that are a move (pos), a resize
+      // (size) or a deletion, and a new stroke is a new id,
+      // so id + pos + size + point count detects every real
+      // change. A connector is different: its own pos/size
+      // is unreliable, and its anchors are just two small
+      // values, so connectors keep the full kind string.
+      if ("Stroke" in it.kind) {
+        const pts = it.kind.Stroke.points;
+        parts.push(`S${it.id}:${it.pos.x},${it.pos.y},${it.size.w}x${it.size.h}:${Array.isArray(pts) ? pts.length : 0}`);
+      } else {
+        parts.push(`${it.id}:${JSON.stringify(it.kind)}`);
+      }
     }
   }
   return parts.join("|");

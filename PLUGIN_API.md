@@ -609,6 +609,35 @@ library card.
   panels and views into isolated frames; v1 does not, and does
   not pretend otherwise.
 
+## Security boundaries
+
+These are enforced in the main process, not in the renderer,
+because renderer code can be replaced by a crafted board:
+
+- Board JSON, file names and link-preview data are untrusted.
+  Card rendering coerces positions and sizes to numbers,
+  only allows strict hex colours, and escapes file names,
+  link domains, titles and descriptions before they reach
+  HTML, so a crafted board or a file named like markup
+  cannot break out of an attribute or inject a script.
+- The `app-file` scheme only serves board-local files and
+  app assets. Any other path is a 404, even if the renderer
+  asked for it by full path.
+- `api.files.openExternal` opens https URLs in the browser
+  and board-local files in their system app. Anything else
+  (a local app, a script, a `file://` URL outside the board)
+  is refused, so a click on a link card cannot open an
+  arbitrary local file.
+- `api.files.fetchPreview` only fetches public http(s)
+  URLs. Localhost, `.local` names and private or loopback
+  IP literals are refused, as is a redirect that lands on
+  one. A DNS name that resolves to a private address after
+  the check (DNS rebinding) is not covered by this check.
+- The plugin permission checks in `src/plugins.ts` are a
+  contract for well-behaved plugins, not a sandbox against
+  a malicious one: a plugin runs in the same renderer as
+  the core, so installing a plugin is trusting its code.
+
 ## Sample plugin
 
 `examples/plugins/hello-card/` in this repo is the smallest
