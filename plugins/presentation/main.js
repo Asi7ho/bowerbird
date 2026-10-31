@@ -68,6 +68,7 @@
 // Other keys pass through, so ? still opens Settings
 // and H still hides the app. Typing in the search box or
 // a text field is never hijacked.
+// ---- State ------------------------------------------------------------
 let apiRef = null;
 let slides = [];
 let index = 0;
@@ -134,105 +135,98 @@ function isCardItem(item) {
   return item.size.w > 0 && item.size.h > 0;
 }
 
-function rectsOverlap(a, b) {
-  // Strict overlap: a card that only touches the frame's
-  // edge, with no area inside, shows nothing in the slide.
-  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+// ---- Slide geometry -------------------------------------------------
+// All geometry lives in the core now, via api.geometry
+// (see PLUGIN_API.md). This plugin used to copy
+// rectCrossing and clipped ends by hand; those copies
+// are gone, so there is one implementation to keep
+// correct, and this file only says what a slide contains.
+
+function frameRect(frame) {
+  return { x: frame.pos.x, y: frame.pos.y, w: frame.size.w, h: frame.size.h };
 }
 
 function cardOverlapsFrame(frame, item) {
-  return rectsOverlap(
-    { x: frame.pos.x, y: frame.pos.y, w: frame.size.w, h: frame.size.h },
+  // Strict overlap: a card that only touches the frame's
+  // edge, with no area inside, shows nothing in the slide.
+  return apiRef.geometry.rectsOverlap(
+    frameRect(frame),
     { x: item.pos.x, y: item.pos.y, w: item.size.w, h: item.size.h },
   );
 }
 
-// Where a segment from `from` to `to` crosses a rectangle,
-// as the core's rectCrossing does (Liang-Barsky): entry
-// is the first crossing, exit the second. Used both for
-// clipping a connector to its cards, and for testing
-// whether a stroke or connector segment enters a frame.
-function rectCrossing(from, to, pos, w, h, entry) {
-  const dx = to.x - from.x, dy = to.y - from.y;
-  let t0 = 0, t1 = 1;
-  for (const [o, d, lo, hi] of [[from.x, dx, pos.x, pos.x + w], [from.y, dy, pos.y, pos.y + h]]) {
-    if (Math.abs(d) < 1e-9) {
-      if (o < lo || o > hi) return null;
-    } else {
-      let ta = (lo - o) / d, tb = (hi - o) / d;
-      if (ta > tb) [ta, tb] = [tb, ta];
-      t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
-      if (t0 > t1) return null;
-    }
-  }
-  const t = entry ? t0 : t1;
-  if (t < 0 || t > 1) return null;
-  return { x: from.x + dx * t, y: from.y + dy * t };
-}
-
 function segmentIntersectsFrame(frame, a, b) {
-  // A segment enters the frame if its clipped interval
-  // overlaps the segment at all — that is, if any part
-  // of it, however short, is inside, as a screenshot
-  // of the frame area would show.
-  const dx = b.x - a.x, dy = b.y - a.y;
-  let t0 = 0, t1 = 1;
-  for (const [o, d, lo, hi] of [[a.x, dx, frame.pos.x, frame.pos.x + frame.size.w], [a.y, dy, frame.pos.y, frame.pos.y + frame.size.h]]) {
-    if (Math.abs(d) < 1e-9) {
-      if (o < lo || o > hi) return false;
-    } else {
-      let ta = (lo - o) / d, tb = (hi - o) / d;
-      if (ta > tb) [ta, tb] = [tb, ta];
-      t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
-      if (t0 > t1) return false;
-    }
-  }
-  return t0 <= t1;
+  // A segment enters the frame if any part of it,
+  // however short, is inside, as a screenshot of the
+  // frame area would show.
+  return apiRef.geometry.segmentIntersectsRect(a, b, frameRect(frame));
 }
 
 function strokeOverlapsFrame(frame, item) {
   const points = item.kind.Stroke.points;
   if (points.length < 2) return false;
+  // Fast reject first: a stroke's points all lie inside
+  // its pos/size bounding box, so if that box does not
+  // overlap the frame, no segment can — this skips the
+  // per-segment loop for every stroke far from a frame,
+  // which is most strokes on a large board. It changes
+  // nothing about the result: the segment test below
+  // is the same test, just not run when it cannot pass.
+  if (!cardOverlapsFrame(frame, item)) return false;
   for (let i = 0; i + 1 < points.length; i++) {
     if (segmentIntersectsFrame(frame, points[i], points[i + 1])) return true;
   }
   return false;
 }
 
-function anchorPoint(all, anchor) {
-  if ("Point" in anchor) return anchor.Point;
-  const it = all.find((x) => x.id === anchor.Item);
-  return it ? { x: it.pos.x + it.size.w / 2, y: it.pos.y + it.size.h / 2 } : null;
-}
-
-function clippedConnectorEnds(all, item) {
-  const aRaw = anchorPoint(all, item.kind.Connector.from);
-  const bRaw = anchorPoint(all, item.kind.Connector.to);
-  if (!aRaw || !bRaw) return null;
-  let a = aRaw, b = bRaw;
-  if ("Item" in item.kind.Connector.from) {
-    const it = all.find((x) => x.id === item.kind.Connector.from.Item);
-    if (it) {
-      const p = rectCrossing(aRaw, bRaw, it.pos, it.size.w, it.size.h, false);
-      if (p) a = p;
-    }
-  }
-  if ("Item" in item.kind.Connector.to) {
-    const it = all.find((x) => x.id === item.kind.Connector.to.Item);
-    if (it) {
-      const p = rectCrossing(aRaw, bRaw, it.pos, it.size.w, it.size.h, true);
-      if (p) b = p;
-    }
-  }
-  return [a, b];
-}
-
-function connectorOverlapsFrame(all, frame, item) {
-  const ends = clippedConnectorEnds(all, item);
+function connectorOverlapsFrame(frame, item) {
+  const ends = apiRef.geometry.clippedEnds(item.kind.Connector.from, item.kind.Connector.to);
   if (!ends) return false;
   return segmentIntersectsFrame(frame, ends[0], ends[1]);
 }
 
+// ---- Drawing primitives ---------------------------------------------
+// One source for the drawing in a slide, used by both
+// the playing view (DOM SVG) and the export (string SVG).
+// A primitive is frame-relative, so both renderers just
+// place it, without redoing clipping or arrowhead math.
+function drawingPrimitives(frame, drawings) {
+  const out = [];
+  for (const item of drawings) {
+    if ("Stroke" in item.kind) {
+      const points = item.kind.Stroke.points;
+      if (points.length < 2) continue;
+      out.push({
+        type: "stroke",
+        d: points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x - frame.pos.x},${p.y - frame.pos.y}`).join(" "),
+        color: item.kind.Stroke.color,
+        width: item.kind.Stroke.width,
+        marker: item.kind.Stroke.marker,
+      });
+    }
+    if ("Connector" in item.kind) {
+      const ends = apiRef.geometry.clippedEnds(item.kind.Connector.from, item.kind.Connector.to);
+      if (!ends) continue;
+      const a = { x: ends[0].x - frame.pos.x, y: ends[0].y - frame.pos.y };
+      const b = { x: ends[1].x - frame.pos.x, y: ends[1].y - frame.pos.y };
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len = Math.max(1, Math.hypot(dx, dy));
+      const ux = dx / len, uy = dy / len;
+      const head = 12, spread = 0.45;
+      const c1 = Math.cos(spread), s1 = Math.sin(spread), c2 = Math.cos(-spread), s2 = Math.sin(-spread);
+      out.push({
+        type: "connector",
+        a, b,
+        p1: { x: b.x - head * (ux * c1 - uy * s1), y: b.y - head * (ux * s1 + uy * c1) },
+        p2: { x: b.x - head * (ux * c2 - uy * s2), y: b.y - head * (ux * s2 + uy * c2) },
+        color: item.kind.Connector.color || "#333333",
+      });
+    }
+  }
+  return out;
+}
+
+// ---- Slide computation ----------------------------------------------
 function computeSlides() {
   const all = apiRef.board.getItems();
   const frames = all.filter(isFrameItem);
@@ -248,7 +242,7 @@ function computeSlides() {
     cards: all.filter((it) => isCardItem(it) && cardOverlapsFrame(frame, it)),
     drawings: all.filter((it) =>
       ("Stroke" in it.kind && strokeOverlapsFrame(frame, it)) ||
-      ("Connector" in it.kind && connectorOverlapsFrame(all, frame, it)),
+      ("Connector" in it.kind && connectorOverlapsFrame(frame, it)),
     ),
   }));
 }
@@ -273,6 +267,7 @@ function signature(list) {
   return parts.join("|");
 }
 
+// ---- Audio, in the playing view only ---------------------------------
 function formatAudioTime(sec) {
   if (!isFinite(sec) || sec < 0) return "–:––";
   const m = Math.floor(sec / 60);
@@ -326,6 +321,7 @@ function playPresentationAudio(item, tile) {
   tile.textContent = "❚❚";
 }
 
+// ---- View: playing a slide -------------------------------------------
 function startPresentation(at) {
   if (slides.length === 0) return;
   cancelDrawMode();
@@ -391,7 +387,6 @@ function renderSlide() {
       // wrapper's overflow hidden crops it to the frame,
       // exactly as a screenshot of the frame area would.
       if (slide.drawings.length > 0) {
-        const all = apiRef.board.getItems();
         const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
         svg.setAttribute("class", "pres-slide-svg");
         svg.setAttribute("width", String(frame.size.w * scale));
@@ -400,46 +395,30 @@ function renderSlide() {
         svg.style.position = "absolute";
         svg.style.left = "0";
         svg.style.top = "0";
-        for (const item of slide.drawings) {
-          if ("Stroke" in item.kind) {
-            const points = item.kind.Stroke.points;
-            if (points.length < 2) continue;
-            const d = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x - frame.pos.x},${p.y - frame.pos.y}`).join(" ");
+        for (const prim of drawingPrimitives(frame, slide.drawings)) {
+          if (prim.type === "stroke") {
             const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-            path.setAttribute("d", d);
+            path.setAttribute("d", prim.d);
             path.setAttribute("fill", "none");
-            path.setAttribute("stroke", item.kind.Stroke.color);
-            path.setAttribute("stroke-width", String(item.kind.Stroke.width));
+            path.setAttribute("stroke", prim.color);
+            path.setAttribute("stroke-width", String(prim.width));
             path.setAttribute("stroke-linecap", "round");
             path.setAttribute("stroke-linejoin", "round");
-            if (item.kind.Stroke.marker) path.setAttribute("opacity", "0.45");
+            if (prim.marker) path.setAttribute("opacity", "0.45");
             svg.appendChild(path);
-          }
-          if ("Connector" in item.kind) {
-            const ends = clippedConnectorEnds(all, item);
-            if (!ends) continue;
-            const a = { x: ends[0].x - frame.pos.x, y: ends[0].y - frame.pos.y };
-            const b = { x: ends[1].x - frame.pos.x, y: ends[1].y - frame.pos.y };
-            const color = item.kind.Connector.color || "#333333";
+          } else {
             const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-            line.setAttribute("x1", String(a.x));
-            line.setAttribute("y1", String(a.y));
-            line.setAttribute("x2", String(b.x));
-            line.setAttribute("y2", String(b.y));
-            line.setAttribute("stroke", color);
+            line.setAttribute("x1", String(prim.a.x));
+            line.setAttribute("y1", String(prim.a.y));
+            line.setAttribute("x2", String(prim.b.x));
+            line.setAttribute("y2", String(prim.b.y));
+            line.setAttribute("stroke", prim.color);
             line.setAttribute("stroke-width", "2");
             svg.appendChild(line);
-            const dx = b.x - a.x, dy = b.y - a.y;
-            const len = Math.max(1, Math.hypot(dx, dy));
-            const ux = dx / len, uy = dy / len;
-            const head = 12, spread = 0.45;
-            const c1 = Math.cos(spread), s1 = Math.sin(spread), c2 = Math.cos(-spread), s2 = Math.sin(-spread);
-            const p1 = { x: b.x - head * (ux * c1 - uy * s1), y: b.y - head * (ux * s1 + uy * c1) };
-            const p2 = { x: b.x - head * (ux * c2 - uy * s2), y: b.y - head * (ux * s2 + uy * c2) };
             const arrow = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-            arrow.setAttribute("points", `${p1.x},${p1.y} ${b.x},${b.y} ${p2.x},${p2.y}`);
+            arrow.setAttribute("points", `${prim.p1.x},${prim.p1.y} ${prim.b.x},${prim.b.y} ${prim.p2.x},${prim.p2.y}`);
             arrow.setAttribute("fill", "none");
-            arrow.setAttribute("stroke", color);
+            arrow.setAttribute("stroke", prim.color);
             arrow.setAttribute("stroke-width", "2");
             svg.appendChild(arrow);
           }
@@ -613,6 +592,7 @@ function viewContainerClear() {
   counter = null;
 }
 
+// ---- Panel ------------------------------------------------------------
 function updatePanel() {
   if (!panelList) return;
   // Play and Export only make sense when there is
@@ -666,14 +646,14 @@ function updatePanel() {
   });
 }
 
-// ---------------------------------------------------------------- export
+// ---- Export -----------------------------------------------------------
 
-function escAttr(s) {
+// One escaping function for both text and attribute
+// values in the export: escaping " as well as &, <, >
+// is harmless in text, and required in attributes, so
+// there is no need for two near-identical functions.
+function escHtml(s) {
   return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-function escText(s) {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 async function fetchDataUrl(url) {
@@ -693,40 +673,30 @@ async function fetchDataUrl(url) {
 }
 
 async function embedAppFiles(html) {
+  // Embed in parallel, not one file at a time: a slide
+  // with several images or videos used to wait for each
+  // fetch + FileReader in turn, so export time grew
+  // with the number of media files. The replacements
+  // are independent (distinct URLs, string splits), so
+  // running them together changes nothing about the
+  // result, only how long it takes to get there.
   const urls = [...new Set(html.match(/app-file:\/\/[^"'\s<>]+/g) || [])];
+  const dataUrls = await Promise.all(urls.map((url) => fetchDataUrl(url)));
   let out = html;
-  for (const url of urls) {
-    const dataUrl = await fetchDataUrl(url);
-    if (dataUrl) out = out.split(url).join(dataUrl);
-  }
+  urls.forEach((url, i) => {
+    if (dataUrls[i]) out = out.split(url).join(dataUrls[i]);
+  });
   return out;
 }
 
 function exportSlideSvg(slide) {
   const frame = slide.frame;
-  const all = apiRef.board.getItems();
   let parts = "";
-  for (const item of slide.drawings) {
-    if ("Stroke" in item.kind) {
-      const points = item.kind.Stroke.points;
-      if (points.length < 2) continue;
-      const d = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x - frame.pos.x},${p.y - frame.pos.y}`).join(" ");
-      parts += `<path d="${d}" fill="none" stroke="${escAttr(item.kind.Stroke.color)}" stroke-width="${item.kind.Stroke.width}" stroke-linecap="round" stroke-linejoin="round"${item.kind.Stroke.marker ? ' opacity="0.45"' : ""}/>`;
-    }
-    if ("Connector" in item.kind) {
-      const ends = clippedConnectorEnds(all, item);
-      if (!ends) continue;
-      const a = { x: ends[0].x - frame.pos.x, y: ends[0].y - frame.pos.y };
-      const b = { x: ends[1].x - frame.pos.x, y: ends[1].y - frame.pos.y };
-      const color = item.kind.Connector.color || "#333333";
-      const dx = b.x - a.x, dy = b.y - a.y;
-      const len = Math.max(1, Math.hypot(dx, dy));
-      const ux = dx / len, uy = dy / len;
-      const head = 12, spread = 0.45;
-      const c1 = Math.cos(spread), s1 = Math.sin(spread), c2 = Math.cos(-spread), s2 = Math.sin(-spread);
-      const p1 = { x: b.x - head * (ux * c1 - uy * s1), y: b.y - head * (ux * s1 + uy * c1) };
-      const p2 = { x: b.x - head * (ux * c2 - uy * s2), y: b.y - head * (ux * s2 + uy * c2) };
-      parts += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${escAttr(color)}" stroke-width="2"/><polyline points="${p1.x},${p1.y} ${b.x},${b.y} ${p2.x},${p2.y}" fill="none" stroke="${escAttr(color)}" stroke-width="2"/>`;
+  for (const prim of drawingPrimitives(frame, slide.drawings)) {
+    if (prim.type === "stroke") {
+      parts += `<path d="${prim.d}" fill="none" stroke="${escHtml(prim.color)}" stroke-width="${prim.width}" stroke-linecap="round" stroke-linejoin="round"${prim.marker ? ' opacity="0.45"' : ""}/>`;
+    } else {
+      parts += `<line x1="${prim.a.x}" y1="${prim.a.y}" x2="${prim.b.x}" y2="${prim.b.y}" stroke="${escHtml(prim.color)}" stroke-width="2"/><polyline points="${prim.p1.x},${prim.p1.y} ${prim.b.x},${prim.b.y} ${prim.p2.x},${prim.p2.y}" fill="none" stroke="${escHtml(prim.color)}" stroke-width="2"/>`;
     }
   }
   if (!parts) return "";
@@ -743,7 +713,7 @@ async function exportCardHtml(item, frame) {
     const name = path.split("/").pop() || "Audio";
     const dataUrl = await fetchDataUrl(apiRef.files.fileUrl(path));
     const src = dataUrl || apiRef.files.fileUrl(path);
-    return `<div class="card" data-id="${item.id}" style="left:0px;top:0px;width:${item.size.w}px;height:${item.size.h}px"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px"><div class="title">${escText(name)}</div><audio controls src="${escAttr(src)}" style="width:100%"></audio></div></div>`;
+    return `<div class="card" data-id="${item.id}" style="left:0px;top:0px;width:${item.size.w}px;height:${item.size.h}px"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px"><div class="title">${escHtml(name)}</div><audio controls src="${escHtml(src)}" style="width:100%"></audio></div></div>`;
   }
   let html = apiRef.board.renderCard(item.id);
   if (!html) return "";
@@ -751,7 +721,7 @@ async function exportCardHtml(item, frame) {
     // Link cards in the app are buttons that only the core
     // can open, so in a standalone file they would do
     // nothing. Turn them into real links to the URL.
-    const href = escAttr(item.kind.UrlCard.url);
+    const href = escHtml(item.kind.UrlCard.url);
     html = html.replace(/<a ([^>]*?)data-action="open-link"([^>]*?)>/g, (_m, before, after) => {
       const attrs = (before + " " + after).replace(/\s*data-id="[^"]*"/g, "").trim();
       return `<a ${attrs} href="${href}" target="_blank" rel="noopener">`;
@@ -762,7 +732,7 @@ async function exportCardHtml(item, frame) {
     // that only the core can open, so in a standalone
     // file it would do nothing. Turn it into a link to
     // the video, keeping its inline size.
-    const href = escAttr(item.kind.Video.source);
+    const href = escHtml(item.kind.Video.source);
     html = html.replace(/<div class="video-thumb clickable"[^>]*style="([^"]*)"[^>]*>([^<]*)<\/div>/, `<a class="video-thumb" style="$1" href="${href}" target="_blank" rel="noopener">$2</a>`);
   }
   return await embedAppFiles(html);
@@ -781,12 +751,16 @@ async function exportSlides() {
     for (let si = 0; si < slides.length; si++) {
       const slide = slides[si];
       const frame = slide.frame;
+      // Cards in a slide are independent, and
+      // Promise.all keeps their order, so a slide's
+      // cards embed in parallel instead of one by one.
+      const cardHtmls = await Promise.all(slide.cards.map((item) => exportCardHtml(item, frame)));
       let cardsHtml = "";
-      for (const item of slide.cards) {
-        const html = await exportCardHtml(item, frame);
-        if (!html) continue;
+      slide.cards.forEach((item, i) => {
+        const html = cardHtmls[i];
+        if (!html) return;
         cardsHtml += `<div style="position:absolute;left:${item.pos.x - frame.pos.x}px;top:${item.pos.y - frame.pos.y}px;width:${item.size.w}px;height:${item.size.h}px">${html}</div>`;
-      }
+      });
       // The first slide is active in the HTML itself, so
       // the page shows a slide even without JavaScript;
       // the script below then takes over navigation.
@@ -956,7 +930,7 @@ function initPanel(body) {
   syncFromBoard(true);
 }
 
-// ---------------------------------------------------------------- draw mode
+// ---- Draw mode --------------------------------------------------------
 
 function boardGeometry() {
   const el = document.getElementById("board");
@@ -1089,6 +1063,7 @@ function initOverlay(container) {
   });
 }
 
+// ---- Lifecycle --------------------------------------------------------
 function activate(api) {
   apiRef = api;
   onBoardHandler = () => syncFromBoard(false);

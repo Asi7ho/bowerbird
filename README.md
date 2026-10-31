@@ -238,7 +238,14 @@ src/
   main.ts     board UI: tools, rendering, interactions, settings
   model.ts    board data + geometry: pan/zoom, hit-testing, grouping,
               markdown, link classification
+  plugins.ts  plugin API v1: discovery, panels, views, tools, cards,
+              and the api object plugins receive (see PLUGIN_API.md)
+  welcome.ts  the welcome board's layout and wording, as a pure
+              function of the board folder and asset sizes
   styles.css  flat, quiet board styling
+plugins/      bundled plugins, each a folder with manifest.json +
+              single-file main.js: hide, visual-library, palette,
+              presentation (see plugins/README.md)
 index.html    board shell + vertical left toolbar
 assets/       welcome photo, birdsong and video + sample PDF, installed beside the board;
               icon.svg / icon.png (1024) / icon.ico / icon.iconset

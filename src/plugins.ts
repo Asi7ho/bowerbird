@@ -20,7 +20,8 @@
 // break. A future version may sandbox panels and views harder;
 // v1 does not pretend otherwise.
 
-import type { Board, Camera, Item, Kind, Pt, Size } from "./model";
+import type { Anchor, Board, Camera, Item, Kind, Pt, Size } from "./model";
+import { anchorPoint, centre, clippedEnds, rectCrossing, segmentIntersectsRect } from "./model";
 
 // ---------------------------------------------------------------- types
 
@@ -252,6 +253,19 @@ export interface PluginContext {
   events: {
     on: (event: string, handler: () => void) => void;
     off: (event: string, handler: () => void) => void;
+  };
+  // Pure geometry, from src/model.ts — no permission needed,
+  // because these read nothing and write nothing. Plugins
+  // used to copy these by hand (Presentation copied
+  // rectCrossing and clipped ends), which drifted from
+  // the core's versions; now there is one implementation.
+  geometry: {
+    centre: (item: Item) => Pt;
+    anchorPoint: (anchor: Anchor) => Pt | null;
+    rectCrossing: (from: Pt, to: Pt, pos: Pt, w: number, h: number, entry: boolean) => Pt | null;
+    clippedEnds: (from: Anchor, to: Anchor) => [Pt, Pt] | null;
+    segmentIntersectsRect: (a: Pt, b: Pt, rect: { x: number; y: number; w: number; h: number }) => boolean;
+    rectsOverlap: (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) => boolean;
   };
 }
 
@@ -625,6 +639,15 @@ function createContext(manifest: PluginManifest): PluginContext {
     events: {
       on: (event: string, handler: () => void) => onEvent(event, handler),
       off: (event: string, handler: () => void) => offEvent(event, handler),
+    },
+    geometry: {
+      centre: (item: Item) => centre(item),
+      anchorPoint: (anchor: Anchor) => anchorPoint(host!.getBoard(), anchor),
+      rectCrossing: (from: Pt, to: Pt, pos: Pt, w: number, h: number, entry: boolean) => rectCrossing(from, to, pos, w, h, entry),
+      clippedEnds: (from: Anchor, to: Anchor) => clippedEnds(host!.getBoard(), from, to),
+      segmentIntersectsRect: (a: Pt, b: Pt, rect: { x: number; y: number; w: number; h: number }) => segmentIntersectsRect(a, b, rect),
+      rectsOverlap: (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) =>
+        a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y,
     },
   };
 }

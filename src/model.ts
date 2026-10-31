@@ -402,6 +402,27 @@ export function rectCrossing(from: Pt, to: Pt, pos: Pt, w: number, h: number, en
   return { x: from.x + dx * t, y: from.y + dy * t };
 }
 
+// Whether a segment enters a rectangle at all, however
+// briefly: its Liang-Barsky interval must overlap [0, 1].
+// A segment that only touches an edge, with no length
+// inside, still counts as entering — the clipped interval
+// is a single point, and t0 <= t1 still holds.
+export function segmentIntersectsRect(a: Pt, b: Pt, rect: { x: number; y: number; w: number; h: number }): boolean {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  let t0 = 0, t1 = 1;
+  for (const [o, d, lo, hi] of [[a.x, dx, rect.x, rect.x + rect.w], [a.y, dy, rect.y, rect.y + rect.h]] as const) {
+    if (Math.abs(d) < 1e-9) {
+      if (o < lo || o > hi) return false;
+    } else {
+      let ta = (lo - o) / d, tb = (hi - o) / d;
+      if (ta > tb) [ta, tb] = [tb, ta];
+      t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
+      if (t0 > t1) return false;
+    }
+  }
+  return t0 <= t1;
+}
+
 export function clippedEnds(board: Board, from: Anchor, to: Anchor): [Pt, Pt] | null {
   const aRaw = anchorPoint(board, from);
   const bRaw = anchorPoint(board, to);

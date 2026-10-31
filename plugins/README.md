@@ -49,9 +49,13 @@ proof that the API can build that feature.
   stay visible and editable; move a card into a frame
   and it joins that slide. The panel lists slides in
   creation order, with Play and Draw a slide at the
-  top, per-slide Play and Delete, and Export at the
-  bottom; double-clicking a frame on
-  the board plays from that slide. Export downloads all
+  top, per-slide Play and Delete, and Export pinned
+  to the very bottom of the panel, below a scrolling
+  slide list; double-clicking a frame on
+  the board plays from that slide. Its slide geometry
+  (frame overlap, stroke and connector clipping) uses
+  `api.geometry` from the core, not a local copy.
+  Export downloads all
   slides, in order, as a single HTML file that shows
   one slide at a time, with arrows and a counter to
   move between slides, images, audio and video

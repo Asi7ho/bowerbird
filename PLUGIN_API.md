@@ -374,6 +374,32 @@ and plugin storage is not a vault.
   plugin created. This is documented because it is easy to get
   wrong, not because the core will prevent it in v1.
 
+### Geometry — `api.geometry`
+
+Pure geometry, from the core's `src/model.ts`. No permission
+needed, because these read nothing and write nothing — they
+take points and rectangles and return points and booleans.
+Use them instead of copying the math into a plugin: an
+earlier version of Presentation copied `rectCrossing` and
+clipped ends by hand, and the copies were a second place
+to keep correct. Adding this domain did not change
+`apiVersion` — it stays `"1"`, because additive additions
+do not break existing plugins.
+
+- `centre(item)` — the centre of a card's rect.
+- `anchorPoint(anchor)` — a connector endpoint: a raw
+  point, or the centre of the item it points to, or `null`
+  if that item is gone.
+- `rectCrossing(from, to, pos, w, h, entry)` — where a
+  segment crosses a rectangle, entry (first) or exit
+  (second), or `null` if it does not cross.
+- `clippedEnds(from, to)` — a connector's ends, clipped
+  to the cards it joins, or `null` if an endpoint is gone.
+- `segmentIntersectsRect(a, b, rect)` — whether a
+  segment enters a rectangle at all, however briefly.
+- `rectsOverlap(a, b)` — strict rect overlap: touching
+  an edge, with no area inside, does not count.
+
 ### Errors and failure
 
 A plugin that throws during `activate`, or whose module fails to
@@ -516,7 +542,8 @@ board, not cards. Draw a rectangle around cards to make
 a slide, then play it: the panel lists slides in frame
 creation order, with Play, Draw a slide, and per-slide
 Play and Delete, and double-clicking a frame on the
-board plays from that slide. Export, at the bottom of the same panel,
+board plays from that slide. Export, pinned to the very
+bottom of the same panel, below a scrolling slide list,
 downloads all slides, in order, as a single HTML file
 that shows one slide at a time, with arrows and a
 counter to move between slides: images, audio and
