@@ -100,35 +100,31 @@
    to core .plugin-panel-body button (class+element beats
    a lone class), so tile and button rules must be
    prefixed to keep their radius and border. */
-/* Play is the primary action, so it is the one coloured
-   button in the panel: core accent fill, white text.
-   Draw stays a quiet core panel button, with a dashed
-   rectangle icon matching the slide frame itself. Both
-   are the same, deliberately narrow width, left-aligned
-   with the panel text — not full-width bars across the
-   panel — so the pair reads as two buttons, not a banner. */
+/* Play and Draw sit on one line, as a pair, in the same
+   quiet core panel button style — no accent colour, no
+   primary/secondary split. Play is first, with its ▶,
+   Draw second, with a dashed rectangle icon matching
+   the slide frame itself. Equal width, so the pair
+   fills the panel width without either button being
+   wide on its own, and Play's label is just "Play" so
+   it fits beside Draw without wrapping. */
+.plugin-panel-body .pres-panel-actions {
+  display: flex; gap: 8px; margin-bottom: 8px;
+}
 .plugin-panel-body .pres-panel-play,
 .plugin-panel-body .pres-panel-draw {
-  display: flex; align-items: center; justify-content: center;
-  gap: 8px; width: 180px; border-radius: 9px; padding: 8px 12px;
-  cursor: pointer; font-size: 13px; font-weight: 600;
-  margin-bottom: 8px;
+  flex: 1 1 0; display: flex; align-items: center; justify-content: center;
+  gap: 6px; min-width: 0; border: 1px solid var(--separator);
+  background: #fff; border-radius: 9px; padding: 8px 6px;
+  cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink);
+  white-space: nowrap;
 }
-.plugin-panel-body .pres-panel-play {
-  border: 1px solid var(--accent); background: var(--accent); color: #fff;
-}
-.plugin-panel-body .pres-panel-play:hover {
-  filter: brightness(0.92);
-}
-.plugin-panel-body .pres-panel-play:disabled {
-  border-color: var(--separator); background: var(--fill);
-  color: var(--grey); cursor: default; filter: none;
-}
-.plugin-panel-body .pres-panel-draw {
-  border: 1px solid var(--separator); background: #fff; color: var(--ink);
-}
+.plugin-panel-body .pres-panel-play:hover,
 .plugin-panel-body .pres-panel-draw:hover {
   background: var(--fill);
+}
+.plugin-panel-body .pres-panel-play:disabled {
+  background: var(--fill); color: var(--grey); cursor: default;
 }
 .plugin-panel-body .pres-panel-draw svg {
   flex: none; display: block;

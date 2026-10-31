@@ -665,14 +665,18 @@ function updatePanel() {
 }
 
 function initPanel(body) {
+  const actions = document.createElement("div");
+  actions.className = "pres-panel-actions";
   const play = document.createElement("button");
   play.className = "pres-panel-play";
-  play.textContent = "▶ Play presentation";
+  // Short label, so Play fits beside Draw on one line;
+  // the full wording stays in the title and aria-label.
+  play.textContent = "▶ Play";
   play.title = "Play from the first slide";
   play.setAttribute("aria-label", "Play presentation");
   play.addEventListener("click", () => startPresentation(0));
   panelPlayBtn = play;
-  body.appendChild(play);
+  actions.appendChild(play);
   const draw = document.createElement("button");
   draw.className = "pres-panel-draw";
   // A dashed rectangle, matching the slide frame itself,
@@ -681,7 +685,8 @@ function initPanel(body) {
   draw.title = "Draw a rectangle on the board to make a slide";
   draw.setAttribute("aria-label", "Draw a slide");
   draw.addEventListener("click", () => startDrawMode());
-  body.appendChild(draw);
+  actions.appendChild(draw);
+  body.appendChild(actions);
   const hint = document.createElement("div");
   hint.className = "pres-panel-hint";
   hint.textContent = "Draw a rectangle around cards to make a slide.";
