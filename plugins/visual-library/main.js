@@ -161,10 +161,6 @@ function syncFromBoard(force) {
   return true;
 }
 
-function refresh() {
-  syncFromBoard(true);
-}
-
 // Board geometry lives in #board now, below the title bar:
 // its client size is the visible board, and its top edge is
 // the board's origin in client coordinates. Centre and drop
@@ -570,11 +566,6 @@ function activate(api) {
       // 0) during the view, before it is seen again.
       if (apiRef) syncFromBoard(true);
     },
-  });
-  apiRef.ui.registerCommand({
-    id: "refresh",
-    title: "Refresh Visual Library",
-    run: () => refresh(),
   });
 }
 

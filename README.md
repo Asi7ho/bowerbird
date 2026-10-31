@@ -88,12 +88,13 @@ There is no handle tab.
   for pen, connector and marquee) instead of rebuilding the board,
   cursor hints run at most once per frame, and content is only
   rebuilt when the visible set actually changes.
-- **Settings (?):** app settings first (every keyboard shortcut,
-  plus the canvas background and grid), then Plugins to turn
-  plugins on and off, then Plugin settings (one section per
-  plugin that has settings, Hide's corner picker among them),
-  then Data and App (Quit Bowerbird) at the bottom. The corner
-  choice is saved in the app's settings file and survives restarts.
+- **Settings (?):** three tabs, not one long window: General
+  (every keyboard shortcut, the canvas background and grid,
+  Data, and Quit Bowerbird), Plugins to turn plugins on and
+  off, and Plugin settings (one section per activated plugin
+  that has settings, Hide's corner picker among them). The
+  corner choice is saved in the app's settings file and
+  survives restarts.
 - **In-app hotkeys:** `V` select, `P` pen, `A` arrow, `Ctrl/Cmd+G`
   group, `Ctrl/Cmd+U` ungroup, `Delete` removes the selection,
   `+`/`-` zoom, `0` resets the view, hold `Space` to pan, `h` hides,
@@ -141,7 +142,7 @@ really restores the board.
   and connectors are skipped — they are drawings and lines, not
   elements to find. Starting from a selected element, `Tab` goes to
   the next one after it.
-- **Delete all board data:** Settings → Data → Delete all board data.
+- **Delete all board data:** Settings → General → Data → Delete all board data.
   It asks you to confirm first, then removes everything saved in
   the whiteboard — the board file and every file dropped onto it —
   and restores a fresh welcome board. The corner setting is kept.

@@ -1378,6 +1378,9 @@ document.getElementById("btn-reset-confirm")?.addEventListener("click", async ()
   }
 });
 document.getElementById("btn-settings")?.addEventListener("click", () => setSettings(!settingsOpen));
+for (const btn of Array.from(document.querySelectorAll("[data-settings-tab]"))) {
+  (btn as HTMLElement).addEventListener("click", () => setSettingsTab((btn as HTMLElement).dataset.settingsTab ?? "general"));
+}
 document.getElementById("settings-close")?.addEventListener("click", () => setSettings(false));
 document.getElementById("settings-backdrop")?.addEventListener("click", (e) => {
   if ((e.target as HTMLElement).id === "settings-backdrop") setSettings(false);
@@ -1431,9 +1434,26 @@ function renderPluginSettings(): void {
 
 function renderPluginSettingsSections(): void {
   renderSettingsSections();
-  const head = document.getElementById("plugin-settings-heading") as HTMLElement | null;
+  const empty = document.getElementById("plugin-settings-empty") as HTMLElement | null;
   const el = document.getElementById("plugin-settings-sections") as HTMLElement | null;
-  if (head && el) head.style.display = el.children.length > 0 ? "" : "none";
+  if (empty && el) empty.style.display = el.children.length > 0 ? "none" : "";
+}
+
+function setSettingsTab(tab: string): void {
+  for (const btn of Array.from(document.querySelectorAll("[data-settings-tab]"))) {
+    (btn as HTMLElement).classList.toggle("active", (btn as HTMLElement).dataset.settingsTab === tab);
+  }
+  const sections: Record<string, string> = {
+    general: "settings-section-general",
+    plugins: "settings-section-plugins",
+    "plugin-settings": "settings-section-plugin-settings",
+  };
+  for (const [key, id] of Object.entries(sections)) {
+    const el = document.getElementById(id) as HTMLElement | null;
+    if (el) el.style.display = key === tab ? "" : "none";
+  }
+  const dialog = document.getElementById("settings") as HTMLElement | null;
+  if (dialog) dialog.scrollTop = 0;
 }
 
 function renderShortcutsTable(): void {
@@ -1458,6 +1478,7 @@ function setSettings(open: boolean): void {
     renderGridOpts();
     renderPluginSettingsSections();
     renderPluginSettings();
+    setSettingsTab("general");
   }
   render();
 }

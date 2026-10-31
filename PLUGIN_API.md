@@ -245,7 +245,8 @@ the board.
   on the plugin's own controls. This is how a corner button can
   sit in a corner without blocking the board.
 - `registerSettingsSection({ id, title, render })` — a section in
-  Settings, rendered with its own heading when Settings opens.
+  the Settings → Plugin settings tab, rendered with its own heading
+  when that tab is shown, and only for plugins that are on.
   Use it for plugin settings that are app-level, not board-level
   (for example the Hide plugin's corner picker). Board-level
   controls belong in a panel, not here.
@@ -455,8 +456,8 @@ is an ordinary board item of the same kind and the same size
 as the original, so it appears in the library too, in
 Uncategorized. There are no Refresh, Open folder,
 folder-path or Add controls in the UI: the library
-refreshes automatically when the board is saved (the Refresh
-command remains in Settings → Plugins). Panels in general
+refreshes automatically when the board is saved, so no
+manual refresh control exists. Panels in general
 are now a flush sidebar in the core CSS (opaque white,
 hairline left border, no frost or floating shadow), 290px
 wide so a panel card is ~250px wide — the same size as a
