@@ -114,6 +114,16 @@ plugin can degrade gracefully instead of crashing on an older core.
   Do not mutate the snapshot; use the methods below.
 - `getItems()` — the board's items, as plain data.
 - `getItem(id)`, `getSelected()`, `setSelected(ids)`
+- `renderCard(id)` — the board item's card HTML, rendered by the
+  core exactly as it renders on the board: same markup, same
+  classes, same size, at position 0,0, with no selection ring and
+  no editing state, and with audio shown neutral (not playing).
+  A plugin can already read the item via `getItems()`, so this
+  needs no extra permission. Strokes and connectors return
+  `null` (they are not cards). Use this to show a board card in
+  a panel or view without re-rendering it a second, different
+  way — the aspect ratio is the board item's width/height, not
+  the file's natural ratio.
 - `addItem(kind, pos, size)` — add a core card kind, e.g.
   `api.board.addItem({ Text: { text: "Hi", bold: false, size: 16, color: "#1A1A1A" } }, { x: 100, y: 100 }, { w: 260, h: 48 })`.
   Requires `board:write`.
@@ -282,7 +292,9 @@ same bridge the core uses for its own cards).
   folder and return its board-owned path, exactly like a dropped
   file. In demo mode it returns the original path and copies
   nothing, like core drops.
-- `listLibrary()` — list the Visual Library folder, recursively:
+- `listLibrary()` — list a library folder, recursively (the
+  bundled Visual Library no longer uses this: it shows board
+  items, not a folder — see below):
   images and PDFs only, sorted by name, capped at 1000, each
   with `name`, `path`, `relativePath` (forward slashes, relative
   to the library), `ext`, `kind` (`image` or `pdf`), `category`
@@ -410,28 +422,37 @@ minimise, moved out of the core into a plugin. The main process
 still owns what a renderer plugin cannot do (hiding the window,
 showing the peek icon, remembering the corner), and everything
 the user sees lives in the plugin. The second is
-`visual-library/`: two modes over the same library folder,
-with the same masonry card in both. Panel mode is a panel
-flush against the right edge, full height, over the board,
-with search, click-to-place at the camera centre and
-drag-to-place at the drop point, as ordinary Image and PDF
-cards. Whiteboard mode is a view replacing the canvas, laid
-out like Pinterest — a masonry grid with items' natural
-heights, click-to-place at the camera centre — which hides
-the panel while it is active and shows it again on the way
-back to the board. Categories are the library's subfolders
-(files in the root are Uncategorized), shown as dropdown
-sections in both modes, with a New category control; dragging
-an item onto another category moves it there (see
-`moveLibraryItem`). There are no Refresh, Open folder or
-folder-path controls in the UI: the library refreshes
-automatically on mode switches, on window focus, and after
-in-app changes (the Refresh command remains in Settings →
-Plugins). Its listing, copying and moving are scoped to the
-library folder through the core. Panels in general are now a
-flush sidebar in the core CSS (opaque white, hairline left
-border, no frost or floating shadow), so a panel reads as
-part of the app, not an overlay card.
+`visual-library/`: two modes over the same board, with
+the same board card in both — not a folder. The library is
+the board's own elements: every card on the whiteboard
+(text, images, links, PDFs, swatches, audio, video, plugin
+cards; strokes and connectors are not cards and are not
+shown), rendered by the core via `renderCard`, scaled
+uniformly to the masonry column width so the aspect ratio is
+the board item's, unchanged. Panel mode is a panel flush
+against the right edge, full height, over the board, one
+column, with search, click-to-duplicate at the camera centre
+and drag-to-duplicate at the drop point. Whiteboard mode is
+a view replacing the canvas, laid out like Pinterest, which
+hides the panel while it is active and shows it again on the
+way back to the board. Categories are the board's element
+kinds (Audio, Images, Links, PDFs, Plugin cards, Swatches,
+Text, Video), shown as dropdown sections in both modes; a
+kind cannot change by dragging, so drag duplicates like
+click does. A duplicate is an ordinary board item of the
+same kind and the same size as the original, so it appears
+in the library too. There are no Refresh, Open folder,
+folder-path, New category or Add controls in the UI: the
+library refreshes automatically when the board is saved (the
+Refresh command remains in Settings → Plugins). Panels in
+general are now a flush sidebar in the core CSS (opaque
+white, hairline left border, no frost or floating shadow), so
+a panel reads as part of the app, not an overlay card. The
+library-folder methods above (`listLibrary`,
+`addToLibrary`, `createLibraryCategory`,
+`moveLibraryItem`) remain in the API for other plugins; the
+bundled library does not use them, and a `board/library/`
+folder from an earlier version is ignored, not deleted.
 
 ## What is not in v1
 

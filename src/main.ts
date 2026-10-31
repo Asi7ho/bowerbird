@@ -361,8 +361,8 @@ function cachedMarkdown(item: Item, text: string, size: number): string {
   return html;
 }
 
-function cardHtml(item: Item): string {
-  const sel = selected.includes(item.id);
+function cardHtml(item: Item, plain = false): string {
+  const sel = plain ? false : selected.includes(item.id);
   const cls = sel ? "card selected" : "card";
   if ("Plugin" in item.kind) {
     const ww0 = item.size.w, hh0 = item.size.h;
@@ -379,7 +379,7 @@ function cardHtml(item: Item): string {
   const ww = item.size.w, hh = item.size.h;
   const style = `left:${item.pos.x}px;top:${item.pos.y}px;width:${ww}px;height:${hh}px;`;
   if ("Text" in item.kind) {
-    if (editingId === item.id) return ""; // the editor DOM is managed separately
+    if (!plain && editingId === item.id) return ""; // the editor DOM is managed separately
     const { text, size, color } = item.kind.Text;
     return `<div class="${cls}" data-id="${item.id}" style="${style}"><div class="inner note-body" style="font-size:${size}px;color:${color}">${cachedMarkdown(item, text, size)}</div></div>`;
   }
@@ -428,8 +428,8 @@ function cardHtml(item: Item): string {
   if ("Audio" in item.kind) {
     const { path } = item.kind.Audio;
     const name = path.split("/").pop() ?? path;
-    const playing = audioId === item.id && audioEl && !audioEl.paused;
-    const isCurrent = audioId === item.id && audioEl;
+    const playing = !plain && audioId === item.id && audioEl && !audioEl.paused;
+    const isCurrent = !plain && audioId === item.id && audioEl;
     const dur = isCurrent && isFinite(audioEl!.duration) ? audioEl!.duration : (audioDurations.get(path) ?? NaN);
     const cur = isCurrent ? audioEl!.currentTime : 0;
     const seekVal = isFinite(dur) && dur > 0 ? Math.round((cur / dur) * 1000) : 0;
@@ -1704,6 +1704,13 @@ async function init(): Promise<void> {
       selected = selected.filter((s) => s !== id);
       save(); render();
       return true;
+    },
+    renderBoardCard: (id) => {
+      const it = boardGet(board, id);
+      if (!it) return null;
+      if ("Stroke" in it.kind || "Connector" in it.kind) return null;
+      const html = cardHtml({ ...it, pos: { x: 0, y: 0 } }, true);
+      return html === "" ? null : html;
     },
     save: () => save(),
     render: () => render(),

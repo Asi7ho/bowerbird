@@ -12,16 +12,18 @@ proof that the API can build that feature.
   into a plugin. The main process still owns what a renderer
   plugin cannot do: hiding the window, showing the peek icon,
   and remembering the corner for the peek.
-- `visual-library/` — two modes over a library folder on disk,
-  with the same masonry card in both: a panel flush against
-  the right edge, full height, over the board (search,
-  click-to-place, drag-to-place) and a Pinterest-like masonry
-  whiteboard view replacing the canvas (search,
-  click-to-place). Categories are the library's subfolders,
-  shown as dropdown sections; drag an item onto another
-  category to move it there. Placed items are ordinary Image
-  and PDF cards. Listing, copying and moving are scoped to
-  the library folder through the core.
+- `visual-library/` — two modes over the same board, with
+  the same board card in both: a panel flush against the
+  right edge, full height, over the board (search,
+  click-to-duplicate, drag-to-duplicate) and a Pinterest-like
+  masonry whiteboard view replacing the canvas (search,
+  click-to-duplicate). The library is the board's own cards
+  (text, images, links, PDFs, swatches, audio, video, plugin
+  cards), rendered by the core at the board item's aspect
+  ratio. Categories are the element kinds, shown as dropdown
+  sections. Duplicates are ordinary board items of the same
+  kind and size, so they appear in the library too. There is
+  no library folder.
 
 Packaging: `scripts/package-mac.sh` copies this folder into the
 app bundle (`Contents/Resources/app/plugins/`), and

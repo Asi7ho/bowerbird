@@ -146,6 +146,7 @@ export interface PluginHost {
   addItem: (kind: Kind, pos: Pt, size: Size) => number;
   updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown }) => boolean;
   removeItem: (id: number) => boolean;
+  renderBoardCard: (id: number) => string | null;
   save: () => void;
   render: () => void;
   setTool: (tool: string) => void;
@@ -173,6 +174,7 @@ export interface PluginContext {
     get: () => Board;
     getItems: () => Item[];
     getItem: (id: number) => Item | undefined;
+    renderCard: (id: number) => string | null;
     getSelected: () => number[];
     setSelected: (ids: number[]) => void;
     addItem: (kind: Kind, pos: Pt, size: Size) => number;
@@ -343,6 +345,12 @@ function createContext(manifest: PluginManifest): PluginContext {
         const it = host!.getBoard().items.find((i) => i.id === id);
         return it ? (JSON.parse(JSON.stringify(it)) as Item) : undefined;
       },
+      // Render a board item exactly as the board renders it, at
+      // position 0,0 and with no selection or editing state, so a
+      // plugin can show the same card in a panel or view. A plugin
+      // can already read the item via getItems, so this needs no
+      // extra permission; strokes and connectors render as null.
+      renderCard: (id: number) => host!.renderBoardCard(id),
       getSelected: () => host!.getSelected(),
       setSelected: (ids: number[]) => host!.setSelected(ids),
       addItem: (kind: Kind, pos: Pt, size: Size) => {
