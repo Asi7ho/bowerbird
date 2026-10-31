@@ -371,9 +371,12 @@ button { font-family: inherit; }
    the toolbar, so plugin chrome looks like Bowerbird; what a plugin
    draws inside its panel or view is its own content. */
 #plugin-panels {
-  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  /* Full height of the board area: panels dock top to bottom,
+     not centred at 80vh. A panel that wants the full height
+     (Visual Library) stretches with flex; others stay auto. */
+  position: absolute; right: 12px; top: 12px; bottom: 12px;
   display: flex; flex-direction: column; gap: 12px; width: 260px;
-  max-height: 80vh; overflow: auto; pointer-events: none; z-index: 10;
+  overflow: auto; pointer-events: none; z-index: 10;
 }
 #plugin-panels::-webkit-scrollbar { display: none; }
 .plugin-panel {

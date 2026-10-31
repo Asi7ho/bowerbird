@@ -1,10 +1,20 @@
-/* Visual Library panel styles, scoped to .vl-* classes. */
+/* Visual Library panel and whiteboard-view styles, scoped to .vl-* classes. */
+/* Panel mode: the panel fills the full height of the dock. The
+   panel body is a flex column so the grid scrolls inside it
+   while search, chips and buttons stay visible. */
+.plugin-panel[data-panel="library"] {
+  flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0;
+}
+.plugin-panel[data-panel="library"] .plugin-panel-body {
+  display: flex; flex-direction: column; flex: 1 1 auto;
+  min-height: 0; overflow: hidden;
+}
 .vl-search {
   width: 100%; box-sizing: border-box; padding: 6px 8px;
   border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 8px;
   font: inherit; margin-bottom: 6px;
 }
-.vl-row { display: flex; gap: 6px; margin-bottom: 6px; }
+.vl-row { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
 .vl-row button, .vl-add {
   flex: 1; padding: 6px 8px; border-radius: 8px;
   border: 1px solid rgba(0, 0, 0, 0.12); background: #fff;
@@ -13,12 +23,35 @@
 .vl-row button:hover, .vl-add:hover:not(:disabled) { background: #f2f2f7; }
 .vl-add { width: 100%; margin-top: 8px; }
 .vl-add:disabled { opacity: 0.5; cursor: default; }
+.vl-view-add { max-width: 320px; }
 .vl-path { word-break: break-all; }
-.vl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.vl-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.vl-chip {
+  border: 1px solid rgba(0, 0, 0, 0.12); background: #fff;
+  border-radius: 999px; padding: 4px 10px; cursor: pointer;
+  font: inherit; font-size: 12px;
+}
+.vl-chip:hover { background: #f2f2f7; }
+.vl-chip.active { background: #007AFF; color: #fff; border-color: #007AFF; }
+.vl-newcat { display: flex; gap: 6px; margin-top: 8px; }
+.vl-newcat input {
+  flex: 1; min-width: 0; padding: 6px 8px;
+  border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 8px; font: inherit;
+}
+.vl-newcat button {
+  padding: 6px 12px; border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.12); background: #fff;
+  cursor: pointer; font: inherit;
+}
+.vl-newcat button:hover { background: #f2f2f7; }
+.vl-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;
+  flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; min-height: 0;
+}
 .vl-item {
   background: #fff; border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 8px; padding: 6px; cursor: pointer;
-  text-align: left; font: inherit;
+  text-align: left; font: inherit; min-width: 0;
 }
 .vl-item:hover { border-color: rgba(0, 122, 255, 0.5); }
 .vl-item img { width: 100%; height: 72px; object-fit: cover; border-radius: 4px; display: block; }
@@ -28,9 +61,29 @@
 }
 .vl-name { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 4px; }
 .vl-size { font-size: 11px; color: #8a8a8e; }
+.vl-cat { font-size: 11px; color: #8a8a8e; margin-top: 2px; }
 .vl-ghost {
   position: fixed; z-index: 100; pointer-events: none; opacity: 0.9;
   background: #fff; border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 8px;
   padding: 4px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); width: 120px;
 }
 .vl-ghost img { width: 100%; height: 72px; object-fit: cover; border-radius: 4px; display: block; }
+/* Whiteboard mode: a Pinterest-like masonry layout. Items are
+   positioned by hand in main.js (each new item to the shortest
+   column), so columns fill the full width with varied heights;
+   CSS columns collapse to fewer columns in a scrollable view
+   and leave the right half empty, so they are not used here. */
+.vl-view-head { margin-bottom: 16px; margin-left: 60px; }
+.vl-view-head h2 { font-size: 20px; margin: 0 0 12px; }
+/* The left toolbar floats over the view, so view content starts
+   right of it instead of under it. */
+.vl-masonry { position: relative; margin-left: 60px; }
+.vl-masonry-item {
+  box-sizing: border-box; background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 12px;
+  padding: 8px; cursor: pointer; text-align: left; font: inherit;
+}
+.vl-masonry-item:hover { border-color: rgba(0, 122, 255, 0.5); }
+.vl-masonry-item img { width: 100%; height: auto; display: block; border-radius: 6px; }
+.vl-masonry-item .vl-pdf { height: 180px; }
+.vl-masonry-item .vl-name { font-size: 13px; }

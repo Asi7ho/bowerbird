@@ -120,7 +120,8 @@ export interface PluginBridge {
   pluginStorageGet(pluginId: string, key: string): Promise<unknown>;
   pluginStorageSet(pluginId: string, key: string, value: unknown): Promise<void>;
   pluginStorageDelete(pluginId: string, key: string): Promise<void>;
-  listLibrary: () => Promise<{ path: string; items: Array<{ name: string; path: string; ext: string; kind: string; size_bytes: number; mtime_ms: number }> }>;
+  listLibrary: () => Promise<{ path: string; items: Array<{ name: string; path: string; relativePath: string; ext: string; kind: string; category: string | null; size_bytes: number; mtime_ms: number }>; categories: Array<{ name: string; count: number }>; uncategorizedCount: number }>;
+  createLibraryCategory: (name: string) => Promise<string>;
   addToLibrary: (filePath: string) => Promise<string>;
   // Window primitives: the main process owns the window and the
   // peek icon, so these are the only way a plugin can hide, show
@@ -215,7 +216,8 @@ export interface PluginContext {
   };
   files: {
     embedFile: (path: string) => Promise<string>;
-    listLibrary: () => Promise<{ path: string; items: Array<{ name: string; path: string; ext: string; kind: string; size_bytes: number; mtime_ms: number }> }>;
+    listLibrary: () => Promise<{ path: string; items: Array<{ name: string; path: string; relativePath: string; ext: string; kind: string; category: string | null; size_bytes: number; mtime_ms: number }>; categories: Array<{ name: string; count: number }>; uncategorizedCount: number }>;
+  createLibraryCategory: (name: string) => Promise<string>;
     addToLibrary: (path: string) => Promise<string>;
     fileUrl: (path: string) => string;
     readTextFile: (path: string) => Promise<string>;
@@ -460,6 +462,10 @@ function createContext(manifest: PluginManifest): PluginContext {
       addToLibrary: async (path: string) => {
         require("files:embed");
         return bridge!.addToLibrary(path);
+      },
+      createLibraryCategory: async (name: string) => {
+        require("files:embed");
+        return bridge!.createLibraryCategory(name);
       },
       fileUrl: (path: string) => bridge!.fileUrl(path),
       readTextFile: async (path: string) => {

@@ -282,17 +282,30 @@ same bridge the core uses for its own cards).
   folder and return its board-owned path, exactly like a dropped
   file. In demo mode it returns the original path and copies
   nothing, like core drops.
-- `listLibrary()` — list the Visual Library folder: images and
-  PDFs only, sorted by name, capped at 1000, each with `name`,
-  `path`, `ext`, `kind` (`image` or `pdf`), `size_bytes` and
-  `mtime_ms`, plus the folder `path` itself. The folder is
-  `board/library/` (temp folder in demo, so a demo never reads
-  the real library). Listing is scoped to that one folder: a
-  plugin never gets an arbitrary folder to list.
+- `listLibrary()` — list the Visual Library folder, recursively:
+  images and PDFs only, sorted by name, capped at 1000, each
+  with `name`, `path`, `relativePath` (forward slashes, relative
+  to the library), `ext`, `kind` (`image` or `pdf`), `category`
+  and `size_bytes` and `mtime_ms`, plus the folder `path`
+  itself, `categories` (immediate subfolders, each with a
+  `name` and a file `count`, including empty folders) and
+  `uncategorizedCount` (files in the library root). A category
+  is an immediate subfolder: a file's category is the first
+  segment of its path under the library, or `null` for files in
+  the root. The folder is `board/library/` (temp folder in demo,
+  so a demo never reads the real library). Listing is scoped to
+  that one folder: a plugin never gets an arbitrary folder to
+  list.
 - `addToLibrary(path)` — copy a file into the library folder
   (deduplicated like `embedFile`, `stem-1` suffix on a name
   clash) and return its library path, or the path unchanged if
   it is already in the library. Requires `files:embed`.
+- `createLibraryCategory(name)` — create a subfolder of the
+  library folder and return its path. The name must be a single
+  folder name (no `/`, `\` or `..`, not starting with `.`, at
+  most 100 characters); `All` and `Uncategorized` are reserved
+  because they are the virtual categories in the UI. Requires
+  `files:embed`.
 - `fileUrl(path)` — the `app-file://` URL the renderer can use
   for an image, audio or video source.
 - `readTextFile(path)`, `fileSize(path)`
@@ -388,10 +401,21 @@ minimise, moved out of the core into a plugin. The main process
 still owns what a renderer plugin cannot do (hiding the window,
 showing the peek icon, remembering the corner), and everything
 the user sees lives in the plugin. The second is
-`visual-library/`: a panel over the library folder, with search,
-click-to-place at the camera centre and drag-to-place at the
-drop point, as ordinary Image and PDF cards. Its listing and
-copying are scoped to the library folder through the core.
+`visual-library/`: two modes over the same library folder.
+Panel mode is a panel in the right dock, full height of the app,
+over the board, with search, category chips, click-to-place at
+the camera centre and drag-to-place at the drop point, as
+ordinary Image and PDF cards. Whiteboard mode is a view
+replacing the canvas, laid out like Pinterest — a masonry grid
+with items' natural heights, click-to-place at the camera
+centre — which hides the panel while it is active and shows it
+again on the way back to the board. Categories are the
+library's subfolders (files in the root are Uncategorized),
+shown as chips in both modes, with a New category control and
+an Open folder button for organising in Finder. Its listing and
+copying are scoped to the library folder through the core, and
+its panel stretches with the full-height panel dock in the
+core CSS, so other panels dock top to bottom too.
 
 ## What is not in v1
 

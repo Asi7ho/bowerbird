@@ -7,8 +7,9 @@ interface BowerbirdAPI {
   saveBoard(json: string): Promise<void>;
   resetBoard(): Promise<{ pdf_size_bytes: number; video_size_bytes: number }>;
   embedFile(path: string): Promise<string>;
-  listLibrary(): Promise<{ path: string; items: Array<{ name: string; path: string; ext: string; kind: string; size_bytes: number; mtime_ms: number }> }>;
+  listLibrary(): Promise<{ path: string; items: Array<{ name: string; path: string; relativePath: string; ext: string; kind: string; category: string | null; size_bytes: number; mtime_ms: number }>; categories: Array<{ name: string; count: number }>; uncategorizedCount: number }>;
   addToLibrary(path: string): Promise<string>;
+  createLibraryCategory(name: string): Promise<string>;
   readTextFile(path: string): Promise<string>;
   fileSize(path: string): Promise<number>;
   fetchPreview(url: string): Promise<{ title: string | null; description: string | null; image: string | null; icon: string | null }>;

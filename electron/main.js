@@ -578,29 +578,68 @@ function registerIpc() {
   const LIBRARY_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf']);
   ipcMain.handle('bowerbird:list-library', () => {
     const dir = libraryDir();
-    let names = [];
-    try { names = fs.readdirSync(dir); } catch { names = []; }
     const items = [];
-    for (const name of names.sort()) {
-      if (name.startsWith('.')) continue;
-      const full = path.join(dir, name);
-      let st;
-      try { st = fs.statSync(full); } catch { continue; }
-      if (!st.isFile()) continue;
-      const ext = path.extname(name).toLowerCase();
-      if (!LIBRARY_EXTS.has(ext)) continue;
-      items.push({
-        name,
-        path: full,
-        ext,
-        kind: ext === '.pdf' ? 'pdf' : 'image',
-        size_bytes: st.size,
-        mtime_ms: st.mtimeMs,
-      });
-      if (items.length >= 1000) break;
-    }
-    return { path: dir, items };
+    const folderCounts = new Map();
+    const folders = [];
+    // Recursive walk, sorted, capped at 1000 items. A category is
+    // an immediate subfolder of the library: a file's category is
+    // the first segment of its path under the library, or null
+    // for files in the library root (shown as Uncategorized).
+    // Empty folders still appear as categories, so a category a
+    // user just created is visible before anything is put in it.
+    const walk = (current, relBase) => {
+      let entries = [];
+      try { entries = fs.readdirSync(current, { withFileTypes: true }); } catch { return; }
+      entries.sort((a, b) => a.name.localeCompare(b.name));
+      for (const ent of entries) {
+        if (ent.name.startsWith('.')) continue;
+        const full = path.join(current, ent.name);
+        const rel = relBase ? path.join(relBase, ent.name) : ent.name;
+        if (ent.isDirectory()) {
+          if (!relBase) folders.push(ent.name);
+          walk(full, rel);
+        } else if (ent.isFile()) {
+          const ext = path.extname(ent.name).toLowerCase();
+          if (!LIBRARY_EXTS.has(ext)) continue;
+          if (items.length >= 1000) return;
+          let st;
+          try { st = fs.statSync(full); } catch { continue; }
+          const category = relBase ? relBase.split(path.sep)[0] : null;
+          if (category) folderCounts.set(category, (folderCounts.get(category) || 0) + 1);
+          items.push({
+            name: ent.name,
+            path: full,
+            relativePath: rel.split(path.sep).join('/'),
+            ext,
+            kind: ext === '.pdf' ? 'pdf' : 'image',
+            category,
+            size_bytes: st.size,
+            mtime_ms: st.mtimeMs,
+          });
+        }
+      }
+    };
+    walk(dir, '');
+    folders.sort();
+    const categories = folders.map((name) => ({ name, count: folderCounts.get(name) || 0 }));
+    const uncategorizedCount = items.filter((it) => it.category === null).length;
+    return { path: dir, items, categories, uncategorizedCount };
   });
+  ipcMain.handle('bowerbird:create-library-category', (_event, name) => {
+    if (typeof name !== 'string') throw new Error('category name must be a string');
+    const clean = name.trim();
+    if (!clean || clean.length > 100) throw new Error('category name is empty or too long');
+    if (clean.includes('/') || clean.includes('\\') || clean.includes('..') || clean.startsWith('.')) {
+      throw new Error('category name must be a single folder name');
+    }
+    if (clean.toLowerCase() === 'all' || clean.toLowerCase() === 'uncategorized') {
+      throw new Error('All and Uncategorized are reserved');
+    }
+    const dir = path.join(libraryDir(), clean);
+    fs.mkdirSync(dir, { recursive: true });
+    return dir;
+  });
+
   ipcMain.handle('bowerbird:add-to-library', (_event, filePath) => {
     const dir = libraryDir();
     fs.mkdirSync(dir, { recursive: true });
