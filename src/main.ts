@@ -1398,6 +1398,7 @@ function renderPluginSettings(): void {
   const descriptions: Record<string, string> = {
     hide: "Hides the board into a corner.",
     "visual-library": "The board's cards, as a library.",
+    palette: "Colour palettes to place as swatches.",
   };
   let html = "";
   for (const lp of plugins) {

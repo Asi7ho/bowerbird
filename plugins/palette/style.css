@@ -1,0 +1,48 @@
+/* Palette panel styles, scoped to .pal-* classes and to this
+   plugin's panel. The tiles themselves are just colours: no
+   text on a tile, the hex is in the title on hover, and the
+   placed board swatch shows its hex pill. */
+/* Panel mode: the panel fills the full height of the flush
+   dock. The panel body is a flex column so the palettes
+   scroll inside it while the panel head stays visible. */
+.plugin-panel[data-panel="palette"] {
+  flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0;
+}
+.plugin-panel[data-panel="palette"] .plugin-panel-body {
+  display: flex; flex-direction: column; flex: 1 1 auto;
+  min-height: 0; overflow: hidden;
+}
+.plugin-panel[data-panel="palette"] .pal-sections {
+  flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; min-height: 0;
+  /* 15px on the right is the scrollbar's own lane, not tile
+     space: an overlay scrollbar would otherwise float over
+     the last tile's right edge, and a classic scrollbar
+     would sit hard against it. */
+  padding-right: 15px;
+}
+.pal-palette { margin-bottom: 20px; }
+.pal-head {
+  font-weight: 600; padding: 6px 4px; margin-bottom: 8px;
+  text-align: left;
+}
+.pal-row { display: flex; gap: 8px; }
+.pal-tile {
+  flex: 1 1 auto; aspect-ratio: 1; min-width: 0;
+  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 10px;
+  padding: 0; cursor: pointer;
+}
+/* The core .plugin-panel-body button rule would otherwise
+   give a tile 6px/12px padding, shrinking its colour area.
+   This rule beats it on specificity, so a tile has no
+   padding; its colour comes from its inline style, which
+   beats both rules. */
+.plugin-panel-body .pal-tile { padding: 0; }
+.pal-tile:hover { filter: brightness(0.96); }
+.pal-tile:active { transform: scale(0.97); }
+/* Drag ghost: a board-size swatch, following the cursor. */
+.pal-ghost {
+  position: fixed; z-index: 100; pointer-events: none;
+  width: 120px; height: 120px; border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.08); overflow: hidden; opacity: 0.9;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}

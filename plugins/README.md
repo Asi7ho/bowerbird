@@ -29,6 +29,14 @@ proof that the API can build that feature.
   are ordinary board items of the same kind and size, so
   they appear in the library too, in Uncategorized. There is
   no library folder.
+- `palette/` — a panel of curated colour palettes, not a
+  library of the board's own cards. Click a colour to place
+  a 120x120 swatch at the camera centre, drag it to place it
+  at the drop point, the same interaction as Visual Library.
+  Placed swatches are ordinary board Swatch items, so they
+  survive disabling the plugin. Palettes are static and
+  bundled in the plugin file, with no network and no
+  storage.
 
 Packaging: `scripts/package-mac.sh` copies this folder into the
 app bundle (`Contents/Resources/app/plugins/`), and
