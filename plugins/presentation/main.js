@@ -84,6 +84,7 @@ let counter = null;
 // Panel refs (built once by initPanel, cleared on deactivate).
 let panelList = null;
 let panelPlayBtn = null;
+let panelExportBtn = null;
 
 // Overlay refs (built once by initOverlay, cleared on deactivate).
 let drawLayer = null;
@@ -614,11 +615,12 @@ function viewContainerClear() {
 
 function updatePanel() {
   if (!panelList) return;
-  // Play is the primary action, but only when there is
-  // something to play: with no slides it is disabled, so
-  // the panel guides you to Draw first instead of
-  // opening an empty presentation.
+  // Play and Export only make sense when there is
+  // something to play or export: with no slides both
+  // are disabled, so the panel guides you to Draw first
+  // instead of opening or exporting an empty presentation.
   if (panelPlayBtn) panelPlayBtn.disabled = slides.length === 0;
+  if (panelExportBtn) panelExportBtn.disabled = slides.length === 0;
   panelList.innerHTML = "";
   if (slides.length === 0) {
     const empty = document.createElement("div");
@@ -664,6 +666,202 @@ function updatePanel() {
   });
 }
 
+// ---------------------------------------------------------------- export
+
+function escAttr(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function escText(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+async function fetchDataUrl(url) {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const blob = await res.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function embedAppFiles(html) {
+  const urls = [...new Set(html.match(/app-file:\/\/[^"'\s<>]+/g) || [])];
+  let out = html;
+  for (const url of urls) {
+    const dataUrl = await fetchDataUrl(url);
+    if (dataUrl) out = out.split(url).join(dataUrl);
+  }
+  return out;
+}
+
+function exportSlideSvg(slide) {
+  const frame = slide.frame;
+  const all = apiRef.board.getItems();
+  let parts = "";
+  for (const item of slide.drawings) {
+    if ("Stroke" in item.kind) {
+      const points = item.kind.Stroke.points;
+      if (points.length < 2) continue;
+      const d = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x - frame.pos.x},${p.y - frame.pos.y}`).join(" ");
+      parts += `<path d="${d}" fill="none" stroke="${escAttr(item.kind.Stroke.color)}" stroke-width="${item.kind.Stroke.width}" stroke-linecap="round" stroke-linejoin="round"${item.kind.Stroke.marker ? ' opacity="0.45"' : ""}/>`;
+    }
+    if ("Connector" in item.kind) {
+      const ends = clippedConnectorEnds(all, item);
+      if (!ends) continue;
+      const a = { x: ends[0].x - frame.pos.x, y: ends[0].y - frame.pos.y };
+      const b = { x: ends[1].x - frame.pos.x, y: ends[1].y - frame.pos.y };
+      const color = item.kind.Connector.color || "#333333";
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const len = Math.max(1, Math.hypot(dx, dy));
+      const ux = dx / len, uy = dy / len;
+      const head = 12, spread = 0.45;
+      const c1 = Math.cos(spread), s1 = Math.sin(spread), c2 = Math.cos(-spread), s2 = Math.sin(-spread);
+      const p1 = { x: b.x - head * (ux * c1 - uy * s1), y: b.y - head * (ux * s1 + uy * c1) };
+      const p2 = { x: b.x - head * (ux * c2 - uy * s2), y: b.y - head * (ux * s2 + uy * c2) };
+      parts += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="${escAttr(color)}" stroke-width="2"/><polyline points="${p1.x},${p1.y} ${b.x},${b.y} ${p2.x},${p2.y}" fill="none" stroke="${escAttr(color)}" stroke-width="2"/>`;
+    }
+  }
+  if (!parts) return "";
+  return `<svg width="${frame.size.w}" height="${frame.size.h}" viewBox="0 0 ${frame.size.w} ${frame.size.h}" style="position:absolute;left:0;top:0">${parts}</svg>`;
+}
+
+async function exportCardHtml(item, frame) {
+  if ("Audio" in item.kind) {
+    // The board's audio tile is a button that only the core
+    // can play, so in a standalone file it would do nothing.
+    // Export a native audio player instead, with the file
+    // embedded, so the audio actually plays in the export.
+    const path = item.kind.Audio.path;
+    const name = path.split("/").pop() || "Audio";
+    const dataUrl = await fetchDataUrl(apiRef.files.fileUrl(path));
+    const src = dataUrl || apiRef.files.fileUrl(path);
+    return `<div class="card" data-id="${item.id}" style="left:0px;top:0px;width:${item.size.w}px;height:${item.size.h}px"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px"><div class="title">${escText(name)}</div><audio controls src="${escAttr(src)}" style="width:100%"></audio></div></div>`;
+  }
+  let html = apiRef.board.renderCard(item.id);
+  if (!html) return "";
+  if ("UrlCard" in item.kind) {
+    // Link cards in the app are buttons that only the core
+    // can open, so in a standalone file they would do
+    // nothing. Turn them into real links to the URL.
+    const href = escAttr(item.kind.UrlCard.url);
+    html = html.replace(/<a ([^>]*?)data-action="open-link"([^>]*?)>/g, (_m, before, after) => {
+      const attrs = (before + " " + after).replace(/\s*data-id="[^"]*"/g, "").trim();
+      return `<a ${attrs} href="${href}" target="_blank" rel="noopener">`;
+    });
+  }
+  if ("Video" in item.kind && item.kind.Video.remote) {
+    // A remote video on the board is a thumbnail button
+    // that only the core can open, so in a standalone
+    // file it would do nothing. Turn it into a link to
+    // the video, keeping its inline size.
+    const href = escAttr(item.kind.Video.source);
+    html = html.replace(/<div class="video-thumb clickable"[^>]*style="([^"]*)"[^>]*>([^<]*)<\/div>/, `<a class="video-thumb" style="$1" href="${href}" target="_blank" rel="noopener">$2</a>`);
+  }
+  return await embedAppFiles(html);
+}
+
+async function exportSlides() {
+  if (!apiRef || slides.length === 0) return;
+  const btn = panelExportBtn;
+  const originalHtml = btn ? btn.innerHTML : "";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Exporting…";
+  }
+  try {
+    let sections = "";
+    for (const slide of slides) {
+      const frame = slide.frame;
+      let cardsHtml = "";
+      for (const item of slide.cards) {
+        const html = await exportCardHtml(item, frame);
+        if (!html) continue;
+        cardsHtml += `<div style="position:absolute;left:${item.pos.x - frame.pos.x}px;top:${item.pos.y - frame.pos.y}px;width:${item.size.w}px;height:${item.size.h}px">${html}</div>`;
+      }
+      sections += `<section class="slide" style="width:${frame.size.w}px;height:${frame.size.h}px">${exportSlideSvg(slide)}${cardsHtml}</section>`;
+    }
+    const doc = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bowerbird slides</title>
+<style>
+:root { --accent:#007aff; --ink:#1d1d1f; --grey:#86868b; --hairline:rgba(0,0,0,0.08); --separator:rgba(0,0,0,0.10); --bg-system:#f5f5f7; --shadow-sm:0 1px 2px rgba(0,0,0,0.06); }
+body { margin:0; padding:32px; background:var(--bg-system); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif; letter-spacing:-0.01em; }
+.slide { position:relative; margin:0 auto 32px auto; background:#fff; border:1px solid var(--hairline); border-radius:12px; box-shadow:var(--shadow-sm); overflow:hidden; }
+.card { position:absolute; background:#fff; border:1px solid var(--hairline); border-radius:12px; overflow:hidden; box-shadow:var(--shadow-sm); pointer-events:none; }
+.card a, .card video, .card audio { pointer-events:auto; }
+.card .inner { width:100%; height:100%; overflow:hidden; }
+.card .note-body { padding:14px; line-height:1.55; word-wrap:break-word; }
+.card .note-body p { margin:0 0 6px; }
+.card .note-body h1, .card .note-body h2, .card .note-body h3 { margin:0 0 6px; line-height:1.3; font-weight:700; letter-spacing:-0.02em; }
+.card .note-body h1 { font-size:1.5em; } .card .note-body h2 { font-size:1.25em; } .card .note-body h3 { font-size:1.1em; }
+.card .note-body pre { background:var(--bg-system); border-radius:8px; padding:8px 10px; overflow:hidden; margin:0 0 6px; white-space:pre-wrap; font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:0.9em; }
+.card .note-body code { background:var(--bg-system); border-radius:4px; padding:1px 4px; font-family:ui-monospace,"SF Mono",Menlo,monospace; font-size:0.9em; }
+.card .note-body blockquote { margin:0 0 6px; padding-left:10px; color:var(--grey); border-left:2px solid var(--separator); }
+.card .note-body a { color:var(--accent); text-decoration:none; } .card .note-body a:hover { text-decoration:underline; }
+.card .row { display:flex; align-items:center; gap:12px; padding:12px; height:100%; }
+.card .col { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+.card .title { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.card .sub { color:var(--grey); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.card .tile { flex:none; width:56px; height:56px; border-radius:10px; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:24px; }
+.card .link-card { display:flex; flex-direction:column; height:100%; }
+.card .link-image { display:block; flex:none; height:168px; overflow:hidden; background:var(--bg-system); }
+.card .link-image img { width:100%; height:100%; object-fit:cover; display:block; }
+.card .link-body { flex:1; min-height:0; display:flex; flex-direction:column; gap:6px; padding:12px 14px 12px; }
+.card .link-card.no-image .link-body { padding:14px; justify-content:center; }
+.card a.link-title { color:var(--ink); text-decoration:none; font-size:15px; font-weight:600; line-height:1.35; letter-spacing:-0.01em; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.card a.link-title:hover { color:var(--accent); }
+.card .link-desc { color:var(--grey); font-size:13px; line-height:1.45; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.card .link-card.no-image .link-desc { -webkit-line-clamp:3; }
+.card .link-footer { margin-top:auto; padding-top:2px; }
+.card a.link-domain { display:flex; align-items:center; gap:6px; color:var(--grey); text-decoration:none; font-size:12px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.card a.link-domain:hover { color:var(--ink); }
+.card a.link-domain .favicon { width:16px; height:16px; border-radius:4px; flex:none; object-fit:cover; }
+.card a.link-domain .favicon-fallback { width:16px; height:16px; border-radius:4px; flex:none; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; }
+.card a.link-domain svg { width:13px; height:13px; flex:none; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.card .swatch-pill { position:absolute; right:10px; bottom:10px; background:rgba(255,255,255,0.92); border:1px solid var(--hairline); border-radius:8px; padding:4px 8px; font-weight:600; font-size:12px; box-shadow:var(--shadow-sm); }
+.card .video-thumb { position:relative; background:#1d1d1f; border-radius:10px; display:flex; align-items:center; justify-content:center; color:#fff; text-decoration:none; }
+@media print {
+  body { background:#fff; padding:0; }
+  .slide { margin:0 auto; page-break-after:always; box-shadow:none; border:1px solid #ddd; }
+  .slide:last-child { page-break-after:auto; }
+}
+</style>
+</head>
+<body>
+${sections}
+</body>
+</html>`;
+    const blob = new Blob([doc], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "bowerbird-slides.html";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    apiRef.ui.toast("Downloading slides…");
+  } catch (e) {
+    if (apiRef) apiRef.ui.toast(`Export failed: ${String(e)}`);
+  } finally {
+    if (btn) {
+      btn.innerHTML = originalHtml;
+      btn.disabled = false;
+    }
+    if (panelList) updatePanel();
+  }
+}
+
 function initPanel(body) {
   const actions = document.createElement("div");
   actions.className = "pres-panel-actions";
@@ -687,6 +885,18 @@ function initPanel(body) {
   draw.addEventListener("click", () => startDrawMode());
   actions.appendChild(draw);
   body.appendChild(actions);
+  const exportBtn = document.createElement("button");
+  exportBtn.className = "pres-panel-export";
+  // A download arrow, matching Draw's icon style, and a
+  // short label: Export sits below Play/Draw, on its own
+  // line, at Play's width, so it does not disturb the
+  // Play/Draw pair above it.
+  exportBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/></svg><span>Export</span>`;
+  exportBtn.title = "Export all slides as a single HTML file";
+  exportBtn.setAttribute("aria-label", "Export slides");
+  exportBtn.addEventListener("click", () => { void exportSlides(); });
+  panelExportBtn = exportBtn;
+  body.appendChild(exportBtn);
   const hint = document.createElement("div");
   hint.className = "pres-panel-hint";
   hint.textContent = "Draw a rectangle around cards to make a slide.";
@@ -932,6 +1142,7 @@ function deactivate() {
   resizeHandler = null;
   panelList = null;
   panelPlayBtn = null;
+  panelExportBtn = null;
   drawLayer = null;
   drawInstruction = null;
   drawPreview = null;

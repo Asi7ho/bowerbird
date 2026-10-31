@@ -48,9 +48,13 @@ proof that the API can build that feature.
   the board, with a "Slide N" label, so the cards inside
   stay visible and editable; move a card into a frame
   and it joins that slide. The panel lists slides in
-  creation order, with Play, Draw a slide, and per-slide
-  Play and Delete; double-clicking a frame on the board
-  plays from that slide. Playing shows a frame's area,
+  creation order, with Play, Draw a slide, Export, and
+  per-slide Play and Delete; double-clicking a frame on
+  the board plays from that slide. Export downloads all
+  slides, in order, as a single HTML file, with images,
+  audio and video embedded, links as real links, and
+  print CSS for one slide per page, so it can be opened
+  anywhere and printed to PDF from a browser. Playing shows a frame's area,
   scaled to fit, almost as a screenshot of that area:
   every card that overlaps it, every pen stroke and
   connector segment that enters it, in board positions,

@@ -129,6 +129,28 @@
 .plugin-panel-body .pres-panel-draw svg {
   flex: none; display: block;
 }
+/* Export sits below Play/Draw, on its own line, at
+   Play's width — calc((100% - 8px) / 2) matches a button
+   in the Play/Draw pair — so it does not disturb that
+   pair, and is not a wide bar across the panel. Same
+   quiet core panel button style, no accent colour. */
+.plugin-panel-body .pres-panel-export {
+  display: flex; align-items: center; justify-content: center;
+  gap: 6px; width: calc((100% - 8px) / 2);
+  border: 1px solid var(--separator); background: #fff;
+  border-radius: 9px; padding: 8px 6px; margin-bottom: 8px;
+  cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink);
+  white-space: nowrap;
+}
+.plugin-panel-body .pres-panel-export:hover {
+  background: var(--fill);
+}
+.plugin-panel-body .pres-panel-export:disabled {
+  background: var(--fill); color: var(--grey); cursor: default;
+}
+.plugin-panel-body .pres-panel-export svg {
+  flex: none; display: block;
+}
 .plugin-panel-body .pres-panel-hint {
   color: var(--grey); font-size: 12px; line-height: 1.5;
   margin-bottom: 12px;
