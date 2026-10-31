@@ -58,6 +58,10 @@ function createButton(container) {
 
 function renderSettings(container) {
   container.innerHTML = "";
+  const desc = document.createElement("p");
+  desc.className = "meta";
+  desc.textContent = "The corner the board hides into.";
+  container.appendChild(desc);
   const opts = document.createElement("div");
   opts.className = "canvas-opt";
   for (const [label, value] of OPTIONS) {

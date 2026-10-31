@@ -88,11 +88,13 @@ There is no handle tab.
   for pen, connector and marquee) instead of rebuilding the board,
   cursor hints run at most once per frame, and content is only
   rebuilt when the visible set actually changes.
-- **Settings (?):** three tabs, not one long window: General
-  (every keyboard shortcut, the canvas background and grid,
-  Data, and Quit Bowerbird), Plugins to turn plugins on and
-  off, and Plugin settings (one section per activated plugin
-  that has settings, Hide's corner picker among them). The
+- **Settings (?):** three vertical tabs on the left, one
+  section at a time on the right, not one long window:
+  General (every keyboard shortcut, the canvas background
+  and grid, Data, and Quit Bowerbird), Plugins to turn
+  plugins on and off, and Plugin settings (one section per
+  activated plugin that has settings, Hide's corner picker
+  among them). Each setting has a one-line description. The
   corner choice is saved in the app's settings file and
   survives restarts.
 - **In-app hotkeys:** `V` select, `P` pen, `A` arrow, `Ctrl/Cmd+G`
@@ -199,11 +201,10 @@ really restores the board.
 
 ## Icon
 
-Bowerbird has its own icon, not a framework default: a blue
-squircle with a white board and flat colour cards inside, in
-the app's palette — no bird, no pale outer ring. The squircle
-is inset to 75% of its canvas, so in the Dock it reads the
-same size as other icons instead of dominating them. The
+Bowerbird has its own icon, not a framework default: a simple
+black and white bird, stylized — a black silhouette (body,
+head, beak, tail) with a white eye, on a white squircle. No
+colour, no detail that disappears at small sizes. The
 vector source is `assets/icon.svg`;
 `assets/icon.png` is the 1024px export, `assets/icon.ico` is the
 Windows multi-size icon, and `assets/icon.iconset/` is the macOS

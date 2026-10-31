@@ -1395,12 +1395,18 @@ function renderPluginSettings(): void {
     list.innerHTML = `<p class="meta">No plugins found. Drop a plugin folder into your plugins folder, then reopen Settings. See PLUGIN_API.md in the repo for the format.</p>`;
     return;
   }
+  const descriptions: Record<string, string> = {
+    hide: "Hides the board into a corner.",
+    "visual-library": "The board's cards, as a library.",
+  };
   let html = "";
   for (const lp of plugins) {
     const m = lp.manifest;
     const state = lp.failed ? "Failed" : lp.active ? "On" : "Off";
     const cmds = commands.filter((c) => c.pluginId === m.id);
     html += `<div class="plugin-row"><div><strong>${m.name}</strong> <span class="meta">${state}</span></div>`;
+    const desc = descriptions[m.id];
+    if (desc) html += `<p class="meta">${desc}</p>`;
     if (lp.failed && lp.error) html += `<p class="meta"><strong>${lp.error}</strong></p>`;
     html += `<button data-plugin-toggle="${m.id}">${lp.active ? "Disable" : "Enable"}</button>`;
     for (const c of cmds) {

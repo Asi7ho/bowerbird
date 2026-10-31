@@ -48,32 +48,42 @@
         <div id="settings">
           <button class="close" id="settings-close" title="Close (Esc)">×</button>
           <h2>Settings</h2>
-          <div id="settings-tabs">
-            <button data-settings-tab="general" class="active">General</button>
-            <button data-settings-tab="plugins">Plugins</button>
-            <button data-settings-tab="plugin-settings">Plugin settings</button>
-          </div>
-          <div id="settings-section-general" class="settings-section">
-            <h3>Keyboard shortcuts</h3>
-            <table id="shortcuts-table"></table>
-            <h3>Canvas</h3>
-            <div class="canvas-opt" id="bg-opts"></div>
-            <div class="canvas-opt" id="grid-opts"></div>
-            <h3>Data</h3>
-            <button id="btn-reset">Delete all board data</button>
-            <div id="reset-confirm" style="display:none">
-              <p class="meta"><strong>This cannot be undone.</strong> Delete everything on this board?</p>
-              <button id="btn-reset-confirm">Delete everything</button>
+          <div id="settings-layout">
+            <div id="settings-tabs">
+              <button data-settings-tab="general" class="active">General</button>
+              <button data-settings-tab="plugins">Plugins</button>
+              <button data-settings-tab="plugin-settings">Plugin settings</button>
             </div>
-            <h3>App</h3>
-            <button id="btn-quit">Quit Bowerbird</button>
-          </div>
-          <div id="settings-section-plugins" class="settings-section" style="display:none">
-            <div id="plugin-list"></div>
-          </div>
-          <div id="settings-section-plugin-settings" class="settings-section" style="display:none">
-            <div id="plugin-settings-sections"></div>
-            <p class="meta" id="plugin-settings-empty" style="display:none">No plugin settings</p>
+            <div id="settings-content">
+              <div id="settings-section-general" class="settings-section">
+                <h3>Keyboard shortcuts</h3>
+                <p class="meta">Keys for working on the board.</p>
+                <table id="shortcuts-table"></table>
+                <h3>Canvas</h3>
+                <p class="meta">Background colour and grid.</p>
+                <div class="canvas-opt" id="bg-opts"></div>
+                <div class="canvas-opt" id="grid-opts"></div>
+                <h3>Data</h3>
+                <p class="meta">Deletes everything and starts again.</p>
+                <button id="btn-reset">Delete all board data</button>
+                <div id="reset-confirm" style="display:none">
+                  <p class="meta"><strong>This cannot be undone.</strong> Delete everything on this board?</p>
+                  <button id="btn-reset-confirm">Delete everything</button>
+                </div>
+                <h3>App</h3>
+                <p class="meta">Closes Bowerbird.</p>
+                <button id="btn-quit">Quit Bowerbird</button>
+              </div>
+              <div id="settings-section-plugins" class="settings-section" style="display:none">
+                <p class="meta">Turn plugins on or off.</p>
+                <div id="plugin-list"></div>
+              </div>
+              <div id="settings-section-plugin-settings" class="settings-section" style="display:none">
+                <p class="meta">Settings for plugins that are on.</p>
+                <div id="plugin-settings-sections"></div>
+                <p class="meta" id="plugin-settings-empty" style="display:none">No plugin settings</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
