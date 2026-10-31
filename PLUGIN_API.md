@@ -516,9 +516,12 @@ board, not cards. Draw a rectangle around cards to make
 a slide, then play it: the panel lists slides in frame
 creation order, with Play, Draw a slide, and per-slide
 Play and Delete, and double-clicking a frame on the
-board plays from that slide. Playing shows a frame's
-area, scaled to fit, with its cards in their board
-positions, cropped to the frame; a video plays in place,
+board plays from that slide. Playing shows a frame's area, scaled to fit, almost
+as a screenshot of that area: every card that overlaps
+the frame at all, every pen stroke that enters it,
+and every connector segment that enters it, in their
+board positions, cropped to the frame, drawing under
+cards as on the board; a video plays in place,
 an audio card plays in place through the plugin's own
 player, a link opens outside the app, and clicking
 anywhere else on a slide does nothing. It hides nothing

@@ -28,16 +28,21 @@
 // frame order only changes when a frame is created or
 // deleted.
 //
-// What a slide looks like when played: the frame's area,
-// scaled uniformly to fit the stage, with its cards in
-// their board positions relative to the frame, cropped to
-// the frame. A card that straddles the border is cropped,
-// so resize the frame to include a card fully if you want
-// it whole. A card's centre decides whether it is inside:
-// a large card whose centre is inside counts, even if an
-// edge sticks out, and a card whose centre is outside
-// does not count, even if an edge sticks in. Frames inside
-// frames are not content — they are their own slides.
+// What a slide looks like when played: almost a
+// screenshot of the frame area, scaled uniformly to fit
+// the stage. Every card that overlaps the frame at all,
+// every pen stroke that enters it, and every connector
+// segment that enters it, in their board positions
+// relative to the frame, cropped to the frame, with
+// drawing under cards as on the board. A card that
+// straddles the border shows only the part inside — a
+// swatch top, a pen circle behind a photo, a connector
+// segment to the frame edge — so resize the frame to
+// include a card fully if you want it whole, or to
+// exclude it fully if you do not want a strip of it.
+// Frames inside frames are not content — they are their
+// own slides. The slide background is plain white, not
+// the board's dot grid, so the slide stays clean.
 //
 // What works inside a slide: a video's native controls
 // play in place, and an audio card plays in place through
@@ -118,27 +123,112 @@ function isFrameItem(item) {
   );
 }
 
-function isContentItem(item) {
-  // Frames are containers, not content, and strokes and
-  // connectors are drawing, not cards — none of them are
-  // ever a slide's content, whatever plugin made them.
+function isCardItem(item) {
+  // Frames are containers, not content — a frame inside
+  // a frame is its own slide, never content — but every
+  // other card kind counts, including Plugin cards.
   if ("Stroke" in item.kind || "Connector" in item.kind) return false;
   if ("Plugin" in item.kind && item.kind.Plugin.kind === "slide") return false;
   return item.size.w > 0 && item.size.h > 0;
 }
 
-function centreOf(item) {
-  return { x: item.pos.x + item.size.w / 2, y: item.pos.y + item.size.h / 2 };
+function rectsOverlap(a, b) {
+  // Strict overlap: a card that only touches the frame's
+  // edge, with no area inside, shows nothing in the slide.
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
-function insideFrame(frame, item) {
-  const c = centreOf(item);
-  return (
-    c.x >= frame.pos.x &&
-    c.x <= frame.pos.x + frame.size.w &&
-    c.y >= frame.pos.y &&
-    c.y <= frame.pos.y + frame.size.h
+function cardOverlapsFrame(frame, item) {
+  return rectsOverlap(
+    { x: frame.pos.x, y: frame.pos.y, w: frame.size.w, h: frame.size.h },
+    { x: item.pos.x, y: item.pos.y, w: item.size.w, h: item.size.h },
   );
+}
+
+// Where a segment from `from` to `to` crosses a rectangle,
+// as the core's rectCrossing does (Liang-Barsky): entry
+// is the first crossing, exit the second. Used both for
+// clipping a connector to its cards, and for testing
+// whether a stroke or connector segment enters a frame.
+function rectCrossing(from, to, pos, w, h, entry) {
+  const dx = to.x - from.x, dy = to.y - from.y;
+  let t0 = 0, t1 = 1;
+  for (const [o, d, lo, hi] of [[from.x, dx, pos.x, pos.x + w], [from.y, dy, pos.y, pos.y + h]]) {
+    if (Math.abs(d) < 1e-9) {
+      if (o < lo || o > hi) return null;
+    } else {
+      let ta = (lo - o) / d, tb = (hi - o) / d;
+      if (ta > tb) [ta, tb] = [tb, ta];
+      t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
+      if (t0 > t1) return null;
+    }
+  }
+  const t = entry ? t0 : t1;
+  if (t < 0 || t > 1) return null;
+  return { x: from.x + dx * t, y: from.y + dy * t };
+}
+
+function segmentIntersectsFrame(frame, a, b) {
+  // A segment enters the frame if its clipped interval
+  // overlaps the segment at all — that is, if any part
+  // of it, however short, is inside, as a screenshot
+  // of the frame area would show.
+  const dx = b.x - a.x, dy = b.y - a.y;
+  let t0 = 0, t1 = 1;
+  for (const [o, d, lo, hi] of [[a.x, dx, frame.pos.x, frame.pos.x + frame.size.w], [a.y, dy, frame.pos.y, frame.pos.y + frame.size.h]]) {
+    if (Math.abs(d) < 1e-9) {
+      if (o < lo || o > hi) return false;
+    } else {
+      let ta = (lo - o) / d, tb = (hi - o) / d;
+      if (ta > tb) [ta, tb] = [tb, ta];
+      t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
+      if (t0 > t1) return false;
+    }
+  }
+  return t0 <= t1;
+}
+
+function strokeOverlapsFrame(frame, item) {
+  const points = item.kind.Stroke.points;
+  if (points.length < 2) return false;
+  for (let i = 0; i + 1 < points.length; i++) {
+    if (segmentIntersectsFrame(frame, points[i], points[i + 1])) return true;
+  }
+  return false;
+}
+
+function anchorPoint(all, anchor) {
+  if ("Point" in anchor) return anchor.Point;
+  const it = all.find((x) => x.id === anchor.Item);
+  return it ? { x: it.pos.x + it.size.w / 2, y: it.pos.y + it.size.h / 2 } : null;
+}
+
+function clippedConnectorEnds(all, item) {
+  const aRaw = anchorPoint(all, item.kind.Connector.from);
+  const bRaw = anchorPoint(all, item.kind.Connector.to);
+  if (!aRaw || !bRaw) return null;
+  let a = aRaw, b = bRaw;
+  if ("Item" in item.kind.Connector.from) {
+    const it = all.find((x) => x.id === item.kind.Connector.from.Item);
+    if (it) {
+      const p = rectCrossing(aRaw, bRaw, it.pos, it.size.w, it.size.h, false);
+      if (p) a = p;
+    }
+  }
+  if ("Item" in item.kind.Connector.to) {
+    const it = all.find((x) => x.id === item.kind.Connector.to.Item);
+    if (it) {
+      const p = rectCrossing(aRaw, bRaw, it.pos, it.size.w, it.size.h, true);
+      if (p) b = p;
+    }
+  }
+  return [a, b];
+}
+
+function connectorOverlapsFrame(all, frame, item) {
+  const ends = clippedConnectorEnds(all, item);
+  if (!ends) return false;
+  return segmentIntersectsFrame(frame, ends[0], ends[1]);
 }
 
 function computeSlides() {
@@ -146,20 +236,36 @@ function computeSlides() {
   const frames = all.filter(isFrameItem);
   return frames.map((frame) => ({
     frame,
-    items: all.filter((it) => isContentItem(it) && insideFrame(frame, it)),
+    // A slide is almost a screenshot of its frame area:
+    // every card that overlaps the frame at all, however
+    // little, and every stroke or connector segment that
+    // enters it, in board order. A card's centre is NOT
+    // the test — a swatch whose top is inside, or a pen
+    // circle behind a photo, shows in the slide, cropped
+    // to the frame, exactly as it looks on the board.
+    cards: all.filter((it) => isCardItem(it) && cardOverlapsFrame(frame, it)),
+    drawings: all.filter((it) =>
+      ("Stroke" in it.kind && strokeOverlapsFrame(frame, it)) ||
+      ("Connector" in it.kind && connectorOverlapsFrame(all, frame, it)),
+    ),
   }));
 }
 
 function signature(list) {
   // Order matters here — it is the slide order — and a
   // card's position matters too, because a slide is a
-  // layout, not a list: moving a card inside a frame must
-  // re-render that slide. This signature is NOT sorted.
+  // layout, not a list: moving a card into, out of, or
+  // inside a frame must re-render that slide. This
+  // signature is NOT sorted, and it covers drawings too,
+  // so a pen stroke moving into a frame re-renders it.
   const parts = [];
   for (const slide of list) {
     parts.push(`F${slide.frame.id}:${slide.frame.pos.x},${slide.frame.pos.y},${slide.frame.size.w}x${slide.frame.size.h}`);
-    for (const it of slide.items) {
+    for (const it of slide.cards) {
       parts.push(`${it.id}:${JSON.stringify(it.kind)}:${it.pos.x},${it.pos.y},${it.size.w}x${it.size.h}`);
+    }
+    for (const it of slide.drawings) {
+      parts.push(`${it.id}:${JSON.stringify(it.kind)}`);
     }
   }
   return parts.join("|");
@@ -263,7 +369,7 @@ function renderSlide() {
     wrap.className = "pres-slide-wrap";
     wrap.style.width = `${frame.size.w * scale}px`;
     wrap.style.height = `${frame.size.h * scale}px`;
-    if (slide.items.length === 0) {
+    if (slide.cards.length === 0 && slide.drawings.length === 0) {
       const empty = document.createElement("div");
       empty.className = "pres-empty";
       const head = document.createElement("div");
@@ -274,7 +380,70 @@ function renderSlide() {
       empty.append(head, sub);
       wrap.appendChild(empty);
     } else {
-      for (const item of slide.items) {
+      // Drawing first, under the cards, as on the board,
+      // where the SVG layer sits under the card layer.
+      // The SVG uses the frame itself as its viewBox, so
+      // its coordinates are frame-relative world units and
+      // it scales with the slide automatically; the slide
+      // wrapper's overflow hidden crops it to the frame,
+      // exactly as a screenshot of the frame area would.
+      if (slide.drawings.length > 0) {
+        const all = apiRef.board.getItems();
+        const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        svg.setAttribute("class", "pres-slide-svg");
+        svg.setAttribute("width", String(frame.size.w * scale));
+        svg.setAttribute("height", String(frame.size.h * scale));
+        svg.setAttribute("viewBox", `0 0 ${frame.size.w} ${frame.size.h}`);
+        svg.style.position = "absolute";
+        svg.style.left = "0";
+        svg.style.top = "0";
+        for (const item of slide.drawings) {
+          if ("Stroke" in item.kind) {
+            const points = item.kind.Stroke.points;
+            if (points.length < 2) continue;
+            const d = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x - frame.pos.x},${p.y - frame.pos.y}`).join(" ");
+            const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            path.setAttribute("d", d);
+            path.setAttribute("fill", "none");
+            path.setAttribute("stroke", item.kind.Stroke.color);
+            path.setAttribute("stroke-width", String(item.kind.Stroke.width));
+            path.setAttribute("stroke-linecap", "round");
+            path.setAttribute("stroke-linejoin", "round");
+            if (item.kind.Stroke.marker) path.setAttribute("opacity", "0.45");
+            svg.appendChild(path);
+          }
+          if ("Connector" in item.kind) {
+            const ends = clippedConnectorEnds(all, item);
+            if (!ends) continue;
+            const a = { x: ends[0].x - frame.pos.x, y: ends[0].y - frame.pos.y };
+            const b = { x: ends[1].x - frame.pos.x, y: ends[1].y - frame.pos.y };
+            const color = item.kind.Connector.color || "#333333";
+            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            line.setAttribute("x1", String(a.x));
+            line.setAttribute("y1", String(a.y));
+            line.setAttribute("x2", String(b.x));
+            line.setAttribute("y2", String(b.y));
+            line.setAttribute("stroke", color);
+            line.setAttribute("stroke-width", "2");
+            svg.appendChild(line);
+            const dx = b.x - a.x, dy = b.y - a.y;
+            const len = Math.max(1, Math.hypot(dx, dy));
+            const ux = dx / len, uy = dy / len;
+            const head = 12, spread = 0.45;
+            const c1 = Math.cos(spread), s1 = Math.sin(spread), c2 = Math.cos(-spread), s2 = Math.sin(-spread);
+            const p1 = { x: b.x - head * (ux * c1 - uy * s1), y: b.y - head * (ux * s1 + uy * c1) };
+            const p2 = { x: b.x - head * (ux * c2 - uy * s2), y: b.y - head * (ux * s2 + uy * c2) };
+            const arrow = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+            arrow.setAttribute("points", `${p1.x},${p1.y} ${b.x},${b.y} ${p2.x},${p2.y}`);
+            arrow.setAttribute("fill", "none");
+            arrow.setAttribute("stroke", color);
+            arrow.setAttribute("stroke-width", "2");
+            svg.appendChild(arrow);
+          }
+        }
+        wrap.appendChild(svg);
+      }
+      for (const item of slide.cards) {
         const html = apiRef.board.renderCard(item.id);
         if (!html) continue;
         const cardWrap = document.createElement("div");
@@ -327,7 +496,7 @@ function onStageClick(e) {
   if (!target || !target.closest) return;
   const cardEl = target.closest(".card");
   if (!cardEl || !cardEl.dataset.id) return;
-  const item = slide.items.find((it) => it.id === Number(cardEl.dataset.id));
+  const item = slide.cards.find((it) => it.id === Number(cardEl.dataset.id));
   if (!item) return;
   // Audio plays in place, as on the board. Everything else
   // on a slide is inert: a click never advances, so a
@@ -473,7 +642,8 @@ function updatePanel() {
     name.textContent = `Slide ${i + 1}`;
     const count = document.createElement("span");
     count.className = "pres-panel-count";
-    count.textContent = slide.items.length === 1 ? "· 1 card" : `· ${slide.items.length} cards`;
+    const total = slide.cards.length + slide.drawings.length;
+    count.textContent = total === 1 ? "· 1 element" : `· ${total} elements`;
     const play = document.createElement("button");
     play.className = "pres-panel-icon-btn";
     play.textContent = "▶";

@@ -51,10 +51,12 @@ proof that the API can build that feature.
   creation order, with Play, Draw a slide, and per-slide
   Play and Delete; double-clicking a frame on the board
   plays from that slide. Playing shows a frame's area,
-  scaled to fit, with its cards in their board positions,
-  cropped to the frame; a video plays in place, an audio
-  card plays in place, a link opens outside, other clicks
-  do nothing. It needs `board:write` (for frames),
+  scaled to fit, almost as a screenshot of that area:
+  every card that overlaps it, every pen stroke and
+  connector segment that enters it, in board positions,
+  cropped to the frame, drawing under cards; a video
+  plays in place, an audio card plays in place, a link
+  opens outside, other clicks do nothing. It needs `board:write` (for frames),
   `view:replace` and `files:read` (for opening links).
 
 Packaging: `scripts/package-mac.sh` copies this folder into the
