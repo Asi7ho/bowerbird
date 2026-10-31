@@ -204,10 +204,9 @@ really restores the board.
 ## Icon
 
 Bowerbird has its own icon, not a framework default: an
-abstract black and white bird — two curved wings and a
-small body, as a single black shape on a white squircle.
-No eye, no beak, no literal silhouette. The
-vector source is `assets/icon.svg`;
+abstract black and white bird, line wings only — two
+black strokes forming wings, no fill, no body, on a white
+squircle. The vector source is `assets/icon.svg`;
 `assets/icon.png` is the 1024px export, `assets/icon.ico` is the
 Windows multi-size icon, and `assets/icon.iconset/` is the macOS
 iconset. The app uses it for its window icon (Linux/Windows
