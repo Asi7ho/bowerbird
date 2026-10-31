@@ -83,6 +83,7 @@ let counter = null;
 
 // Panel refs (built once by initPanel, cleared on deactivate).
 let panelList = null;
+let panelPlayBtn = null;
 
 // Overlay refs (built once by initOverlay, cleared on deactivate).
 let drawLayer = null;
@@ -325,6 +326,7 @@ function playPresentationAudio(item, tile) {
 }
 
 function startPresentation(at) {
+  if (slides.length === 0) return;
   cancelDrawMode();
   pendingStartIndex = at;
   apiRef.view.setView("presentation");
@@ -595,13 +597,7 @@ function buildView(container) {
   const hint = document.createElement("span");
   hint.className = "pres-hint";
   hint.textContent = "← → to move · Esc to exit";
-  const back = document.createElement("button");
-  back.className = "pres-back";
-  back.textContent = "Back to board";
-  back.title = "Back to board (Esc)";
-  back.setAttribute("aria-label", "Back to board");
-  back.addEventListener("click", () => apiRef.view.setView("board"));
-  controls.append(counter, hint, back);
+  controls.append(counter, hint);
   root.append(row, controls);
   container.appendChild(root);
   viewBuilt = true;
@@ -618,6 +614,11 @@ function viewContainerClear() {
 
 function updatePanel() {
   if (!panelList) return;
+  // Play is the primary action, but only when there is
+  // something to play: with no slides it is disabled, so
+  // the panel guides you to Draw first instead of
+  // opening an empty presentation.
+  if (panelPlayBtn) panelPlayBtn.disabled = slides.length === 0;
   panelList.innerHTML = "";
   if (slides.length === 0) {
     const empty = document.createElement("div");
@@ -640,10 +641,6 @@ function updatePanel() {
     const name = document.createElement("span");
     name.className = "pres-panel-name";
     name.textContent = `Slide ${i + 1}`;
-    const count = document.createElement("span");
-    count.className = "pres-panel-count";
-    const total = slide.cards.length + slide.drawings.length;
-    count.textContent = total === 1 ? "· 1 element" : `· ${total} elements`;
     const play = document.createElement("button");
     play.className = "pres-panel-icon-btn";
     play.textContent = "▶";
@@ -662,7 +659,7 @@ function updatePanel() {
       e.stopPropagation();
       apiRef.board.removeItem(slide.frame.id);
     });
-    row.append(name, count, play, del);
+    row.append(name, play, del);
     panelList.appendChild(row);
   });
 }
@@ -674,10 +671,13 @@ function initPanel(body) {
   play.title = "Play from the first slide";
   play.setAttribute("aria-label", "Play presentation");
   play.addEventListener("click", () => startPresentation(0));
+  panelPlayBtn = play;
   body.appendChild(play);
   const draw = document.createElement("button");
   draw.className = "pres-panel-draw";
-  draw.textContent = "Draw a slide";
+  // A dashed rectangle, matching the slide frame itself,
+  // so Draw reads as drawing a frame at a glance.
+  draw.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-dasharray="3 3" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/></svg><span>Draw a slide</span>`;
   draw.title = "Draw a rectangle on the board to make a slide";
   draw.setAttribute("aria-label", "Draw a slide");
   draw.addEventListener("click", () => startDrawMode());
@@ -926,6 +926,7 @@ function deactivate() {
   onViewHandler = null;
   resizeHandler = null;
   panelList = null;
+  panelPlayBtn = null;
   drawLayer = null;
   drawInstruction = null;
   drawPreview = null;

@@ -1,11 +1,12 @@
 /* Presentation view, scoped to this plugin's view container
    (core sets data-plugin="presentation" on #plugin-view).
    Same surface, same style: core grey for counter and hint,
-   core panel button for Back to board, toolbar-style
-   borderless arrows for Previous/Next, core card for the
-   cards inside a slide (a slide itself is a white card
-   with a hairline border and soft shadow, so it reads as
-   a slide on the white view background). */
+   toolbar-style borderless arrows for Previous/Next, core
+   card for the cards inside a slide (a slide itself is a
+   white card with a hairline border and soft shadow, so it
+   reads as a slide on the white view background). Exit is
+   Esc, or the Board button in the view switcher — there
+   is no Back button in the controls. */
 #plugin-view[data-plugin="presentation"] .pres-root {
   display: flex; flex-direction: column; height: 100%; min-height: 0;
   /* The toolbar floats over the view at the left, about
@@ -66,8 +67,8 @@
 }
 /* Controls sit above the view switcher, which floats at
    the bottom centre of the board: 56px of bottom margin
-   keeps Back to board and the counter clear of it, so
-   they are never hidden under that pill. */
+   keeps the counter and hint clear of it, so they are
+   never hidden under that pill. */
 #plugin-view[data-plugin="presentation"] .pres-controls {
   flex: none; display: flex; align-items: center;
   justify-content: center; gap: 16px;
@@ -78,14 +79,6 @@
 }
 #plugin-view[data-plugin="presentation"] .pres-hint {
   color: var(--grey); font-size: 12px;
-}
-#plugin-view[data-plugin="presentation"] .pres-back {
-  border: 1px solid var(--separator); background: #fff;
-  border-radius: 9px; padding: 6px 12px; cursor: pointer;
-  font-size: 13px; font-weight: 600; color: var(--ink);
-}
-#plugin-view[data-plugin="presentation"] .pres-back:hover {
-  background: var(--fill);
 }
 
 /* Slide border on the board: a label, not a card. This
@@ -107,16 +100,37 @@
    to core .plugin-panel-body button (class+element beats
    a lone class), so tile and button rules must be
    prefixed to keep their radius and border. */
+/* Play is the primary action, so it is the one coloured
+   button in the panel: core accent fill, white text.
+   Draw stays a quiet core panel button, with a dashed
+   rectangle icon matching the slide frame itself. Both
+   are full-width, same height, centred, so the pair
+   reads as one control, not two competing buttons. */
 .plugin-panel-body .pres-panel-play,
 .plugin-panel-body .pres-panel-draw {
-  display: block; width: 100%; border: 1px solid var(--separator);
-  background: #fff; border-radius: 9px; padding: 6px 12px;
-  cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink);
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; width: 100%; border-radius: 9px; padding: 8px 12px;
+  cursor: pointer; font-size: 13px; font-weight: 600;
   margin-bottom: 8px;
 }
-.plugin-panel-body .pres-panel-play:hover,
+.plugin-panel-body .pres-panel-play {
+  border: 1px solid var(--accent); background: var(--accent); color: #fff;
+}
+.plugin-panel-body .pres-panel-play:hover {
+  filter: brightness(0.92);
+}
+.plugin-panel-body .pres-panel-play:disabled {
+  border-color: var(--separator); background: var(--fill);
+  color: var(--grey); cursor: default; filter: none;
+}
+.plugin-panel-body .pres-panel-draw {
+  border: 1px solid var(--separator); background: #fff; color: var(--ink);
+}
 .plugin-panel-body .pres-panel-draw:hover {
   background: var(--fill);
+}
+.plugin-panel-body .pres-panel-draw svg {
+  flex: none; display: block;
 }
 .plugin-panel-body .pres-panel-hint {
   color: var(--grey); font-size: 12px; line-height: 1.5;
@@ -137,10 +151,7 @@
   background: var(--fill);
 }
 .plugin-panel-body .pres-panel-name {
-  font-size: 13px; font-weight: 600; color: var(--ink);
-}
-.plugin-panel-body .pres-panel-count {
-  flex: 1 1 auto; font-size: 13px; color: var(--grey);
+  flex: 1 1 auto; font-size: 13px; font-weight: 600; color: var(--ink);
 }
 .plugin-panel-body .pres-panel-icon-btn {
   flex: none; border: none; background: transparent;
