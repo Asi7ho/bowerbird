@@ -553,13 +553,22 @@ function activate(api) {
       if (viewBuilt && viewSections) syncFromBoard(true);
     },
     onHide: () => {
+      // Show first, then clear. showPanel re-renders the
+      // board, and that render refreshes the active view:
+      // if the view were already cleared, that refresh would
+      // rebuild it in a container about to be emptied, leaving
+      // a stale built flag and a detached sections element,
+      // so the next view activation showed an empty white
+      // view. Showing first means the refresh sees the old,
+      // still-valid view and skips it, and the clear that
+      // follows leaves a clean state for the next activation.
+      if (apiRef) apiRef.ui.showPanel("library");
       viewContainerClear();
-      apiRef.ui.showPanel("library");
       // The panel is visible again at its fixed 290px, so the
       // board narrowed back: re-lay the panel at its real
       // width, in case it was re-rendered while hidden (width
       // 0) during the view, before it is seen again.
-      syncFromBoard(true);
+      if (apiRef) syncFromBoard(true);
     },
   });
   apiRef.ui.registerCommand({

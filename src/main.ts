@@ -979,6 +979,31 @@ window.addEventListener("mouseup", (e: MouseEvent) => {
 });
 
 window.addEventListener("wheel", (e: WheelEvent) => {
+  // A wheel over a plugin panel or a plugin view must scroll
+  // that panel or view, not pan the board behind it. The
+  // handler below calls preventDefault, so without this guard
+  // scrolling the Visual Library panel (or its whiteboard
+  // view, which is itself a scroll container) moved the
+  // whiteboard and the panel never scrolled. Ctrl/Cmd+wheel
+  // over a panel or view is blocked, not zoomed: zooming the
+  // board from over a panel is confusing, and in view mode
+  // the board is hidden anyway. A wheel over a panel header
+  // or search row has no scrollable ancestor — the sections
+  // list is the scroller, and the header sits outside it —
+  // so scroll that list by hand instead of doing nothing.
+  const panelOrView = (e.target as HTMLElement).closest("#plugin-panels, #plugin-view");
+  if (panelOrView) {
+    if (e.ctrlKey || e.metaKey) { e.preventDefault(); return; }
+    if (panelOrView.closest("#plugin-panels")) {
+      const panel = (e.target as HTMLElement).closest(".plugin-panel");
+      const sections = panel?.querySelector(".vl-sections") as HTMLElement | null;
+      if (sections && !(e.target as HTMLElement).closest(".vl-sections")) {
+        sections.scrollTop += e.deltaY;
+        e.preventDefault();
+      }
+    }
+    return;
+  }
   if ((e.target as HTMLElement).closest("#settings, #toolbar, #title-bar")) return;
   e.preventDefault();
   if (e.ctrlKey || e.metaKey) {
