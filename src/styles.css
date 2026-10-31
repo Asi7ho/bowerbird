@@ -56,7 +56,28 @@ button { font-family: inherit; }
   font-size: 13px; font-weight: 600; white-space: nowrap;
   -webkit-app-region: drag;
 }
-#title-bar-spacer { -webkit-app-region: drag; }
+#title-bar-actions {
+  display: flex; align-items: center; justify-content: flex-end;
+  -webkit-app-region: drag;
+}
+/* Panels toggle, as a toolbar icon button: borderless,
+   32px, 9px radius, hover a quiet black tint, active
+   white with the toolbar active shadow, dim (opacity
+   0.35, no hover) when no panel exists to show. */
+#panels-toggle {
+  border: none; background: transparent; border-radius: 9px;
+  width: 32px; height: 32px; display: flex; align-items: center;
+  justify-content: center; cursor: pointer; color: var(--ink);
+  -webkit-app-region: no-drag;
+}
+#panels-toggle:hover { background: rgba(0, 0, 0, 0.05); }
+#panels-toggle.active {
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+}
+#panels-toggle.dim { opacity: 0.35; cursor: default; }
+#panels-toggle.dim:hover { background: transparent; }
+#panels-toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 #canvas-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 #grid { position: absolute; inset: 0; pointer-events: none; }
 /* #cards must NOT have overflow:hidden: cards live in world
@@ -435,47 +456,73 @@ button { font-family: inherit; }
 #plugin-panels {
   /* Flush sidebar, not a floating card: panels dock against
      the right edge, full window height, with no gap to the
-     window top or bottom, so a panel's header sits at the
-     title bar's level. A panel that wants the full height
-     (Visual Library) stretches with flex; others stay auto.
-     290px, not 260px, so a panel card is ~250px wide once
-     body padding and the scrollbar gutter are taken out —
-     the same size as a whiteboard-view card, with the same
-     readable type. The dock is a flex sibling of the main
-     column, not an overlay on the board, so the board is
-     narrower while a panel is open and widens again when
-     the last visible panel closes: the width comes from
-     :has, because a hidden panel (display: none, as set
-     by hidePanel and the panel close button) is still a
-     child, and an empty or all-hidden dock must collapse
-     to 0 rather than leave a 290px gap. */
+     window top or bottom, so the tab bar shares the top
+     strip with the title bar. 290px, not 260px, so a panel
+     card is ~250px wide once body padding and the scrollbar
+     gutter are taken out — the same size as a
+     whiteboard-view card, with the same readable type.
+     The dock is a flex sibling of the main column, not an
+     overlay on the board, so the board is narrower while
+     a panel is open and widens again when the dock closes.
+     The width is set by the plugin host (updatePanelDock),
+     not by :has: a tabbed panel can be shown but inactive,
+     or hidden, and the dock can be closed while panels are
+     still shown — three states :has cannot tell apart. */
   flex: none; align-self: stretch;
   display: flex; flex-direction: column; gap: 0; width: 0;
-  overflow: auto; pointer-events: none; z-index: 10;
+  overflow: hidden; pointer-events: none; z-index: 10;
 }
-#plugin-panels:has(> .plugin-panel:not([style*="display: none"])) { width: 290px; }
 #plugin-panels::-webkit-scrollbar { display: none; }
+/* Mini tabs, as a Settings segmented control: a fill-grey
+   pill with compact 13px/500 tabs, active tab white with
+   the segmented active shadow. Tabs are mini in height
+   and padding, not in name — full panel titles, so
+   Palette and Visual Library stay distinct at a glance.
+   The bar is 48px, as the title bar, with a hairline
+   underneath that lines up with the title bar's rule.
+   The close button is the old panel-head close, moved
+   here: it hides the whole dock, not one tab. */
+.plugin-tabs {
+  flex: none; height: 48px; display: flex; align-items: center;
+  justify-content: space-between; gap: 8px; padding: 0 12px;
+  background: #fff; border-bottom: 1px solid var(--separator);
+  pointer-events: auto; overflow: hidden;
+}
+.plugin-tabs-list {
+  display: flex; gap: 2px; background: var(--fill);
+  border-radius: 9px; padding: 2px; overflow-x: auto;
+  scrollbar-width: none;
+}
+.plugin-tabs-list::-webkit-scrollbar { display: none; }
+.plugin-tab {
+  flex: none; border: none; background: transparent;
+  border-radius: 7px; padding: 4px 10px; cursor: pointer;
+  font-size: 13px; font-weight: 500; color: var(--ink);
+  white-space: nowrap;
+}
+.plugin-tab.active {
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+}
+.plugin-tabs-close {
+  flex: none; border: none; background: transparent; cursor: pointer;
+  font-size: 16px; line-height: 1; color: var(--grey);
+  padding: 2px 6px; border-radius: 6px;
+}
+.plugin-tabs-close:hover { background: rgba(0, 0, 0, 0.05); }
 .plugin-panel {
-  /* Same material as a board card — opaque white, hairline
-     border, no frost, no floating shadow — so a panel reads
-     as part of the app, not something added on top of it.
-     Only the left edge carries a border (the flush edge);
-     stacked panels are separated by a bottom hairline. */
+  /* One panel at a time fills the dock below the tab bar,
+     so it gets the full dock height instead of half a
+     stacked dock. Same material as a board card — opaque
+     white, hairline border, no frost, no floating shadow —
+     so a panel reads as part of the app, not something
+     added on top of it. Only the left edge carries a
+     border (the flush edge). */
+  flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0;
   pointer-events: auto; background: #fff;
   border: none; border-left: 1px solid var(--separator);
   border-radius: 0; box-shadow: none; overflow: hidden;
 }
-.plugin-panel:not(:last-child) { border-bottom: 1px solid var(--separator); }
-.plugin-panel-head {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 12px; font-size: 13px; font-weight: 600;
-  border-bottom: 1px solid var(--separator);
-}
-.plugin-panel-head button {
-  border: none; background: transparent; cursor: pointer; font-size: 16px;
-  line-height: 1; color: var(--grey); padding: 2px 6px; border-radius: 6px;
-}
-.plugin-panel-head button:hover { background: rgba(0, 0, 0, 0.05); }
 .plugin-panel-body { padding: 12px; font-size: 13px; line-height: 1.5; }
 .plugin-panel-body button {
   border: 1px solid var(--separator); background: #fff; border-radius: 9px;

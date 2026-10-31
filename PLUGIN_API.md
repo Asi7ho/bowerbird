@@ -223,17 +223,22 @@ the board.
   `board:write` for tools that write, plus the tool contribution
   itself).
 - `registerPanel({ id, title, render })` — adds a panel to the
-  right dock, full window height, so a panel's header sits at
-  the title bar's level. The dock is core-owned: panels stack vertically,
-  each with a core header (title + close button) and a body the
-  plugin renders into. `render(container)` is called when the
-  panel is created; the plugin should listen to `api.events` and
+  right dock, full window height, as a mini tab in the dock's
+  tab bar. The dock is core-owned: one panel is shown at a
+  time, switched by its tab; the tab is the panel's header,
+  there is no per-panel header. A close button in the tab
+  bar hides the whole dock, and a panels toggle in the
+  title bar shows it again with its tabs and active panel
+  intact. `render(container)` is called when the panel is
+  created; the plugin should listen to `api.events` and
   update its own panel DOM from there. Panels are contextual by
   convention: show the panel's content only when it is relevant
   (for example a photo panel only when a photo is selected) by
   calling `showPanel`/`hidePanel`, or by rendering an empty state.
   The core does not guess relevance for a plugin.
-- `showPanel(id)`, `hidePanel(id)`, `getPanelElement(id)`
+- `showPanel(id)`, `hidePanel(id)`, `getPanelElement(id)` —
+  showing a panel also activates its tab; hiding the active
+  panel switches to another shown panel.
 - `registerCommand({ id, title, run })` — a command listed in
   Settings → Plugins under this plugin, with a Run button. There
   is no command palette in v1; commands are run from Settings,
@@ -412,12 +417,14 @@ SF type, ink `#1D1D1F`, grey `#86868B`, hairline
 `rgba(0,0,0,0.08)`, separator `rgba(0,0,0,0.10)`, fill
 `rgba(120,120,128,0.12)`, quiet grey field `#F5F5F7`, and
 the core shadows. Panels are opaque white, hairline on the
-left, no frost or floating shadow; a panel head is the core
-panel head (13px/600, hairline underneath) and a panel body
-is the core panel body (13px/1.5). A full-board view is a
+left, no frost or floating shadow; the tab bar is 48px, as
+the title bar, with a hairline underneath, its tabs are a
+segmented control (fill-grey pill, 13px/500 tabs, active
+tab white with the segmented active shadow), and a panel
+body is the core panel body (13px/1.5). A full-board view is a
 different surface: it uses the core view type (14px/1.6,
 padding 24px) with a document title (17px/700), not the
-panel head forced to match it. Cards are white, 12px radius,
+tab bar forced to match it. Cards are white, 12px radius,
 hairline border, soft shadow. Search fields are quiet grey
 fields with no border, icon buttons are borderless with a
 9px radius, text buttons are bordered white with a 9px
@@ -458,8 +465,8 @@ swatches sit side by side, 16px apart, instead of a 120px
 swatch centred in a 250px column leaving 149px between
 them. The panel sections keep 15px of right padding as
 the scrollbar's lane, so an overlay scrollbar never floats
-over a card's right edge. Panel mode is a panel flush
-against the right edge, full height, over the board, one
+over a card's right edge. Panel mode is a tab in the dock,
+flush against the right edge, full height, over the board, one
 column, with search, click-to-duplicate at the camera centre
 and drag-to-duplicate at the drop point. Whiteboard mode is
 a view replacing the canvas, laid out like Pinterest, which

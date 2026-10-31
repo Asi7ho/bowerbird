@@ -158,6 +158,7 @@ export interface PluginHost {
   // these elements in; plugins never query core DOM themselves.
   toolbarToolsEl: HTMLElement;
   panelsEl: HTMLElement;
+  panelsToggleEl: HTMLElement;
   pluginViewEl: HTMLElement;
   boardCanvasEls: HTMLElement[];
   viewSwitcherEl: HTMLElement;
@@ -252,7 +253,7 @@ interface LoadedPlugin {
 
 const cards = new Map<string, PluginCardDef & { pluginId: string }>();
 const tools = new Map<string, PluginToolDef & { pluginId: string; fullId: string }>();
-const panels = new Map<string, PluginPanelDef & { pluginId: string; el: HTMLElement; body: HTMLElement }>();
+const panels = new Map<string, PluginPanelDef & { pluginId: string; el: HTMLElement; body: HTMLElement; tab: HTMLElement; hidden: boolean }>();
 const views = new Map<string, PluginViewDef & { pluginId: string }>();
 const commands = new Map<string, PluginCommandDef & { pluginId: string }>();
 const overlays = new Map<string, PluginOverlayDef & { pluginId: string; el: HTMLElement }>();
@@ -265,6 +266,88 @@ let host: PluginHost | null = null;
 let bridge: PluginBridge | null = null;
 let activeView = "board";
 let pluginsReady = false;
+
+// Panel tabs state: one panel shown at a time, switched by
+// its tab. `hidden` is the showPanel/hidePanel state (a
+// panel with no tab); `activePanelKey` is which shown panel
+// is on screen. `dockVisible` is the tab-bar close and
+// title-bar toggle state — the dock can be closed while
+// panels are still shown, so it can be reopened with its
+// tabs and active panel intact.
+let activePanelKey: string | null = null;
+let dockVisible = true;
+let tabsEl: HTMLElement | null = null;
+let tabsListEl: HTMLElement | null = null;
+let tabsToggleWired = false;
+
+function wirePanelsToggle(): void {
+  // Title-bar toggle, wired once: it lives outside the
+  // dock, so it is still there when the dock is closed,
+  // and is how a closed dock comes back.
+  if (!host || !host.panelsToggleEl || tabsToggleWired) return;
+  tabsToggleWired = true;
+  host.panelsToggleEl.addEventListener("click", () => {
+    if (Array.from(panels.values()).every((p) => p.hidden)) return;
+    setDockVisible(!dockVisible);
+    host?.render();
+  });
+}
+
+function ensureTabsBar(): void {
+  if (!host || tabsEl) return;
+  tabsEl = document.createElement("div");
+  tabsEl.id = "plugin-tabs";
+  tabsEl.className = "plugin-tabs";
+  tabsListEl = document.createElement("div");
+  tabsListEl.className = "plugin-tabs-list";
+  const close = document.createElement("button");
+  close.className = "plugin-tabs-close";
+  close.textContent = "×";
+  close.title = "Hide panels";
+  close.setAttribute("aria-label", "Hide panels");
+  close.addEventListener("click", () => {
+    setDockVisible(false);
+    host?.render();
+  });
+  tabsEl.appendChild(tabsListEl);
+  tabsEl.appendChild(close);
+  host.panelsEl.appendChild(tabsEl);
+  wirePanelsToggle();
+}
+
+function visiblePanels(): Array<[string, PluginPanelDef & { pluginId: string; el: HTMLElement; body: HTMLElement; tab: HTMLElement; hidden: boolean }]> {
+  return Array.from(panels.entries()).filter(([, p]) => !p.hidden);
+}
+
+function updatePanelDock(): void {
+  if (!host) return;
+  const visible = visiblePanels();
+  const open = dockVisible && visible.length > 0;
+  host.panelsEl.style.width = open ? "290px" : "0px";
+  if (tabsEl) tabsEl.style.display = open ? "" : "none";
+  for (const [key, p] of panels.entries()) {
+    const active = !p.hidden && key === activePanelKey;
+    p.tab.style.display = p.hidden ? "none" : "";
+    p.tab.classList.toggle("active", active);
+    p.el.style.display = active ? "" : "none";
+  }
+  if (host.panelsToggleEl) {
+    host.panelsToggleEl.classList.toggle("active", open);
+    host.panelsToggleEl.classList.toggle("dim", visible.length === 0);
+  }
+}
+
+function setActivePanel(key: string): void {
+  const p = panels.get(key);
+  if (!p || p.hidden) return;
+  activePanelKey = key;
+  updatePanelDock();
+}
+
+function setDockVisible(visible: boolean): void {
+  dockVisible = visible;
+  updatePanelDock();
+}
 
 export function pluginsLoaded(): boolean {
   return pluginsReady;
@@ -443,12 +526,24 @@ function createContext(manifest: PluginManifest): PluginContext {
       registerSettingsSection: (def: PluginSettingsSectionDef) => registerSettingsSection(pluginId, def),
       registerShortcut: (def: PluginShortcutDef) => registerShortcut(pluginId, def),
       showPanel: (id: string) => {
-        const p = panels.get(`${pluginId}:${id}`);
-        if (p) { p.el.style.display = ""; host?.render(); }
+        // Showing a panel activates its tab, so the user
+        // actually sees it — a new tab in the background
+        // would be easy to miss.
+        const key = `${pluginId}:${id}`;
+        const p = panels.get(key);
+        if (p) { p.hidden = false; setActivePanel(key); host?.render(); }
       },
       hidePanel: (id: string) => {
-        const p = panels.get(`${pluginId}:${id}`);
-        if (p) { p.el.style.display = "none"; host?.render(); }
+        const key = `${pluginId}:${id}`;
+        const p = panels.get(key);
+        if (!p) return;
+        p.hidden = true;
+        if (activePanelKey === key) {
+          const next = visiblePanels()[0];
+          activePanelKey = next ? next[0] : null;
+        }
+        updatePanelDock();
+        host?.render();
       },
       getPanelElement: (id: string) => {
         const p = panels.get(`${pluginId}:${id}`);
@@ -542,35 +637,37 @@ function registerTool(pluginId: string, def: PluginToolDef): void {
 
 function registerPanel(pluginId: string, def: PluginPanelDef): void {
   if (!host) return;
+  ensureTabsBar();
+  // No per-panel header: the tab is the header. A panel
+  // is a body only; the tab bar, with one tab per panel,
+  // sits above the active panel and switches between them.
   const wrap = document.createElement("div");
   wrap.className = "plugin-panel";
   wrap.dataset.plugin = pluginId;
   wrap.dataset.panel = def.id;
-  const head = document.createElement("div");
-  head.className = "plugin-panel-head";
-  const title = document.createElement("span");
-  title.textContent = def.title;
-  const close = document.createElement("button");
-  close.textContent = "×";
-  close.title = "Close panel";
-  close.setAttribute("aria-label", "Close panel");
-  close.addEventListener("click", () => {
-    wrap.style.display = "none";
-    host?.render();
-  });
-  head.appendChild(title);
-  head.appendChild(close);
   const body = document.createElement("div");
   body.className = "plugin-panel-body";
-  wrap.appendChild(head);
   wrap.appendChild(body);
   host.panelsEl.appendChild(wrap);
-  panels.set(`${pluginId}:${def.id}`, { ...def, pluginId, el: wrap, body });
+  const tab = document.createElement("button");
+  tab.className = "plugin-tab";
+  tab.textContent = def.title;
+  tab.title = def.title;
+  tab.setAttribute("aria-label", def.title);
+  const key = `${pluginId}:${def.id}`;
+  tab.addEventListener("click", () => setActivePanel(key));
+  tabsListEl!.appendChild(tab);
+  panels.set(key, { ...def, pluginId, el: wrap, body, tab, hidden: false });
   try {
     def.render(body);
   } catch (e) {
     body.textContent = `Panel failed to render: ${String(e)}`;
   }
+  // First panel becomes active; later panels do not steal
+  // focus from the panel the user is already looking at.
+  if (activePanelKey === null) activePanelKey = key;
+  updatePanelDock();
+  host.render();
 }
 
 function registerCommand(pluginId: string, def: PluginCommandDef): void {
@@ -860,9 +957,15 @@ function unregisterPlugin(pluginId: string): void {
   for (const [key, p] of Array.from(panels.entries())) {
     if (p.pluginId === pluginId) {
       panels.delete(key);
+      p.tab.remove();
       p.el.remove();
     }
   }
+  if (activePanelKey && !panels.has(activePanelKey)) {
+    const next = visiblePanels()[0];
+    activePanelKey = next ? next[0] : null;
+  }
+  updatePanelDock();
   for (const [key, v] of Array.from(views.entries())) {
     if (v.pluginId === pluginId) views.delete(key);
   }
@@ -946,6 +1049,7 @@ async function deactivatePlugin(manifest: PluginManifest): Promise<void> {
 export async function initPlugins(h: PluginHost, b: PluginBridge): Promise<void> {
   host = h;
   bridge = b;
+  wirePanelsToggle();
   let manifests: PluginManifest[] = [];
   try {
     manifests = await b.listPlugins();
@@ -977,6 +1081,7 @@ export async function initPlugins(h: PluginHost, b: PluginBridge): Promise<void>
     }
   }
   renderViewSwitcher();
+  updatePanelDock();
   pluginsReady = true;
 }
 

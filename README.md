@@ -52,7 +52,7 @@ There is no handle tab.
   search field and its controls opt out of dragging, so typing
   never moves the window. The bar is layout, not an overlay:
   it spans the board area, and a panel dock on the right is
-  full window height, so a panel's header shares the top strip
+  full window height, so its mini tabs share the top strip
   with the bar instead of starting below it. The board and its
   views start below the bar and left of the panels, so nothing
   in the app ever slides over the bar or under a panel.

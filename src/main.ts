@@ -1800,6 +1800,7 @@ async function init(): Promise<void> {
     commitEditing: () => commitEditingIfAny(),
     toolbarToolsEl: document.getElementById("tools") as HTMLElement,
     panelsEl: document.getElementById("plugin-panels") as HTMLElement,
+    panelsToggleEl: document.getElementById("panels-toggle") as HTMLElement,
     pluginViewEl: document.getElementById("plugin-view") as HTMLElement,
     boardCanvasEls: [
       gridEl,

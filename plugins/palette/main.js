@@ -172,7 +172,7 @@ function attachPlaceInteractions(el) {
       // A drop back onto any UI cancels.
       const target = document.elementFromPoint(me.clientX, me.clientY);
       if (!target) return;
-      if (target.closest && (target.closest(".plugin-panel") || target.closest("#toolbar") || target.closest("#title-bar") || target.closest("#settings-backdrop") || target.closest("#view-switcher"))) return;
+      if (target.closest && (target.closest(".plugin-panel") || target.closest("#toolbar") || target.closest("#title-bar") || target.closest("#settings-backdrop") || target.closest("#view-switcher") || target.closest(".plugin-tabs"))) return;
       placeAt(hex, dropWorld(me.clientX, me.clientY));
     };
     window.addEventListener("mousemove", onMove);

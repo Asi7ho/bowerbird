@@ -309,7 +309,7 @@ function attachCardInteractions(wrap, item, mode) {
         // duplicates. A drop back onto any UI cancels.
         const el = document.elementFromPoint(me.clientX, me.clientY);
         if (!el) return;
-        if (el.closest && (el.closest('[data-panel="library"]') || el.closest("#toolbar") || el.closest("#plugin-view") || el.closest("#view-switcher") || el.closest("#search-box") || el.closest("#title-bar") || el.closest("#settings-sheet") || el.closest(".plugin-panel"))) return;
+        if (el.closest && (el.closest('[data-panel="library"]') || el.closest("#toolbar") || el.closest("#plugin-view") || el.closest("#view-switcher") || el.closest("#search-box") || el.closest("#title-bar") || el.closest("#settings-sheet") || el.closest(".plugin-tabs") || el.closest(".plugin-panel"))) return;
         duplicateAt(item, dropWorld(me.clientX, me.clientY), false);
       } else {
         // Whiteboard mode: the board is hidden behind the view,
