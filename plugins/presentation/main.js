@@ -778,7 +778,8 @@ async function exportSlides() {
   }
   try {
     let sections = "";
-    for (const slide of slides) {
+    for (let si = 0; si < slides.length; si++) {
+      const slide = slides[si];
       const frame = slide.frame;
       let cardsHtml = "";
       for (const item of slide.cards) {
@@ -786,7 +787,11 @@ async function exportSlides() {
         if (!html) continue;
         cardsHtml += `<div style="position:absolute;left:${item.pos.x - frame.pos.x}px;top:${item.pos.y - frame.pos.y}px;width:${item.size.w}px;height:${item.size.h}px">${html}</div>`;
       }
-      sections += `<section class="slide" style="width:${frame.size.w}px;height:${frame.size.h}px">${exportSlideSvg(slide)}${cardsHtml}</section>`;
+      // The first slide is active in the HTML itself, so
+      // the page shows a slide even without JavaScript;
+      // the script below then takes over navigation.
+      const active = si === 0 ? " active" : "";
+      sections += `<section class="slide${active}" style="width:${frame.size.w}px;height:${frame.size.h}px">${exportSlideSvg(slide)}${cardsHtml}</section>`;
     }
     const doc = `<!DOCTYPE html>
 <html lang="en">
@@ -795,8 +800,16 @@ async function exportSlides() {
 <title>Bowerbird slides</title>
 <style>
 :root { --accent:#007aff; --ink:#1d1d1f; --grey:#86868b; --hairline:rgba(0,0,0,0.08); --separator:rgba(0,0,0,0.10); --bg-system:#f5f5f7; --shadow-sm:0 1px 2px rgba(0,0,0,0.06); }
-body { margin:0; padding:32px; background:var(--bg-system); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif; letter-spacing:-0.01em; }
-.slide { position:relative; margin:0 auto 32px auto; background:#fff; border:1px solid var(--hairline); border-radius:12px; box-shadow:var(--shadow-sm); overflow:hidden; }
+body { margin:0; padding:32px; background:var(--bg-system); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif; letter-spacing:-0.01em; display:flex; flex-direction:column; align-items:center; gap:16px; }
+.export-nav { display:flex; align-items:center; gap:16px; }
+.export-nav button { flex:none; width:48px; height:48px; border:none; background:transparent; border-radius:9px; cursor:pointer; font-size:28px; line-height:1; color:var(--grey); display:flex; align-items:center; justify-content:center; }
+.export-nav button:hover { background:rgba(0,0,0,0.05); color:var(--ink); }
+.export-nav button:disabled { opacity:0.35; cursor:default; }
+.export-nav button:disabled:hover { background:transparent; color:var(--grey); }
+.export-counter { color:var(--grey); font-size:13px; font-weight:500; min-width:48px; text-align:center; }
+.export-hint { color:var(--grey); font-size:12px; }
+.slide { display:none; position:relative; margin:0; background:#fff; border:1px solid var(--hairline); border-radius:12px; box-shadow:var(--shadow-sm); overflow:hidden; }
+.slide.active { display:block; }
 .card { position:absolute; background:#fff; border:1px solid var(--hairline); border-radius:12px; overflow:hidden; box-shadow:var(--shadow-sm); pointer-events:none; }
 .card a, .card video, .card audio { pointer-events:auto; }
 .card .inner { width:100%; height:100%; overflow:hidden; }
@@ -831,14 +844,51 @@ body { margin:0; padding:32px; background:var(--bg-system); color:var(--ink); fo
 .card .swatch-pill { position:absolute; right:10px; bottom:10px; background:rgba(255,255,255,0.92); border:1px solid var(--hairline); border-radius:8px; padding:4px 8px; font-weight:600; font-size:12px; box-shadow:var(--shadow-sm); }
 .card .video-thumb { position:relative; background:#1d1d1f; border-radius:10px; display:flex; align-items:center; justify-content:center; color:#fff; text-decoration:none; }
 @media print {
-  body { background:#fff; padding:0; }
-  .slide { margin:0 auto; page-break-after:always; box-shadow:none; border:1px solid #ddd; }
+  body { display:block; background:#fff; padding:0; }
+  .export-nav, .export-hint { display:none; }
+  .slide { display:block !important; margin:0 auto; page-break-after:always; box-shadow:none; border:1px solid #ddd; }
   .slide:last-child { page-break-after:auto; }
 }
 </style>
 </head>
 <body>
+<nav class="export-nav"><button id="export-prev" aria-label="Previous slide" disabled>‹</button><span class="export-counter" id="export-counter">1 / ${slides.length}</span><button id="export-next" aria-label="Next slide"${slides.length <= 1 ? " disabled" : ""}>›</button></nav>
 ${sections}
+<div class="export-hint">← → to move</div>
+<script>
+(function () {
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var prev = document.getElementById('export-prev');
+  var next = document.getElementById('export-next');
+  var counter = document.getElementById('export-counter');
+  var index = 0;
+  function show(i) {
+    if (slides.length === 0) return;
+    index = Math.max(0, Math.min(slides.length - 1, i));
+    slides.forEach(function (s, j) {
+      s.classList.toggle('active', j === index);
+      if (j !== index) s.querySelectorAll('video, audio').forEach(function (m) { m.pause(); });
+    });
+    counter.textContent = (index + 1) + ' / ' + slides.length;
+    prev.disabled = index === 0;
+    next.disabled = index === slides.length - 1;
+  }
+  prev.addEventListener('click', function () { show(index - 1); });
+  next.addEventListener('click', function () { show(index + 1); });
+  document.addEventListener('keydown', function (e) {
+    var tag = e.target && e.target.tagName;
+    if (tag === 'VIDEO' || tag === 'AUDIO' || tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (e.key === 'ArrowLeft') show(index - 1);
+    else if (e.key === 'ArrowRight') show(index + 1);
+    else if (e.key === ' ') {
+      if (tag === 'BUTTON') return;
+      e.preventDefault();
+      show(index + 1);
+    }
+  });
+  show(0);
+})();
+</script>
 </body>
 </html>`;
     const blob = new Blob([doc], { type: "text/html;charset=utf-8" });
@@ -885,18 +935,6 @@ function initPanel(body) {
   draw.addEventListener("click", () => startDrawMode());
   actions.appendChild(draw);
   body.appendChild(actions);
-  const exportBtn = document.createElement("button");
-  exportBtn.className = "pres-panel-export";
-  // A download arrow, matching Draw's icon style, and a
-  // short label: Export sits below Play/Draw, on its own
-  // line, at Play's width, so it does not disturb the
-  // Play/Draw pair above it.
-  exportBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/></svg><span>Export</span>`;
-  exportBtn.title = "Export all slides as a single HTML file";
-  exportBtn.setAttribute("aria-label", "Export slides");
-  exportBtn.addEventListener("click", () => { void exportSlides(); });
-  panelExportBtn = exportBtn;
-  body.appendChild(exportBtn);
   const hint = document.createElement("div");
   hint.className = "pres-panel-hint";
   hint.textContent = "Draw a rectangle around cards to make a slide.";
@@ -904,6 +942,18 @@ function initPanel(body) {
   panelList = document.createElement("div");
   panelList.className = "pres-panel-list";
   body.appendChild(panelList);
+  const exportBtn = document.createElement("button");
+  exportBtn.className = "pres-panel-export";
+  // A download arrow, matching Draw's icon style, and a
+  // short label: Export sits at the bottom of the panel,
+  // below the slide list, at Play's width, so it does
+  // not disturb the Play/Draw pair at the top.
+  exportBtn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="M7 11l5 5 5-5"/><path d="M4 20h16"/></svg><span>Export</span>`;
+  exportBtn.title = "Export all slides as a single HTML file";
+  exportBtn.setAttribute("aria-label", "Export slides");
+  exportBtn.addEventListener("click", () => { void exportSlides(); });
+  panelExportBtn = exportBtn;
+  body.appendChild(exportBtn);
   syncFromBoard(true);
 }
 

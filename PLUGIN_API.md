@@ -516,14 +516,16 @@ board, not cards. Draw a rectangle around cards to make
 a slide, then play it: the panel lists slides in frame
 creation order, with Play, Draw a slide, and per-slide
 Play and Delete, and double-clicking a frame on the
-board plays from that slide. Export, in the same panel,
-downloads all slides, in order, as a single HTML file:
-images, audio and video are embedded as data URLs, so
-the file works offline and contains no app-file URLs;
-link cards become real links, audio cards become native
-audio players, and print CSS gives one slide per page,
-so the export can be opened anywhere and printed to
-PDF from a browser. Playing shows a frame's area, scaled to fit, almost
+board plays from that slide. Export, at the bottom of the same panel,
+downloads all slides, in order, as a single HTML file
+that shows one slide at a time, with arrows and a
+counter to move between slides: images, audio and
+video are embedded as data URLs, so the file works
+offline and contains no app-file URLs; link cards
+become real links, audio cards become native audio
+players, and print CSS gives one slide per page, so
+the export can be opened anywhere and printed to PDF
+from a browser. Playing shows a frame's area, scaled to fit, almost
 as a screenshot of that area: every card that overlaps
 the frame at all, every pen stroke that enters it,
 and every connector segment that enters it, in their
