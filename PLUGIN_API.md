@@ -407,12 +407,28 @@ is the user's escape hatch.
 ## Styling
 
 Plugin panels, tool buttons and card chrome follow Bowerbird's
-design system: same frosted panels, same 12px card radius, same
-typography and colours as core. A plugin's *content* — what it
-draws inside its canvas, view or card — is its own: a 3D scene
-looks like a 3D scene, a photo editor looks like a photo editor.
-Do not restyle core UI from a plugin, do not add branding, ads
-or a second toolbar inside a panel, and scope plugin CSS to the
+design system, using the core tokens, not hard-coded copies:
+SF type, ink `#1D1D1F`, grey `#86868B`, hairline
+`rgba(0,0,0,0.08)`, separator `rgba(0,0,0,0.10)`, fill
+`rgba(120,120,128,0.12)`, quiet grey field `#F5F5F7`, and
+the core shadows. Panels are opaque white, hairline on the
+left, no frost or floating shadow; a panel head is the core
+panel head (13px/600, hairline underneath) and a panel body
+is the core panel body (13px/1.5). A full-board view is a
+different surface: it uses the core view type (14px/1.6,
+padding 24px) with a document title (17px/700), not the
+panel head forced to match it. Cards are white, 12px radius,
+hairline border, soft shadow. Search fields are quiet grey
+fields with no border, icon buttons are borderless with a
+9px radius, text buttons are bordered white with a 9px
+radius, and small circular controls are white with a
+hairline border and a soft shadow. Same surface, same style
+— a panel in one plugin looks like a panel in another.
+A plugin's *content* — what it draws inside its canvas, view
+or card — is its own: a 3D scene looks like a 3D scene, a
+photo editor looks like a photo editor. Do not restyle core
+UI from a plugin, do not add branding, ads or a second
+toolbar inside a panel, and scope plugin CSS to the
 plugin's own containers (the core prefixes panel and view
 containers with `data-plugin="<id>"`; use that as your selector
 root).

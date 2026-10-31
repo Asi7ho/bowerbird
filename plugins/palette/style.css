@@ -24,27 +24,67 @@
   position: relative; width: 180px; height: 180px; margin: 4px auto 12px;
   cursor: crosshair; touch-action: none;
 }
-.pal-wheel { display: block; border-radius: 50%; }
+/* Hairline border defines the wheel edge on white, where
+   light hues (yellow, light green) would otherwise blend
+   into the panel — the same hairline board cards use. */
+.pal-wheel { display: block; border-radius: 50%; border: 1px solid var(--hairline); }
 .pal-marker {
   position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px;
   border-radius: 50%; border: 2px solid #fff;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35), inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+  /* Small-handle shadow, as the board's resize handle:
+     crisp, not the large floating shadow of a card. */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), inset 0 0 0 1px var(--separator);
   pointer-events: none;
 }
 .pal-preview-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .pal-preview {
-  flex: none; width: 48px; height: 48px; border-radius: 10px;
-  border: 1px solid rgba(0, 0, 0, 0.08); cursor: pointer; padding: 0;
+  flex: none; width: 48px; height: 48px; border-radius: 12px;
+  border: 1px solid var(--hairline); box-shadow: var(--shadow-sm);
+  cursor: pointer; padding: 0;
 }
-.plugin-panel-body .pal-preview { padding: 0; }
-.pal-hex { font-weight: 600; font-size: 14px; }
+/* Prefixed, so this beats the core .plugin-panel-body
+   button rule (class + element beats a lone class) on
+   border, radius and padding alike — an unprefixed tile
+   or preview rule loses border and radius to the core
+   9px/separator button, even when its own radius is 12px. */
+.plugin-panel-body .pal-preview {
+  border: 1px solid var(--hairline); border-radius: 12px;
+  box-shadow: var(--shadow-sm); padding: 0;
+}
+.pal-hex { font-weight: 600; font-size: 13px; }
 .pal-slider-row {
   display: flex; justify-content: space-between; align-items: baseline;
   margin-bottom: 4px;
 }
 .pal-slider-label { font-weight: 600; }
 .pal-slider-value { color: var(--grey); }
-.pal-slider { width: 100%; box-sizing: border-box; margin: 0; cursor: pointer; }
+/* Slider, in app style — not the browser default. Track is
+   the core fill grey, thumb is a white circle with a
+   hairline border and a soft shadow, like the toolbar
+   swatches, search clear button and Settings close button:
+   white circular controls on a quiet background. */
+.pal-slider {
+  -webkit-appearance: none; appearance: none;
+  width: 100%; box-sizing: border-box; margin: 0; cursor: pointer;
+  height: 20px; background: transparent; outline: none;
+}
+.pal-slider::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px; background: var(--fill);
+}
+.pal-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 20px; height: 20px; margin-top: -8px; border-radius: 50%;
+  background: #fff; border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-sm);
+}
+.pal-slider::-moz-range-track {
+  height: 4px; border-radius: 2px; background: var(--fill);
+}
+.pal-slider::-moz-range-thumb {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: #fff; border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-sm);
+}
 .plugin-panel[data-panel="palette"] .pal-sections {
   flex: none;
   /* 15px on the right is the scrollbar's own lane, not tile
@@ -54,27 +94,36 @@
      sit hard against it. */
   padding-right: 15px;
 }
-.pal-palette { margin-bottom: 20px; }
+.pal-palette { margin-bottom: 16px; }
 .pal-head { font-weight: 600; padding: 6px 4px 0; text-align: left; }
 .pal-desc { color: var(--grey); font-size: 12px; padding: 0 4px 8px; text-align: left; }
+/* Tile gap 8px, like the toolbar palette's 6px gap for small
+   swatches — not the masonry 16px gap for large cards. */
 .pal-row { display: flex; gap: 8px; }
 .pal-tile {
   flex: 1 1 auto; aspect-ratio: 1; min-width: 0;
-  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 10px;
+  /* Radius 12px, as a board card: a tile previews the
+     swatch card it will become, and the drag ghost and
+     board card are both 12px. Tiles stay flat, like a
+     colour palette and like the toolbar swatches, not
+     shadowed cards — the preview above is the card-like
+     one, with a shadow. */
+  border: 1px solid var(--hairline); border-radius: 12px;
   padding: 0; cursor: pointer;
 }
-/* The core .plugin-panel-body button rule would otherwise
-   give a tile 6px/12px padding, shrinking its colour area.
-   This rule beats it on specificity, so a tile has no
-   padding; its colour comes from its inline style, which
-   beats both rules. */
-.plugin-panel-body .pal-tile { padding: 0; }
+/* Prefixed, so this beats the core .plugin-panel-body
+   button rule on border, radius and padding alike — see
+   the preview rule above. A tile's colour comes from its
+   inline style, which beats both rules. */
+.plugin-panel-body .pal-tile {
+  border: 1px solid var(--hairline); border-radius: 12px; padding: 0;
+}
 .pal-tile:hover { filter: brightness(0.96); }
 .pal-tile:active { transform: scale(0.97); }
 /* Drag ghost: a board-size swatch, following the cursor. */
 .pal-ghost {
   position: fixed; z-index: 100; pointer-events: none;
   width: 120px; height: 120px; border-radius: 12px;
-  border: 1px solid rgba(0, 0, 0, 0.08); overflow: hidden; opacity: 0.9;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--hairline); overflow: hidden; opacity: 0.9;
+  box-shadow: var(--shadow-lg);
 }

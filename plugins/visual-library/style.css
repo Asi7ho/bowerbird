@@ -13,18 +13,16 @@
 .plugin-panel[data-panel="library"] .plugin-panel-body {
   display: flex; flex-direction: column; flex: 1 1 auto;
   min-height: 0; overflow: hidden;
-  /* Match the whiteboard view's type, not the core panel
-     default (13px/1.5): the panel and the view are the same
-     library, so search, headers and counts read the same. */
-  font-size: 14px; line-height: 1.6;
+  /* No type override: a panel is a panel, so it uses the
+     core panel type (13px/1.5), like every other panel.
+     The whiteboard view keeps the core view type (14px/1.6)
+     from #plugin-view, because a full-board view is a
+     different surface from a sidebar panel — same surface,
+     same style, not panel forced to match view. */
 }
-/* Match the view head, not a dialog header: the same 20px
-   bold title the whiteboard view uses, no rule under it.
-   The close button stays (it is how the panel closes);
-   only the title size, weight and rule change. */
-.plugin-panel[data-panel="library"] .plugin-panel-head {
-  font-size: 20px; font-weight: 700; padding: 12px; border-bottom: none;
-}
+/* Panel head: no override here — a panel head is the core
+   panel head (13px/600, 10px/12px, hairline underneath),
+   like every other panel, including Palette. */
 .plugin-panel[data-panel="library"] .vl-sections {
   flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; min-height: 0;
   /* 15px on the right is the scrollbar's own lane, not card
@@ -41,21 +39,26 @@
    mode switch. The button matches the search input's height. */
 .vl-search-row { display: flex; gap: 6px; margin-bottom: 12px; }
 .vl-search {
-  flex: 1; min-width: 0; box-sizing: border-box; padding: 6px 8px;
-  border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 8px;
-  font: inherit;
+  flex: 1; min-width: 0; box-sizing: border-box;
+  /* Core search field, as in the title bar: a quiet grey
+     field, no border, not a bordered white web input. */
+  padding: 6px 8px 6px 12px;
+  background: var(--bg-system); border: none; border-radius: 8px;
+  font: inherit; color: var(--ink); outline: none;
 }
-/* Button rules below are prefixed with a container class so
-   they beat the core .plugin-panel-body button rule (which
-   would otherwise give the icon button a 9px radius, 6px/12px
-   padding and weight 600). */
+.vl-search::placeholder { color: var(--grey); }
+/* Icon button, as a toolbar button: no border, transparent,
+   9px radius, hover a quiet black tint — not a bordered
+   white button, which is the core panel button style for
+   text buttons, not icon buttons. The prefix beats the
+   core .plugin-panel-body button rule. */
 .vl-search-row .vl-icon-btn {
   width: 32px; height: 32px; padding: 0; box-sizing: border-box;
-  border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 8px;
-  background: #fff; cursor: pointer; display: flex;
+  border: none; border-radius: 9px;
+  background: transparent; cursor: pointer; display: flex;
   align-items: center; justify-content: center; flex: none;
 }
-.vl-search-row .vl-icon-btn:hover { background: #f2f2f7; }
+.vl-search-row .vl-icon-btn:hover { background: rgba(0, 0, 0, 0.05); }
 /* Icon glyphs are pure CSS, so no asset is needed. Masonry:
    three columns of blocks. Sidebar: a main area with a
    right-hand bar. */
@@ -64,16 +67,16 @@
   width: 16px; height: 16px;
 }
 .vl-icon-masonry::before, .vl-icon-masonry::after {
-  content: ""; background: #1d1d1f; border-radius: 1px;
+  content: ""; background: var(--ink); border-radius: 1px;
 }
 .vl-icon-masonry::before { grid-row: span 2; }
 .vl-icon-sidebar {
-  width: 16px; height: 16px; border: 1.5px solid #1d1d1f;
+  width: 16px; height: 16px; border: 1.5px solid var(--ink);
   border-radius: 2px; position: relative; box-sizing: border-box;
 }
 .vl-icon-sidebar::after {
   content: ""; position: absolute; top: 0; right: 0; bottom: 0;
-  width: 5px; background: #1d1d1f; border-radius: 0 1px 1px 0;
+  width: 5px; background: var(--ink); border-radius: 0 1px 1px 0;
 }
 /* Sections: a header button (arrow, name, count) and a
    masonry body. The body is position relative so scaled
@@ -99,10 +102,10 @@
   border-radius: 0; cursor: pointer;
   font: inherit; font-weight: 600; text-align: left; box-sizing: border-box;
 }
-.vl-category .vl-category-head:hover { background: #f2f2f7; border-radius: 8px; border: none; }
-.vl-arrow { width: 12px; flex: none; text-align: center; }
+.vl-category .vl-category-head:hover { background: var(--fill); border-radius: 8px; border: none; }
+.vl-arrow { width: 12px; flex: none; text-align: center; color: var(--grey); }
 .vl-category-name { flex: 1 1 auto; min-width: 0; }
-.vl-count { color: #6e6e73; font-weight: 400; }
+.vl-count { color: var(--grey); font-weight: 400; }
 .vl-category-body { position: relative; }
 /* A library card wrapper: a positioning box at the column
    width, with the board card inside it, scaled uniformly to
@@ -117,10 +120,12 @@
 .vl-ghost {
   position: fixed; z-index: 100; pointer-events: none;
   overflow: hidden; opacity: 0.9;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--shadow-lg);
 }
 /* Whiteboard view: the head and the sections sit clear of the
    left toolbar, as the board does. */
 .vl-view-head { margin-bottom: 16px; margin-left: 60px; }
-.vl-view-head h2 { font-size: 20px; margin: 0 0 12px; }
+/* View title, as a document title in Settings: 17px/700,
+   not the old 20px, which was larger than any core title. */
+.vl-view-head h2 { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 12px; }
 #plugin-view .vl-sections { margin-left: 60px; }
