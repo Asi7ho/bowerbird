@@ -1,7 +1,12 @@
-/* Visual Library panel and whiteboard-view styles, scoped to .vl-* classes. */
-/* Panel mode: the panel fills the full height of the dock. The
-   panel body is a flex column so the grid scrolls inside it
-   while search, chips and buttons stay visible. */
+/* Visual Library panel and whiteboard-view styles, scoped to .vl-* classes.
+   One card, one section header, one search row in both modes:
+   the panel and the whiteboard differ only in column width,
+   never in card shape, padding, radius, border, shadow or type.
+   Cards use exactly the board card material: white, 12px
+   radius, hairline border, soft shadow. */
+/* Panel mode: the panel fills the full height of the flush
+   dock. The panel body is a flex column so the sections scroll
+   inside it while search and controls stay visible. */
 .plugin-panel[data-panel="library"] {
   flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0;
 }
@@ -9,81 +14,110 @@
   display: flex; flex-direction: column; flex: 1 1 auto;
   min-height: 0; overflow: hidden;
 }
-.vl-search {
-  width: 100%; box-sizing: border-box; padding: 6px 8px;
-  border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 8px;
-  font: inherit; margin-bottom: 6px;
-}
-.vl-row { display: flex; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
-.vl-row button, .vl-add {
-  flex: 1; padding: 6px 8px; border-radius: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.12); background: #fff;
-  cursor: pointer; font: inherit;
-}
-.vl-row button:hover, .vl-add:hover:not(:disabled) { background: #f2f2f7; }
-.vl-add { width: 100%; margin-top: 8px; }
-.vl-add:disabled { opacity: 0.5; cursor: default; }
-.vl-view-add { max-width: 320px; }
-.vl-path { word-break: break-all; }
-.vl-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
-.vl-chip {
-  border: 1px solid rgba(0, 0, 0, 0.12); background: #fff;
-  border-radius: 999px; padding: 4px 10px; cursor: pointer;
-  font: inherit; font-size: 12px;
-}
-.vl-chip:hover { background: #f2f2f7; }
-.vl-chip.active { background: #007AFF; color: #fff; border-color: #007AFF; }
-.vl-newcat { display: flex; gap: 6px; margin-top: 8px; }
-.vl-newcat input {
-  flex: 1; min-width: 0; padding: 6px 8px;
-  border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 8px; font: inherit;
-}
-.vl-newcat button {
-  padding: 6px 12px; border-radius: 8px;
-  border: 1px solid rgba(0, 0, 0, 0.12); background: #fff;
-  cursor: pointer; font: inherit;
-}
-.vl-newcat button:hover { background: #f2f2f7; }
-.vl-grid {
-  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;
+.plugin-panel[data-panel="library"] .vl-sections {
   flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; min-height: 0;
 }
-.vl-item {
-  background: #fff; border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 8px; padding: 6px; cursor: pointer;
-  text-align: left; font: inherit; min-width: 0;
+/* Search row: search input plus a single icon button for the
+   mode switch. The button matches the search input's height. */
+.vl-search-row { display: flex; gap: 6px; margin-bottom: 6px; }
+.vl-search {
+  flex: 1; min-width: 0; box-sizing: border-box; padding: 6px 8px;
+  border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 8px;
+  font: inherit;
 }
-.vl-item:hover { border-color: rgba(0, 122, 255, 0.5); }
-.vl-item img { width: 100%; height: 72px; object-fit: cover; border-radius: 4px; display: block; }
+/* Button rules below are prefixed with a container class so
+   they beat the core .plugin-panel-body button rule (which
+   would otherwise give panel cards a 9px radius, 6px/12px
+   padding and bold text while view cards kept the plugin
+   values — exactly the panel/whiteboard drift to avoid). */
+.vl-search-row .vl-icon-btn {
+  flex: none; width: 32px; height: 32px; padding: 0; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 8px;
+  background: #fff; cursor: pointer; color: var(--ink);
+}
+.vl-search-row .vl-icon-btn:hover { background: #f2f2f7; }
+/* Masonry icon: two columns, tall/short and short/tall. */
+.vl-icon-masonry { display: flex; gap: 2px; width: 18px; height: 16px; }
+.vl-icon-col { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.vl-icon-col span { background: var(--ink); border-radius: 1px; }
+.vl-icon-col-tall-first span:first-child { flex: 2; }
+.vl-icon-col-tall-first span:last-child { flex: 1; }
+.vl-icon-col-short-first span:first-child { flex: 1; }
+.vl-icon-col-short-first span:last-child { flex: 2; }
+/* Panel icon: main area on the left, sidebar bar on the right. */
+.vl-icon-panel { display: flex; gap: 2px; width: 18px; height: 16px; }
+.vl-icon-panel-main { flex: 1; border: 1px solid var(--ink); border-radius: 2px; }
+.vl-icon-panel-side { width: 5px; background: var(--ink); border-radius: 2px; }
+/* Controls: Add selected plus New category. They wrap, so the
+   same row is one line in the wide whiteboard view and two
+   lines in the narrow panel, with no separate layouts. */
+.vl-controls { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.vl-controls .vl-add {
+  flex: 1 1 auto; padding: 6px 8px; border-radius: 8px; box-sizing: border-box;
+  border: 1px solid rgba(0, 0, 0, 0.12); background: #fff;
+  cursor: pointer; font: inherit;
+}
+.vl-controls .vl-add:hover:not(:disabled) { background: #f2f2f7; }
+.vl-controls .vl-add:disabled { opacity: 0.5; cursor: default; }
+.vl-newcat { flex: 2 1 160px; display: flex; gap: 6px; min-width: 0; }
+.vl-newcat input {
+  flex: 1; min-width: 0; padding: 6px 8px; box-sizing: border-box;
+  border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 8px; font: inherit;
+}
+.vl-controls .vl-newcat button {
+  padding: 6px 12px; border-radius: 8px; box-sizing: border-box;
+  border: 1px solid rgba(0, 0, 0, 0.12); background: #fff;
+  cursor: pointer; font: inherit;
+}
+.vl-controls .vl-newcat button:hover { background: #f2f2f7; }
+/* Category dropdown sections. The header is a plain button,
+   like a section title anywhere else in the app; the body is
+   a masonry grid. A section being dragged over gets a soft
+   blue wash on its header, the app's selection colour. */
+.vl-category { margin-bottom: 12px; }
+.vl-category .vl-category-head {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 8px 4px; background: transparent; border: none;
+  cursor: pointer; text-align: left; font: inherit;
+  font-size: 14px; font-weight: 600; color: var(--ink);
+}
+.vl-category .vl-category-head:hover { background: rgba(0, 0, 0, 0.03); border-radius: 8px; }
+.vl-arrow { font-size: 12px; color: var(--grey); width: 12px; text-align: center; }
+.vl-category-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vl-category-count { color: var(--grey); font-weight: 400; }
+.vl-category.vl-drop-target .vl-category-head { background: rgba(0, 122, 255, 0.10); border-radius: 8px; }
+.vl-category-body { position: relative; }
+.vl-empty-category { margin: 0; padding: 8px 4px; min-height: 48px; box-sizing: border-box; border: 1px dashed rgba(0, 0, 0, 0.16); border-radius: 12px; }
+/* The one library card, in both modes. Images keep their
+   natural aspect ratio; PDF tiles keep 4:3 via aspect-ratio,
+   so height scales with column width and nothing is cropped. */
+.vl-sections .vl-card {
+  background: #fff; border: 1px solid var(--hairline);
+  border-radius: 12px; padding: 8px; cursor: pointer;
+  text-align: left; font: inherit; font-weight: 400; box-sizing: border-box;
+  box-shadow: var(--shadow-sm);
+}
+.vl-sections .vl-card:hover { border-color: rgba(0, 122, 255, 0.5); }
+.vl-sections .vl-card img { width: 100%; height: auto; display: block; border-radius: 6px; }
 .vl-pdf {
-  width: 100%; height: 72px; display: flex; align-items: center; justify-content: center;
-  background: #f2f2f7; border-radius: 4px; font-weight: 600; color: #007AFF;
+  width: 100%; aspect-ratio: 4 / 3; display: flex; align-items: center; justify-content: center;
+  background: #f2f2f7; border-radius: 6px; font-weight: 600; color: #007AFF;
 }
-.vl-name { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 4px; }
-.vl-size { font-size: 11px; color: #8a8a8e; }
-.vl-cat { font-size: 11px; color: #8a8a8e; margin-top: 2px; }
+.vl-name { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 4px; color: var(--ink); }
+.vl-size { font-size: 11px; color: var(--grey); }
+/* Drag ghost: a preview, not a card, so it keeps its old
+   compact size in both modes. */
 .vl-ghost {
   position: fixed; z-index: 100; pointer-events: none; opacity: 0.9;
   background: #fff; border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 8px;
   padding: 4px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18); width: 120px;
 }
 .vl-ghost img { width: 100%; height: 72px; object-fit: cover; border-radius: 4px; display: block; }
-/* Whiteboard mode: a Pinterest-like masonry layout. Items are
-   positioned by hand in main.js (each new item to the shortest
-   column), so columns fill the full width with varied heights;
-   CSS columns collapse to fewer columns in a scrollable view
-   and leave the right half empty, so they are not used here. */
+.vl-ghost .vl-pdf { height: 72px; }
+/* Whiteboard view: same controls, wider. The left toolbar
+   floats over the view, so view content starts right of it
+   instead of under it. */
 .vl-view-head { margin-bottom: 16px; margin-left: 60px; }
 .vl-view-head h2 { font-size: 20px; margin: 0 0 12px; }
-/* The left toolbar floats over the view, so view content starts
-   right of it instead of under it. */
-.vl-masonry { position: relative; margin-left: 60px; }
-.vl-masonry-item {
-  box-sizing: border-box; background: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 12px;
-  padding: 8px; cursor: pointer; text-align: left; font: inherit;
-}
-.vl-masonry-item:hover { border-color: rgba(0, 122, 255, 0.5); }
-.vl-masonry-item img { width: 100%; height: auto; display: block; border-radius: 6px; }
-.vl-masonry-item .vl-pdf { height: 180px; }
-.vl-masonry-item .vl-name { font-size: 13px; }
+#plugin-view .vl-sections { margin-left: 60px; }

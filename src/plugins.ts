@@ -122,6 +122,7 @@ export interface PluginBridge {
   pluginStorageDelete(pluginId: string, key: string): Promise<void>;
   listLibrary: () => Promise<{ path: string; items: Array<{ name: string; path: string; relativePath: string; ext: string; kind: string; category: string | null; size_bytes: number; mtime_ms: number }>; categories: Array<{ name: string; count: number }>; uncategorizedCount: number }>;
   createLibraryCategory: (name: string) => Promise<string>;
+  moveLibraryItem: (relativePath: string, category: string | null) => Promise<string>;
   addToLibrary: (filePath: string) => Promise<string>;
   // Window primitives: the main process owns the window and the
   // peek icon, so these are the only way a plugin can hide, show
@@ -218,6 +219,7 @@ export interface PluginContext {
     embedFile: (path: string) => Promise<string>;
     listLibrary: () => Promise<{ path: string; items: Array<{ name: string; path: string; relativePath: string; ext: string; kind: string; category: string | null; size_bytes: number; mtime_ms: number }>; categories: Array<{ name: string; count: number }>; uncategorizedCount: number }>;
   createLibraryCategory: (name: string) => Promise<string>;
+  moveLibraryItem: (relativePath: string, category: string | null) => Promise<string>;
     addToLibrary: (path: string) => Promise<string>;
     fileUrl: (path: string) => string;
     readTextFile: (path: string) => Promise<string>;
@@ -466,6 +468,10 @@ function createContext(manifest: PluginManifest): PluginContext {
       createLibraryCategory: async (name: string) => {
         require("files:embed");
         return bridge!.createLibraryCategory(name);
+      },
+      moveLibraryItem: async (relativePath: string, category: string | null) => {
+        require("files:embed");
+        return bridge!.moveLibraryItem(relativePath, category);
       },
       fileUrl: (path: string) => bridge!.fileUrl(path),
       readTextFile: async (path: string) => {

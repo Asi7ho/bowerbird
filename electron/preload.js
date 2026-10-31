@@ -35,4 +35,5 @@ contextBridge.exposeInMainWorld('bowerbird', {
   listLibrary: () => ipcRenderer.invoke('bowerbird:list-library'),
   createLibraryCategory: (name) => ipcRenderer.invoke('bowerbird:create-library-category', name),
   addToLibrary: (filePath) => ipcRenderer.invoke('bowerbird:add-to-library', filePath),
+  moveLibraryItem: (relativePath, category) => ipcRenderer.invoke('bowerbird:move-library-item', relativePath, category),
 });

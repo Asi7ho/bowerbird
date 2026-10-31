@@ -306,6 +306,15 @@ same bridge the core uses for its own cards).
   most 100 characters); `All` and `Uncategorized` are reserved
   because they are the virtual categories in the UI. Requires
   `files:embed`.
+- `moveLibraryItem(relativePath, category)` — move a library
+  file to another category (a subfolder, created if needed),
+  or to the library root when `category` is `null`
+  (Uncategorized). The source must already be inside the
+  library, the destination stays inside it, and only library
+  extensions move; a name clash at the destination is
+  deduplicated (`stem-1`, `stem-2`, …) like `addToLibrary`.
+  Returns the destination path, relative to the library.
+  Requires `files:embed`.
 - `fileUrl(path)` — the `app-file://` URL the renderer can use
   for an image, audio or video source.
 - `readTextFile(path)`, `fileSize(path)`
@@ -401,21 +410,28 @@ minimise, moved out of the core into a plugin. The main process
 still owns what a renderer plugin cannot do (hiding the window,
 showing the peek icon, remembering the corner), and everything
 the user sees lives in the plugin. The second is
-`visual-library/`: two modes over the same library folder.
-Panel mode is a panel in the right dock, full height of the app,
-over the board, with search, category chips, click-to-place at
-the camera centre and drag-to-place at the drop point, as
-ordinary Image and PDF cards. Whiteboard mode is a view
-replacing the canvas, laid out like Pinterest — a masonry grid
-with items' natural heights, click-to-place at the camera
-centre — which hides the panel while it is active and shows it
-again on the way back to the board. Categories are the
-library's subfolders (files in the root are Uncategorized),
-shown as chips in both modes, with a New category control and
-an Open folder button for organising in Finder. Its listing and
-copying are scoped to the library folder through the core, and
-its panel stretches with the full-height panel dock in the
-core CSS, so other panels dock top to bottom too.
+`visual-library/`: two modes over the same library folder,
+with the same masonry card in both. Panel mode is a panel
+flush against the right edge, full height, over the board,
+with search, click-to-place at the camera centre and
+drag-to-place at the drop point, as ordinary Image and PDF
+cards. Whiteboard mode is a view replacing the canvas, laid
+out like Pinterest — a masonry grid with items' natural
+heights, click-to-place at the camera centre — which hides
+the panel while it is active and shows it again on the way
+back to the board. Categories are the library's subfolders
+(files in the root are Uncategorized), shown as dropdown
+sections in both modes, with a New category control; dragging
+an item onto another category moves it there (see
+`moveLibraryItem`). There are no Refresh, Open folder or
+folder-path controls in the UI: the library refreshes
+automatically on mode switches, on window focus, and after
+in-app changes (the Refresh command remains in Settings →
+Plugins). Its listing, copying and moving are scoped to the
+library folder through the core. Panels in general are now a
+flush sidebar in the core CSS (opaque white, hairline left
+border, no frost or floating shadow), so a panel reads as
+part of the app, not an overlay card.
 
 ## What is not in v1
 

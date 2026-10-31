@@ -10,6 +10,7 @@ interface BowerbirdAPI {
   listLibrary(): Promise<{ path: string; items: Array<{ name: string; path: string; relativePath: string; ext: string; kind: string; category: string | null; size_bytes: number; mtime_ms: number }>; categories: Array<{ name: string; count: number }>; uncategorizedCount: number }>;
   addToLibrary(path: string): Promise<string>;
   createLibraryCategory(name: string): Promise<string>;
+  moveLibraryItem(relativePath: string, category: string | null): Promise<string>;
   readTextFile(path: string): Promise<string>;
   fileSize(path: string): Promise<number>;
   fetchPreview(url: string): Promise<{ title: string | null; description: string | null; image: string | null; icon: string | null }>;

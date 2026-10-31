@@ -640,6 +640,48 @@ function registerIpc() {
     return dir;
   });
 
+  ipcMain.handle('bowerbird:move-library-item', (_event, relativePath, category) => {
+    // Move a library file to another category (a subfolder), or to
+    // the library root when category is null (Uncategorized).
+    // Scoped: the source must already be inside the library, the
+    // destination stays inside it, and only library extensions move.
+    if (typeof relativePath !== 'string' || !relativePath || relativePath.startsWith('/') || relativePath.includes('..')) {
+      throw new Error('invalid library path');
+    }
+    const lib = libraryDir();
+    const src = path.join(lib, relativePath);
+    if (!src.startsWith(lib + path.sep)) throw new Error('source is outside the library');
+    const ext = path.extname(src).toLowerCase();
+    if (!LIBRARY_EXTS.has(ext)) throw new Error('not a library file');
+    let st;
+    try { st = fs.statSync(src); } catch { throw new Error('library file not found'); }
+    if (!st.isFile()) throw new Error('not a file');
+    let destDir = lib;
+    if (category !== null && category !== undefined) {
+      if (typeof category !== 'string') throw new Error('category must be a string or null');
+      const clean = category.trim();
+      if (!clean || clean.length > 100 || clean.includes('/') || clean.includes('\\') || clean.includes('..') || clean.startsWith('.')) {
+        throw new Error('category name must be a single folder name');
+      }
+      if (clean.toLowerCase() === 'all' || clean.toLowerCase() === 'uncategorized') {
+        throw new Error('All and Uncategorized are reserved');
+      }
+      destDir = path.join(lib, clean);
+      fs.mkdirSync(destDir, { recursive: true });
+    }
+    const base = path.basename(src);
+    let dest = path.join(destDir, base);
+    if (dest === src) return relativePath.split(path.sep).join('/');
+    // Deduplicate like embedFile/addToLibrary: stem-1, stem-2, …
+    if (fs.existsSync(dest)) {
+      const stem = path.basename(base, ext);
+      let n = 1;
+      do { dest = path.join(destDir, `${stem}-${n}${ext}`); n += 1; } while (fs.existsSync(dest));
+    }
+    fs.renameSync(src, dest);
+    return path.relative(lib, dest).split(path.sep).join('/');
+  });
+
   ipcMain.handle('bowerbird:add-to-library', (_event, filePath) => {
     const dir = libraryDir();
     fs.mkdirSync(dir, { recursive: true });

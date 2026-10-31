@@ -20,7 +20,7 @@
       }
     ]
   },
-  "description": "Your personal collection of images and PDFs, in two modes over the same library folder. Panel mode: a panel in the right dock, full height of the app, over the board \u2014 click to place at the camera centre, drag onto the board to place at the drop point. Whiteboard mode: a Pinterest-like masonry view replacing the canvas \u2014 click to place at the camera centre. Categories are the library's subfolders (files in the root are Uncategorized); organise in Finder or with the New category control, then Refresh. Placed items are ordinary Image or PDF cards, not plugin cards, so they survive with or without this plugin. This is a bundled plugin: it ships inside the app and is on by default.",
+  "description": "Your personal collection of images and PDFs, in two modes over the same library folder, with the same masonry card in both. Panel mode: a panel flush against the right edge, full height, over the board \u2014 click to place at the camera centre, drag onto the board to place at the drop point. Whiteboard mode: a Pinterest-like masonry view replacing the canvas \u2014 click to place at the camera centre. Categories are the library's subfolders, shown as dropdown sections; drag an item onto another category to move it there. The library refreshes automatically when you switch modes or return to the app. Placed items are ordinary Image or PDF cards, not plugin cards, so they survive with or without this plugin. This is a bundled plugin: it ships inside the app and is on by default.",
   "id": "visual-library",
   "main": "main.js",
   "name": "Visual Library",
@@ -33,5 +33,5 @@
   "styles": [
     "style.css"
   ],
-  "version": "1.1.0"
+  "version": "1.2.0"
 }

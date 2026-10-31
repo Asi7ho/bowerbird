@@ -371,21 +371,26 @@ button { font-family: inherit; }
    the toolbar, so plugin chrome looks like Bowerbird; what a plugin
    draws inside its panel or view is its own content. */
 #plugin-panels {
-  /* Full height of the board area: panels dock top to bottom,
-     not centred at 80vh. A panel that wants the full height
-     (Visual Library) stretches with flex; others stay auto. */
-  position: absolute; right: 12px; top: 12px; bottom: 12px;
-  display: flex; flex-direction: column; gap: 12px; width: 260px;
+  /* Flush sidebar, not a floating card: panels dock against
+     the right edge, top to bottom, with no gap to the window.
+     A panel that wants the full height (Visual Library)
+     stretches with flex; others stay auto. */
+  position: absolute; right: 0; top: 0; bottom: 0;
+  display: flex; flex-direction: column; gap: 0; width: 260px;
   overflow: auto; pointer-events: none; z-index: 10;
 }
 #plugin-panels::-webkit-scrollbar { display: none; }
 .plugin-panel {
-  pointer-events: auto; background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 16px;
-  box-shadow: var(--shadow-md); overflow: hidden;
+  /* Same material as a board card — opaque white, hairline
+     border, no frost, no floating shadow — so a panel reads
+     as part of the app, not something added on top of it.
+     Only the left edge carries a border (the flush edge);
+     stacked panels are separated by a bottom hairline. */
+  pointer-events: auto; background: #fff;
+  border: none; border-left: 1px solid var(--separator);
+  border-radius: 0; box-shadow: none; overflow: hidden;
 }
+.plugin-panel:not(:last-child) { border-bottom: 1px solid var(--separator); }
 .plugin-panel-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 12px; font-size: 13px; font-weight: 600;

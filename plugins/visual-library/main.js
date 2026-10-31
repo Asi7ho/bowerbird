@@ -1,53 +1,59 @@
 // Visual Library — bundled Bowerbird plugin (see PLUGIN_API.md).
 // Two modes over the same library folder on disk (board/library/,
 // temp folder in demo so a demo never touches the real library):
-//  - Panel mode: a panel in the right dock, full height of the
-//    app, over the board. Click places at the camera centre;
-//    drag places at the drop point.
+//  - Panel mode: a panel in the right dock, flush against the
+//    window edge, full height, over the board.
 //  - Whiteboard mode: a view replacing the canvas, laid out
-//    like Pinterest — a masonry grid of items with their natural
-//    heights. Click places at the camera centre; the board is
-//    hidden in this mode, so there is no drag-to-drop. Switching
-//    modes keeps the search and category filter, and the view
-//    hides the panel while it is active so the masonry gets the
-//    full board width, then shows the panel again on the way back.
-// Categories are the library's subfolders: a file's category is
-// the first folder under the library, files in the root are
-// Uncategorized. Organise in Finder (Open folder) or with the
-// New category control, then Refresh. Either way the result is
-// an ordinary Image or PdfCard, board-owned via files:embed,
-// not a plugin card — so it survives with or without this plugin.
-// Listing and copying are scoped to the library folder through
-// the core (api.files.listLibrary / addToLibrary); the plugin
-// never gets an arbitrary folder to list or copy to.
+//    like Pinterest.
+// Both modes show the same library, with the same card, in a
+// masonry grid: images keep their natural aspect ratio, PDF
+// tiles keep a 4:3 aspect ratio, so a card never changes shape
+// between modes — only its column width changes. The search
+// box is shared, and the mode switch is a single icon button
+// beside it (masonry icon for whiteboard, sidebar icon for
+// panel). There are no Refresh, Open folder or Folder-path
+// controls in the UI: the library refreshes automatically when
+// you switch modes, when the app regains focus, and after any
+// change you make in the app (the Refresh command still exists
+// in Settings → Plugins for a manual refresh).
+// Categories are the library's subfolders, shown as dropdown
+// sections (Uncategorized first, then folders alphabetically).
+// A section header expands or collapses it. Changing an
+// item's category is drag and drop: drag it onto another
+// category's section — header, grid, or an item inside it —
+// and it moves there. In panel mode, dragging an item out of
+// the panel onto the board still places it on the board, and
+// clicking an item places it at the camera centre in both
+// modes. Placed items are ordinary Image or PdfCards, board-
+// owned via files:embed, not plugin cards, so they survive
+// with or without this plugin. Listing, copying and moving
+// are scoped to the library folder through the core; the
+// plugin never gets an arbitrary folder.
 let apiRef = null;
 let items = [];
 let categories = [];
 let uncategorizedCount = 0;
-let libraryPath = "";
 let query = "";
-let selectedCategory = "all";
+let collapsed = new Set();
+let lastRefreshMs = 0;
+let currentRenderSeq = 0;
 
 // Panel refs (built once by initPanel).
 let panelSearch = null;
-let panelChips = null;
-let panelGrid = null;
-let panelCount = null;
-let panelPath = null;
+let panelSections = null;
 let panelAdd = null;
 let panelNewCat = null;
 
 // View refs (built on each activation, cleared on hide).
 let viewContainer = null;
 let viewBuilt = false;
-let masonrySeq = 0;
 let viewSearch = null;
-let viewChips = null;
-let viewMasonry = null;
-let viewCount = null;
-let viewPath = null;
+let viewSections = null;
 let viewAdd = null;
 let viewNewCat = null;
+
+let focusHandler = null;
+let resizeHandler = null;
 
 function formatSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -55,16 +61,25 @@ function formatSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function filtered() {
-  let list = items;
-  if (selectedCategory === "uncategorized") {
-    list = list.filter((it) => it.category === null);
-  } else if (selectedCategory !== "all") {
-    list = list.filter((it) => it.category === selectedCategory);
-  }
+function categoryKey(item) {
+  return item.category === null ? "uncategorized" : item.category;
+}
+
+function categoryLabel(key) {
+  return key === "uncategorized" ? "Uncategorized" : key;
+}
+
+function sectionsList() {
   const q = query.trim().toLowerCase();
-  if (q) list = list.filter((it) => it.name.toLowerCase().includes(q));
-  return list;
+  const keys = ["uncategorized", ...categories.map((c) => c.name)];
+  const out = [];
+  for (const key of keys) {
+    const inCat = items.filter((it) => categoryKey(it) === key);
+    const filtered = q ? inCat.filter((it) => it.name.toLowerCase().includes(q)) : inCat;
+    if (q && filtered.length === 0) continue;
+    out.push({ key, label: categoryLabel(key), total: inCat.length, items: filtered });
+  }
+  return out;
 }
 
 function loadImageSize(url) {
@@ -114,9 +129,28 @@ function dropWorld(clientX, clientY) {
   return { x: clientX / cam.zoom + cam.x, y: clientY / cam.zoom + cam.y };
 }
 
-function makeItemButton(item, masonry) {
+async function moveItem(item, destCategory) {
+  const destKey = destCategory === null ? "uncategorized" : destCategory;
+  try {
+    await apiRef.files.moveLibraryItem(item.relativePath, destCategory);
+    // Show the destination expanded, so the moved item is visible.
+    collapsed.delete(destKey);
+    apiRef.ui.toast(`Moved ${item.name} to ${destCategory === null ? "Uncategorized" : destCategory}`);
+    await refresh();
+  } catch (e) {
+    apiRef.ui.toast(`Could not move ${item.name}: ${String(e)}`);
+  }
+}
+
+function makeCard(item) {
+  // One card component for both modes: same padding, radius,
+  // border, shadow and typography as a board card, so a library
+  // card never looks like a different app. Images keep their
+  // natural aspect ratio (width 100%, height auto); PDF tiles
+  // keep a 4:3 aspect ratio via CSS, so height scales with
+  // column width in both modes instead of being cropped.
   const b = document.createElement("button");
-  b.className = masonry ? "vl-masonry-item" : "vl-item";
+  b.className = "vl-card";
   b.title = item.name;
   if (item.kind === "image") {
     const img = document.createElement("img");
@@ -138,21 +172,18 @@ function makeItemButton(item, masonry) {
   size.className = "vl-size";
   size.textContent = formatSize(item.size_bytes);
   b.appendChild(size);
-  if (masonry && item.category) {
-    const cat = document.createElement("div");
-    cat.className = "vl-cat";
-    cat.textContent = item.category;
-    b.appendChild(cat);
-  }
   return b;
 }
 
-function attachPanelDrag(b, item) {
-  // Drag to place: mouse tracking, not HTML5 drag, so the drop
-  // is a plain board position, not a file drop the core has to
-  // understand. A plain click (no drag) places at camera centre.
-  // Only in panel mode: in whiteboard mode the board is hidden,
-  // so there is nothing visible to drop onto.
+function clearDropHighlights() {
+  document.querySelectorAll(".vl-category.vl-drop-target").forEach((s) => s.classList.remove("vl-drop-target"));
+}
+
+function attachDrag(b, item, mode) {
+  // Drag with mouse tracking, not HTML5 drag, so the drop is a
+  // plain position or a plain category, not a file drop the
+  // core has to understand. A plain click (no drag) places at
+  // the camera centre in both modes.
   let dragged = false;
   let ghost = null;
   b.addEventListener("mousedown", (e) => {
@@ -183,16 +214,39 @@ function attachPanelDrag(b, item) {
         }
         ghost.style.left = `${me.clientX + 12}px`;
         ghost.style.top = `${me.clientY + 12}px`;
+        // Highlight the category section under the cursor, if any.
+        const el = document.elementFromPoint(me.clientX, me.clientY);
+        const cat = el ? el.closest("[data-category]") : null;
+        document.querySelectorAll(".vl-category.vl-drop-target").forEach((s) => {
+          if (s !== cat) s.classList.remove("vl-drop-target");
+        });
+        if (cat) cat.classList.add("vl-drop-target");
       }
     };
     const onUp = (me) => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
       if (ghost) { ghost.remove(); ghost = null; }
+      clearDropHighlights();
       if (!dragged) return;
-      // Dropped back on the panel itself: cancel, do not add.
-      if (me.target && me.target.closest && me.target.closest(".plugin-panel")) return;
-      addItemAt(item, null, dropWorld(me.clientX, me.clientY));
+      const target = me.target && me.target.closest ? me.target : null;
+      const catEl = target ? target.closest("[data-category]") : null;
+      if (catEl) {
+        const destKey = catEl.dataset.category;
+        const dest = destKey === "uncategorized" ? null : destKey;
+        if (dest !== item.category) moveItem(item, dest);
+        return;
+      }
+      if (mode === "panel") {
+        // Outside the panel, onto the board: place at the drop
+        // point. Onto the panel itself (but not a category),
+        // the toolbar, Settings, search or the view switcher:
+        // cancel, do not place under chrome.
+        if (target && target.closest(".plugin-panel, #toolbar, #settings, #search-box, #view-switcher")) return;
+        addItemAt(item, null, dropWorld(me.clientX, me.clientY));
+      }
+      // In whiteboard mode the board is hidden, so a drop that
+      // is not on a category cancels — placing is via click.
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
@@ -203,126 +257,134 @@ function attachPanelDrag(b, item) {
   });
 }
 
-function emptyMessage() {
-  if (items.length === 0) return "Library is empty. Drop images or PDFs into the library folder, then Refresh.";
-  if (query.trim()) return "No matches.";
-  if (selectedCategory !== "all") return "No items in this category yet — drop files into that folder, or use Open folder.";
-  return "No matches.";
-}
-
-function renderChips(into) {
-  into.innerHTML = "";
-  const mk = (key, label, count) => {
-    const chip = document.createElement("button");
-    chip.className = "vl-chip" + (selectedCategory === key ? " active" : "");
-    chip.textContent = count !== null && count !== undefined ? `${label} (${count})` : label;
-    chip.addEventListener("click", () => {
-      selectedCategory = key;
-      updateAllDynamic();
-    });
-    into.appendChild(chip);
-  };
-  mk("all", "All", items.length);
-  if (uncategorizedCount > 0 || selectedCategory === "uncategorized") {
-    mk("uncategorized", "Uncategorized", uncategorizedCount);
-  }
-  for (const c of categories) mk(c.name, c.name, c.count);
-}
-
-function renderPanelDynamic() {
-  if (!panelGrid) return;
-  if (panelPath) { panelPath.textContent = `Folder: ${libraryPath}`; panelPath.title = libraryPath; }
-  renderChips(panelChips);
-  const list = filtered();
-  panelGrid.innerHTML = "";
-  panelCount.textContent = items.length === 0
-    ? "Library is empty."
-    : `${list.length} of ${items.length} item${items.length === 1 ? "" : "s"}`;
-  if (list.length === 0) {
-    const msg = document.createElement("p");
-    msg.className = "meta";
-    msg.textContent = emptyMessage();
-    panelGrid.appendChild(msg);
-  } else {
-    for (const item of list) {
-      const b = makeItemButton(item, false);
-      attachPanelDrag(b, item);
-      panelGrid.appendChild(b);
-    }
-  }
-  updateAddButtons();
-}
-
-async function layoutMasonry(list) {
-  // True Pinterest-style masonry: items are placed in columns
-  // by hand, each new item going to the currently shortest
-  // column, so columns fill the full width with varied heights.
-  // CSS columns cannot do this reliably in a scrollable view:
-  // with a constrained height they collapse to fewer columns
-  // and leave the right half empty.
-  const seq = ++masonrySeq;
-  const container = viewMasonry;
-  if (!container) return;
-  container.innerHTML = "";
-  container.style.height = "auto";
-  if (list.length === 0) {
-    const msg = document.createElement("p");
-    msg.className = "meta";
-    msg.textContent = emptyMessage();
-    container.appendChild(msg);
-    return;
-  }
-  const gap = 16;
+async function layoutMasonry(container, list, minColWidth, gap, seq) {
+  // Pinterest-style masonry by hand: each new item goes to the
+  // currently shortest column, so columns fill the full width
+  // with varied heights. CSS columns cannot do this reliably
+  // in a scrollable view: with a constrained height they
+  // collapse to fewer columns and leave the right half empty.
+  if (!container.isConnected) return;
   const containerWidth = container.clientWidth;
   if (containerWidth <= 0) return;
-  const colCount = Math.max(1, Math.floor((containerWidth + gap) / (240 + gap)));
+  const colCount = Math.max(1, Math.floor((containerWidth + gap) / (minColWidth + gap)));
   const colWidth = (containerWidth - (colCount - 1) * gap) / colCount;
   const colHeights = new Array(colCount).fill(0);
   for (const item of list) {
     let contentHeight;
     if (item.kind === "image") {
       const size = await loadImageSize(apiRef.files.fileUrl(item.path));
-      if (seq !== masonrySeq || !viewMasonry) return;
+      if (seq !== currentRenderSeq || !container.isConnected) return;
       contentHeight = colWidth * (size.h / size.w);
     } else {
-      contentHeight = 180;
+      contentHeight = colWidth * 0.75; // PDF tile, 4:3 aspect ratio.
     }
-    // Card chrome under the thumbnail: name, size, and a
-    // category line when there is one, plus padding.
-    const chrome = item.category ? 68 : 52;
-    const height = contentHeight + chrome;
+    // Card chrome under the thumbnail: name, size, padding.
+    // Same card in both modes, so chrome is width-independent.
+    const height = contentHeight + 54;
     let col = 0;
     for (let i = 1; i < colCount; i++) {
       if (colHeights[i] < colHeights[col]) col = i;
     }
-    const b = makeItemButton(item, true);
+    const b = makeCard(item);
     b.style.position = "absolute";
     b.style.left = `${col * (colWidth + gap)}px`;
     b.style.top = `${colHeights[col]}px`;
     b.style.width = `${colWidth}px`;
-    b.addEventListener("click", () => addItemAt(item, cameraCentreWorld(), null));
+    attachDrag(b, item, container.dataset.vlMode);
     container.appendChild(b);
     colHeights[col] += height + gap;
   }
-  if (seq !== masonrySeq || !viewMasonry) return;
+  if (seq !== currentRenderSeq || !container.isConnected) return;
   container.style.height = `${Math.max(...colHeights) - gap}px`;
 }
 
-function renderViewDynamic() {
-  if (!viewMasonry) return;
-  if (viewPath) { viewPath.textContent = `Folder: ${libraryPath}`; viewPath.title = libraryPath; }
-  renderChips(viewChips);
-  const list = filtered();
-  viewCount.textContent = items.length === 0
-    ? "Library is empty."
-    : `${list.length} of ${items.length} item${items.length === 1 ? "" : "s"}`;
-  layoutMasonry(list);
-  updateAddButtons();
+function renderSections(container, mode, seq) {
+  container.innerHTML = "";
+  const sections = sectionsList();
+  if (items.length === 0) {
+    const msg = document.createElement("p");
+    msg.className = "meta";
+    msg.textContent = "Library is empty. Select an image or PDF on the board and use Add selected to library.";
+    container.appendChild(msg);
+    return;
+  }
+  if (sections.length === 0) {
+    const msg = document.createElement("p");
+    msg.className = "meta";
+    msg.textContent = "No matches.";
+    container.appendChild(msg);
+    return;
+  }
+  const minColWidth = mode === "panel" ? 110 : 240;
+  const gap = mode === "panel" ? 8 : 16;
+  for (const section of sections) {
+    const wrap = document.createElement("div");
+    wrap.className = "vl-category";
+    wrap.dataset.category = section.key;
+    const head = document.createElement("button");
+    head.className = "vl-category-head";
+    head.type = "button";
+    const isCollapsed = collapsed.has(section.key);
+    const arrow = document.createElement("span");
+    arrow.className = "vl-arrow";
+    arrow.textContent = isCollapsed ? "▸" : "▾";
+    head.appendChild(arrow);
+    const name = document.createElement("span");
+    name.className = "vl-category-name";
+    name.textContent = section.label;
+    head.appendChild(name);
+    const count = document.createElement("span");
+    count.className = "vl-category-count";
+    count.textContent = query.trim() ? `(${section.items.length})` : `(${section.total})`;
+    head.appendChild(count);
+    head.addEventListener("click", () => {
+      if (collapsed.has(section.key)) collapsed.delete(section.key);
+      else collapsed.add(section.key);
+      updateAllDynamic();
+    });
+    wrap.appendChild(head);
+    const body = document.createElement("div");
+    body.className = "vl-category-body";
+    body.dataset.vlMode = mode;
+    wrap.appendChild(body);
+    container.appendChild(wrap);
+    // The body must be in the document before layout runs:
+    // layout measures its width and checks isConnected, and a
+    // detached body has width 0, so layout would return early
+    // and the section would stay empty.
+    if (isCollapsed) {
+      body.style.display = "none";
+    } else if (section.items.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "meta vl-empty-category";
+      empty.textContent = section.key === "uncategorized"
+        ? "No uncategorized items — drag items here to remove them from a category."
+        : "Empty category — drag items here.";
+      body.appendChild(empty);
+    } else {
+      layoutMasonry(body, section.items, minColWidth, gap, seq);
+    }
+  }
+}
+
+function renderPanelDynamic(seq) {
+  // A hidden panel (whiteboard mode hides it) has no width to
+  // measure, so do not clear it while hidden — it is re-rendered
+  // on the way back, after it is shown again.
+  if (!panelSections || panelSections.offsetParent === null) return;
+  renderSections(panelSections, "panel", seq);
+}
+
+function renderViewDynamic(seq) {
+  if (!viewSections) return;
+  renderSections(viewSections, "view", seq);
 }
 
 function updateAllDynamic() {
-  renderPanelDynamic();
-  renderViewDynamic();
+  const seq = ++currentRenderSeq;
+  renderPanelDynamic(seq);
+  renderViewDynamic(seq);
+  updateAddButtons();
 }
 
 function selectedBoardFiles() {
@@ -370,49 +432,82 @@ async function createCategoryFrom(input) {
   }
 }
 
-function searchInputEl(placeholder, initial) {
+function masonryIcon() {
+  const icon = document.createElement("span");
+  icon.className = "vl-icon-masonry";
+  icon.setAttribute("aria-hidden", "true");
+  const left = document.createElement("span");
+  left.className = "vl-icon-col vl-icon-col-tall-first";
+  left.appendChild(document.createElement("span"));
+  left.appendChild(document.createElement("span"));
+  const right = document.createElement("span");
+  right.className = "vl-icon-col vl-icon-col-short-first";
+  right.appendChild(document.createElement("span"));
+  right.appendChild(document.createElement("span"));
+  icon.appendChild(left);
+  icon.appendChild(right);
+  return icon;
+}
+
+function panelIcon() {
+  const icon = document.createElement("span");
+  icon.className = "vl-icon-panel";
+  icon.setAttribute("aria-hidden", "true");
+  const main = document.createElement("span");
+  main.className = "vl-icon-panel-main";
+  const side = document.createElement("span");
+  side.className = "vl-icon-panel-side";
+  icon.appendChild(main);
+  icon.appendChild(side);
+  return icon;
+}
+
+function searchRow(mode) {
+  const row = document.createElement("div");
+  row.className = "vl-search-row";
   const input = document.createElement("input");
   input.className = "vl-search";
   input.type = "search";
-  input.placeholder = placeholder;
-  input.value = initial;
-  // Search only re-renders grids/chips, never the search input
+  input.placeholder = "Search library…";
+  input.value = query;
+  // Search only re-renders sections, never the search input
   // itself, so typing does not steal focus or reset the input.
   input.addEventListener("input", () => {
     query = input.value;
-    // Keep the other mode's search box in step when it is built.
     if (panelSearch && panelSearch !== input) panelSearch.value = query;
     if (viewSearch && viewSearch !== input) viewSearch.value = query;
     updateAllDynamic();
   });
-  return input;
-}
-
-function buttonsRow(withModeButton, modeLabel, onMode) {
-  const row = document.createElement("div");
-  row.className = "vl-row";
-  const refreshBtn = document.createElement("button");
-  refreshBtn.textContent = "Refresh";
-  refreshBtn.addEventListener("click", () => refresh());
-  row.appendChild(refreshBtn);
-  const openBtn = document.createElement("button");
-  openBtn.textContent = "Open folder";
-  openBtn.addEventListener("click", () => {
-    if (libraryPath) apiRef.files.openExternal(libraryPath).catch(() => undefined);
-  });
-  row.appendChild(openBtn);
-  if (withModeButton) {
-    const modeBtn = document.createElement("button");
-    modeBtn.textContent = modeLabel;
-    modeBtn.addEventListener("click", onMode);
-    row.appendChild(modeBtn);
+  row.appendChild(input);
+  const modeBtn = document.createElement("button");
+  modeBtn.className = "vl-icon-btn";
+  modeBtn.type = "button";
+  if (mode === "panel") {
+    modeBtn.title = "Whiteboard view";
+    modeBtn.setAttribute("aria-label", "Switch to whiteboard view");
+    modeBtn.appendChild(masonryIcon());
+    modeBtn.addEventListener("click", () => apiRef.view.setView("library"));
+  } else {
+    modeBtn.title = "Panel view";
+    modeBtn.setAttribute("aria-label", "Switch to panel view");
+    modeBtn.appendChild(panelIcon());
+    modeBtn.addEventListener("click", () => apiRef.view.setView("board"));
   }
-  return row;
+  row.appendChild(modeBtn);
+  return { row, input };
 }
 
-function newCategoryRow() {
-  const row = document.createElement("div");
-  row.className = "vl-newcat";
+function controlsRow() {
+  const wrap = document.createElement("div");
+  wrap.className = "vl-controls";
+  const addBtn = document.createElement("button");
+  addBtn.className = "vl-add";
+  addBtn.disabled = true;
+  addBtn.textContent = "Add selected to library";
+  addBtn.addEventListener("click", () => addSelectedToLibrary());
+  wrap.appendChild(addBtn);
+  const nc = document.createElement("div");
+  nc.className = "vl-newcat";
   const input = document.createElement("input");
   input.type = "text";
   input.placeholder = "New category…";
@@ -422,36 +517,23 @@ function newCategoryRow() {
   const btn = document.createElement("button");
   btn.textContent = "Create";
   btn.addEventListener("click", () => createCategoryFrom(input));
-  row.appendChild(input);
-  row.appendChild(btn);
-  return { row, input };
+  nc.appendChild(input);
+  nc.appendChild(btn);
+  wrap.appendChild(nc);
+  return { wrap, addBtn, input };
 }
 
 function initPanel(body) {
-  panelSearch = searchInputEl("Search library…", query);
-  body.appendChild(panelSearch);
-  body.appendChild(buttonsRow(true, "Whiteboard view", () => apiRef.view.setView("library")));
-  panelPath = document.createElement("p");
-  panelPath.className = "meta vl-path";
-  body.appendChild(panelPath);
-  panelCount = document.createElement("p");
-  panelCount.className = "meta";
-  body.appendChild(panelCount);
-  panelChips = document.createElement("div");
-  panelChips.className = "vl-chips";
-  body.appendChild(panelChips);
-  panelGrid = document.createElement("div");
-  panelGrid.className = "vl-grid";
-  body.appendChild(panelGrid);
-  panelAdd = document.createElement("button");
-  panelAdd.className = "vl-add";
-  panelAdd.disabled = true;
-  panelAdd.textContent = "Add selected to library";
-  panelAdd.addEventListener("click", () => addSelectedToLibrary());
-  body.appendChild(panelAdd);
-  const nc = newCategoryRow();
-  panelNewCat = nc.input;
-  body.appendChild(nc.row);
+  const sr = searchRow("panel");
+  panelSearch = sr.input;
+  body.appendChild(sr.row);
+  const cr = controlsRow();
+  panelAdd = cr.addBtn;
+  panelNewCat = cr.input;
+  body.appendChild(cr.wrap);
+  panelSections = document.createElement("div");
+  panelSections.className = "vl-sections";
+  body.appendChild(panelSections);
   apiRef.events.on("selection", updateAddButtons);
   apiRef.events.on("board", updateAddButtons);
   refresh();
@@ -463,31 +545,17 @@ function buildView(container) {
   const title = document.createElement("h2");
   title.textContent = "Visual Library";
   head.appendChild(title);
-  viewSearch = searchInputEl("Search library…", query);
-  head.appendChild(viewSearch);
-  head.appendChild(buttonsRow(true, "Panel view", () => apiRef.view.setView("board")));
-  viewPath = document.createElement("p");
-  viewPath.className = "meta vl-path";
-  head.appendChild(viewPath);
-  viewCount = document.createElement("p");
-  viewCount.className = "meta";
-  head.appendChild(viewCount);
-  viewChips = document.createElement("div");
-  viewChips.className = "vl-chips";
-  head.appendChild(viewChips);
-  viewAdd = document.createElement("button");
-  viewAdd.className = "vl-add vl-view-add";
-  viewAdd.disabled = true;
-  viewAdd.textContent = "Add selected to library";
-  viewAdd.addEventListener("click", () => addSelectedToLibrary());
-  head.appendChild(viewAdd);
-  const nc = newCategoryRow();
-  viewNewCat = nc.input;
-  head.appendChild(nc.row);
+  const sr = searchRow("view");
+  viewSearch = sr.input;
+  head.appendChild(sr.row);
+  const cr = controlsRow();
+  viewAdd = cr.addBtn;
+  viewNewCat = cr.input;
+  head.appendChild(cr.wrap);
   container.appendChild(head);
-  viewMasonry = document.createElement("div");
-  viewMasonry.className = "vl-masonry";
-  container.appendChild(viewMasonry);
+  viewSections = document.createElement("div");
+  viewSections.className = "vl-sections";
+  container.appendChild(viewSections);
   viewBuilt = true;
   viewContainer = container;
 }
@@ -497,29 +565,29 @@ function renderView(container) {
   // is active; rebuilding the shell each time would steal the
   // search box focus, so a built shell is only updated.
   if (viewBuilt && viewContainer === container) {
-    renderViewDynamic();
+    const seq = ++currentRenderSeq;
+    renderViewDynamic(seq);
+    updateAddButtons();
     return;
   }
   container.innerHTML = "";
   buildView(container);
-  renderViewDynamic();
+  updateAllDynamic();
 }
 
 async function refresh() {
   if (!apiRef) return;
   try {
     const res = await apiRef.files.listLibrary();
-    libraryPath = res.path;
     items = res.items;
     categories = res.categories;
     uncategorizedCount = res.uncategorizedCount;
-    // A category deleted outside the app must not leave a filter
-    // pointing at nothing.
-    if (selectedCategory !== "all" && selectedCategory !== "uncategorized" &&
-        !categories.some((c) => c.name === selectedCategory)) {
-      selectedCategory = "all";
+    // Prune collapsed entries for categories deleted outside
+    // the app, so a stale key never hides a new category.
+    for (const key of Array.from(collapsed)) {
+      if (key !== "uncategorized" && !categories.some((c) => c.name === key)) collapsed.delete(key);
     }
-    if (selectedCategory === "uncategorized" && uncategorizedCount === 0) selectedCategory = "all";
+    lastRefreshMs = Date.now();
   } catch (e) {
     if (apiRef) apiRef.ui.toast(`Could not list library: ${String(e)}`);
     items = [];
@@ -529,11 +597,22 @@ async function refresh() {
   updateAllDynamic();
 }
 
-let resizeHandler = null;
-
 export function activate(api) {
   apiRef = api;
-  resizeHandler = () => { if (viewMasonry) renderViewDynamic(); };
+  focusHandler = () => {
+    // No Refresh button in the UI: picking up files added
+    // outside the app happens when the app regains focus
+    // (for example after dropping files in Finder), debounced
+    // so focus changes do not refresh in a loop.
+    if (Date.now() - lastRefreshMs < 3000) return;
+    refresh();
+  };
+  window.addEventListener("focus", focusHandler);
+  resizeHandler = () => {
+    if (!viewSections) return;
+    const seq = ++currentRenderSeq;
+    renderViewDynamic(seq);
+  };
   window.addEventListener("resize", resizeHandler);
   api.ui.registerPanel({
     id: "library",
@@ -552,16 +631,16 @@ export function activate(api) {
     },
     onHide: () => {
       // Back to panel mode: the panel is the library again.
+      // Show it first, then refresh, so the re-render measures
+      // a visible panel instead of a hidden one.
+      api.ui.showPanel("library");
       viewBuilt = false;
       viewContainer = null;
       viewSearch = null;
-      viewChips = null;
-      viewMasonry = null;
-      viewCount = null;
-      viewPath = null;
+      viewSections = null;
       viewAdd = null;
       viewNewCat = null;
-      api.ui.showPanel("library");
+      refresh();
     },
   });
   api.ui.registerCommand({
@@ -575,23 +654,19 @@ export function deactivate() {
   // The core removes the panel, the view and the command on
   // deactivate. Panel listeners die with the removed panel DOM;
   // the ghost, if a drag was in flight, is removed on mouseup.
+  if (focusHandler) window.removeEventListener("focus", focusHandler);
   if (resizeHandler) window.removeEventListener("resize", resizeHandler);
+  focusHandler = null;
   resizeHandler = null;
   apiRef = null;
   panelSearch = null;
-  panelChips = null;
-  panelGrid = null;
-  panelCount = null;
-  panelPath = null;
+  panelSections = null;
   panelAdd = null;
   panelNewCat = null;
   viewContainer = null;
   viewBuilt = false;
   viewSearch = null;
-  viewChips = null;
-  viewMasonry = null;
-  viewCount = null;
-  viewPath = null;
+  viewSections = null;
   viewAdd = null;
   viewNewCat = null;
 }
