@@ -544,14 +544,22 @@ function activate(api) {
       // its right-hand columns, including the mode icon itself,
       // so hide the panel while the view is active.
       apiRef.ui.hidePanel("library");
-      // render() above already synced; only re-render here if the
-      // board changed in between, which a synchronous activation
-      // cannot do — so this normally skips, not re-renders.
-      if (viewBuilt && viewSections) syncFromBoard(false);
+      // The panel dock collapses when the panel hides, so the
+      // board (and the view inside it) widens by the panel's
+      // 290px: the view must be laid out again at the new,
+      // wider width, not kept at the narrower layout render()
+      // built before the panel hid. Force it, even when the
+      // board itself is unchanged.
+      if (viewBuilt && viewSections) syncFromBoard(true);
     },
     onHide: () => {
       viewContainerClear();
       apiRef.ui.showPanel("library");
+      // The panel is visible again at its fixed 290px, so the
+      // board narrowed back: re-lay the panel at its real
+      // width, in case it was re-rendered while hidden (width
+      // 0) during the view, before it is seen again.
+      syncFromBoard(true);
     },
   });
   apiRef.ui.registerCommand({

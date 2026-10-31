@@ -444,11 +444,11 @@ function createContext(manifest: PluginManifest): PluginContext {
       registerShortcut: (def: PluginShortcutDef) => registerShortcut(pluginId, def),
       showPanel: (id: string) => {
         const p = panels.get(`${pluginId}:${id}`);
-        if (p) p.el.style.display = "";
+        if (p) { p.el.style.display = ""; host?.render(); }
       },
       hidePanel: (id: string) => {
         const p = panels.get(`${pluginId}:${id}`);
-        if (p) p.el.style.display = "none";
+        if (p) { p.el.style.display = "none"; host?.render(); }
       },
       getPanelElement: (id: string) => {
         const p = panels.get(`${pluginId}:${id}`);
@@ -556,6 +556,7 @@ function registerPanel(pluginId: string, def: PluginPanelDef): void {
   close.setAttribute("aria-label", "Close panel");
   close.addEventListener("click", () => {
     wrap.style.display = "none";
+    host?.render();
   });
   head.appendChild(title);
   head.appendChild(close);
@@ -885,6 +886,7 @@ function unregisterPlugin(pluginId: string): void {
     if (!v) setActiveView("board");
   }
   renderViewSwitcher();
+  host?.render();
 }
 
 async function activatePlugin(manifest: PluginManifest): Promise<void> {

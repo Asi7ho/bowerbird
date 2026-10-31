@@ -51,8 +51,11 @@ There is no handle tab.
   it, and nothing else. The bar is the window drag region; the
   search field and its controls opt out of dragging, so typing
   never moves the window. The bar is layout, not an overlay:
-  the board, its panels and its views start below it, so nothing
-  in the app ever slides over it or hides under it.
+  it spans the board area, and a panel dock on the right is
+  full window height, so a panel's header shares the top strip
+  with the bar instead of starting below it. The board and its
+  views start below the bar and left of the panels, so nothing
+  in the app ever slides over the bar or under a panel.
 - **Vertical toolbar, left side:** a frosted vertical bar, centred on
   the left edge — Select, Pen,
   Arrow (connectors), the pen palette (only while Pen is active),
@@ -124,7 +127,8 @@ really restores the board.
 - **Pan:** hold `Space` and drag, or scroll without Ctrl. **Zoom:**
   `Ctrl` + scroll (keeps the point under the cursor fixed), or `+`/`-`,
   or the toolbar zoom buttons. The canvas fills the window below
-  the title bar and the toolbar floats over its left edge.
+  the title bar and left of the panels, and the toolbar floats
+  over its left edge.
 - **Select:** click an item, `Shift`-click to add to the selection, or drag
   a marquee around several items. Dragging one member of a group moves the
   whole group. `Ctrl/Cmd+G` groups the selection. Clicking a card brings

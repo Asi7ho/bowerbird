@@ -223,7 +223,8 @@ the board.
   `board:write` for tools that write, plus the tool contribution
   itself).
 - `registerPanel({ id, title, render })` — adds a panel to the
-  right dock. The dock is core-owned: panels stack vertically,
+  right dock, full window height, so a panel's header sits at
+  the title bar's level. The dock is core-owned: panels stack vertically,
   each with a core header (title + close button) and a body the
   plugin renders into. `render(container)` is called when the
   panel is created; the plugin should listen to `api.events` and

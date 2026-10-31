@@ -26,10 +26,15 @@ html, body {
   color: var(--ink);
   background: #fff;
 }
-/* The window is a column: the title bar on top, the board
-   below it. Nothing in the board can slide over the bar,
-   because the board's area starts below it. */
-body { display: flex; flex-direction: column; }
+/* The window is a row: a main column (title bar on top,
+   board below it) on the left, plugin panels on the right.
+   Panels are full window height, so a panel's header sits
+   at the title bar's level, sharing the top strip with it,
+   instead of starting below the bar. The board's area
+   starts below the bar and left of the panels, so nothing
+   in the board can slide over the bar or under a panel. */
+body { display: flex; flex-direction: row; }
+#main-column { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; min-height: 0; }
 button { font-family: inherit; }
 #board { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; user-select: none; -webkit-user-select: none; }
 
@@ -393,16 +398,26 @@ button { font-family: inherit; }
    draws inside its panel or view is its own content. */
 #plugin-panels {
   /* Flush sidebar, not a floating card: panels dock against
-     the right edge, top to bottom, with no gap to the window.
-     A panel that wants the full height (Visual Library)
-     stretches with flex; others stay auto. 290px, not 260px,
-     so a panel card is ~250px wide once body padding and the
-     scrollbar gutter are taken out — the same size as a
-     whiteboard-view card, with the same readable type. */
-  position: absolute; right: 0; top: 0; bottom: 0;
-  display: flex; flex-direction: column; gap: 0; width: 290px;
+     the right edge, full window height, with no gap to the
+     window top or bottom, so a panel's header sits at the
+     title bar's level. A panel that wants the full height
+     (Visual Library) stretches with flex; others stay auto.
+     290px, not 260px, so a panel card is ~250px wide once
+     body padding and the scrollbar gutter are taken out —
+     the same size as a whiteboard-view card, with the same
+     readable type. The dock is a flex sibling of the main
+     column, not an overlay on the board, so the board is
+     narrower while a panel is open and widens again when
+     the last visible panel closes: the width comes from
+     :has, because a hidden panel (display: none, as set
+     by hidePanel and the panel close button) is still a
+     child, and an empty or all-hidden dock must collapse
+     to 0 rather than leave a 290px gap. */
+  flex: none; align-self: stretch;
+  display: flex; flex-direction: column; gap: 0; width: 0;
   overflow: auto; pointer-events: none; z-index: 10;
 }
+#plugin-panels:has(> .plugin-panel:not([style*="display: none"])) { width: 290px; }
 #plugin-panels::-webkit-scrollbar { display: none; }
 .plugin-panel {
   /* Same material as a board card — opaque white, hairline
