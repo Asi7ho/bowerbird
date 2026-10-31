@@ -70,6 +70,7 @@ export interface PluginToolDef {
 export interface PluginPanelDef {
   id: string;
   title: string;
+  icon?: string;
   render: (container: HTMLElement) => void;
 }
 
@@ -651,7 +652,19 @@ function registerPanel(pluginId: string, def: PluginPanelDef): void {
   host.panelsEl.appendChild(wrap);
   const tab = document.createElement("button");
   tab.className = "plugin-tab";
-  tab.textContent = def.title;
+  // Tabs are icons only: the title stays as the tooltip
+  // and aria-label, so the panel is still named on hover
+  // and to screen readers, without text in the tab bar.
+  // A panel with no icon falls back to its title text,
+  // as tabs did before, so an icon is optional, not
+  // required for a panel to be usable.
+  if (def.icon) {
+    if (/<script/i.test(def.icon)) throw new Error(`Plugin ${pluginId} panel icon contains <script>`);
+    tab.innerHTML = def.icon;
+    tab.classList.add("has-icon");
+  } else {
+    tab.textContent = def.title;
+  }
   tab.title = def.title;
   tab.setAttribute("aria-label", def.title);
   const key = `${pluginId}:${def.id}`;

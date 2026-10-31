@@ -520,6 +520,9 @@ function activate(api) {
   apiRef.ui.registerPanel({
     id: "library",
     title: "Visual Library",
+    // Masonry grid, as the panel's own mode icon: a tall
+    // card on the left, two short cards on the right.
+    icon: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="4" width="7" height="16" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>',
     render: (container) => initPanel(container),
   });
   apiRef.ui.registerView({

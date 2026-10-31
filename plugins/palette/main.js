@@ -365,6 +365,10 @@ function activate(api) {
   apiRef.ui.registerPanel({
     id: "palette",
     title: "Palette",
+    // Colour-wheel dots, hue round the wheel as in the
+    // panel itself: red at the top, clockwise through
+    // orange, yellow, green, blue and purple.
+    icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="4.5" r="2.8" fill="#FF3B30"/><circle cx="18.5" cy="8.25" r="2.8" fill="#FF9500"/><circle cx="18.5" cy="15.75" r="2.8" fill="#FFCC00"/><circle cx="12" cy="19.5" r="2.8" fill="#34C759"/><circle cx="5.5" cy="15.75" r="2.8" fill="#007AFF"/><circle cx="5.5" cy="8.25" r="2.8" fill="#AF52DE"/></svg>',
     render: (container) => renderPanel(container),
   });
 }

@@ -474,18 +474,24 @@ button { font-family: inherit; }
 }
 #plugin-panels::-webkit-scrollbar { display: none; }
 /* Mini tabs, as a Settings segmented control: a fill-grey
-   pill with compact 13px/500 tabs, active tab white with
-   the segmented active shadow. Tabs are mini in height
-   and padding, not in name — full panel titles, so
-   Palette and Visual Library stay distinct at a glance.
-   The bar is 48px, as the title bar, with a hairline
-   underneath that lines up with the title bar's rule.
-   The close button is the old panel-head close, moved
-   here: it hides the whole dock, not one tab. */
+   pill with icon tabs, active tab white with the
+   segmented active shadow. Tabs are icons only — the
+   panel title is the tooltip and aria-label, not text
+   in the bar — so the pill is compact and the tab bar
+   stays quiet. The bar is 48px, as the title bar, with
+   a hairline underneath that lines up with the title
+   bar's rule, and a hairline on the left that lines up
+   with the panel's left edge: together they are the
+   separation between the panel dock and the title bar,
+   continuous from the top of the window to the bottom,
+   not just below the tab bar. The close button is the
+   old panel-head close, moved here: it hides the whole
+   dock, not one tab. */
 .plugin-tabs {
   flex: none; height: 48px; display: flex; align-items: center;
   justify-content: space-between; gap: 8px; padding: 0 12px;
   background: #fff; border-bottom: 1px solid var(--separator);
+  border-left: 1px solid var(--separator);
   pointer-events: auto; overflow: hidden;
 }
 .plugin-tabs-list {
@@ -500,6 +506,16 @@ button { font-family: inherit; }
   font-size: 13px; font-weight: 500; color: var(--ink);
   white-space: nowrap;
 }
+/* Icon tab: a 32px square, icon centred, as a toolbar
+   button at tab-bar size. The SVG itself sets its own
+   colours (Palette dots are coloured, Visual Library
+   is ink stroke via currentColor), so the core only
+   sets size here, never a fill or stroke override. */
+.plugin-tab.has-icon {
+  width: 32px; height: 32px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.plugin-tab.has-icon svg { width: 20px; height: 20px; display: block; }
 .plugin-tab.active {
   background: #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);

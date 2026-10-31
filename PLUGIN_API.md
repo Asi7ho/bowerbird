@@ -222,11 +222,15 @@ the board.
   tool in the manifest; the permission name in the manifest is
   `board:write` for tools that write, plus the tool contribution
   itself).
-- `registerPanel({ id, title, render })` — adds a panel to the
+- `registerPanel({ id, title, icon, render })` — adds a panel to the
   right dock, full window height, as a mini tab in the dock's
   tab bar. The dock is core-owned: one panel is shown at a
   time, switched by its tab; the tab is the panel's header,
-  there is no per-panel header. A close button in the tab
+  there is no per-panel header. Tabs are icons only: `icon`
+  is an SVG string, as a tool icon, shown at 20px in a
+  32px tab; the title stays as the tab's tooltip and
+  aria-label. A panel with no icon falls back to its
+  title text in the tab. A close button in the tab
   bar hides the whole dock, and a panels toggle in the
   title bar shows it again with its tabs and active panel
   intact. `render(container)` is called when the panel is
@@ -418,10 +422,13 @@ SF type, ink `#1D1D1F`, grey `#86868B`, hairline
 `rgba(120,120,128,0.12)`, quiet grey field `#F5F5F7`, and
 the core shadows. Panels are opaque white, hairline on the
 left, no frost or floating shadow; the tab bar is 48px, as
-the title bar, with a hairline underneath, its tabs are a
-segmented control (fill-grey pill, 13px/500 tabs, active
-tab white with the segmented active shadow), and a panel
-body is the core panel body (13px/1.5). A full-board view is a
+the title bar, with a hairline underneath and a hairline
+on the left — the vertical separation between the panel
+dock and the title bar, continuous with the panel's left
+edge — its tabs are a segmented control (fill-grey pill,
+32px icon tabs, active tab white with the segmented
+active shadow), and a panel body is the core panel body
+(13px/1.5). A full-board view is a
 different surface: it uses the core view type (14px/1.6,
 padding 24px) with a document title (17px/700), not the
 tab bar forced to match it. Cards are white, 12px radius,
