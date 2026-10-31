@@ -511,22 +511,41 @@ drop point, the same interaction as Visual Library.
 Placed swatches are ordinary board Swatch items, so they
 survive disabling the plugin. No network, no storage,
 and the plugin needs only `board:write`.
-The fourth is `presentation/`: a view, not a panel, that
-steps through the board's cards one at a time, large and
-centred, for presenting a moodboard. Slides are in board
-order, the same order Tab steps through on the board;
-side arrows, arrow keys and Space move, Esc returns to
-the board, and a counter shows where you are. A video
-plays in place, an audio card plays in place through
-the plugin's own player, a link opens outside the app;
-clicking anywhere else on a slide does nothing, so
-media never moves you on by accident. There is no
-reordering and no editing in presentation, and it hides
-nothing but the board itself — panels, the toolbar and
-the view switcher stay where the user left them, so a
-clean full-width presentation starts by hiding the dock
-with the title-bar toggle. It needs only
-`view:replace` and `files:read` (for opening links).
+The fourth is `presentation/`: slides are frames on the
+board, not cards. Draw a rectangle around cards to make
+a slide, then play it: the panel lists slides in frame
+creation order, with Play, Draw a slide, and per-slide
+Play and Delete, and double-clicking a frame on the
+board plays from that slide. Playing shows a frame's
+area, scaled to fit, with its cards in their board
+positions, cropped to the frame; a video plays in place,
+an audio card plays in place through the plugin's own
+player, a link opens outside the app, and clicking
+anywhere else on a slide does nothing. It hides nothing
+but the board itself — panels, the toolbar and the view
+switcher stay where the user left them, so a clean
+full-width presentation starts by hiding the dock with
+the title-bar toggle. It needs `board:write` (for
+frames), `view:replace` and `files:read` (for opening
+links).
+
+## Frame cards
+
+A plugin card can be a frame, by setting `frame: true`
+in its card def. A frame is a container, not content:
+on the board it renders as a transparent dashed border
+only, never hiding the cards inside it, and in board
+interaction it is hit-tested after every other card, so
+clicking a card inside a frame selects the card, not
+the frame, and clicking empty space inside a frame
+selects the frame. Frames are never brought to the
+front on click, so their board order — and therefore
+any frame-based order, like a presentation's slide
+order — never changes just by selecting a frame.
+Frame cards should use kind `"slide"` by convention, so
+library-style plugins can exclude them from content
+lists, as Visual Library does: a slide border is not a
+library card.
 
 ## What is not in v1
 

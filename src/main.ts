@@ -44,7 +44,7 @@ import {
   resizeItem, select, tileColorFor, tint,
 } from "./model";
 import {
-  emitPluginEvent, getActiveView, getCardHtml, getPluginCardSearchText,
+  emitPluginEvent, getActiveView, getCardHtml, getCardRenderer, getPluginCardSearchText,
   getPluginTool, handlePluginCardAction, handlePluginCardDoubleClick, handlePluginShortcut,
   initPlugins, listLoadedPlugins, listPluginCommands, listPluginShortcuts,
   refreshActiveView, renderSettingsSections, runPluginCommand,
@@ -243,11 +243,37 @@ function safeHttpUrl(u: string | null | undefined): string | null {
   }
 }
 
+function isFrameCard(it: Item | undefined): boolean {
+  if (!it || !("Plugin" in it.kind)) return false;
+  return getCardRenderer(it)?.frame === true;
+}
+
+function hitTestWithFrames(b: Board, world: Pt): number | null {
+  // A frame is a container, not content: a card inside a frame
+  // must win over the frame itself, or cards inside a slide
+  // could never be grabbed, moved or edited once framed.
+  // Try everything except frames first; only if nothing else
+  // covers the point does the frame itself win, which is
+  // exactly clicking empty space inside a frame. When the
+  // plugin that owns a frame is disabled, its card def is
+  // gone, so it falls back to a normal card, matching its
+  // placeholder rendering, which is opaque, not a frame.
+  const filtered: Board = { ...b, items: b.items.filter((it) => !isFrameCard(it)) };
+  const hit = hitTest(filtered, world);
+  if (hit !== null) return hit;
+  return hitTest(b, world);
+}
+
 function bringToFront(ids: number[]): void {
   // Later items paint on top, so a clicked card (and its group) comes
-  // to the front.
-  const front = board.items.filter((it) => ids.includes(it.id));
-  const rest = board.items.filter((it) => !ids.includes(it.id));
+  // to the front. Frames never come to the front: their board order
+  // is a frame-based order (a presentation's slide order), and
+  // clicking a frame to move it must not reorder its slides.
+  // Frames also render as transparent borders, so staying behind
+  // later cards is correct visually, not just for order.
+  const nonFrames = ids.filter((id) => !isFrameCard(boardGet(board, id)));
+  const front = board.items.filter((it) => nonFrames.includes(it.id));
+  const rest = board.items.filter((it) => !nonFrames.includes(it.id));
   board.items = [...rest, ...front];
 }
 
@@ -381,7 +407,8 @@ function cardHtml(item: Item, plain = false): string {
     const ww0 = item.size.w, hh0 = item.size.h;
     const style0 = `left:${item.pos.x}px;top:${item.pos.y}px;width:${ww0}px;height:${hh0}px;`;
     const inner = getCardHtml(item) ?? "";
-    return `<div class="${cls}" data-id="${item.id}" style="${style0}"><div class="inner">${inner}</div></div>`;
+    const frameCls = getCardRenderer(item)?.frame === true ? " plugin-frame" : "";
+    return `<div class="${cls}${frameCls}" data-id="${item.id}" style="${style0}"><div class="inner">${inner}</div></div>`;
   }
   // Cards live in world coordinates; the whole #cards layer is
   // transformed once by the camera (see applyCamera). Per-card
@@ -747,7 +774,7 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
     return;
   }
   if (tool === "connector") {
-    const hit = hitTest(board, world);
+    const hit = hitTestWithFrames(board, world);
     const hitItem = hit !== null ? boardGet(board, hit) : null;
     const anchorable = hitItem && !("Stroke" in hitItem.kind) && !("Connector" in hitItem.kind);
     drag = { kind: "connector", from: hitItem && anchorable ? { Item: hitItem.id } : { Point: world }, current: world };
@@ -759,7 +786,7 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
     // this handler and steals focus from a textarea created here, so
     // typing would never land in a new or edited note.
     e.preventDefault();
-    const hit = hitTest(board, world);
+    const hit = hitTestWithFrames(board, world);
     if (hit !== null) {
       const it = boardGet(board, hit);
       if (it && "Plugin" in it.kind && handlePluginCardDoubleClick(it)) return;
@@ -775,7 +802,7 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
       return;
     }
   }
-  const clicked = hitTest(board, world);
+  const clicked = hitTestWithFrames(board, world);
   if (selected.length === 1 && cornerHit(selected[0], world)) {
     const sel = selected[0];
     const it = boardGet(board, sel);
@@ -858,7 +885,7 @@ window.addEventListener("mousemove", (e: MouseEvent) => {
           boardEl.style.cursor = "grab";
         } else if (selected.length === 1 && cornerHit(selected[0], w)) {
           boardEl.style.cursor = "nwse-resize";
-        } else if (hitTest(board, w) !== null) {
+        } else if (hitTestWithFrames(board, w) !== null) {
           boardEl.style.cursor = "move";
         } else {
           boardEl.style.cursor = "default";
@@ -945,7 +972,7 @@ window.addEventListener("mouseup", (e: MouseEvent) => {
       save();
     }
   } else if (d.kind === "connector") {
-    const to = hitTest(board, world);
+    const to = hitTestWithFrames(board, world);
     const toItem = to !== null ? boardGet(board, to) : null;
     const toAnchorable = toItem && !("Stroke" in toItem.kind) && !("Connector" in toItem.kind);
     const toAnchor: Anchor = toItem && toAnchorable ? { Item: toItem.id } : { Point: world };
@@ -1399,7 +1426,7 @@ function renderPluginSettings(): void {
     hide: "Hides the board into a corner.",
     "visual-library": "The board's cards, as a library.",
     palette: "Colour palettes to place as swatches.",
-    presentation: "The board's cards, one at a time.",
+    presentation: "Slides on the board, played in order.",
   };
   let html = "";
   for (const lp of plugins) {

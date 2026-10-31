@@ -118,6 +118,19 @@ button { font-family: inherit; }
   border-color: rgba(0, 122, 255, 0.5);
   box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.35), var(--shadow-md);
 }
+/* Frame cards are containers, not content: a transparent
+   dashed border only, so the cards inside a frame stay
+   visible on the board, and the frame reads as a slide
+   border, not as another card. Selected, the dash turns
+   blue, as a selected card's ring does. */
+.card.plugin-frame {
+  background: transparent; border: 2px dashed rgba(0, 0, 0, 0.20);
+  box-shadow: none;
+}
+.card.plugin-frame.selected {
+  border-color: rgba(0, 122, 255, 0.6);
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.25);
+}
 .card .inner { width: 100%; height: 100%; overflow: hidden; }
 .card button, .card .clickable, .card textarea, .card a, .card video, .card input { pointer-events: auto; }
 .card .note-body { padding: 14px; line-height: 1.55; word-wrap: break-word; }

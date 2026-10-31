@@ -57,6 +57,19 @@ export interface PluginCardDef {
   onDoubleClick?: (item: Item, data: unknown) => void;
   onAction?: (action: string, item: Item, data: unknown) => void;
   searchText?: (data: unknown) => string;
+  // A frame card is a container, not content: on the board
+  // it renders as a transparent dashed border only, so it
+  // never hides the cards inside it, and in board interaction
+  // it is hit-tested after every other card, so clicking a
+  // card inside a frame selects the card, not the frame, and
+  // clicking empty space inside a frame selects the frame.
+  // Frames are also never brought to the front on click, so
+  // their board order — and therefore a frame-based order
+  // like a presentation's slide order — never changes just
+  // by selecting a frame. Frame cards should use kind
+  // "slide" by convention, so library-style plugins can
+  // exclude them from content lists, as Visual Library does.
+  frame?: boolean;
 }
 
 export interface PluginToolDef {

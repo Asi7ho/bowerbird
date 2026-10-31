@@ -3,8 +3,9 @@
    Same surface, same style: core grey for counter and hint,
    core panel button for Back to board, toolbar-style
    borderless arrows for Previous/Next, core card for the
-   slide itself (the card brings its own white, radius and
-   shadow, so the stage adds none). */
+   cards inside a slide (a slide itself is a white card
+   with a hairline border and soft shadow, so it reads as
+   a slide on the white view background). */
 #plugin-view[data-plugin="presentation"] .pres-root {
   display: flex; flex-direction: column; height: 100%; min-height: 0;
   /* The toolbar floats over the view at the left, about
@@ -19,7 +20,7 @@
   /* Stretch, not centre: the stage must take the row's full
      height, or its height collapses to its content and the
      scale calculation — which reads the stage height — feeds
-     on itself and shrinks the card to a pixel. The arrows
+     on itself and shrinks the slide to a pixel. The arrows
      centre themselves instead, below. */
   display: flex; align-items: stretch; gap: 16px;
   flex: 1 1 auto; min-height: 0;
@@ -44,8 +45,14 @@
   display: flex; align-items: center; justify-content: center;
   overflow: hidden;
 }
-#plugin-view[data-plugin="presentation"] .pres-card-wrap {
-  flex: none; position: relative;
+#plugin-view[data-plugin="presentation"] .pres-slide-wrap {
+  flex: none; position: relative; background: #fff;
+  border: 1px solid var(--hairline); border-radius: 12px;
+  box-shadow: var(--shadow-sm); overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+#plugin-view[data-plugin="presentation"] .pres-slide-card-wrap {
+  position: absolute; flex: none;
 }
 #plugin-view[data-plugin="presentation"] .pres-empty {
   text-align: center; color: var(--grey);
@@ -76,4 +83,103 @@
 }
 #plugin-view[data-plugin="presentation"] .pres-back:hover {
   background: var(--fill);
+}
+
+/* Slide border on the board: a label, not a card. This
+   lives in #cards, not in a plugin container, so it is
+   scoped to #cards, not to a view or panel. The label
+   never takes clicks itself — the board's geometry
+   decides what a click selects, not this label. */
+#cards .pres-slide-label {
+  position: absolute; top: 8px; left: 8px;
+  background: #fff; border: 1px solid var(--hairline);
+  border-radius: 6px; padding: 2px 8px;
+  font-size: 12px; font-weight: 600; color: var(--ink);
+  pointer-events: none; white-space: nowrap;
+}
+
+/* Presentation panel, scoped to a plugin panel body.
+   Panel rules are prefixed with .plugin-panel-body, as
+   Palette's tile rules are: an unprefixed class loses
+   to core .plugin-panel-body button (class+element beats
+   a lone class), so tile and button rules must be
+   prefixed to keep their radius and border. */
+.plugin-panel-body .pres-panel-play,
+.plugin-panel-body .pres-panel-draw {
+  display: block; width: 100%; border: 1px solid var(--separator);
+  background: #fff; border-radius: 9px; padding: 6px 12px;
+  cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink);
+  margin-bottom: 8px;
+}
+.plugin-panel-body .pres-panel-play:hover,
+.plugin-panel-body .pres-panel-draw:hover {
+  background: var(--fill);
+}
+.plugin-panel-body .pres-panel-hint {
+  color: var(--grey); font-size: 12px; line-height: 1.5;
+  margin-bottom: 12px;
+}
+.plugin-panel-body .pres-panel-list {
+  display: flex; flex-direction: column;
+}
+.plugin-panel-body .pres-panel-empty {
+  color: var(--grey); font-size: 13px; line-height: 1.5;
+}
+.plugin-panel-body .pres-panel-row {
+  display: flex; align-items: center; gap: 8px;
+  border-bottom: 1px solid var(--separator);
+  padding: 8px 0; cursor: pointer;
+}
+.plugin-panel-body .pres-panel-row:hover {
+  background: var(--fill);
+}
+.plugin-panel-body .pres-panel-name {
+  font-size: 13px; font-weight: 600; color: var(--ink);
+}
+.plugin-panel-body .pres-panel-count {
+  flex: 1 1 auto; font-size: 13px; color: var(--grey);
+}
+.plugin-panel-body .pres-panel-icon-btn {
+  flex: none; border: none; background: transparent;
+  border-radius: 6px; padding: 2px 6px; cursor: pointer;
+  font-size: 14px; color: var(--grey);
+}
+.plugin-panel-body .pres-panel-icon-btn:hover {
+  background: rgba(0, 0, 0, 0.05); color: var(--ink);
+}
+
+/* Draw mode overlay, scoped to this plugin's overlay.
+   The draw layer covers the board and takes clicks, so
+   the board underneath cannot start a drag while drawing;
+   the instruction bar is a sibling, not a child, of the
+   layer, so clicking Cancel does not start a draw, and
+   it paints above the layer by DOM order. The preview
+   rectangle takes no clicks, so a drag continues over it. */
+.plugin-overlay[data-plugin="presentation"] .pres-draw-layer {
+  position: absolute; inset: 0; pointer-events: auto;
+  cursor: crosshair;
+}
+.plugin-overlay[data-plugin="presentation"] .pres-draw-preview {
+  position: absolute; pointer-events: none;
+  border: 2px dashed rgba(0, 0, 0, 0.20); border-radius: 12px;
+  background: transparent;
+}
+.plugin-overlay[data-plugin="presentation"] .pres-draw-instruction {
+  position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+  align-items: center; gap: 12px; padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 12px;
+  box-shadow: var(--shadow-md); pointer-events: auto;
+  font-size: 13px; font-weight: 600; color: var(--ink);
+  white-space: nowrap;
+}
+.plugin-overlay[data-plugin="presentation"] .pres-draw-cancel {
+  border: none; background: transparent; border-radius: 6px;
+  padding: 2px 6px; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: var(--grey);
+}
+.plugin-overlay[data-plugin="presentation"] .pres-draw-cancel:hover {
+  background: rgba(0, 0, 0, 0.05); color: var(--ink);
 }

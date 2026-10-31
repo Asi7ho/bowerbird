@@ -84,6 +84,11 @@ function kindKey(item) {
 }
 
 function isLibraryItem(item) {
+  // Slide frames are containers, not content: a frame
+  // border is not a library card, so kind "slide" is
+  // excluded here, as Presentation's frames use it, and
+  // any future frame plugin should use it too.
+  if ("Plugin" in item.kind && item.kind.Plugin.kind === "slide") return false;
   return LIBRARY_KINDS.has(kindKey(item)) && item.size.w > 0 && item.size.h > 0;
 }
 
