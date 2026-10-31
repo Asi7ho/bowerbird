@@ -1,0 +1,79 @@
+/* Presentation view, scoped to this plugin's view container
+   (core sets data-plugin="presentation" on #plugin-view).
+   Same surface, same style: core grey for counter and hint,
+   core panel button for Back to board, toolbar-style
+   borderless arrows for Previous/Next, core card for the
+   slide itself (the card brings its own white, radius and
+   shadow, so the stage adds none). */
+#plugin-view[data-plugin="presentation"] .pres-root {
+  display: flex; flex-direction: column; height: 100%; min-height: 0;
+  /* The toolbar floats over the view at the left, about
+     56px wide from the board edge, so the whole
+     presentation needs 72px of left clearance: without it
+     the Previous arrow sits under the toolbar and cannot
+     be clicked. The stage and controls stay aligned with
+     each other, just right of the toolbar. */
+  padding-left: 72px;
+}
+#plugin-view[data-plugin="presentation"] .pres-stage-row {
+  /* Stretch, not centre: the stage must take the row's full
+     height, or its height collapses to its content and the
+     scale calculation — which reads the stage height — feeds
+     on itself and shrinks the card to a pixel. The arrows
+     centre themselves instead, below. */
+  display: flex; align-items: stretch; gap: 16px;
+  flex: 1 1 auto; min-height: 0;
+}
+#plugin-view[data-plugin="presentation"] .pres-nav {
+  flex: none; align-self: center; width: 48px; height: 48px; border: none;
+  background: transparent; border-radius: 9px; cursor: pointer;
+  font-size: 28px; line-height: 1; color: var(--grey);
+  display: flex; align-items: center; justify-content: center;
+}
+#plugin-view[data-plugin="presentation"] .pres-nav:hover {
+  background: rgba(0, 0, 0, 0.05); color: var(--ink);
+}
+#plugin-view[data-plugin="presentation"] .pres-nav:disabled {
+  opacity: 0.35; cursor: default;
+}
+#plugin-view[data-plugin="presentation"] .pres-nav:disabled:hover {
+  background: transparent; color: var(--grey);
+}
+#plugin-view[data-plugin="presentation"] .pres-stage {
+  flex: 1 1 auto; min-width: 0; min-height: 0;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+#plugin-view[data-plugin="presentation"] .pres-card-wrap {
+  flex: none; position: relative;
+}
+#plugin-view[data-plugin="presentation"] .pres-empty {
+  text-align: center; color: var(--grey);
+  font-size: 13px; line-height: 1.5;
+}
+#plugin-view[data-plugin="presentation"] .pres-empty-sub {
+  font-size: 12px; margin-top: 4px;
+}
+/* Controls sit above the view switcher, which floats at
+   the bottom centre of the board: 56px of bottom margin
+   keeps Back to board and the counter clear of it, so
+   they are never hidden under that pill. */
+#plugin-view[data-plugin="presentation"] .pres-controls {
+  flex: none; display: flex; align-items: center;
+  justify-content: center; gap: 16px;
+  padding-top: 16px; margin-bottom: 56px;
+}
+#plugin-view[data-plugin="presentation"] .pres-counter {
+  color: var(--grey); font-size: 13px; font-weight: 500;
+}
+#plugin-view[data-plugin="presentation"] .pres-hint {
+  color: var(--grey); font-size: 12px;
+}
+#plugin-view[data-plugin="presentation"] .pres-back {
+  border: 1px solid var(--separator); background: #fff;
+  border-radius: 9px; padding: 6px 12px; cursor: pointer;
+  font-size: 13px; font-weight: 600; color: var(--ink);
+}
+#plugin-view[data-plugin="presentation"] .pres-back:hover {
+  background: var(--fill);
+}

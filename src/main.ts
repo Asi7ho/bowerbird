@@ -1399,6 +1399,7 @@ function renderPluginSettings(): void {
     hide: "Hides the board into a corner.",
     "visual-library": "The board's cards, as a library.",
     palette: "Colour palettes to place as swatches.",
+    presentation: "The board's cards, one at a time.",
   };
   let html = "";
   for (const lp of plugins) {

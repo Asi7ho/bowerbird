@@ -42,6 +42,17 @@ proof that the API can build that feature.
   Placed swatches are ordinary board Swatch items, so they
   survive disabling the plugin. No network, no storage,
   board:write only.
+- `presentation/` — a view, not a panel: step through the
+  board's cards one at a time, large and centred, for
+  presenting a moodboard. Slides are in board order, the
+  same order Tab steps through on the board, with side
+  arrows, arrow keys and Space to move, Esc to return to
+  the board, and a counter. A video plays in place, an
+  audio card plays in place, a link opens outside the
+  app; clicking anywhere else on a slide does nothing,
+  so media never moves you on by accident. There is no
+  reordering and no editing in presentation. It needs
+  only `view:replace` and `files:read` (for opening links).
 
 Packaging: `scripts/package-mac.sh` copies this folder into the
 app bundle (`Contents/Resources/app/plugins/`), and

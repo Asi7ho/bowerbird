@@ -511,6 +511,22 @@ drop point, the same interaction as Visual Library.
 Placed swatches are ordinary board Swatch items, so they
 survive disabling the plugin. No network, no storage,
 and the plugin needs only `board:write`.
+The fourth is `presentation/`: a view, not a panel, that
+steps through the board's cards one at a time, large and
+centred, for presenting a moodboard. Slides are in board
+order, the same order Tab steps through on the board;
+side arrows, arrow keys and Space move, Esc returns to
+the board, and a counter shows where you are. A video
+plays in place, an audio card plays in place through
+the plugin's own player, a link opens outside the app;
+clicking anywhere else on a slide does nothing, so
+media never moves you on by accident. There is no
+reordering and no editing in presentation, and it hides
+nothing but the board itself — panels, the toolbar and
+the view switcher stay where the user left them, so a
+clean full-width presentation starts by hiding the dock
+with the title-bar toggle. It needs only
+`view:replace` and `files:read` (for opening links).
 
 ## What is not in v1
 
