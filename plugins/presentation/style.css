@@ -129,14 +129,27 @@
 .plugin-panel-body .pres-panel-draw svg {
   flex: none; display: block;
 }
-/* Export sits at the bottom of the panel, below the
-   slide list, and uses the panel's full width — it is
-   the one full-width button in the panel, a footer
-   action for the whole presentation, distinct from the
-   Play/Draw pair at the top. Same quiet core panel
-   button style, no accent colour. */
+/* Export is pinned to the very bottom of the panel,
+   not just below the slide list: the panel body is a
+   flex column filling the panel's full height (scoped
+   to this plugin's panel only, so other panels are
+   untouched), the slide list takes the middle space
+   and scrolls inside it, and Export stays at the
+   bottom, always visible, at the panel's full width.
+   It is the one full-width button in the panel, a
+   footer action for the whole presentation, distinct
+   from the Play/Draw pair at the top. Same quiet core
+   panel button style, no accent colour. */
+.plugin-panel[data-plugin="presentation"] .plugin-panel-body {
+  display: flex; flex-direction: column;
+  flex: 1 1 auto; min-height: 0;
+}
+.plugin-panel[data-plugin="presentation"] .pres-panel-actions,
+.plugin-panel[data-plugin="presentation"] .pres-panel-hint {
+  flex: none;
+}
 .plugin-panel-body .pres-panel-export {
-  display: flex; align-items: center; justify-content: center;
+  flex: none; display: flex; align-items: center; justify-content: center;
   gap: 6px; width: 100%;
   border: 1px solid var(--separator); background: #fff;
   border-radius: 9px; padding: 8px 6px; margin-top: 12px;
@@ -158,6 +171,7 @@
 }
 .plugin-panel-body .pres-panel-list {
   display: flex; flex-direction: column;
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
 }
 .plugin-panel-body .pres-panel-empty {
   color: var(--grey); font-size: 13px; line-height: 1.5;
