@@ -155,6 +155,53 @@ const audioProbing = new Set<string>();
 type PdfDoc = Awaited<ReturnType<typeof pdfjsLib.getDocument>["promise"]>;
 const pdfDocs = new Map<string, Promise<PdfDoc>>();
 const pdfFailed = new Set<string>();
+// Extracted PDF text for search, keyed by path. Filled
+// lazily on the first search that could match a PDF, so
+// board load is never slowed by text extraction.
+const pdfSearchText = new Map<string, string>();
+const pdfSearchIndexing = new Set<string>();
+function getPdfDoc(path: string): Promise<PdfDoc> {
+  let docPromise = pdfDocs.get(path);
+  if (!docPromise) {
+    docPromise = (async () => {
+      try {
+        const res = await fetch(api.fileUrl(path));
+        if (!res.ok) throw new Error(`PDF fetch failed: ${res.status}`);
+        const data = await res.arrayBuffer();
+        return pdfjsLib.getDocument({ data }).promise;
+      } catch {
+        const { base64 } = await api.readFileBase64(path);
+        const binary = atob(base64);
+        const data = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) data[i] = binary.charCodeAt(i);
+        return pdfjsLib.getDocument({ data }).promise;
+      }
+    })();
+    pdfDocs.set(path, docPromise);
+  }
+  return docPromise;
+}
+function indexPdfForSearch(path: string): void {
+  if (pdfSearchText.has(path) || pdfSearchIndexing.has(path)) return;
+  pdfSearchIndexing.add(path);
+  void getPdfDoc(path).then(async (doc) => {
+    try {
+      const parts: string[] = [];
+      const pages = Math.min(doc.numPages, 50);
+      for (let i = 1; i <= pages; i++) {
+        const page = await doc.getPage(i);
+        const content = await page.getTextContent();
+        for (const it of content.items) {
+          if (typeof (it as { str?: unknown }).str === "string") parts.push((it as { str: string }).str);
+        }
+      }
+      pdfSearchText.set(path, parts.join(" "));
+    } catch { /* search falls back to the filename */ }
+    pdfSearchIndexing.delete(path);
+    const input = document.getElementById("search-input") as HTMLInputElement | null;
+    if (input && input.value.trim() !== "") updateSearch();
+  }).catch(() => { pdfSearchIndexing.delete(path); });
+}
 const pdfPages = new Map<number, number>();
 const pdfRendering = new Set<number>();
 function formatAudioTime(sec: number): string {
@@ -237,28 +284,7 @@ async function renderPdfPage(id: number, path: string): Promise<void> {
     // that puts the new canvas in the DOM.
     // One shared promise per path, so two cards showing the
     // same PDF wait on the same load instead of racing it.
-    let docPromise = pdfDocs.get(path);
-    if (!docPromise) {
-      docPromise = (async () => {
-        try {
-          const res = await fetch(api.fileUrl(path));
-          if (!res.ok) throw new Error(`PDF fetch failed: ${res.status}`);
-          const data = await res.arrayBuffer();
-          return pdfjsLib.getDocument({ data }).promise;
-        } catch {
-          // Same app-file fallback as images: read the
-          // file through the main process and render
-          // from its bytes instead of the scheme.
-          const { base64 } = await api.readFileBase64(path);
-          const binary = atob(base64);
-          const data = new Uint8Array(binary.length);
-          for (let i = 0; i < binary.length; i++) data[i] = binary.charCodeAt(i);
-          return pdfjsLib.getDocument({ data }).promise;
-        }
-      })();
-      pdfDocs.set(path, docPromise);
-    }
-    const doc = await docPromise;
+    const doc = await getPdfDoc(path);
     canvas = cardsEl.querySelector(`[data-pdf-canvas="${id}"]`) as HTMLCanvasElement | null;
     if (!canvas) return;
     const pageNum = pdfPages.get(id) ?? 1;
@@ -1808,21 +1834,81 @@ document.getElementById("btn-redo")?.addEventListener("click", () => { redo(); }
 
 // ---------------------------------------------------------------- search
 
-function searchText(item: Item): string {
+// Search normalisation: separators become spaces, so
+// "welcome bower" matches "welcome-bower.jpg", and a
+// query is split into words that must all match (AND),
+// so "bird song" finds the bird audio, not everything
+// containing either word.
+// Colour names: a swatch's hex is expanded to its plain
+// colour name, so "blue" finds #007AFF and "orange"
+// finds the orange swatch, not just a hex string.
+// Type words: every kind carries its plain type words,
+// so "image", "audio", "video", "pdf", "link", "text"
+// and "color" find all cards of that kind, not just
+// cards whose filename happens to contain the word.
+function normaliseSearch(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9#]+/g, " ").replace(/\s+/g, " ").trim();
+}
+function colorNameForHex(hex: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return "";
+  const r = parseInt(m[1].slice(0, 2), 16) / 255;
+  const g = parseInt(m[1].slice(2, 4), 16) / 255;
+  const b = parseInt(m[1].slice(4, 6), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2;
+  const s = max === min ? 0 : l < 0.5 ? (max - min) / (max + min) : (max - min) / (2 - max - min);
+  if (l < 0.15) return "black";
+  if (l > 0.92) return "white";
+  if (s < 0.15) return "grey gray";
+  let h = 0;
+  if (max === r) h = ((g - b) / (max - min) + (g < b ? 6 : 0)) * 60;
+  else if (max === g) h = ((b - r) / (max - min) + 2) * 60;
+  else h = ((r - g) / (max - min) + 4) * 60;
+  if (h >= 345 || h < 12) return l < 0.45 ? "red brown" : "red pink";
+  if (h < 45) return l < 0.55 && s > 0.3 ? "orange brown" : "orange";
+  if (h < 70) return "yellow";
+  if (h < 160) return "green";
+  if (h < 200) return "cyan teal blue";
+  if (h < 260) return "blue";
+  if (h < 300) return "purple violet";
+  if (h < 330) return "pink purple";
+  return "pink red";
+}
+function searchHaystack(item: Item): string {
   const k = item.kind;
-  const base = (p: string) => p.split("/").pop() ?? p;
-  if ("Text" in k) return k.Text.text;
-  if ("UrlCard" in k) return [k.UrlCard.title ?? "", k.UrlCard.description ?? "", k.UrlCard.url].join(" ");
-  if ("Image" in k) return base(k.Image.path);
-  if ("PdfCard" in k) return base(k.PdfCard.path);
-  if ("Audio" in k) return base(k.Audio.path);
-  if ("Video" in k) return base(k.Video.source);
-  if ("Swatch" in k) return k.Swatch.hex;
+  const file = (p: string) => {
+    const name = p.split("/").pop() ?? p;
+    const ext = name.includes(".") ? name.split(".").pop() ?? "" : "";
+    return `${name} ${ext}`;
+  };
+  if ("Text" in k) return normaliseSearch(`${k.Text.text} text note`);
+  if ("UrlCard" in k) {
+    let domain = "";
+    try { domain = new URL(k.UrlCard.url).hostname.replace(/^www\./, ""); } catch { /* keep empty */ }
+    return normaliseSearch([k.UrlCard.title ?? "", k.UrlCard.description ?? "", k.UrlCard.url, domain, "link website"].join(" "));
+  }
+  if ("Image" in k) return normaliseSearch(`${file(k.Image.path)} image picture photo`);
+  if ("PdfCard" in k) {
+    indexPdfForSearch(k.PdfCard.path);
+    return normaliseSearch(`${file(k.PdfCard.path)} pdf document ${pdfSearchText.get(k.PdfCard.path) ?? ""}`);
+  }
+  if ("Audio" in k) return normaliseSearch(`${file(k.Audio.path)} audio sound music`);
+  if ("Video" in k) {
+    const src = k.Video.remote ? k.Video.source : file(k.Video.source);
+    return normaliseSearch(`${src} video ${k.Video.remote ? "remote link" : ""}`);
+  }
+  if ("Swatch" in k) return normaliseSearch(`${k.Swatch.hex} ${colorNameForHex(k.Swatch.hex)} color colour swatch`);
   if ("Plugin" in k) {
     const pt = getPluginCardSearchText(item);
-    return pt ?? `${k.Plugin.plugin} ${k.Plugin.kind}`;
+    return normaliseSearch(pt ?? `${k.Plugin.plugin} ${k.Plugin.kind}`);
   }
   return "";
+}
+function searchMatchesQuery(item: Item, words: string[]): boolean {
+  if (words.length === 0) return false;
+  const hay = searchHaystack(item);
+  return words.every((w) => hay.includes(w));
 }
 
 function updateSearch(): void {
@@ -1830,7 +1916,7 @@ function updateSearch(): void {
   const countEl = document.getElementById("search-count") as HTMLSpanElement | null;
   const clearEl = document.getElementById("search-clear") as HTMLButtonElement | null;
   if (!input || !countEl || !clearEl) return;
-  const query = input.value.trim().toLowerCase();
+  const query = normaliseSearch(input.value);
   clearEl.style.display = query === "" ? "none" : "flex";
   if (query === "") {
     const hadMatches = searchMatches.length > 0;
@@ -1843,8 +1929,9 @@ function updateSearch(): void {
     }
     return;
   }
+  const words = query.split(" ").filter((w) => w !== "");
   searchMatches = board.items
-    .filter((it) => !("Stroke" in it.kind) && !("Connector" in it.kind) && searchText(it).toLowerCase().includes(query))
+    .filter((it) => !("Stroke" in it.kind) && !("Connector" in it.kind) && searchMatchesQuery(it, words))
     .map((it) => it.id);
   if (searchIndex >= searchMatches.length) searchIndex = -1;
   const matchSet = new Set(searchMatches);
@@ -1939,6 +2026,8 @@ document.getElementById("btn-restore-media")?.addEventListener("click", async ()
     audioFailed.clear();
     pdfFailed.clear();
     pdfDocs.clear();
+    pdfSearchText.clear();
+    pdfSearchIndexing.clear();
     setSettings(false);
     render();
     toast(result.missing.length > 0
