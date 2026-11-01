@@ -473,11 +473,31 @@ button { font-family: inherit; }
    opt out of the bar's drag region, so typing, clearing and
    clicking the count never move the window. */
 #search-box {
+  position: relative;
   display: flex; align-items: center; gap: 6px; width: min(360px, 60vw);
   padding: 6px 8px 6px 12px;
   background: var(--bg-system); border: none; border-radius: 8px;
   -webkit-app-region: no-drag;
 }
+/* Omnisearch-style results list: a ranked list under the
+   search field, with type, title and an excerpt around
+   the match. Quiet white card, same hairline and shadow
+   as board cards, not a modal — the board stays visible
+   and dimmed behind it. */
+#search-results {
+  position: absolute; top: calc(100% + 4px); left: 50%; transform: translateX(-50%);
+  width: 480px; max-width: 90vw; max-height: 360px; overflow-y: auto;
+  background: #fff; border: 1px solid rgba(0, 0, 0, 0.1); border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); z-index: 50; padding: 4px;
+  -webkit-app-region: no-drag;
+}
+.search-result { padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.search-result-selected, .search-result:hover { background: #f5f5f7; }
+.search-result-top { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.search-result-type { font-size: 11px; color: var(--grey); white-space: nowrap; flex: none; }
+.search-result-title { font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.search-result-excerpt { font-size: 12px; color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.search-result-excerpt strong { color: var(--ink); }
 #search-box input, #search-box button { -webkit-app-region: no-drag; }
 #search-input {
   flex: 1; min-width: 0; border: none; background: transparent;

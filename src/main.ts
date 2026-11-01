@@ -60,6 +60,7 @@ import {
   resizeItem, select, tileColorFor, tint,
 } from "./model";
 import { welcomeBoard } from "./welcome";
+import MiniSearch from "minisearch";
 import * as pdfjsLib from "pdfjs-dist";
 import PdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?worker";
 // PDF.js renders PDF pages to canvas in the renderer, with its
@@ -2117,7 +2118,9 @@ async function contextMatches(item: Item, query: string, words: string[]): Promi
 // and "color" find all cards of that kind, not just
 // cards whose filename happens to contain the word.
 function normaliseSearch(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9#]+/g, " ").replace(/\s+/g, " ").trim();
+  // Diacritics first (café -> cafe, like Omnisearch),
+  // then separators become spaces.
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9#]+/g, " ").replace(/\s+/g, " ").trim();
 }
 function colorNameForHex(hex: string): string {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
@@ -2145,40 +2148,163 @@ function colorNameForHex(hex: string): string {
   if (h < 330) return "pink purple";
   return "pink red";
 }
-function searchHaystack(item: Item): string {
+// ---------------------------------------------------------------- Omnisearch-style search
+// Omnisearch (Obsidian) is MiniSearch with BM25 scoring:
+// filename boosted over headings over body, typo-tolerant
+// fuzzy matching, prefix matching, results as you type in
+// a ranked list with excerpts, keyboard-first, and a query
+// language of "exact phrases", -exclusions and .ext filters.
+// Bowerbird uses the same engine (MiniSearch, zero
+// dependencies) with the same weights, and maps Obsidian's
+// fields onto cards: filename -> card title/filename,
+// headings -> text-card headings, body -> card text, PDF
+// text, link description, colour name, and audio labels.
+// What does not map: Obsidian's path: filter (a board
+// has no folders), backlinks, and in-file search (cards
+// are short; jumping to the card is the in-file view).
+type SearchDoc = { id: number; title: string; headings: string; body: string; typeLabel: string; excerptText: string; ext: string };
+function searchDoc(item: Item): SearchDoc | null {
   const k = item.kind;
-  const file = (p: string) => {
-    const name = p.split("/").pop() ?? p;
-    const ext = name.includes(".") ? name.split(".").pop() ?? "" : "";
-    return `${name} ${ext}`;
-  };
-  if ("Text" in k) return normaliseSearch(`${k.Text.text} text note`);
+  const fileName = (p: string) => p.split("/").pop() ?? p;
+  const extOf = (p: string) => { const n = fileName(p); return n.includes(".") ? (n.split(".").pop() ?? "").toLowerCase() : ""; };
+  const labels = (p: string) => contextIndex.get(p)?.labels ?? [];
+  if ("Text" in k) {
+    const lines = k.Text.text.split("\n");
+    const headings = lines.filter((l) => l.trim().startsWith("#")).map((l) => l.replace(/^#+\s*/, "")).join(" ");
+    const title = lines.map((l) => l.trim()).find((l) => l !== "")?.replace(/^#+\s*/, "") ?? "Note";
+    const excerptText = lines.map((l) => l.replace(/^#+\s*/, "")).join("\n");
+    return { id: item.id, title, headings, body: k.Text.text, typeLabel: "Note", excerptText, ext: "md" };
+  }
   if ("UrlCard" in k) {
     let domain = "";
     try { domain = new URL(k.UrlCard.url).hostname.replace(/^www\./, ""); } catch { /* keep empty */ }
-    return normaliseSearch([k.UrlCard.title ?? "", k.UrlCard.description ?? "", k.UrlCard.url, domain, "link website"].join(" "));
+    const title = k.UrlCard.title ?? domain ?? k.UrlCard.url;
+    return { id: item.id, title, headings: "", body: [k.UrlCard.title ?? "", k.UrlCard.description ?? "", k.UrlCard.url, domain, "link"].join(" "), typeLabel: "Link", excerptText: [k.UrlCard.title ?? "", k.UrlCard.description ?? ""].filter(Boolean).join(" — ") || k.UrlCard.url, ext: "" };
   }
-  if ("Image" in k) return normaliseSearch(`${file(k.Image.path)} image picture photo`);
+  if ("Image" in k) return { id: item.id, title: fileName(k.Image.path), headings: "", body: `${fileName(k.Image.path)} image picture photo`, typeLabel: "Image", excerptText: fileName(k.Image.path), ext: extOf(k.Image.path) };
   if ("PdfCard" in k) {
     indexPdfForSearch(k.PdfCard.path);
-    return normaliseSearch(`${file(k.PdfCard.path)} pdf document ${pdfSearchText.get(k.PdfCard.path) ?? ""}`);
+    const pdfText = pdfSearchText.get(k.PdfCard.path) ?? "";
+    return { id: item.id, title: fileName(k.PdfCard.path), headings: "", body: `${fileName(k.PdfCard.path)} pdf document ${pdfText}`, typeLabel: "PDF", excerptText: pdfText || fileName(k.PdfCard.path), ext: "pdf" };
   }
-  if ("Audio" in k) return normaliseSearch(`${file(k.Audio.path)} audio sound music`);
+  if ("Audio" in k) {
+    const lab = labels(k.Audio.path).join(" ");
+    return { id: item.id, title: fileName(k.Audio.path), headings: "", body: `${fileName(k.Audio.path)} audio sound music ${lab}`, typeLabel: "Audio", excerptText: lab ? `${fileName(k.Audio.path)} — ${lab}` : fileName(k.Audio.path), ext: extOf(k.Audio.path) };
+  }
   if ("Video" in k) {
-    const src = k.Video.remote ? k.Video.source : file(k.Video.source);
-    return normaliseSearch(`${src} video ${k.Video.remote ? "remote link" : ""}`);
+    if (k.Video.remote) return { id: item.id, title: k.Video.source, headings: "", body: `${k.Video.source} video remote link`, typeLabel: "Video", excerptText: k.Video.source, ext: "" };
+    const lab = labels(k.Video.source).join(" ");
+    return { id: item.id, title: fileName(k.Video.source), headings: "", body: `${fileName(k.Video.source)} video ${lab}`, typeLabel: "Video", excerptText: lab ? `${fileName(k.Video.source)} — ${lab}` : fileName(k.Video.source), ext: extOf(k.Video.source) };
   }
-  if ("Swatch" in k) return normaliseSearch(`${k.Swatch.hex} ${colorNameForHex(k.Swatch.hex)} color colour swatch`);
+  if ("Swatch" in k) {
+    const name = colorNameForHex(k.Swatch.hex).split(" ")[0];
+    return { id: item.id, title: name, headings: "", body: `${k.Swatch.hex} ${colorNameForHex(k.Swatch.hex)} color colour swatch`, typeLabel: "Colour", excerptText: `${name} ${k.Swatch.hex}`, ext: "" };
+  }
   if ("Plugin" in k) {
     const pt = getPluginCardSearchText(item);
-    return normaliseSearch(pt ?? `${k.Plugin.plugin} ${k.Plugin.kind}`);
+    return { id: item.id, title: k.Plugin.kind, headings: "", body: pt ?? `${k.Plugin.plugin} ${k.Plugin.kind}`, typeLabel: "Plugin", excerptText: pt ?? k.Plugin.kind, ext: "" };
   }
-  return "";
+  return null;
 }
-function searchMatchesQuery(item: Item, words: string[]): boolean {
-  if (words.length === 0) return false;
-  const hay = searchHaystack(item);
-  return words.every((w) => hay.includes(w));
+type ParsedQuery = { terms: string[]; phrases: string[]; exclusions: string[]; exts: string[] };
+function parseSearchQuery(raw: string): ParsedQuery {
+  const phrases: string[] = [];
+  const exclusions: string[] = [];
+  const exts: string[] = [];
+  // Excluded phrases first, so -"foo bar" is not read as a phrase.
+  let s = raw.replace(/-\s*"([^"]+)"/g, (_m, p) => { exclusions.push(normaliseSearch(p)); return " "; });
+  s = s.replace(/"([^"]+)"/g, (_m, p) => { const n = normaliseSearch(p); if (n) phrases.push(n); return " "; });
+  s = s.replace(/-\s*([^\s]+)/g, (_m, t) => { const n = normaliseSearch(t); if (n) exclusions.push(n); return " "; });
+  s = s.replace(/(^|\s)\.(jpg|jpeg|png|gif|webp|mp3|wav|mp4|mov|pdf|md)\b/gi, (_m, _sp, e) => { exts.push(e.toLowerCase()); return " "; });
+  const terms = normaliseSearch(s).split(" ").filter((w) => w !== "");
+  return { terms, phrases: phrases.filter(Boolean), exclusions: exclusions.filter(Boolean), exts };
+}
+function splitCamel(s: string): string {
+  // Omnisearch's tokenizer splits CamelCase: Bowerbird
+  // becomes Bower + bird, so "bird" finds it. Keep the
+  // full word too, so "bowerbird" still matches.
+  return s.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
+}
+function docPassesFilters(doc: SearchDoc, q: ParsedQuery): boolean {
+  if (q.exts.length > 0 && !q.exts.includes(doc.ext)) return false;
+  const hay = normaliseSearch([doc.title, doc.headings, doc.body, splitCamel(doc.title), splitCamel(doc.headings), splitCamel(doc.body)].join(" "));
+  for (const p of q.phrases) if (!hay.includes(p)) return false;
+  for (const e of q.exclusions) {
+    // Exclusion is prefix-based for single words: -bird
+    // removes birdsong, but keeps Bowerbird (bird is
+    // not at the start of that word). Phrases exclude
+    // on an exact substring, as they are quoted.
+    if (e.includes(" ")) { if (hay.includes(e)) return false; }
+    else if (hay.split(" ").some((w) => w.startsWith(e))) return false;
+  }
+  return true;
+}
+let miniSearchCache: { key: string; ms: MiniSearch<SearchDoc> } | null = null;
+function buildMiniSearch(docs: SearchDoc[]): MiniSearch<SearchDoc> {
+  const key = docs.map((d) => `${d.id}|${d.title}|${d.headings}|${d.body}`).join("\n");
+  if (miniSearchCache && miniSearchCache.key === key) return miniSearchCache.ms;
+  const ms = new MiniSearch<SearchDoc>({
+    fields: ["title", "headings", "body"],
+    storeFields: ["id"],
+    searchOptions: { boost: { title: 3, headings: 2, body: 1 }, fuzzy: 0.2, prefix: true, combineWith: "AND" },
+  });
+  // Feed MiniSearch already-normalised text, so its
+  // tokenizer sees the same diacritic-free words the
+  // rest of Bowerbird search uses, plus CamelCase splits.
+  ms.addAll(docs.map((d) => ({
+    ...d,
+    title: normaliseSearch(`${d.title} ${splitCamel(d.title)}`),
+    headings: normaliseSearch(`${d.headings} ${splitCamel(d.headings)}`),
+    body: normaliseSearch(`${d.body} ${splitCamel(d.body)}`),
+  })));
+  miniSearchCache = { key, ms };
+  return ms;
+}
+function escapeRegExp(s: string): string { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+// Excerpt: ~40 chars before the first matched term, ~80
+// after, with matched terms in <strong>. Diacritics are
+// stripped for finding the position, but the snippet
+// itself is cut from the original text.
+function excerptFor(doc: SearchDoc, matchedTerms: string[]): string {
+  const text = doc.excerptText;
+  if (!text) return doc.title;
+  const stripped = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  let pos = -1;
+  for (const t of matchedTerms) {
+    const p = stripped.indexOf(t.toLowerCase());
+    if (p >= 0 && (pos === -1 || p < pos)) pos = p;
+  }
+  const start = pos === -1 ? 0 : Math.max(0, pos - 40);
+  const end = pos === -1 ? Math.min(text.length, 120) : Math.min(text.length, pos + 80);
+  let snippet = text.slice(start, end);
+  if (start > 0) snippet = "…" + snippet;
+  if (end < text.length) snippet = snippet + "…";
+  let html = escapeHtml(snippet);
+  const terms = [...new Set(matchedTerms.filter(Boolean))].sort((a, b) => b.length - a.length);
+  if (terms.length > 0) {
+    const re = new RegExp(`(${terms.map(escapeRegExp).join("|")})`, "gi");
+    html = html.replace(re, "<strong>$1</strong>");
+  }
+  return html;
+}
+type SearchRow = { id: number; title: string; typeLabel: string; excerptHtml: string; isContext: boolean };
+let searchRows: SearchRow[] = [];
+let searchResultsOpen = false;
+function renderSearchResults(): void {
+  const box = document.getElementById("search-results") as HTMLElement | null;
+  if (!box) return;
+  if (!searchResultsOpen || searchRows.length === 0) { box.style.display = "none"; box.innerHTML = ""; return; }
+  box.style.display = "block";
+  box.innerHTML = searchRows.slice(0, 30).map((r, i) => {
+    const sel = i === searchIndex ? " search-result-selected" : "";
+    return `<div class="search-result${sel}" data-id="${r.id}" data-index="${i}"><div class="search-result-top"><span class="search-result-type">${escapeHtml(r.typeLabel)}${r.isContext ? " · Visual" : ""}</span><span class="search-result-title">${escapeHtml(r.title)}</span></div><div class="search-result-excerpt">${r.excerptHtml}</div></div>`;
+  }).join("");
+  const selected = box.querySelector(".search-result-selected") as HTMLElement | null;
+  selected?.scrollIntoView({ block: "nearest" });
+}
+function closeSearchResults(): void {
+  searchResultsOpen = false;
+  renderSearchResults();
 }
 
 let searchGeneration = 0;
@@ -2193,7 +2319,10 @@ function applySearchMatches(countEl: HTMLElement): void {
   }
   let text = "";
   if (searchMatches.length === 0) text = "No matches";
-  else if (searchIndex >= 0) text = `${searchIndex + 1} of ${searchMatches.length}`;
+  // While the results list is open, the selection is
+  // just the top result, not a jump — show the count,
+  // not "1 of N". After a jump (list closed), show position.
+  else if (searchIndex >= 0 && !searchResultsOpen) text = `${searchIndex + 1} of ${searchMatches.length}`;
   else text = searchMatches.length === 1 ? "1 match" : `${searchMatches.length} matches`;
   if (contextIndexing) text += contextIndexTotal > 0 ? ` · Indexing context ${contextIndexDone}/${contextIndexTotal}` : " · Indexing context…";
   else if (contextIndexFailed) text += " · Context unavailable";
@@ -2204,12 +2333,15 @@ function updateSearch(): void {
   const countEl = document.getElementById("search-count") as HTMLSpanElement | null;
   const clearEl = document.getElementById("search-clear") as HTMLButtonElement | null;
   if (!input || !countEl || !clearEl) return;
-  const query = normaliseSearch(input.value);
+  const raw = input.value;
+  const query = normaliseSearch(raw);
   clearEl.style.display = query === "" ? "none" : "flex";
   if (query === "") {
     const hadMatches = searchMatches.length > 0;
     searchMatches = [];
+    searchRows = [];
     searchIndex = -1;
+    closeSearchResults();
     countEl.textContent = "";
     if (!hadMatches) return;
     for (const child of Array.from(cardsEl.children)) {
@@ -2217,10 +2349,28 @@ function updateSearch(): void {
     }
     return;
   }
-  const words = query.split(" ").filter((w) => w !== "");
-  searchMatches = board.items
-    .filter((it) => !("Stroke" in it.kind) && !("Connector" in it.kind) && searchMatchesQuery(it, words))
-    .map((it) => it.id);
+  const parsed = parseSearchQuery(raw);
+  const docs = board.items.map(searchDoc).filter((d): d is SearchDoc => d !== null);
+  const byId = new Map(docs.map((d) => [d.id, d]));
+  let results: { id: number; terms: string[] }[];
+  if (parsed.terms.length === 0) {
+    // Phrase / filter only: no BM25 terms, so rank by
+    // board order among cards passing the filters.
+    results = docs.filter((d) => docPassesFilters(d, parsed)).map((d) => ({ id: d.id, terms: parsed.phrases.flatMap((p) => p.split(" ")) }));
+  } else {
+    const ms = buildMiniSearch(docs);
+    results = ms.search(parsed.terms.join(" "))
+      .map((r) => ({ id: Number(r.id), terms: r.terms }))
+      .filter((r) => { const d = byId.get(r.id); return d ? docPassesFilters(d, parsed) : false; });
+  }
+  searchMatches = results.map((r) => r.id);
+  searchRows = results.map((r) => {
+    const d = byId.get(r.id)!;
+    return { id: r.id, title: d.title, typeLabel: d.typeLabel, excerptHtml: excerptFor(d, r.terms), isContext: false };
+  });
+  if (searchIndex >= searchMatches.length) searchIndex = searchMatches.length > 0 ? 0 : -1;
+  searchResultsOpen = searchMatches.length > 0;
+  renderSearchResults();
   applySearchMatches(countEl);
   // Context search, in the background: index media that
   // is not indexed yet, then check the rest of the board
@@ -2240,13 +2390,25 @@ function updateSearch(): void {
     const inputNow = document.getElementById("search-input") as HTMLInputElement | null;
     if (!inputNow || normaliseSearch(inputNow.value) !== query) return;
     const extra: number[] = [];
+    const contextQuery = [...parsed.terms, ...parsed.phrases].join(" ");
     for (const it of board.items) {
       if (("Stroke" in it.kind) || ("Connector" in it.kind)) continue;
       if (searchMatches.includes(it.id)) continue;
-      if (await contextMatches(it, query, words)) extra.push(it.id);
+      if (await contextMatches(it, contextQuery, parsed.terms)) extra.push(it.id);
     }
     if (gen !== searchGeneration) return;
-    if (extra.length > 0) searchMatches = [...searchMatches, ...extra];
+    if (extra.length > 0) {
+      searchMatches = [...searchMatches, ...extra];
+      const byId2 = new Map(docs.map((d) => [d.id, d]));
+      for (const id of extra) {
+        const d = byId2.get(id);
+        if (!d) continue;
+        searchRows.push({ id, title: d.title, typeLabel: d.typeLabel, excerptHtml: excerptFor(d, parsed.terms), isContext: true });
+      }
+      if (searchIndex < 0 && searchMatches.length > 0) searchIndex = 0;
+      searchResultsOpen = true;
+      renderSearchResults();
+    }
     // Always refresh the count, even with no extra matches:
     // otherwise the "Indexing context…" text stays stuck
     // after indexing finishes with nothing new to add.
@@ -2259,17 +2421,16 @@ function clearSearch(): void {
   const input = document.getElementById("search-input") as HTMLInputElement | null;
   if (input) input.value = "";
   searchMatches = [];
+  searchRows = [];
   searchIndex = -1;
+  closeSearchResults();
   updateSearch();
 }
 
-function jumpToSearch(dir: 1 | -1): void {
+function jumpToSearchIndex(idx: number): void {
   if (searchMatches.length === 0) return;
-  const next = searchIndex === -1
-    ? (dir === 1 ? 0 : searchMatches.length - 1)
-    : (searchIndex + dir + searchMatches.length) % searchMatches.length;
-  searchIndex = next;
-  const target = boardGet(board, searchMatches[next]);
+  searchIndex = ((idx % searchMatches.length) + searchMatches.length) % searchMatches.length;
+  const target = boardGet(board, searchMatches[searchIndex]);
   if (!target) return;
   selected = select(board, [], target.id, false);
   let c: Pt;
@@ -2293,20 +2454,56 @@ function jumpToSearch(dir: 1 | -1): void {
 }
 
 document.getElementById("search-input")?.addEventListener("input", () => {
-  // A new query restarts the jump position: Enter always starts
-  // from the first match of what is actually typed now.
-  searchIndex = -1;
+  // A new query selects the top-ranked result, like
+  // Omnisearch: Enter opens it, arrows move selection.
+  searchIndex = 0;
   updateSearch();
 });
 document.getElementById("search-input")?.addEventListener("keydown", (e: KeyboardEvent) => {
   if (e.key === "Enter") {
     e.preventDefault();
-    jumpToSearch(e.shiftKey ? -1 : 1);
+    if (searchResultsOpen) {
+      // List open: open the selected result, close list.
+      jumpToSearchIndex(e.shiftKey ? searchIndex - 1 : searchIndex);
+      closeSearchResults();
+      const countEl = document.getElementById("search-count") as HTMLElement | null;
+      if (countEl) applySearchMatches(countEl);
+    } else {
+      // List closed (after a jump): cycle, as before.
+      jumpToSearchIndex(searchIndex + (e.shiftKey ? -1 : 1));
+      const countEl = document.getElementById("search-count") as HTMLElement | null;
+      if (countEl) applySearchMatches(countEl);
+    }
+  } else if (e.key === "ArrowDown" || (e.ctrlKey && e.key === "j")) {
+    // Omnisearch supports Vim Ctrl+j/k as well as arrows.
+    e.preventDefault();
+    if (searchMatches.length === 0) return;
+    searchIndex = (searchIndex + 1) % searchMatches.length;
+    renderSearchResults();
+  } else if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "k")) {
+    e.preventDefault();
+    if (searchMatches.length === 0) return;
+    searchIndex = (searchIndex - 1 + searchMatches.length) % searchMatches.length;
+    renderSearchResults();
   } else if (e.key === "Escape") {
     e.preventDefault();
     clearSearch();
     (e.target as HTMLInputElement).blur();
   }
+});
+document.getElementById("search-input")?.addEventListener("blur", () => {
+  // Delay so a mousedown on a result lands first.
+  setTimeout(() => closeSearchResults(), 150);
+});
+document.getElementById("search-results")?.addEventListener("mousedown", (e: MouseEvent) => {
+  const row = (e.target as HTMLElement).closest(".search-result") as HTMLElement | null;
+  if (!row) return;
+  e.preventDefault();
+  const idx = Number(row.dataset.index ?? "0");
+  jumpToSearchIndex(idx);
+  closeSearchResults();
+  const countEl = document.getElementById("search-count") as HTMLElement | null;
+  if (countEl) applySearchMatches(countEl);
 });
 document.getElementById("search-clear")?.addEventListener("click", () => {
   clearSearch();
