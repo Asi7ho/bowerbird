@@ -881,6 +881,22 @@ function registerIpc() {
   });
 
   ipcMain.handle('bowerbird:read-text-file', (_event, filePath) => fs.readFileSync(filePath, 'utf8'));
+  // Data-URL fallback for media: if the app-file scheme
+  // fails to serve a file in a given run (the Mac dev-run
+  // failure, where files exist and open in Preview but
+  // never render in the board), the renderer can still
+  // load the file by reading it here and using a data:
+  // URL instead. Same board-local check as app-file, and
+  // a 50 MB cap so a huge video does not blow up the
+  // renderer with a base64 string.
+  ipcMain.handle('bowerbird:read-file-base64', (_event, filePath) => {
+    if (!isBoardLocal(filePath)) throw new Error('not a board-local file');
+    const size = fs.statSync(filePath).size;
+    if (size > 50 * 1024 * 1024) throw new Error('file too large for inline loading');
+    const ext = path.extname(filePath).toLowerCase();
+    const mime = MIME[ext] || 'application/octet-stream';
+    return { mime, base64: fs.readFileSync(filePath).toString('base64') };
+  });
   ipcMain.handle('bowerbird:file-size', (_event, filePath) => fs.statSync(filePath).size);
 
   ipcMain.handle('bowerbird:fetch-preview', async (_event, url) => {
@@ -1179,6 +1195,7 @@ app.whenReady().then(() => {
       // another app's data — is a 404, not a file, even
       // though the renderer asked for it by full path.
       if (!isBoardLocal(filePath)) {
+        console.error(`[app-file] rejected (not board-local): ${filePath} (boardDir=${boardDir()}, assetsDir=${assetsDir()})`);
         return new Response('not found', { status: 404 });
       }
       // Welcome-media fallback: a board item that points at
@@ -1213,6 +1230,7 @@ app.whenReady().then(() => {
       try {
         size = fs.statSync(servePath).size;
       } catch {
+        console.error(`[app-file] not found on disk: ${servePath} (requested ${filePath})`);
         return new Response('not found', { status: 404 });
       }
       // A bundle fallback that is itself empty is no better

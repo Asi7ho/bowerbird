@@ -8,6 +8,7 @@ interface BowerbirdAPI {
   resetBoard(): Promise<{ pdf_size_bytes: number; video_size_bytes: number }>;
   restoreShowcase(): Promise<{ copied: string[]; missing: string[]; srcDir: string; destDir: string }>;
   checkFile(filePath: string): Promise<{ path: string; exists: boolean; size: number; bundlePath: string; bundleExists: boolean; bundleSize: number }>;
+  readFileBase64(filePath: string): Promise<{ mime: string; base64: string }>;
   embedFile(path: string): Promise<string>;
   listLibrary(): Promise<{ path: string; items: Array<{ name: string; path: string; relativePath: string; ext: string; kind: string; category: string | null; size_bytes: number; mtime_ms: number }>; categories: Array<{ name: string; count: number }>; uncategorizedCount: number }>;
   addToLibrary(path: string): Promise<string>;
@@ -177,14 +178,40 @@ function updateAudioProgress(): void {
   }
 }
 const audioFailed = new Set<string>();
+// Data-URL fallbacks for files whose app-file load failed,
+// keyed by board path. Audio playback uses this map too,
+// so a file that only loads as a data URL still plays.
+const mediaDataUrls = new Map<string, string>();
 function loadAudioDuration(id: number, path: string): void {
   if (audioDurations.has(path) || audioProbing.has(path) || audioFailed.has(path)) return;
   audioProbing.add(path);
   const probe = new Audio(api.fileUrl(path));
   probe.onerror = () => {
-    audioProbing.delete(path);
-    audioFailed.add(path);
-    render();
+    // Same app-file fallback as images and video: try
+    // once as a data URL before calling the file missing.
+    void api.readFileBase64(path).then(({ mime, base64 }) => {
+      const dataUrl = `data:${mime};base64,${base64}`;
+      mediaDataUrls.set(path, dataUrl);
+      const retry = new Audio(dataUrl);
+      retry.preload = "metadata";
+      retry.onloadedmetadata = () => {
+        audioProbing.delete(path);
+        if (isFinite(retry.duration)) {
+          audioDurations.set(path, retry.duration);
+          const durEl = cardsEl.querySelector(`[data-audio-dur="${id}"]`);
+          if (durEl) durEl.textContent = formatAudioTime(retry.duration);
+        }
+      };
+      retry.onerror = () => {
+        audioProbing.delete(path);
+        audioFailed.add(path);
+        render();
+      };
+    }).catch(() => {
+      audioProbing.delete(path);
+      audioFailed.add(path);
+      render();
+    });
   };
   probe.preload = "metadata";
   probe.onloadedmetadata = () => {
@@ -213,10 +240,21 @@ async function renderPdfPage(id: number, path: string): Promise<void> {
     let docPromise = pdfDocs.get(path);
     if (!docPromise) {
       docPromise = (async () => {
-        const res = await fetch(api.fileUrl(path));
-        if (!res.ok) throw new Error(`PDF fetch failed: ${res.status}`);
-        const data = await res.arrayBuffer();
-        return pdfjsLib.getDocument({ data }).promise;
+        try {
+          const res = await fetch(api.fileUrl(path));
+          if (!res.ok) throw new Error(`PDF fetch failed: ${res.status}`);
+          const data = await res.arrayBuffer();
+          return pdfjsLib.getDocument({ data }).promise;
+        } catch {
+          // Same app-file fallback as images: read the
+          // file through the main process and render
+          // from its bytes instead of the scheme.
+          const { base64 } = await api.readFileBase64(path);
+          const binary = atob(base64);
+          const data = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) data[i] = binary.charCodeAt(i);
+          return pdfjsLib.getDocument({ data }).promise;
+        }
       })();
       pdfDocs.set(path, docPromise);
     }
@@ -702,7 +740,7 @@ function cardHtml(item: Item, plain = false): string {
     // selected. Selecting switches to contain, so the full
     // image is visible; deselecting goes back to cover.
     const fit = sel ? "contain" : "cover";
-    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner" style="background:#f5f5f7"><img src="${api.fileUrl(path)}" data-name="${escapeHtml(name)}" draggable="false" style="width:100%;height:100%;object-fit:${fit};border-radius:12px" alt="" /></div></div>`;
+    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner" style="background:#f5f5f7"><img src="${api.fileUrl(path)}" data-name="${escapeHtml(name)}" data-path="${escapeHtml(path)}" draggable="false" style="width:100%;height:100%;object-fit:${fit};border-radius:12px" alt="" /></div></div>`;
   }
   if ("UrlCard" in item.kind) {
     const { url, title, description, image, icon } = item.kind.UrlCard;
@@ -807,11 +845,11 @@ function cardHtml(item: Item, plain = false): string {
       const src = api.fileUrl(source);
       if (hh >= thumbH + 70) {
         return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
-          <video controls preload="metadata" playsinline src="${src}" data-name="${escapeHtml(name)}" style="width:${ww - 24}px;height:${thumbH}px;object-fit:${sel ? "contain" : "cover"};border-radius:10px;background:#1d1d1f;pointer-events:auto"></video>
+          <video controls preload="metadata" playsinline src="${src}" data-name="${escapeHtml(name)}" data-path="${escapeHtml(source)}" style="width:${ww - 24}px;height:${thumbH}px;object-fit:${sel ? "contain" : "cover"};border-radius:10px;background:#1d1d1f;pointer-events:auto"></video>
           <div class="title" style="font-size:14px">${escapeHtml(elide(name, ww - 24, 14, true))}</div><div class="sub" style="font-size:12px">${sub}</div></div></div>`;
       }
       return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner row" style="padding:12px">
-        <video controls preload="metadata" playsinline src="${src}" data-name="${escapeHtml(name)}" style="width:96px;height:56px;object-fit:${sel ? "contain" : "cover"};border-radius:10px;background:#1d1d1f;pointer-events:auto"></video>
+        <video controls preload="metadata" playsinline src="${src}" data-name="${escapeHtml(name)}" data-path="${escapeHtml(source)}" style="width:96px;height:56px;object-fit:${sel ? "contain" : "cover"};border-radius:10px;background:#1d1d1f;pointer-events:auto"></video>
         <div class="col"><div class="title" style="font-size:14px">${escapeHtml(elide(name, ww - 132, 14, true))}</div><div class="sub" style="font-size:12px">${sub}</div></div></div></div>`;
     }
     if (hh >= thumbH + 70) {
@@ -1476,14 +1514,31 @@ window.addEventListener("resize", () => { applyCamera(); refreshContentIfVisible
 // A media file that is missing shows as a blank card, which
 // looks like a rendering bug and tells the user nothing.
 // Catch load errors in the capture phase (img/video errors
-// do not bubble) and swap the element for a plain tile
-// naming the missing file, so a broken board is diagnosable
-// instead of silently blank.
+// do not bubble). First, try once to load the same file as
+// a data URL through the main process: if the app-file
+// scheme itself is what fails in a given run (files exist
+// and open in Preview, but never render in the board),
+// the data URL still renders, and the user never sees a
+// missing tile for a file that is actually there. Only
+// if that also fails is the element swapped for a plain
+// tile naming the missing file, so a broken board is
+// diagnosable instead of silently blank.
 window.addEventListener("error", (e: Event) => {
   const t = e.target as HTMLElement | null;
   if (!t || (t.tagName !== "IMG" && t.tagName !== "VIDEO")) return;
-  if (t.closest(".plugin-panel-body") || t.closest(".plugin-view")) return;
-  const name = (t as HTMLElement).dataset?.name ?? "media file";
+  const el = t as HTMLImageElement | HTMLVideoElement;
+  const path = el.dataset?.path;
+  if (path && el.dataset?.fallback !== "1") {
+    el.dataset.fallback = "1";
+    void api.readFileBase64(path).then(({ mime, base64 }) => {
+      el.src = `data:${mime};base64,${base64}`;
+    }).catch(() => {
+      // Fall through to the missing tile below on the
+      // next error event, which will have fallback set.
+    });
+    return;
+  }
+  const name = el.dataset?.name ?? "media file";
   const div = document.createElement("div");
   div.className = "missing-media";
   div.textContent = `File missing: ${name}`;
@@ -1544,7 +1599,10 @@ function toggleAudio(id: number, path: string): void {
     return;
   }
   if (audioEl) audioEl.pause();
-  audioEl = new Audio(api.fileUrl(path));
+  // If the app-file probe already fell back to a data
+  // URL for this file, play from that URL, not the
+  // scheme that failed.
+  audioEl = new Audio(mediaDataUrls.get(path) ?? api.fileUrl(path));
   audioId = id;
   audioEl.onloadedmetadata = () => {
     if (audioEl && isFinite(audioEl.duration)) audioDurations.set(path, audioEl.duration);
