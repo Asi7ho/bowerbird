@@ -137,6 +137,10 @@ export interface PluginBridge {
   pluginStorageGet(pluginId: string, key: string): Promise<unknown>;
   pluginStorageSet(pluginId: string, key: string, value: unknown): Promise<void>;
   pluginStorageDelete(pluginId: string, key: string): Promise<void>;
+  listBoards: () => Promise<Array<{ name: string; current: boolean; items: number }>>;
+  createBoard: (name: string) => Promise<{ name: string }>;
+  renameBoard: (oldName: string, newName: string) => Promise<{ name: string }>;
+  deleteBoard: (name: string) => Promise<{ wasCurrent: boolean }>;
   secureStorageAvailable(): Promise<boolean>;
   secureStorageGet(pluginId: string, key: string): Promise<string | null>;
   secureStorageSet(pluginId: string, key: string, value: string): Promise<boolean>;
@@ -171,6 +175,7 @@ export interface PluginHost {
   renderBoardCard: (id: number) => string | null;
   save: () => void;
   render: () => void;
+  switchBoard: (name: string) => Promise<boolean>;
   setTool: (tool: string) => void;
   getPenColor: () => string;
   setPenColor: (hex: string) => boolean;
@@ -232,6 +237,14 @@ export interface PluginContext {
     redo: () => boolean;
     canUndo: () => boolean;
     canRedo: () => boolean;
+  };
+  boards: {
+    list: () => Promise<Array<{ name: string; current: boolean; items: number }>>;
+    current: () => Promise<string>;
+    create: (name: string) => Promise<{ name: string }>;
+    switch: (name: string) => Promise<boolean>;
+    rename: (oldName: string, newName: string) => Promise<{ name: string }>;
+    delete: (name: string) => Promise<{ wasCurrent: boolean }>;
   };
   window: {
     hide: () => Promise<void>;
@@ -553,7 +566,7 @@ function createContext(manifest: PluginManifest): PluginContext {
       // Capabilities in v1: every domain documented in PLUGIN_API.md.
       // A future core may add more; a plugin should check before
       // using a capability that was added after v1.
-      return ["board", "view", "window", "ui", "cards", "files", "storage", "events", "tools", "panels", "commands", "views", "overlays", "settingsSections", "shortcuts", "library", "ai", "plugins", "pen"].includes(capability);
+      return ["board", "boards", "view", "window", "ui", "cards", "files", "storage", "events", "tools", "panels", "commands", "views", "overlays", "settingsSections", "shortcuts", "library", "ai", "plugins", "pen"].includes(capability);
     },
     board: {
       get: () => {
@@ -639,6 +652,29 @@ function createContext(manifest: PluginManifest): PluginContext {
       },
       canUndo: () => host!.canUndo(),
       canRedo: () => host!.canRedo(),
+    },
+    boards: {
+      list: async () => bridge!.listBoards(),
+      current: async () => {
+        const list = await bridge!.listBoards();
+        return list.find((b) => b.current)?.name ?? "Main";
+      },
+      create: async (name: string) => {
+        require("board:write");
+        return bridge!.createBoard(name);
+      },
+      switch: async (name: string) => {
+        require("board:write");
+        return host!.switchBoard(name);
+      },
+      rename: async (oldName: string, newName: string) => {
+        require("board:write");
+        return bridge!.renameBoard(oldName, newName);
+      },
+      delete: async (name: string) => {
+        require("board:write");
+        return bridge!.deleteBoard(name);
+      },
     },
     window: {
       hide: async () => {

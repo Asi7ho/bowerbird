@@ -9,7 +9,8 @@ export interface Size { w: number; h: number }
 export type Anchor = { Point: Pt } | { Item: number };
 
 export type Kind =
-  | { Text: { text: string; bold: boolean; size: number; color: string } }
+  | { Text: { text: string; bold: boolean; size: number; color: string; bg?: string } }
+  | { Shape: { shape: "rect" | "ellipse"; fill: string } }
   | { Image: { path: string } }
   | { UrlCard: { url: string; title: string | null; description: string | null; image?: string | null; icon?: string | null; embed?: boolean } }
   | { PdfCard: { path: string; size_bytes: number } }
@@ -31,6 +32,11 @@ export interface Item {
   size: Size;
   group: number | null;
   kind: Kind;
+  // Rotation in degrees, clockwise, around the card's centre.
+  // Optional so old boards load unchanged: missing means 0.
+  // Only cards rotate; strokes and connectors never carry it,
+  // and slide frames are excluded by the rotate action.
+  rotation?: number;
 }
 
 export interface Camera { x: number; y: number; zoom: number }
@@ -90,6 +96,16 @@ function distToSegment(p: Pt, a: Pt, b: Pt): number {
   return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
 
+export function rotatePoint(p: Pt, c: Pt, deg: number): Pt {
+  const r = (deg * Math.PI) / 180;
+  const cos = Math.cos(r), sin = Math.sin(r);
+  const dx = p.x - c.x, dy = p.y - c.y;
+  return { x: c.x + dx * cos - dy * sin, y: c.y + dx * sin + dy * cos };
+}
+export function itemRotation(item: Item): number {
+  const r = Number(item.rotation ?? 0);
+  return Number.isFinite(r) ? r : 0;
+}
 function itemHit(board: Board, item: Item, world: Pt): boolean {
   if ("Connector" in item.kind) {
     const a = anchorPoint(board, item.kind.Connector.from);
@@ -104,9 +120,17 @@ function itemHit(board: Board, item: Item, world: Pt): boolean {
     }
     return points.some((p) => Math.hypot(p.x - world.x, p.y - world.y) <= tol);
   }
+  // A rotated card is hit in its own frame: rotate the point
+  // back by -rotation around the centre, then test the
+  // unrotated rect. Without this, a rotated card's corners
+  // (outside the rect, inside its axis-aligned box) would
+  // still select it, and its real corners would not.
+  let p = world;
+  const rot = itemRotation(item);
+  if (rot !== 0) p = rotatePoint(world, centre(item), -rot);
   return (
-    world.x >= item.pos.x && world.x <= item.pos.x + item.size.w &&
-    world.y >= item.pos.y && world.y <= item.pos.y + item.size.h
+    p.x >= item.pos.x && p.x <= item.pos.x + item.size.w &&
+    p.y >= item.pos.y && p.y <= item.pos.y + item.size.h
   );
 }
 

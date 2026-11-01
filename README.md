@@ -2,7 +2,7 @@
 
 An infinite whiteboard for creatives, built like a quick note: one window, always there, ready to drop things onto.
 
-Drop images, notes, links, PDFs, audio, video and colours onto the board. Pan and zoom freely, sketch with a pen, connect things with lines, and group items that belong together. The board saves on every change, so closing it never loses anything.
+Drop images, notes, links, PDFs, audio, video and colours onto the board. Pan and zoom freely, sketch with a pen, connect things with lines, draw rectangles and ellipses, rotate cards, and group items that belong together. The board saves on every change, so closing it never loses anything, and it backs itself up at most once an hour, plus before a reset or a restore — see Settings → Data → Backups.
 
 Link cards are previews only. They do not embed web pages.
 
@@ -36,6 +36,10 @@ The build is unsigned, so a recipient must right-click it and choose Open the fi
 ## Use it
 
 - **Pan:** hold `Space` and drag, or scroll. **Zoom:** `Ctrl` + scroll, `+` / `-`, or the toolbar buttons.
+- **Shapes:** the rectangle (R) and ellipse (E) tools draw a shape in the pen colour. Drag on the board to size it.
+- **Rotate:** drag the round handle above a selected card, or press `[` / `]` to rotate the selection by 15°. Strokes, connectors and slide frames do not rotate.
+- **Note colours:** select a text note and pick a background from the colour flyout beside the toolbar. Light pastels only, so the text stays readable.
+- **Boards:** the Boards plugin (on by default) lists boards in the right panel. Click a board to open it, click the current board's name to rename it, × to delete it. Main is the default board.
 - **Select:** click an item, `Shift`-click to add to the selection, or drag a box around several items. Dragging one member of a group moves the whole group. Clicking a card brings it to the front.
 - **Find:** `Tab` steps through elements in board order and centres each one. `Shift + Tab` steps backwards. Pen strokes and connectors are skipped.
 - **Text:** double-click empty space for a new note, double-click a note to edit it. `Esc` commits, and the note renders markdown: headings, bullets, numbered lists, quotes, code blocks, bold, italic, code, links and strikethrough.
@@ -73,7 +77,7 @@ General holds the keyboard shortcuts, the canvas background and grid, Data, and 
 
 ## Plugins
 
-Bowerbird has plugins. The bundled ones are Hide, Visual Library, Palette, Presentation, Command Palette and Plugin Builder, which describes a plugin and has an AI write it for you to check and install. See `plugins/README.md` for what each one does, and `PLUGIN_API.md` if you want to write one.
+Bowerbird has plugins. The bundled ones are Hide, Visual Library, Palette, Presentation, Command Palette, Plugin Builder, which describes a plugin and has an AI write it for you to check and install, and Boards, for switching between boards. See `plugins/README.md` for what each one does, and `PLUGIN_API.md` if you want to write one.
 
 ## Icon
 
@@ -116,7 +120,6 @@ npm run build
 ## Not yet
 
 - No system-wide global hotkey. That needs an OS-level hook, with accessibility permission on macOS.
-- No multi-board switching.
 
 ## License
 

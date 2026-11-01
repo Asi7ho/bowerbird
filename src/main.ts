@@ -5,6 +5,13 @@ interface BowerbirdAPI {
   isDemo: boolean;
   loadBoard(): Promise<{ json: string | null; board_path: string; board_dir: string; pdf_size_bytes: number; video_size_bytes: number; panelOrder?: string[]; buildId?: string }>;
   saveBoard(json: string): Promise<void>;
+  listBoards(): Promise<Array<{ name: string; current: boolean; items: number }>>;
+  createBoard(name: string): Promise<{ name: string }>;
+  switchBoard(name: string): Promise<{ json: string; board_path: string; board_dir: string }>;
+  renameBoard(oldName: string, newName: string): Promise<{ name: string }>;
+  deleteBoard(name: string): Promise<{ wasCurrent: boolean }>;
+  listBackups(): Promise<Array<{ name: string; items: number; size: number }>>;
+  restoreBackup(name: string): Promise<{ json: string; board_path: string; board_dir: string }>;
   resetBoard(): Promise<{ pdf_size_bytes: number; video_size_bytes: number }>;
   restoreShowcase(): Promise<{ copied: string[]; missing: string[]; srcDir: string; destDir: string }>;
   checkFile(filePath: string): Promise<{ path: string; exists: boolean; size: number; bundlePath: string; bundleExists: boolean; bundleSize: number }>;
@@ -56,8 +63,8 @@ const api = window.bowerbird;
 import {
   Anchor, Board, GRID, Item, Pt,
   anchorPoint, boardGet, centre, clippedEnds, domainOf, elide, escapeHtml, estimateTextHeight,
-  hitTest, itemBounds, marquee, moveSelection, normaliseHex, parseHex, renderMarkdownHtml,
-  resizeItem, select, tileColorFor, tint,
+  hitTest, itemBounds, itemRotation, marquee, moveSelection, normaliseHex, parseHex, renderMarkdownHtml,
+  resizeItem, rotatePoint, select, tileColorFor, tint,
 } from "./model";
 import { welcomeBoard } from "./welcome";
 import MiniSearch from "minisearch";
@@ -83,6 +90,9 @@ import {
 // type stays open so a plugin tool is a valid Tool.
 type Tool = string;
 const PALETTE = ["#1A1A1A", "#E63946", "#2E86AB", "#FF6B35", "#6A4C93", "#2A9D8F"];
+// Note background colours: light pastels only, so dark note text
+// stays readable on every one. White is the default (no bg set).
+const NOTE_COLOURS = ["#FFFFFF", "#FEF3C7", "#FCE7F3", "#DCFCE7", "#DBEAFE", "#FFEDD5", "#EDE9FE", "#F3F4F6"];
 const ACCENT = "#007AFF";
 
 const SHORTCUTS: Array<[string, string]> = [
@@ -146,6 +156,8 @@ let drag: null
   | { kind: "stroke"; points: Pt[] }
   | { kind: "connector"; from: Anchor; current: Pt }
   | { kind: "marquee"; start: Pt; current: Pt }
+  | { kind: "shape"; shape: "rect" | "ellipse"; start: Pt; current: Pt }
+  | { kind: "rotate"; id: number; origRot: number; moved: boolean }
   | { kind: "resize"; id: number; startWorld: Pt; origW: number; origH: number; moved: boolean } = null;
 let pluginToolDown = false;
 let audioEl: HTMLAudioElement | null = null;
@@ -557,6 +569,70 @@ function resetUndo(): void {
   lastSnapshot = contentSnapshot();
   updateUndoButtons();
 }
+// Replace the board in place, from a JSON string the main
+// process just handed over (a board switch, or a backup
+// restore). The old board's undo, search, context index and
+// media caches are all per-board, so they are cleared, not
+// carried over — a restored board must not undo back into
+// the board it replaced, and its context index is its own
+// file in its own folder.
+async function loadBoardFromJson(json: string, dir: string): Promise<void> {
+  commitEditingIfAny();
+  const parsed = JSON.parse(json) as Board;
+  parsed.bg = parsed.bg ?? "#FFFFFF";
+  parsed.grid = parsed.grid ?? "Dots";
+  parsed.camera = parsed.camera ?? { x: 0, y: 0, zoom: 1 };
+  board = parsed;
+  boardDir = dir;
+  selected = [];
+  editingId = null;
+  searchMatches = [];
+  searchRows = [];
+  searchIndex = -1;
+  const input = document.getElementById("search-input") as HTMLInputElement | null;
+  if (input) input.value = "";
+  contextIndex.clear();
+  contextIndexLoaded = false;
+  contextIndexFailed = false;
+  contextQueryCache.clear();
+  contextQueryEmbedding = null;
+  pdfSearchText.clear();
+  pdfSearchIndexing.clear();
+  pdfPages.clear();
+  audioDurations.clear();
+  audioFailed.clear();
+  const boardDirEl = document.getElementById("board-dir-meta");
+  if (boardDirEl) boardDirEl.textContent = `Board folder: ${boardDir}`;
+  resetUndo();
+  render();
+  void loadContextIndex();
+}
+async function switchToBoard(name: string): Promise<boolean> {
+  if (DEMO) { toast("Demo — boards do not switch in demo mode"); return false; }
+  try {
+    commitEditingIfAny();
+    await api.saveBoard(JSON.stringify(board));
+    const loaded = await api.switchBoard(name);
+    await loadBoardFromJson(loaded.json, loaded.board_dir);
+    toast(`Board: ${name}`);
+    return true;
+  } catch (e) {
+    toast(`Could not switch boards: ${String(e)}`);
+    return false;
+  }
+}
+async function restoreBoardBackup(name: string): Promise<boolean> {
+  if (DEMO) { toast("Demo — backups are not available in demo mode"); return false; }
+  try {
+    const loaded = await api.restoreBackup(name);
+    await loadBoardFromJson(loaded.json, loaded.board_dir);
+    toast("Backup restored");
+    return true;
+  } catch (e) {
+    toast(`Could not restore backup: ${String(e)}`);
+    return false;
+  }
+}
 function allocId(): number {
   board.next_id += 1;
   return board.next_id;
@@ -761,7 +837,8 @@ function cardHtml(item: Item, plain = false): string {
   const cls = sel ? "card selected" : "card";
   if ("Plugin" in item.kind) {
     const ww0 = num(item.size.w, 0), hh0 = num(item.size.h, 0);
-    const style0 = `left:${num(item.pos.x, 0)}px;top:${num(item.pos.y, 0)}px;width:${ww0}px;height:${hh0}px;`;
+    const rot0 = itemRotation(item);
+    const style0 = `left:${num(item.pos.x, 0)}px;top:${num(item.pos.y, 0)}px;width:${ww0}px;height:${hh0}px;${rot0 ? `transform:rotate(${rot0}deg);` : ""}`;
     const inner = getCardHtml(item) ?? "";
     const frameCls = getCardRenderer(item)?.frame === true ? " plugin-frame" : "";
     return `<div class="${cls}${frameCls}" data-id="${id}" style="${style0}"><div class="inner">${inner}</div></div>`;
@@ -773,12 +850,25 @@ function cardHtml(item: Item, plain = false): string {
   // was the main source of lag. Content still scales with zoom,
   // because the layer itself is scaled.
   const ww = num(item.size.w, 0), hh = num(item.size.h, 0);
-  const style = `left:${num(item.pos.x, 0)}px;top:${num(item.pos.y, 0)}px;width:${ww}px;height:${hh}px;`;
+  const rot = itemRotation(item);
+  const style = `left:${num(item.pos.x, 0)}px;top:${num(item.pos.y, 0)}px;width:${ww}px;height:${hh}px;${rot ? `transform:rotate(${rot}deg);` : ""}`;
   if ("Text" in item.kind) {
     if (!plain && editingId === id) return ""; // the editor DOM is managed separately
-    const { text, size, color } = item.kind.Text;
+    const { text, size, color, bg } = item.kind.Text;
     const safeSize = num(size, 16);
-    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner note-body" style="font-size:${safeSize}px;color:${safeColor(color, "#1A1A1A")}">${cachedMarkdown(item, text, safeSize)}</div></div>`;
+    const noteBg = safeColor(bg, "#FFFFFF");
+    return `<div class="${cls}" data-id="${id}" style="${style}background:${noteBg}"><div class="inner note-body" style="font-size:${safeSize}px;color:${safeColor(color, "#1A1A1A")}">${cachedMarkdown(item, text, safeSize)}</div></div>`;
+  }
+  if ("Shape" in item.kind) {
+    const fill = safeColor(item.kind.Shape.fill, "#1A1A1A");
+    const radius = item.kind.Shape.shape === "ellipse" ? "50%" : "12px";
+    // Outer card is transparent with no hairline border, so
+    // an ellipse is really an ellipse: a filled outer rect
+    // would show its corners outside the ellipse, and a
+    // rectangular hairline would frame it. The selected
+    // ring (box-shadow) follows the outer border-radius,
+    // so it wraps an ellipse as an ellipse, not a rect.
+    return `<div class="${cls}" data-id="${id}" style="${style}background:transparent;border:none;border-radius:${radius}"><div class="inner" style="background:${fill};border-radius:${radius};width:100%;height:100%;box-shadow:var(--shadow-sm)"></div></div>`;
   }
   if ("Image" in item.kind) {
     const { path } = item.kind.Image;
@@ -979,29 +1069,71 @@ function render(): void {
   updateSearch();
 }
 
+function isRotatable(it: Item | undefined): boolean {
+  if (!it || "Stroke" in it.kind || "Connector" in it.kind) return false;
+  return !isFrameCard(it);
+}
+function rotateHandleWorld(it: Item): Pt {
+  const c = centre(it);
+  const top = { x: c.x, y: it.pos.y - 28 / board.camera.zoom };
+  return rotatePoint(top, c, itemRotation(it));
+}
 function updateResizeHandle(): void {
   const el = document.getElementById("resize-handle") as HTMLDivElement;
+  const rotEl = document.getElementById("rotate-handle") as HTMLDivElement | null;
   // A plugin view owns the screen: the board's resize handle is
   // not part of that view, so it must never float over it — it
   // did, at the selected card's corner, while playing a slide.
-  if (getActiveView() !== "board" || selected.length !== 1 || settingsOpen || editingId !== null) { el.style.display = "none"; return; }
+  if (getActiveView() !== "board" || selected.length !== 1 || settingsOpen || editingId !== null) {
+    el.style.display = "none";
+    if (rotEl) rotEl.style.display = "none";
+    return;
+  }
   const it = boardGet(board, selected[0]);
-  if (!it || "Connector" in it.kind) { el.style.display = "none"; return; }
+  if (!it || "Connector" in it.kind) {
+    el.style.display = "none";
+    if (rotEl) rotEl.style.display = "none";
+    return;
+  }
   const [p, s] = itemBounds(board, it);
-  const screen = toScreen({ x: p.x + s.w, y: p.y + s.h });
+  const c = centre(it);
+  const rot = itemRotation(it);
+  // Corners follow the rotation, so the handles sit on the
+  // card as drawn, not on its unrotated bounding box.
+  const corner = rotatePoint({ x: p.x + s.w, y: p.y + s.h }, c, rot);
+  const screen = toScreen(corner);
   const bs = boardSize();
   if (screen.x < 0 || screen.y < 0 || screen.x > bs.x || screen.y > bs.y) {
-    el.style.display = "none"; return;
+    el.style.display = "none";
+  } else {
+    el.style.left = `${screen.x}px`;
+    el.style.top = `${screen.y}px`;
+    el.style.display = "block";
   }
-  el.style.left = `${screen.x}px`;
-  el.style.top = `${screen.y}px`;
-  el.style.display = "block";
+  if (rotEl) {
+    if (!isRotatable(it)) { rotEl.style.display = "none"; return; }
+    const rs = toScreen(rotateHandleWorld(it));
+    if (rs.x < 0 || rs.y < 0 || rs.x > bs.x || rs.y > bs.y) {
+      rotEl.style.display = "none"; return;
+    }
+    rotEl.style.left = `${rs.x}px`;
+    rotEl.style.top = `${rs.y}px`;
+    rotEl.style.display = "block";
+  }
 }
 
+function noteBgOfSelected(): string | null {
+  for (const id of selected) {
+    const it = boardGet(board, id);
+    if (it && "Text" in it.kind) return it.kind.Text.bg ?? "#FFFFFF";
+  }
+  return null;
+}
 function updateToolbar(): void {
   // render() runs on every mousemove; rebuilding the toolbar's DOM
   // every time is wasted work when nothing about it changed.
-  const key = `${tool}|${selected.length}|${penColor}`;
+  const noteBg = noteBgOfSelected();
+  const key = `${tool}|${selected.join(",")}|${penColor}|${noteBg ?? ""}`;
   if (key === lastToolbarKey) return;
   lastToolbarKey = key;
   const setActive = (id: string, on: boolean) => {
@@ -1011,6 +1143,39 @@ function updateToolbar(): void {
   setActive("tool-select", tool === "select");
   setActive("tool-pen", tool === "pen");
   setActive("tool-connector", tool === "connector");
+  setActive("tool-rect", tool === "rect");
+  setActive("tool-ellipse", tool === "ellipse");
+  // Note colours: shown when at least one selected card is a
+  // text note and the pen flyout is not showing (pen tool).
+  // Clicking a colour sets the background of every selected
+  // text note, and saves, so it is undoable like any edit.
+  const noteEl = document.getElementById("note-colours") as HTMLDivElement | null;
+  if (noteEl) {
+    const showNotes = noteBg !== null && tool !== "pen";
+    noteEl.style.display = showNotes ? "flex" : "none";
+    if (showNotes && noteEl.childElementCount === 0) {
+      for (const hex of NOTE_COLOURS) {
+        const b = document.createElement("div");
+        b.className = "swatch";
+        b.style.background = hex;
+        b.title = hex;
+        b.addEventListener("click", () => {
+          for (const id of selected) {
+            const it = boardGet(board, id);
+            if (it && "Text" in it.kind) it.kind.Text.bg = hex;
+          }
+          save(); render();
+        });
+        noteEl.appendChild(b);
+      }
+    }
+    if (showNotes) {
+      for (const child of Array.from(noteEl.children)) {
+        const sw = child as HTMLDivElement;
+        sw.classList.toggle("active", sw.title.toUpperCase() === (noteBg ?? "#FFFFFF").toUpperCase());
+      }
+    }
+  }
   syncPluginToolButtons(tool);
   const palette = document.getElementById("palette") as HTMLDivElement;
   palette.style.display = tool === "pen" ? "flex" : "none";
@@ -1083,6 +1248,11 @@ function updateSelectionInner(): void {
 
 function updateSelection(): void {
   updateSelectionInner();
+  // Toolbar state now depends on selection (note colours
+  // show only when a text note is selected), and a click
+  // only calls updateSelection, not render, so the toolbar
+  // must refresh here or the flyout would never appear.
+  updateToolbar();
   emitPluginEvent("selection");
 }
 
@@ -1209,9 +1379,35 @@ function cornerHit(id: number, world: Pt): boolean {
   const it = boardGet(board, id);
   if (!it || "Connector" in it.kind) return false;
   const [p, s] = itemBounds(board, it);
+  const corner = rotatePoint({ x: p.x + s.w, y: p.y + s.h }, centre(it), itemRotation(it));
   const tol = 16 / cam.zoom;
-  return world.x >= p.x + s.w - tol && world.x <= p.x + s.w + tol &&
-    world.y >= p.y + s.h - tol && world.y <= p.y + s.h + tol;
+  return Math.hypot(world.x - corner.x, world.y - corner.y) <= tol;
+}
+function rotateHit(id: number, world: Pt): boolean {
+  const cam = board.camera;
+  const it = boardGet(board, id);
+  if (!it || !isRotatable(it)) return false;
+  const h = rotateHandleWorld(it);
+  const tol = 18 / cam.zoom;
+  return Math.hypot(world.x - h.x, world.y - h.y) <= tol;
+}
+function normAngle(deg: number): number {
+  let d = deg % 360;
+  if (d > 180) d -= 360;
+  if (d <= -180) d += 360;
+  return d;
+}
+function rotateSelected(delta: number): boolean {
+  let changed = false;
+  for (const id of selected) {
+    const it = boardGet(board, id);
+    if (!it || !isRotatable(it)) continue;
+    it.rotation = normAngle(itemRotation(it) + delta);
+    changed = true;
+  }
+  if (!changed) return false;
+  save(); render();
+  return true;
 }
 
 // ---------------------------------------------------------------- mouse
@@ -1244,6 +1440,10 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
     return;
   }
   if (spaceDown) { drag = { kind: "pan", last: winPt }; return; }
+  if (tool === "rect" || tool === "ellipse") {
+    drag = { kind: "shape", shape: tool === "rect" ? "rect" : "ellipse", start: world, current: world };
+    return;
+  }
   if (tool === "pen") {
     drag = { kind: "stroke", points: [world] };
     return;
@@ -1280,6 +1480,11 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
     }
   }
   const clicked = hitTestWithFrames(board, world);
+  if (selected.length === 1 && rotateHit(selected[0], world)) {
+    const it = boardGet(board, selected[0]);
+    drag = { kind: "rotate", id: selected[0], origRot: it ? itemRotation(it) : 0, moved: false };
+    return;
+  }
   if (selected.length === 1 && cornerHit(selected[0], world)) {
     const sel = selected[0];
     const it = boardGet(board, sel);
@@ -1356,9 +1561,11 @@ window.addEventListener("mousemove", (e: MouseEvent) => {
         if (!w) return;
         if (settingsOpen || editingId !== null) {
           boardEl.style.cursor = "default";
-        } else if (tool === "pen" || tool === "connector") {
+        } else if (tool === "pen" || tool === "connector" || tool === "rect" || tool === "ellipse") {
           boardEl.style.cursor = "crosshair";
         } else if (spaceDown) {
+          boardEl.style.cursor = "grab";
+        } else if (selected.length === 1 && rotateHit(selected[0], w)) {
           boardEl.style.cursor = "grab";
         } else if (selected.length === 1 && cornerHit(selected[0], w)) {
           boardEl.style.cursor = "nwse-resize";
@@ -1371,7 +1578,7 @@ window.addEventListener("mousemove", (e: MouseEvent) => {
     }
     return;
   }
-  boardEl.style.cursor = drag.kind === "resize" ? "nwse-resize" : drag.kind === "pan" ? "grabbing" : drag.kind === "move" ? "move" : "default";
+  boardEl.style.cursor = drag.kind === "resize" ? "nwse-resize" : drag.kind === "rotate" ? "grabbing" : drag.kind === "pan" ? "grabbing" : drag.kind === "move" ? "move" : "default";
   if (drag.kind === "pan") {
     board.camera.x -= (winPt.x - drag.last.x) / board.camera.zoom;
     board.camera.y -= (winPt.y - drag.last.y) / board.camera.zoom;
@@ -1408,6 +1615,35 @@ window.addEventListener("mousemove", (e: MouseEvent) => {
       el.setAttribute("y2", String(world.y));
       el.setAttribute("stroke", "#333333");
       el.setAttribute("stroke-width", "2");
+    }
+  } else if (drag.kind === "shape") {
+    drag.current = world;
+    const x0 = Math.min(drag.start.x, world.x), y0 = Math.min(drag.start.y, world.y);
+    const w = Math.abs(world.x - drag.start.x), h = Math.abs(world.y - drag.start.y);
+    if (drag.shape === "rect") {
+      const el = dragPreview("shape-preview", "rect");
+      el.setAttribute("x", String(x0)); el.setAttribute("y", String(y0));
+      el.setAttribute("width", String(w)); el.setAttribute("height", String(h));
+      el.setAttribute("rx", "12");
+      el.setAttribute("fill", penColor); el.setAttribute("fill-opacity", "0.85");
+    } else {
+      const el = dragPreview("shape-preview", "ellipse");
+      el.setAttribute("cx", String(x0 + w / 2)); el.setAttribute("cy", String(y0 + h / 2));
+      el.setAttribute("rx", String(w / 2)); el.setAttribute("ry", String(h / 2));
+      el.setAttribute("fill", penColor); el.setAttribute("fill-opacity", "0.85");
+    }
+  } else if (drag.kind === "rotate") {
+    const it = boardGet(board, drag.id);
+    if (it) {
+      const c = centre(it);
+      let deg = Math.atan2(world.y - c.y, world.x - c.x) * 180 / Math.PI + 90;
+      if (e.shiftKey) deg = Math.round(deg / 15) * 15;
+      const rot = normAngle(deg);
+      if (Math.abs(rot - drag.origRot) > 1) drag.moved = true;
+      it.rotation = rot;
+      const el = cardsEl.querySelector(`[data-id="${drag.id}"]`) as HTMLElement | null;
+      if (el) el.style.transform = rot ? `rotate(${rot}deg)` : "";
+      updateResizeHandle();
     }
   } else if (drag.kind === "marquee") {
     drag.current = world;
@@ -1466,6 +1702,28 @@ window.addEventListener("mouseup", (e: MouseEvent) => {
       board.items.push({ id, pos: { x: Math.min(aPt.x, bPt.x), y: Math.min(aPt.y, bPt.y) }, size: { w: Math.max(1, Math.abs(bPt.x - aPt.x)), h: Math.max(1, Math.abs(bPt.y - aPt.y)) }, group: null, kind: { Connector: { from: d.from, to: toAnchor, color: "#333333" } } });
       save();
     }
+  } else if (d.kind === "shape") {
+    const w = Math.abs(world.x - d.start.x), h = Math.abs(world.y - d.start.y);
+    if (w >= 10 && h >= 10) {
+      const id = allocId();
+      board.items.push({ id, pos: { x: Math.min(d.start.x, world.x), y: Math.min(d.start.y, world.y) }, size: { w, h }, group: null, kind: { Shape: { shape: d.shape, fill: penColor } } });
+      save();
+    }
+  } else if (d.kind === "rotate") {
+    // Apply the final point too: a drag's last mousemove
+    // may not be at the mouseup point, so the rotation
+    // would otherwise stop one step short of where the
+    // user actually released.
+    const it = boardGet(board, d.id);
+    if (it) {
+      const c = centre(it);
+      let deg = Math.atan2(world.y - c.y, world.x - c.x) * 180 / Math.PI + 90;
+      if (e.shiftKey) deg = Math.round(deg / 15) * 15;
+      const rot = normAngle(deg);
+      if (Math.abs(rot - d.origRot) > 1) d.moved = true;
+      it.rotation = rot;
+    }
+    if (d.moved) save();
   } else if (d.kind === "marquee") {
     selected = marquee(board, d.start, world);
   } else if (d.kind === "pan") {
@@ -1487,7 +1745,7 @@ window.addEventListener("mouseup", (e: MouseEvent) => {
   // their final geometry). A move/resize that never moved was a
   // click, not a drag: rebuilding here would destroy the card
   // button just pressed, so its click would never fire.
-  if (d.kind === "stroke" || d.kind === "connector" || d.kind === "marquee") {
+  if (d.kind === "stroke" || d.kind === "connector" || d.kind === "marquee" || d.kind === "shape" || (d.kind === "rotate" && d.moved)) {
     render();
   } else if ((d.kind === "move" || d.kind === "resize") && d.moved) {
     render();
@@ -1806,6 +2064,10 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   } else if (e.key.toLowerCase() === "v" && !ctrl) setTool("select");
   else if (e.key.toLowerCase() === "p" && !ctrl) setTool("pen");
   else if (e.key.toLowerCase() === "a" && !ctrl) setTool("connector");
+  else if (e.key.toLowerCase() === "r" && !ctrl) setTool("rect");
+  else if (e.key.toLowerCase() === "e" && !ctrl) setTool("ellipse");
+  else if (e.key === "[" && !ctrl) rotateSelected(-15);
+  else if (e.key === "]" && !ctrl) rotateSelected(15);
   else if (e.key.toLowerCase() === "g" && ctrl) {
     e.preventDefault();
     groupSelected();
@@ -1831,6 +2093,8 @@ window.addEventListener("keyup", (e: KeyboardEvent) => {
 document.getElementById("tool-select")?.addEventListener("click", () => setTool("select"));
 document.getElementById("tool-pen")?.addEventListener("click", () => setTool("pen"));
 document.getElementById("tool-connector")?.addEventListener("click", () => setTool("connector"));
+document.getElementById("tool-rect")?.addEventListener("click", () => setTool("rect"));
+document.getElementById("tool-ellipse")?.addEventListener("click", () => setTool("ellipse"));
 document.getElementById("zoom-in")?.addEventListener("click", () => { zoomCentre(1.2); save(); render(); });
 document.getElementById("zoom-out")?.addEventListener("click", () => { zoomCentre(1 / 1.2); save(); render(); });
 document.getElementById("btn-delete")?.addEventListener("click", () => {
@@ -2173,7 +2437,12 @@ function searchDoc(item: Item): SearchDoc | null {
     const headings = lines.filter((l) => l.trim().startsWith("#")).map((l) => l.replace(/^#+\s*/, "")).join(" ");
     const title = lines.map((l) => l.trim()).find((l) => l !== "")?.replace(/^#+\s*/, "") ?? "Note";
     const excerptText = lines.map((l) => l.replace(/^#+\s*/, "")).join("\n");
-    return { id: item.id, title, headings, body: k.Text.text, typeLabel: "Note", excerptText, ext: "md" };
+    const bgName = k.Text.bg && k.Text.bg.toUpperCase() !== "#FFFFFF" ? colorNameForHex(k.Text.bg) : "";
+    return { id: item.id, title, headings, body: `${k.Text.text} ${bgName}`, typeLabel: "Note", excerptText, ext: "md" };
+  }
+  if ("Shape" in k) {
+    const name = colorNameForHex(k.Shape.fill).split(" ")[0];
+    return { id: item.id, title: `${name} ${k.Shape.shape === "ellipse" ? "ellipse" : "rectangle"}`, headings: "", body: `${k.Shape.shape} shape ${k.Shape.fill} ${colorNameForHex(k.Shape.fill)} color colour`, typeLabel: "Shape", excerptText: `${name} ${k.Shape.shape}`, ext: "" };
   }
   if ("UrlCard" in k) {
     let domain = "";
@@ -2732,11 +3001,59 @@ function setSettings(open: boolean): void {
     renderShortcutsTable();
     renderBgOpts();
     renderGridOpts();
+    void renderBackups();
     renderPluginSettingsSections();
     renderPluginSettings();
     setSettingsTab("general");
   }
   render();
+}
+
+async function renderBackups(): Promise<void> {
+  const el = document.getElementById("backups-list") as HTMLElement | null;
+  if (!el) return;
+  if (DEMO) { el.innerHTML = `<p class="meta">Backups are not available in demo mode.</p>`; return; }
+  let list: Array<{ name: string; items: number; size: number }> = [];
+  try { list = await api.listBackups(); } catch { list = []; }
+  if (list.length === 0) {
+    el.innerHTML = `<p class="meta">No backups yet. The first one is made within an hour of working on this board.</p>`;
+    return;
+  }
+  const fmtSize = (n: number): string => n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  const fmtName = (n: string): string => {
+    // Backup folders are YYYY-MM-DD-HHMMSS: show them as a date and time.
+    const m = /^(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})(\d{2})/.exec(n);
+    return m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}` : n;
+  };
+  el.innerHTML = "";
+  for (const b of list) {
+    const row = document.createElement("div");
+    row.className = "backup-row";
+    row.style.cssText = "display:flex;align-items:center;gap:12px;margin:6px 0";
+    const meta = document.createElement("span");
+    meta.className = "meta";
+    meta.style.flex = "1 1 auto";
+    meta.textContent = `${fmtName(b.name)} · ${b.items} items · ${fmtSize(b.size)}`;
+    const btn = document.createElement("button");
+    btn.textContent = "Restore";
+    let armed = false;
+    btn.addEventListener("click", async () => {
+      // Two-click confirm, like Delete all data: the first
+      // click arms the button, the second restores. The app
+      // never uses a native confirm dialog.
+      if (!armed) {
+        armed = true;
+        btn.textContent = "Confirm restore?";
+        setTimeout(() => { if (btn.isConnected) { armed = false; btn.textContent = "Restore"; } }, 4000);
+        return;
+      }
+      const ok = await restoreBoardBackup(b.name);
+      if (ok) { setSettings(false); void renderBackups(); }
+    });
+    row.appendChild(meta);
+    row.appendChild(btn);
+    el.appendChild(row);
+  }
 }
 
 function renderBgOpts(): void {
@@ -3047,6 +3364,7 @@ async function init(): Promise<void> {
     },
     save: () => save(),
     render: () => render(),
+    switchBoard: (name: string) => switchToBoard(name),
     setTool: (toolName: string) => setTool(toolName),
     getPenColor: () => penColor,
     setPenColor: (hex: string) => {
@@ -3096,6 +3414,7 @@ async function init(): Promise<void> {
       // must hide it, and returning to the board restores its
       // CSS default (hidden until updateResizeHandle shows it).
       document.getElementById("resize-handle") as HTMLElement,
+      document.getElementById("rotate-handle") as HTMLElement,
     ],
     viewSwitcherEl: document.getElementById("view-switcher") as HTMLElement,
     overlaysEl: document.getElementById("plugin-overlays") as HTMLElement,

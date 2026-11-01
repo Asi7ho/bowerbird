@@ -2,8 +2,13 @@
 //
 // A colour wheel, not a fixed palette list. Pick a colour
 // on the wheel and five palettes are made from it, live,
-// following colour theory — no fixed palettes, no network,
-// no storage.
+// following colour theory — no fixed palettes, no network.
+// The picked colour is saved in plugin storage, so it
+// survives restarts and re-enabling: on activate, a fresh
+// app (pen still at its default black) restores the saved
+// colour and the pen with it; otherwise Palette follows
+// the pen, as it always did, so a toolbar pick made while
+// Palette was off is not overwritten by an old saved colour.
 //
 // The wheel is hue + saturation: angle round the wheel is
 // hue (red at the top, clockwise), distance from the
@@ -243,8 +248,17 @@ function hexToHsl(hex) {
   return { h, s, l };
 }
 
+function savePicked() {
+  if (!apiRef || !apiRef.storage) return;
+  try {
+    const hex = hslToHex(baseH, baseS, baseL);
+    void apiRef.storage.set("picked", hex).catch(() => { /* storage is a convenience, not a pick */ });
+  } catch { /* same */ }
+}
+
 function updateAll(setPen) {
   const hex = hslToHex(baseH, baseS, baseL);
+  if (setPen) savePicked();
   if (previewSwatch) {
     previewSwatch.style.background = hex;
     previewSwatch.dataset.hex = hex;
@@ -414,8 +428,30 @@ function renderPanel(container) {
   wheelWrap._palPointerDown = onPointerDown;
 }
 
-function activate(api) {
+async function activate(api) {
   apiRef = api;
+  // Restore the picked colour, if there is one. A fresh
+  // app starts with the pen at its default black, so a
+  // saved colour is a restart, not a toolbar pick: restore
+  // it into the wheel and the pen. Any other pen colour
+  // means the user picked in the toolbar while Palette was
+  // off, so Palette follows the pen instead (see below).
+  try {
+    if (apiRef.storage) {
+      const saved = await apiRef.storage.get("picked");
+      if (typeof saved === "string" && /^#[0-9a-fA-F]{6}$/.test(saved)) {
+        const penNow = apiRef.pen ? apiRef.pen.getColor() : "#1A1A1A";
+        if (penNow.toUpperCase() === "#1A1A1A") {
+          const hsl = hexToHsl(saved);
+          baseH = hsl.h; baseS = hsl.s; baseL = hsl.l;
+          if (apiRef.pen) apiRef.pen.setColor(saved.toUpperCase());
+        } else {
+          const hsl = hexToHsl(penNow);
+          baseH = hsl.h; baseS = hsl.s; baseL = hsl.l;
+        }
+      }
+    }
+  } catch { /* a failed restore leaves the default blue */ }
   // Follow the pen when it changes elsewhere, in the
   // toolbar: read the new colour, move the wheel and
   // palettes to it, and do not set the pen back, or
@@ -429,6 +465,7 @@ function activate(api) {
     baseS = hsl.s;
     baseL = hsl.l;
     updateAll(false);
+    savePicked();
   };
   apiRef.events.on("pen", penHandler);
   apiRef.ui.registerPanel({

@@ -94,6 +94,17 @@ Board methods validate their input and throw on bad ids, bad positions, or a plu
 
 Undo is snapshots, not operations: every save compares the board content with the last saved content, and a change becomes one undo step, up to 50 steps. A plugin board change saves immediately, like a core drag or note commit, so it is undoable too. Panning and zooming never create a step, and undoing never moves the view. `api.board.undo()`, `redo()`, `canUndo()` and `canRedo()` run undo from a plugin; undo and redo need `board:write`.
 
+### Boards — `api.boards`
+
+Multi-board is a plugin, not core UI: the core owns one board at a time, and this domain is how a plugin lists and switches boards. Switching saves the current board, loads the new one, and resets undo, search and the context index, which are all per-board. All methods except `list` and `current` need `board:write`.
+
+- `list()` — `[{ name, current, items }]`, Main first, then other boards by name. Main is the default board; other boards live in their own folders under the base folder's `boards/`, each with its own assets and backups.
+- `current()` — the current board's name.
+- `create(name)` — create an empty board. Names are 1–64 characters; Main is reserved and cannot be created, renamed or deleted.
+- `switch(name)` — switch to a board, returning true on success. The current board name is stored in app settings, so the last board survives the Boards plugin being turned off.
+- `rename(oldName, newName)` — rename a board's folder and display name.
+- `delete(name)` — delete a board's folder, including its assets and backups, after the plugin's own confirmation. It refuses the current board: switch to another board first, then delete, or the renderer would be left on a deleted folder.
+
 ### Window — `api.window`
 
 Requires the `window` permission. These are main-process primitives a renderer plugin cannot do itself. The Hide plugin is built on exactly these.
@@ -227,6 +238,7 @@ Plugins in `plugins/` ship inside the app, are listed in Settings as "Built in",
 - `palette/` — a colour wheel panel. Pick a colour and five palettes are made from it live: Monochromatic, Analogous, Complementary, Split complementary, Triadic, five colours each. Click a colour, or the preview swatch, to place a 120x120 swatch at the camera centre. Drag to place it at the drop point. Placed swatches are ordinary board Swatch items, so they survive disabling the plugin. Needs only `board:write`.
 - `presentation/` — slides are frames on the board. Draw a rectangle around cards to make a slide, then play it. The panel lists slides in frame creation order, with Play and Draw a slide at the top, per-slide Play and Delete, and Export pinned to the very bottom, below a scrolling slide list. Double-clicking a frame on the board plays from that slide. Export downloads all slides, in order, as a single HTML file that shows one slide at a time, with arrows and a counter: images, audio and video are embedded, links become real links, and print CSS gives one slide per page. Playing shows a frame's area, scaled to fit, cropped to the frame: every card that overlaps it at all, every pen stroke and connector segment that enters it, drawing under cards. Video and audio play in place, a link opens outside, other clicks do nothing. Needs `board:write`, `view:replace` and `files:read`.
 - `command-palette/` — Cmd or Ctrl + K opens one place to run anything: plugin commands, jumping to a board card, switching views, picking a tool, and core actions like zoom, group, ungroup, delete, Settings, minimise and hide. Type to search, Arrow keys to move, Enter to run, Esc to close. Needs `board:write` and `window`.
+- `boards/` — multiple boards, as a panel: click a board to open it, click the current board's name to rename it inline, × to delete it (with confirmation), and a name field plus New board to create one and open it at once. Needs `board:write`.
 
 ## Frame cards
 

@@ -13,10 +13,11 @@
   "main": "main.js",
   "name": "Palette",
   "permissions": [
-    "board:write"
+    "board:write",
+    "storage"
   ],
   "styles": [
     "style.css"
   ],
-  "version": "2.0.0"
+  "version": "2.1.0"
 }

@@ -114,6 +114,20 @@ button { font-family: inherit; }
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); pointer-events: none;
   z-index: 100; display: none; cursor: nwse-resize;
 }
+/* Rotation handle: a round grip above the selected card's top
+   centre, joined to the card by a short stem (the stem is drawn
+   by the handle's own ::before, so no extra element is needed).
+   Dragging it rotates the card around its centre. */
+#rotate-handle {
+  position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px;
+  background: #fff; border: 1.5px solid #007aff; border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); pointer-events: none;
+  z-index: 100; display: none; cursor: grab;
+}
+#rotate-handle::before {
+  content: ""; position: absolute; left: 50%; top: 100%; width: 1.5px;
+  height: 20px; margin-left: -0.75px; background: #007aff;
+}
 
 /* Cards: white, 12px radius, soft macOS shadow. Selection is a blue
    focus ring, the way Finder and Notes show it. */

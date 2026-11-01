@@ -70,6 +70,14 @@ function demoShowcaseSizes() {
 // Default bottom-left, per the user's choice. "off" disables it.
 const CORNERS = ["bottom-left", "bottom-right", "top-left", "top-right", "off"];
 let cornerReveal = "bottom-left";
+// Current board, as a display name: null (or "Main") is the
+// default board at the base folder's board.json; any other
+// name lives in boards/<sanitised>/board.json under it.
+// Stored in app settings, not plugin storage, so the last
+// board survives even if the Boards plugin is turned off —
+// the plugin is only the UI for switching, not the owner
+// of which board is open.
+let currentBoard = null;
 // Panel tab order, as the user dragged it: an array of
 // "pluginId:panelId" keys, in tab-bar order. Panels not in
 // the list (new plugins, or a first run) go at the end, in
@@ -85,6 +93,9 @@ function loadAppSettings() {
     const parsed = JSON.parse(fs.readFileSync(appSettingsPath(), "utf8"));
     if (parsed && CORNERS.includes(parsed.corner)) cornerReveal = parsed.corner;
     if (parsed && Array.isArray(parsed.panelOrder)) panelOrder = parsed.panelOrder.filter((x) => typeof x === "string");
+    if (parsed && typeof parsed.currentBoard === "string" && parsed.currentBoard && parsed.currentBoard !== "Main") {
+      currentBoard = parsed.currentBoard.slice(0, 64);
+    }
   } catch {
     // No settings file yet: keep the default.
   }
@@ -95,7 +106,7 @@ function saveAppSettings() {
     const file = appSettingsPath();
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const tmp = file + ".tmp";
-    fs.writeFileSync(tmp, JSON.stringify({ corner: cornerReveal, panelOrder }));
+    fs.writeFileSync(tmp, JSON.stringify({ corner: cornerReveal, panelOrder, currentBoard }));
     fs.renameSync(tmp, file);
   } catch {
     // Settings are a convenience, not board data: never fail the app
@@ -183,18 +194,27 @@ function restoreBoard() {
 
 // ---------------------------------------------------------------- board file
 
-function boardPath() {
-  if (process.env.BOWERBIRD_BOARD_PATH) return process.env.BOWERBIRD_BOARD_PATH;
-  if (process.env.QB_BOARD_PATH) return process.env.QB_BOARD_PATH;
+function defaultBaseDir() {
   const base = process.env.XDG_DATA_HOME
     ? process.env.XDG_DATA_HOME
     : path.join(process.env.HOME || '.', '.local', 'share');
-  const next = path.join(base, 'bowerbird', 'board.json');
-  if (!fs.existsSync(next)) {
-    const old = path.join(base, 'quickboard', 'board.json');
-    if (fs.existsSync(old)) return old;
-  }
+  const next = path.join(base, 'bowerbird');
+  const old = path.join(base, 'quickboard');
+  if (fs.existsSync(path.join(next, 'board.json'))) return next;
+  if (fs.existsSync(path.join(old, 'board.json'))) return old;
   return next;
+}
+function defaultBoardPath() {
+  return path.join(defaultBaseDir(), 'board.json');
+}
+function boardPathFor(name) {
+  if (!name || name === "Main") return defaultBoardPath();
+  return path.join(defaultBaseDir(), 'boards', sanitise(name), 'board.json');
+}
+function boardPath() {
+  if (process.env.BOWERBIRD_BOARD_PATH) return process.env.BOWERBIRD_BOARD_PATH;
+  if (process.env.QB_BOARD_PATH) return process.env.QB_BOARD_PATH;
+  return boardPathFor(currentBoard);
 }
 
 function boardDir() {
@@ -273,6 +293,225 @@ function sanitise(name) {
   let out = name.replace(/[^A-Za-z0-9._-]/g, '_').replace(/^\.+/, '');
   if (out.length > 64) out = out.slice(0, 64);
   return out || 'file';
+}
+
+// ---------------------------------------------------------------- boards
+//
+// Multi-board lives in a plugin, but the core owns the board
+// files, because a board is the app's data, not a plugin's.
+// Layout, under the base folder (the folder holding Main's
+// board.json):
+//   board.json            — Main, the default board
+//   boards/<sanitised>/   — every other board, one folder each:
+//     board.json, display-name.txt, assets/, backups/
+// A board folder's display name is kept in display-name.txt,
+// because sanitise() turns spaces into underscores, and the
+// list must show the name the user typed, not the folder.
+// The current board is in app settings (see currentBoard),
+// so it survives the Boards plugin being turned off.
+
+function boardsDir() {
+  return path.join(defaultBaseDir(), 'boards');
+}
+function boardDisplayName(folder) {
+  try {
+    const name = fs.readFileSync(path.join(folder, 'display-name.txt'), 'utf8').trim();
+    if (name) return name;
+  } catch { /* no display-name file: fall back to the folder */ }
+  return path.basename(folder);
+}
+function boardItemCount(file) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return Array.isArray(parsed.items) ? parsed.items.length : 0;
+  } catch { return 0; }
+}
+function listBoards() {
+  const out = [];
+  const mainFile = defaultBoardPath();
+  out.push({ name: 'Main', current: !currentBoard || currentBoard === 'Main', items: boardItemCount(mainFile) });
+  const dir = boardsDir();
+  let entries = [];
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort(); } catch { entries = []; }
+  for (const folder of entries) {
+    const folderPath = path.join(dir, folder);
+    const name = boardDisplayName(folderPath);
+    out.push({ name, current: currentBoard === name, items: boardItemCount(path.join(folderPath, 'board.json')) });
+  }
+  return out;
+}
+function emptyBoardJson() {
+  return JSON.stringify({ items: [], camera: { x: 0, y: 0, zoom: 1 }, next_id: 1, next_group: 1, bg: '#FFFFFF', grid: 'Dots' });
+}
+function guardBoards() {
+  if (DEMO) throw new Error('cannot switch boards in demo mode');
+  if (process.env.BOWERBIRD_BOARD_PATH || process.env.QB_BOARD_PATH) throw new Error('board switching is disabled when a board path is set');
+}
+function createBoard(name) {
+  guardBoards();
+  const clean = typeof name === 'string' ? name.trim() : '';
+  if (!clean || clean.length > 64) throw new Error('board name must be 1 to 64 characters');
+  if (clean === 'Main') throw new Error('Main already exists');
+  const existing = listBoards().map((b) => b.name.toLowerCase());
+  if (existing.includes(clean.toLowerCase())) throw new Error('a board with that name already exists');
+  const folder = path.join(boardsDir(), sanitise(clean));
+  if (fs.existsSync(folder)) throw new Error('a board with that name already exists');
+  fs.mkdirSync(folder, { recursive: true });
+  fs.writeFileSync(path.join(folder, 'board.json'), emptyBoardJson());
+  fs.writeFileSync(path.join(folder, 'display-name.txt'), clean);
+  return { name: clean };
+}
+function switchBoard(name) {
+  guardBoards();
+  const target = name === 'Main' ? null : name;
+  if (target !== null) {
+    const found = listBoards().some((b) => b.name === target);
+    if (!found) throw new Error('no such board');
+  }
+  currentBoard = target;
+  saveAppSettings();
+  const file = boardPath();
+  const dir = path.dirname(file);
+  fs.mkdirSync(dir, { recursive: true });
+  let json = null;
+  try { json = fs.readFileSync(file, 'utf8'); } catch { /* new board */ }
+  if (json === null) {
+    json = emptyBoardJson();
+    fs.writeFileSync(file, json);
+  }
+  return { json, board_path: file, board_dir: dir };
+}
+function renameBoard(oldName, newName) {
+  guardBoards();
+  if (oldName === 'Main') throw new Error('Main cannot be renamed');
+  const clean = typeof newName === 'string' ? newName.trim() : '';
+  if (!clean || clean.length > 64 || clean === 'Main') throw new Error('board name must be 1 to 64 characters and not Main');
+  const existing = listBoards().map((b) => b.name.toLowerCase());
+  if (existing.includes(clean.toLowerCase())) throw new Error('a board with that name already exists');
+  const oldFolder = path.join(boardsDir(), sanitise(oldName));
+  if (!fs.existsSync(oldFolder)) throw new Error('no such board');
+  const newFolder = path.join(boardsDir(), sanitise(clean));
+  fs.renameSync(oldFolder, newFolder);
+  fs.writeFileSync(path.join(newFolder, 'display-name.txt'), clean);
+  if (currentBoard === oldName) { currentBoard = clean; saveAppSettings(); }
+  return { name: clean };
+}
+function deleteBoard(name) {
+  guardBoards();
+  if (name === 'Main') throw new Error('Main cannot be deleted');
+  if (currentBoard === name) throw new Error('cannot delete the current board — switch to another board first');
+  const folder = path.join(boardsDir(), sanitise(name));
+  if (!fs.existsSync(folder)) throw new Error('no such board');
+  fs.rmSync(folder, { recursive: true, force: true });
+  return { wasCurrent: false };
+}
+
+// ---------------------------------------------------------------- backups
+//
+// A backup is a full snapshot of one board at a moment: its
+// board.json plus the assets its cards reference (copied, not
+// linked, so a later asset delete cannot break the snapshot).
+// Backups live in the board's own folder, under backups/, so
+// switching boards switches backup lists, and deleting a
+// board deletes its backups with it. They are made at most
+// once an hour on save, plus unconditionally before a reset
+// or a restore (so restoring never loses the current board).
+// Only the newest 10 are kept; older ones are pruned.
+
+function backupsDirFor(dir) {
+  return path.join(dir, 'backups');
+}
+function backupStamp() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+function copyDirRecursive(src, dest) {
+  fs.mkdirSync(dest, { recursive: true });
+  for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    const s = path.join(src, entry.name), d = path.join(dest, entry.name);
+    if (entry.isDirectory()) copyDirRecursive(s, d);
+    else if (entry.isFile()) fs.copyFileSync(s, d);
+  }
+}
+function dirSize(dir) {
+  let total = 0;
+  try {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const p = path.join(dir, entry.name);
+      if (entry.isDirectory()) total += dirSize(p);
+      else if (entry.isFile()) total += fs.statSync(p).size;
+    }
+  } catch { /* ignore */ }
+  return total;
+}
+function pruneBackups(dir) {
+  const backups = backupsDirFor(dir);
+  let entries = [];
+  try { entries = fs.readdirSync(backups, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort(); } catch { return; }
+  while (entries.length > 10) {
+    const oldest = entries.shift();
+    try { fs.rmSync(path.join(backups, oldest), { recursive: true, force: true }); } catch { /* keep going */ }
+  }
+}
+function makeBackup(dir, json) {
+  if (DEMO || !json) return null;
+  const backups = backupsDirFor(dir);
+  fs.mkdirSync(backups, { recursive: true });
+  let dest = path.join(backups, backupStamp());
+  let i = 1;
+  while (fs.existsSync(dest)) { dest = path.join(backups, `${backupStamp()}-${i++}`); }
+  fs.mkdirSync(dest, { recursive: true });
+  fs.writeFileSync(path.join(dest, 'board.json'), json);
+  const assets = path.join(dir, 'assets');
+  if (fs.existsSync(assets)) {
+    try { copyDirRecursive(assets, path.join(dest, 'assets')); } catch { /* board.json alone is still a backup */ }
+  }
+  pruneBackups(dir);
+  return path.basename(dest);
+}
+function maybeBackup(dir, json) {
+  if (DEMO || !json) return;
+  const backups = backupsDirFor(dir);
+  let newest = 0;
+  try {
+    for (const entry of fs.readdirSync(backups, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const m = fs.statSync(path.join(backups, entry.name)).mtimeMs;
+      if (m > newest) newest = m;
+    }
+  } catch { /* no backups yet */ }
+  if (Date.now() - newest < 60 * 60 * 1000) return;
+  try { makeBackup(dir, json); } catch { /* backups must never break a save */ }
+}
+function listBackups(dir) {
+  const backups = backupsDirFor(dir);
+  let entries = [];
+  try { entries = fs.readdirSync(backups, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort().reverse(); } catch { return []; }
+  return entries.map((name) => {
+    const folder = path.join(backups, name);
+    return { name, items: boardItemCount(path.join(folder, 'board.json')), size: dirSize(folder) };
+  });
+}
+function restoreBackup(dir, name) {
+  if (DEMO) throw new Error('cannot restore a backup in demo mode');
+  if (!/^[A-Za-z0-9._-]+$/.test(name) || name.includes('..')) throw new Error('bad backup name');
+  const src = path.join(backupsDirFor(dir), name);
+  const srcJson = path.join(src, 'board.json');
+  if (!fs.existsSync(srcJson)) throw new Error('no such backup');
+  // Back up the current board first, so restoring is reversible.
+  try {
+    const cur = fs.readFileSync(boardPath(), 'utf8');
+    makeBackup(dir, cur);
+  } catch { /* restoring still proceeds */ }
+  const json = fs.readFileSync(srcJson, 'utf8');
+  fs.writeFileSync(boardPath(), json);
+  const assetsDest = path.join(dir, 'assets');
+  try { fs.rmSync(assetsDest, { recursive: true, force: true }); } catch { /* replaced below */ }
+  if (fs.existsSync(path.join(src, 'assets'))) {
+    try { copyDirRecursive(path.join(src, 'assets'), assetsDest); } catch { /* board.json is restored regardless */ }
+  }
+  return { json, board_path: boardPath(), board_dir: dir };
 }
 
 // ---------------------------------------------------------------- link preview
@@ -674,6 +913,7 @@ function registerIpc() {
     const tmp = file + '.tmp';
     fs.writeFileSync(tmp, json);
     fs.renameSync(tmp, file);
+    maybeBackup(path.dirname(file), json);
   });
 
   // Delete/reset: remove everything saved in the whiteboard — the
@@ -686,6 +926,7 @@ function registerIpc() {
     if (DEMO) return demoShowcaseSizes();
     const file = boardPath();
     const dir = path.dirname(file);
+    try { makeBackup(dir, fs.readFileSync(file, 'utf8')); } catch { /* reset still proceeds */ }
     try { fs.rmSync(file, { force: true }); } catch { /* already gone */ }
     try { fs.rmSync(path.join(dir, 'assets'), { recursive: true, force: true }); } catch { /* already gone */ }
     return installShowcaseAssets(dir);
@@ -1013,6 +1254,19 @@ function registerIpc() {
     throw new Error('not a public web address or a board-local file');
   });
   ipcMain.handle('bowerbird:get-app-settings', () => ({ corner: cornerReveal, panelOrder: [...panelOrder] }));
+  ipcMain.handle('bowerbird:list-boards', () => {
+    if (DEMO) return [{ name: 'Main', current: true, items: 0 }];
+    return listBoards();
+  });
+  ipcMain.handle('bowerbird:create-board', (_event, name) => createBoard(name));
+  ipcMain.handle('bowerbird:switch-board', (_event, name) => switchBoard(name));
+  ipcMain.handle('bowerbird:rename-board', (_event, oldName, newName) => renameBoard(oldName, newName));
+  ipcMain.handle('bowerbird:delete-board', (_event, name) => deleteBoard(name));
+  ipcMain.handle('bowerbird:list-backups', () => {
+    if (DEMO) return [];
+    return listBackups(boardDir());
+  });
+  ipcMain.handle('bowerbird:restore-backup', (_event, name) => restoreBackup(boardDir(), name));
   ipcMain.handle('bowerbird:set-panel-order', (_event, order) => {
     if (!Array.isArray(order)) return panelOrder;
     panelOrder = order.filter((x) => typeof x === "string").slice(0, 100);
@@ -1318,7 +1572,15 @@ app.whenReady().then(() => {
       return new Response('not found', { status: 404 });
     }
   });
-  if (!DEMO) loadAppSettings();
+  if (!DEMO) {
+    loadAppSettings();
+    // A board deleted outside the app must not leave the
+    // app pointing at a missing folder: fall back to Main.
+    if (currentBoard && !fs.existsSync(boardPathFor(currentBoard)) && !fs.existsSync(path.dirname(boardPathFor(currentBoard)))) {
+      currentBoard = null;
+      saveAppSettings();
+    }
+  }
   registerIpc();
   createWindow();
 });
