@@ -3,7 +3,7 @@
 // this bridge, which the main process exposes with context isolation on.
 interface BowerbirdAPI {
   isDemo: boolean;
-  loadBoard(): Promise<{ json: string | null; board_path: string; board_dir: string; pdf_size_bytes: number; video_size_bytes: number; panelOrder?: string[] }>;
+  loadBoard(): Promise<{ json: string | null; board_path: string; board_dir: string; pdf_size_bytes: number; video_size_bytes: number; panelOrder?: string[]; buildId?: string }>;
   saveBoard(json: string): Promise<void>;
   resetBoard(): Promise<{ pdf_size_bytes: number; video_size_bytes: number }>;
   restoreShowcase(): Promise<{ copied: string[]; missing: string[]; srcDir: string; destDir: string }>;
@@ -2190,6 +2190,8 @@ async function init(): Promise<void> {
     if (Array.isArray(loaded.panelOrder)) panelOrderList = loaded.panelOrder.filter((x: unknown) => typeof x === "string");
     const boardDirEl = document.getElementById("board-dir-meta");
     if (boardDirEl) boardDirEl.textContent = `Board folder: ${boardDir}`;
+    const buildEl = document.getElementById("build-meta");
+    if (buildEl) buildEl.textContent = `Build: ${loaded.buildId ?? "dev"}`;
     if (loaded.json) {
       const parsed = JSON.parse(loaded.json) as Board;
       board = parsed;

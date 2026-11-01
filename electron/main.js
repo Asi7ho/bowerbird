@@ -201,6 +201,23 @@ function boardDir() {
   return path.dirname(boardPath());
 }
 
+// Build identifier, so a user can tell which packaged build
+// they are actually running (Settings → General → Data).
+// package-mac.sh writes dist/build-id.txt with the git short
+// hash at packaging time; source runs without it read "dev".
+function buildId() {
+  for (const candidate of [
+    path.join(__dirname, '..', 'dist', 'build-id.txt'),
+    path.join(app.getAppPath(), 'dist', 'build-id.txt'),
+  ]) {
+    try {
+      const id = fs.readFileSync(candidate, 'utf8').trim();
+      if (id) return id;
+    } catch { /* no build id in this run */ }
+  }
+  return 'dev';
+}
+
 function assetsDir() {
   const candidates = [
     path.join(__dirname, '..', 'assets'),
@@ -332,29 +349,30 @@ function iconPath() {
 }
 
 function createWindow() {
-  // Default size: 1200x800, centred in the work area (so it never
-  // sits under the menu bar or the Dock). 1000x700 is also the
+  // Default size: 1280x850, centred in the work area (so it never
+  // sits under the menu bar or the Dock). 1100x720 is also the
   // minimum size: the window cannot be resized smaller than this.
   // 800x600 was too small on a Mac screen: the board felt cramped
-  // and the welcome board needed scrolling to be seen at all.
+  // and the welcome board needed scrolling to be seen at all,
+  // and 1200x800 still felt a little small, hence one more step up.
   const wa0 = screen.getPrimaryDisplay().workArea;
   // Screenshot override (not a user setting): BOWERBIRD_WINDOW_SIZE
   // e.g. 1440x900 makes the window fill the frame for App Store
   // screenshots. Used only by screenshots/README.md recapture
-  // instructions. The 1000x700 minimum still applies to it.
+  // instructions. The 1100x720 minimum still applies to it.
   const sizeOverride = /^([0-9]+)x([0-9]+)$/.exec(process.env.BOWERBIRD_WINDOW_SIZE || "");
   // The minimum applies to the initial size too, not just to
-  // later resizing: an override smaller than 1000x700 still opens
-  // at 1000x700.
-  const defaultWidth = Math.max(sizeOverride ? Number(sizeOverride[1]) : 1200, 1000);
-  const defaultHeight = Math.max(sizeOverride ? Number(sizeOverride[2]) : 800, 700);
+  // later resizing: an override smaller than 1100x720 still opens
+  // at 1100x720.
+  const defaultWidth = Math.max(sizeOverride ? Number(sizeOverride[1]) : 1280, 1100);
+  const defaultHeight = Math.max(sizeOverride ? Number(sizeOverride[2]) : 850, 720);
   const defaultX = wa0.x + Math.round((wa0.width - defaultWidth) / 2);
   const defaultY = wa0.y + Math.round((wa0.height - defaultHeight) / 2);
   win = new BaseWindow({
     width: defaultWidth,
     height: defaultHeight,
-    minWidth: 1000,
-    minHeight: 700,
+    minWidth: 1100,
+    minHeight: 720,
     frame: false,
     title: DEMO ? 'Bowerbird \u2014 Demo' : 'Bowerbird',
     backgroundColor: '#ffffff',
@@ -383,8 +401,8 @@ function createWindow() {
     // resize) can bypass the option, but it cannot bypass this.
     // Clamping triggers one more resize event, which then passes
     // this check and updates the board view.
-    if (b.width < 1000 || b.height < 700) {
-      win.setBounds({ x: b.x, y: b.y, width: Math.max(b.width, 1000), height: Math.max(b.height, 700) });
+    if (b.width < 1100 || b.height < 720) {
+      win.setBounds({ x: b.x, y: b.y, width: Math.max(b.width, 1100), height: Math.max(b.height, 720) });
       return;
     }
     boardView.setBounds({ x: 0, y: 0, width: b.width, height: b.height });
@@ -612,7 +630,7 @@ function isPrivateHost(host) {
 function registerIpc() {
   ipcMain.handle('bowerbird:load-board', () => {
     if (DEMO) {
-      return { json: null, board_path: '', board_dir: assetsDir(), ...demoShowcaseSizes() };
+      return { json: null, board_path: '', board_dir: assetsDir(), buildId: buildId(), ...demoShowcaseSizes() };
     }
     const file = boardPath();
     const dir = path.dirname(file);
@@ -646,7 +664,7 @@ function registerIpc() {
         }
       } catch { /* old reference stays, video still opens outside */ }
     }
-    return { json, board_path: file, board_dir: dir, panelOrder: [...panelOrder], ...showcase };
+    return { json, board_path: file, board_dir: dir, panelOrder: [...panelOrder], buildId: buildId(), ...showcase };
   });
 
   ipcMain.handle('bowerbird:save-board', (_event, json) => {
@@ -1145,7 +1163,28 @@ app.whenReady().then(() => {
       if (!isBoardLocal(filePath)) {
         return new Response('not found', { status: 404 });
       }
-      const ext = path.extname(filePath).toLowerCase();
+      // Welcome-media fallback: a board item that points at
+      // a welcome file in the board folder must still play
+      // even if that board copy is missing or empty — which
+      // is exactly the "File missing" state users kept
+      // hitting on Mac, where the board-folder copy was
+      // gone for reasons the load-time repair could not
+      // fix. In that case serve the bundle copy, which is
+      // always inside the app itself. A non-empty board
+      // copy is never overridden: if the user replaced a
+      // welcome file with their own image of the same name,
+      // that file is the one served.
+      const WELCOME = ['welcome-bower.jpg', 'welcome-birdsong.mp3', 'welcome-video.mp4', 'sample.pdf'];
+      let servePath = filePath;
+      if (WELCOME.includes(path.basename(filePath))) {
+        let boardSize = -1;
+        try { boardSize = fs.statSync(filePath).size; } catch { boardSize = -1; }
+        if (boardSize <= 0) {
+          const bundle = path.join(assetsDir(), path.basename(filePath));
+          if (fs.existsSync(bundle)) servePath = bundle;
+        }
+      }
+      const ext = path.extname(servePath).toLowerCase();
       const type = MIME[ext] || 'application/octet-stream';
       // Chromium's media player asks for byte ranges and refuses a
       // source it cannot seek in ("no supported source was found"
@@ -1154,8 +1193,15 @@ app.whenReady().then(() => {
       // work through this scheme just as <img> already did.
       let size;
       try {
-        size = fs.statSync(filePath).size;
+        size = fs.statSync(servePath).size;
       } catch {
+        return new Response('not found', { status: 404 });
+      }
+      // A bundle fallback that is itself empty is no better
+      // than the missing board copy: fall through to 404 so
+      // the renderer shows "File missing" instead of a blank
+      // card that looks like a different bug.
+      if (size <= 0 && servePath !== filePath) {
         return new Response('not found', { status: 404 });
       }
       const range = request.headers.get('range');
@@ -1168,7 +1214,7 @@ app.whenReady().then(() => {
           const start = m[1] ? parseInt(m[1], 10) : 0;
           const end = m[2] ? parseInt(m[2], 10) : size - 1;
           if (start < size && end >= start && end < size) {
-            return new Response(Readable.toWeb(fs.createReadStream(filePath, { start, end })), {
+            return new Response(Readable.toWeb(fs.createReadStream(servePath, { start, end })), {
               status: 206,
               headers: { 'Content-Type': type, 'Content-Length': String(end - start + 1), 'Content-Range': `bytes ${start}-${end}/${size}`, 'Accept-Ranges': 'bytes' },
             });
@@ -1176,7 +1222,7 @@ app.whenReady().then(() => {
           return new Response('range not satisfiable', { status: 416, headers: { 'Content-Range': `bytes */${size}` } });
         }
       }
-      return new Response(Readable.toWeb(fs.createReadStream(filePath)), {
+      return new Response(Readable.toWeb(fs.createReadStream(servePath)), {
         headers: { 'Content-Type': type, 'Content-Length': String(size), 'Accept-Ranges': 'bytes' },
       });
     } catch {

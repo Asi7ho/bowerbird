@@ -43,6 +43,9 @@ echo "== Bowerbird $VERSION for macOS ($ARCH), Electron $ELECTRON_VERSION"
 
 # 1. Build the web app.
 npm run build
+# Build identifier, shown in Settings → General → Data, so a
+# user can tell which packaged build they are actually running.
+git rev-parse --short HEAD > dist/build-id.txt 2>/dev/null || echo "unknown" > dist/build-id.txt
 
 # 2. Get the macOS Electron runtime.
 ELECTRON_ZIP="/tmp/electron-v$ELECTRON_VERSION-darwin-$ARCH.zip"

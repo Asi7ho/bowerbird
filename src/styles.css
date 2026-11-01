@@ -615,10 +615,20 @@ button { font-family: inherit; }
   box-shadow: var(--shadow-md);
 }
 #view-switcher button {
-  border: none; background: transparent; border-radius: 9px;
+  border: 1px solid transparent; background: transparent; border-radius: 9px;
   padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
+  color: #6e6e73;
 }
-#view-switcher button.active { background: #fff; box-shadow: var(--shadow-sm); }
+/* The bar itself is frosted white over a white board, so a
+   white active button on it was white on white — the selected
+   view was invisible. Same frosted pill style, but the active
+   button now reads as a pill: a hairline border, a stronger
+   shadow, and full-strength text, while inactive buttons stay
+   dimmed. No new colour, no new shape, just contrast. */
+#view-switcher button.active {
+  background: #fff; color: #1d1d1f;
+  border-color: rgba(0, 0, 0, 0.10); box-shadow: var(--shadow-md);
+}
 /* Plugin rows as a list, not bordered cards: name and
    description on the left, the toggle on the right, rows
    separated by a hairline. */
