@@ -45,6 +45,16 @@
 // it is not in a palette (for example at the lightness
 // extremes, where a monochromatic palette is shifted).
 //
+// Picking a colour — on the wheel, on the lightness
+// slider, or in the colour picker below — also sets the
+// pen to that colour, through api.pen.setColor, so the
+// next pen stroke is the colour you just picked, and the
+// toolbar's pen swatches show it (as a custom swatch
+// when it is not one of the six fixed colours). Picking
+// in the toolbar does the reverse, through the "pen"
+// event: Palette follows the pen, so the two colour
+// controls are one colour, not two disconnected ones.
+//
 // Click a tile or the preview to place a 120x120 swatch
 // at the camera centre. Drag a tile or the preview to
 // place it at the drop point, centred there, the same
@@ -70,10 +80,12 @@ let wheelCanvas = null;
 let wheelMarker = null;
 let previewSwatch = null;
 let previewHex = null;
+let colorPicker = null;
 let lightnessSlider = null;
 let lightnessValue = null;
 let palettesEl = null;
 let paletteTiles = [];
+let penHandler = null;
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const wrapHue = (h) => ((h % 360) + 360) % 360;
@@ -215,7 +227,23 @@ function drawWheel() {
   ctx.putImageData(img, 0, 0);
 }
 
-function updateAll() {
+function hexToHsl(hex) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b);
+  const l = (max + min) / 2 * 100;
+  if (max === min) return { h: 0, s: 0, l };
+  const d = max - min;
+  const s = (l > 50 ? d / (2 - max - min) : d / (max + min)) * 100;
+  let h = 0;
+  if (max === r) h = ((g - b) / d + (g < b ? 6 : 0)) * 60;
+  else if (max === g) h = ((b - r) / d + 2) * 60;
+  else h = ((r - g) / d + 4) * 60;
+  return { h, s, l };
+}
+
+function updateAll(setPen) {
   const hex = hslToHex(baseH, baseS, baseL);
   if (previewSwatch) {
     previewSwatch.style.background = hex;
@@ -223,6 +251,13 @@ function updateAll() {
     previewSwatch.title = hex;
   }
   if (previewHex) previewHex.textContent = hex;
+  if (colorPicker && colorPicker.value.toUpperCase() !== hex) colorPicker.value = hex;
+  // Picking sets the pen, but only when a pick actually
+  // happened: the initial render must not overwrite the
+  // pen colour the user already had with Palette's
+  // default blue, and a pen change coming back from the
+  // toolbar must not echo back into a pen set.
+  if (setPen && apiRef && apiRef.pen) apiRef.pen.setColor(hex);
   if (lightnessValue) lightnessValue.textContent = `${Math.round(baseL)}%`;
   if (lightnessSlider && Number(lightnessSlider.value) !== Math.round(baseL)) lightnessSlider.value = String(Math.round(baseL));
   if (wheelMarker && wheelCanvas) {
@@ -257,7 +292,7 @@ function pickFromWheel(clientX, clientY) {
   const r = Math.min(1, Math.hypot(dx, dy) / radius);
   baseH = (Math.atan2(dy, dx) * 180 / Math.PI + 90 + 360) % 360;
   baseS = r * 100;
-  updateAll();
+  updateAll(true);
 }
 
 function renderPanel(container) {
@@ -290,6 +325,25 @@ function renderPanel(container) {
   previewHex = document.createElement("div");
   previewHex.className = "pal-hex";
   previewRow.appendChild(previewHex);
+  // A native colour picker, beside the preview: the
+  // system picker is the fastest way to an exact colour,
+  // and it is the control a user reaches for when the
+  // wheel is not precise enough. Picking here sets the
+  // wheel, the palettes and the pen, like any other pick.
+  colorPicker = document.createElement("input");
+  colorPicker.className = "pal-color-picker";
+  colorPicker.type = "color";
+  colorPicker.value = hslToHex(baseH, baseS, baseL);
+  colorPicker.setAttribute("aria-label", "Pick a colour");
+  colorPicker.title = "Pick a colour";
+  colorPicker.addEventListener("input", () => {
+    const hsl = hexToHsl(colorPicker.value);
+    baseH = hsl.h;
+    baseS = hsl.s;
+    baseL = hsl.l;
+    updateAll(true);
+  });
+  previewRow.appendChild(colorPicker);
   wheelSection.appendChild(previewRow);
   const sliderRow = document.createElement("div");
   sliderRow.className = "pal-slider-row";
@@ -310,7 +364,7 @@ function renderPanel(container) {
   lightnessSlider.setAttribute("aria-label", "Lightness");
   lightnessSlider.addEventListener("input", () => {
     baseL = Number(lightnessSlider.value);
-    updateAll();
+    updateAll(true);
   });
   wheelSection.appendChild(lightnessSlider);
   container.appendChild(wheelSection);
@@ -344,7 +398,7 @@ function renderPanel(container) {
   container.appendChild(palettesEl);
 
   drawWheel();
-  updateAll();
+  updateAll(false);
 
   const onPointerDown = (e) => {
     pickFromWheel(e.clientX, e.clientY);
@@ -362,6 +416,21 @@ function renderPanel(container) {
 
 function activate(api) {
   apiRef = api;
+  // Follow the pen when it changes elsewhere, in the
+  // toolbar: read the new colour, move the wheel and
+  // palettes to it, and do not set the pen back, or
+  // the two would echo each other forever.
+  penHandler = () => {
+    if (!apiRef || !apiRef.pen) return;
+    const hex = apiRef.pen.getColor();
+    if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return;
+    const hsl = hexToHsl(hex);
+    baseH = hsl.h;
+    baseS = hsl.s;
+    baseL = hsl.l;
+    updateAll(false);
+  };
+  apiRef.events.on("pen", penHandler);
   apiRef.ui.registerPanel({
     id: "palette",
     title: "Palette",
@@ -374,10 +443,13 @@ function activate(api) {
 }
 
 function deactivate() {
+  if (apiRef && penHandler) apiRef.events.off("pen", penHandler);
+  penHandler = null;
   wheelCanvas = null;
   wheelMarker = null;
   previewSwatch = null;
   previewHex = null;
+  colorPicker = null;
   lightnessSlider = null;
   lightnessValue = null;
   palettesEl = null;

@@ -52,6 +52,16 @@
   box-shadow: var(--shadow-sm); padding: 0;
 }
 .pal-hex { font-weight: 600; font-size: 13px; }
+/* The native colour picker, at the end of the preview
+   row: a small swatch, not a web input. Its own border
+   and padding would fight the core panel button rule,
+   so it is prefixed like the preview above, and its
+   padding is zero so the colour fills the swatch. */
+.plugin-panel-body .pal-color-picker {
+  flex: none; margin-left: auto; width: 32px; height: 32px;
+  border: 1px solid var(--hairline); border-radius: 8px;
+  padding: 0; background: #fff; cursor: pointer;
+}
 .pal-slider-row {
   display: flex; justify-content: space-between; align-items: baseline;
   margin-bottom: 4px;

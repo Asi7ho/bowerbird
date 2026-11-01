@@ -168,6 +168,8 @@ export interface PluginHost {
   save: () => void;
   render: () => void;
   setTool: (tool: string) => void;
+  getPenColor: () => string;
+  setPenColor: (hex: string) => boolean;
   getCamera: () => Camera;
   setCamera: (cam: Camera) => void;
   centreOn: (id: number) => void;
@@ -237,6 +239,20 @@ export interface PluginContext {
     getView: () => string;
     setView: (id: string) => void;
     listViews: () => Array<{ id: string; title: string; plugin: string | null }>;
+  };
+  // The pen's colour: one shared state, not a board item.
+  // The toolbar's pen swatches and Palette both read and
+  // write it, so picking a colour in Palette changes the
+  // next pen stroke, and picking a toolbar swatch updates
+  // Palette. No permission: like setTool, it is a tool
+  // setting, not a board mutation, and a colour is not
+  // a security-sensitive write. Changing it fires a
+  // "pen" plugin event, so a listening plugin can follow
+  // it without polling. Pen colour is session state, not
+  // saved in board JSON.
+  pen: {
+    getColor: () => string;
+    setColor: (hex: string) => boolean;
   };
   ui: {
     toast: (msg: string) => void;
@@ -479,7 +495,7 @@ function createContext(manifest: PluginManifest): PluginContext {
       // Capabilities in v1: every domain documented in PLUGIN_API.md.
       // A future core may add more; a plugin should check before
       // using a capability that was added after v1.
-      return ["board", "view", "window", "ui", "cards", "files", "storage", "events", "tools", "panels", "commands", "views", "overlays", "settingsSections", "shortcuts", "library", "ai", "plugins"].includes(capability);
+      return ["board", "view", "window", "ui", "cards", "files", "storage", "events", "tools", "panels", "commands", "views", "overlays", "settingsSections", "shortcuts", "library", "ai", "plugins", "pen"].includes(capability);
     },
     board: {
       get: () => {
@@ -603,6 +619,10 @@ function createContext(manifest: PluginManifest): PluginContext {
         for (const v of views.values()) out.push({ id: v.id, title: v.title, plugin: v.pluginId });
         return out;
       },
+    },
+    pen: {
+      getColor: () => host!.getPenColor(),
+      setColor: (hex: string) => host!.setPenColor(hex),
     },
     ui: {
       toast: (msg: string) => host!.toast(msg),

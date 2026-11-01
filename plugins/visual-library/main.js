@@ -22,20 +22,19 @@
 // There is one category, Uncategorized, holding every board
 // item in board order. Nothing is auto-categorised by kind.
 // Drag therefore never moves anything between categories —
-// it duplicates, as click does.
+// it duplicates, as it always did.
 //
-// Clicking a library card duplicates that board element onto
-// the board, at the camera centre. Dragging it duplicates it
-// at the drop point (panel mode: onto the visible board;
-// whiteboard mode: at the drop point in camera coordinates,
-// with a toast, since the board is hidden). The duplicate is
-// an ordinary board item of the same kind and the same size
-// as the original, so it appears in the library too — it is a
-// board element. Media previews are the only interactions
-// that do not duplicate: a video's native controls play in
-// place, and an audio tile plays in place. Link cards
-// duplicate on click like every other card; open a link from
-// the board after placing it.
+// Clicking a library card focuses the original on the
+// board: it centres on it and selects it, and adds nothing.
+// Dragging it duplicates it at the drop point (panel mode:
+// onto the visible board; whiteboard mode: at the drop
+// point in camera coordinates, with a toast, since the
+// board is hidden). The duplicate is an ordinary board
+// item of the same kind and the same size as the original,
+// so it appears in the library too — it is a board
+// element. Media previews are the only interactions that
+// do neither: a video's native controls play in place,
+// and an audio tile plays in place.
 //
 // Strokes and connectors are not library elements: they are
 // drawing and annotation, not cards, and duplicating them
@@ -255,12 +254,24 @@ function loadLibraryAudioDuration(wrap, item) {
   audio.addEventListener("error", () => {});
 }
 
+function focusOnBoard(item) {
+  // Focus, not duplication: show the original on the
+  // board, centred and selected, and add nothing. In
+  // whiteboard mode the board is hidden behind the view,
+  // so go back to the board first, then centre on it.
+  if (apiRef.view.getView() !== "board") apiRef.view.setView("board");
+  apiRef.board.setSelected([item.id]);
+  apiRef.view.centreOn(item.id);
+}
+
 function attachCardInteractions(wrap, item, mode) {
   wrap.addEventListener("click", (e) => {
-    // Media previews do not duplicate. Everything else on the
-    // card — including a link's title and image — duplicates.
+    // Media previews do not focus either. Everything else
+    // on the card — including a link's title and image —
+    // focuses the original on the board. Dragging, below,
+    // is still how a card is duplicated.
     if (isMediaTarget(e.target)) return;
-    duplicateAt(item, cameraCentreWorld(), mode === "view");
+    focusOnBoard(item);
   });
   const tile = wrap.querySelector(".audio-tile");
   if (tile) {
@@ -319,9 +330,9 @@ function attachCardInteractions(wrap, item, mode) {
       } else {
         // Whiteboard mode: the board is hidden behind the view,
         // so any drop duplicates at the drop point in camera
-        // coordinates, with a toast, as a click does — except
-        // a drop onto the title bar, which is not the board
-        // and must not create a card hidden under it.
+        // coordinates, with a toast — except a drop onto the
+        // title bar, which is not the board and must not
+        // create a card hidden under it.
         const el = document.elementFromPoint(me.clientX, me.clientY);
         if (el && el.closest && el.closest("#title-bar")) return;
         duplicateAt(item, dropWorld(me.clientX, me.clientY), true);
@@ -359,8 +370,22 @@ function layoutMasonry(container, items, mode) {
   // (classic scrollbar plus padding); view 110px keeps 10
   // columns at 1317–1332px.
   const cs = getComputedStyle(container);
-  const containerWidth = container.clientWidth
+  let containerWidth = container.clientWidth
     - parseFloat(cs.paddingLeft || "0") - parseFloat(cs.paddingRight || "0");
+  // A panel renders once, at registration, before its tab
+  // is the active one — so at first render it is hidden
+  // and its width is 0. Laying out at width 0 gave every
+  // card a width and height of 0, so Uncategorized looked
+  // empty until a collapse/reopen re-rendered it at its
+  // real width. The panel is a fixed 290px dock, its body
+  // has 12px padding each side, and the sections have
+  // 15px of right padding, so a hidden panel's content
+  // width is 290 - 24 - 15 = 251. Lay out at that when
+  // the real width is not known yet; the observer below
+  // re-lays out at the real width as soon as the panel
+  // is actually shown, so a classic scrollbar's narrower
+  // lane is corrected too.
+  if (containerWidth <= 0 && mode === "panel") containerWidth = 251;
   const smallTarget = mode === "panel" ? 105 : 110;
   const gap = 16;
   const colCount = Math.max(1, Math.floor((containerWidth + gap) / (smallTarget + gap)));
@@ -494,6 +519,20 @@ function initPanel(body) {
   panelSections = sections;
   body.appendChild(sections);
   syncFromBoard(true);
+  // Re-lay out when the panel is first shown: the first
+  // render happened while it was hidden, so even with the
+  // fallback width above, the layout must be redone at
+  // the panel's real width the moment it becomes visible.
+  // The observer fires on the hidden-to-visible change
+  // only, not on child changes, so it does not loop.
+  if (typeof IntersectionObserver !== "undefined") {
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting && panelSections) renderSections(panelSections, "panel");
+      }
+    });
+    observer.observe(sections);
+  }
 }
 
 function buildView(container) {

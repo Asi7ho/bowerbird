@@ -165,13 +165,17 @@ Plugin-scoped settings, kept out of board JSON, in the app's userData folder, on
 
 Adding these domains did not change `apiVersion`. It stays `"1"`, because additive additions do not break existing plugins.
 
-- `ai.chat({ baseUrl, model, key, messages })` — chat completions from an OpenAI-compatible provider, run in the main process, not the renderer, so a provider's CORS policy and a local http model server are not a problem. Requires the `ai` permission. The base must be a public https address, or localhost for a local model server; other private addresses are refused. Only the provider's chat-completions path is ever called, with the caller's own key, which is never stored by the core. The Plugin Builder uses this; its key lives only in memory for the session, never in plugin storage, for exactly the reason above.
+- `ai.chat({ baseUrl, model, key, messages })` — chat completions from an OpenAI-compatible provider, run in the main process, not the renderer, so a provider's CORS policy and a local http model server are not a problem. Requires the `ai` permission. The base must be a public https address, or localhost for a local model server; other private addresses are refused. Only the provider's chat-completions path is ever called, with the caller's own key, which is never stored by the core. The Plugin Builder uses this; its provider, model and key live in its Settings section, its key lives only in memory for the session, never in plugin storage, for exactly the reason above, and its system prompt forbids the AI from knowing or changing the core: it only writes plugins, using this api, and a request that would need a core change gets the closest plugin-only version.
 - `plugins.install({ id, name, description, permissions, mainCode, styleCode })` — write a plugin to the user plugins folder, never the bundled folder, and never over an existing plugin with the same id. Requires the `plugins:install` permission. Blocked in demo mode. The manifest is built by the core, with `apiVersion "1"` and `version "1.0.0"`.
 - `plugins.refresh()` — re-scan for plugins installed since startup, and activate any new ones that are enabled, with no restart. Requires the `plugins:install` permission.
 
 ### Events — `api.events`
 
-`on(event, handler)`, `off(event, handler)`. Events in v1: `selection`, `board`, `view`. `board` fires after a board change that the core saved or rendered. A plugin's own board writes fire it too, after the write. Do not write to the board synchronously inside a `board` handler in a way that loops. If a handler needs to react by writing, guard against your own last write, for example by comparing ids or by a flag. The core will not prevent a loop you create in v1.
+`on(event, handler)`, `off(event, handler)`. Events in v1: `selection`, `board`, `view`, `pen`. `board` fires after a board change that the core saved or rendered. A plugin's own board writes fire it too, after the write. Do not write to the board synchronously inside a `board` handler in a way that loops. If a handler needs to react by writing, guard against your own last write, for example by comparing ids or by a flag. The core will not prevent a loop you create in v1.
+
+### Pen — `api.pen`
+
+The pen's colour, shared with the toolbar's pen swatches. No permission is needed, like `setTool`: it is a tool setting, not a board mutation. `getColor()` returns the current colour as a hex string. `setColor(hex)` sets it (a 6-digit hex only, anything else is ignored and returns false) and fires a `pen` event, so a listening plugin can follow it. Pen colour is session state, not saved in board JSON. Palette uses this: picking a colour there sets the pen, and picking a toolbar swatch updates Palette back.
 
 ### Geometry — `api.geometry`
 

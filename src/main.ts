@@ -55,8 +55,8 @@ pdfjsLib.GlobalWorkerOptions.workerPort = new PdfWorker();
 import {
   emitPluginEvent, getActiveView, getCardHtml, getCardRenderer, getPluginCardSearchText,
   getPluginTool, handlePluginCardAction, handlePluginCardDoubleClick, handlePluginShortcut,
-  initPlugins, listLoadedPlugins, listPluginCommands, listPluginShortcuts,
-  refreshActiveView, renderSettingsSections, runPluginCommand,
+  initPlugins, listLoadedPlugins, listPluginShortcuts,
+  refreshActiveView, renderSettingsSections,
   setPluginEnabled, syncPluginToolButtons,
   type PluginHost, type PluginManifest,
 } from "./plugins";
@@ -907,11 +907,30 @@ function updateToolbar(): void {
       b.className = "swatch" + (hex === penColor ? " active" : "");
       b.style.background = hex;
       b.title = hex;
-      b.addEventListener("click", () => { penColor = hex; render(); });
+      b.addEventListener("click", () => { penColor = hex; render(); emitPluginEvent("pen"); });
       palette.appendChild(b);
     }
   }
   if (tool === "pen") {
+    // A pen colour set elsewhere — Palette's wheel, for
+    // example — is not one of the six fixed swatches, so
+    // without this it would show no active swatch at all,
+    // and the toolbar would not say what the pen is.
+    // Keep at most one such custom swatch: drop a stale
+    // one, add the current colour if it is not fixed.
+    for (const child of Array.from(palette.children)) {
+      const sw = child as HTMLDivElement;
+      if (!PALETTE.includes(sw.title) && sw.title.toUpperCase() !== penColor.toUpperCase()) sw.remove();
+    }
+    const hasCurrent = Array.from(palette.children).some((c) => (c as HTMLDivElement).title.toUpperCase() === penColor.toUpperCase());
+    if (!hasCurrent) {
+      const b = document.createElement("div");
+      b.className = "swatch";
+      b.style.background = penColor;
+      b.title = penColor;
+      b.addEventListener("click", () => { penColor = penColor; render(); emitPluginEvent("pen"); });
+      palette.prepend(b);
+    }
     for (const child of Array.from(palette.children)) {
       const sw = child as HTMLDivElement;
       sw.classList.toggle("active", sw.style.background === penColor || sw.title === penColor);
@@ -1344,6 +1363,17 @@ window.addEventListener("wheel", (e: WheelEvent) => {
   // or search row has no scrollable ancestor — the sections
   // list is the scroller, and the header sits outside it —
   // so scroll that list by hand instead of doing nothing.
+  // The command palette is an overlay, not a panel or a
+  // view, so it needs its own guard here: without it, a
+  // wheel over its list panned the board behind it, and
+  // the preventDefault below stopped the list scrolling
+  // at all. Over the palette, let the list scroll natively
+  // and never pan or zoom the board; Ctrl/Cmd+wheel is
+  // still blocked, so it does not zoom the page either.
+  if ((e.target as HTMLElement).closest(".cmd-palette")) {
+    if (e.ctrlKey || e.metaKey) e.preventDefault();
+    return;
+  }
   const panelOrView = (e.target as HTMLElement).closest("#plugin-panels, #plugin-view");
   if (panelOrView) {
     if (e.ctrlKey || e.metaKey) { e.preventDefault(); return; }
@@ -1757,7 +1787,6 @@ function renderPluginSettings(): void {
   const list = document.getElementById("plugin-list") as HTMLDivElement | null;
   if (!list) return;
   const plugins = listLoadedPlugins();
-  const commands = listPluginCommands();
   if (plugins.length === 0) {
     list.innerHTML = `<p class="meta">No plugins found. Drop a plugin folder into your plugins folder, then reopen Settings. See PLUGIN_API.md in the repo for the format.</p>`;
     return;
@@ -1774,16 +1803,16 @@ function renderPluginSettings(): void {
   for (const lp of plugins) {
     const m = lp.manifest;
     const state = lp.failed ? "Failed" : lp.active ? "On" : "Off";
-    const cmds = commands.filter((c) => c.pluginId === m.id);
     html += `<div class="plugin-row"><div class="plugin-row-text"><div><strong>${escapeHtml(m.name)}</strong> <span class="meta">${state}</span></div>`;
     const desc = descriptions[m.id];
     if (desc) html += `<p class="meta">${desc}</p>`;
     if (lp.failed && lp.error) html += `<p class="meta"><strong>${escapeHtml(lp.error)}</strong></p>`;
+    // No Run buttons: commands are run from the command
+    // palette (Cmd/Ctrl+K), not from Settings, and the
+    // palette's own Open command was the only command any
+    // plugin registered, so a Run button here was just a
+    // second way to open the palette.
     html += `</div><button data-plugin-toggle="${m.id}">${lp.active ? "Disable" : "Enable"}</button>`;
-    for (const c of cmds) {
-      if (!lp.active) continue;
-      html += ` <button data-plugin-command="${m.id}:${c.id}">Run: ${escapeHtml(c.title)}</button>`;
-    }
     html += `</div>`;
   }
   list.innerHTML = html;
@@ -1796,14 +1825,6 @@ function renderPluginSettings(): void {
       renderShortcutsTable();
       renderPluginSettingsSections();
       renderPluginSettings();
-      render();
-    });
-  }
-  for (const btn of Array.from(list.querySelectorAll("[data-plugin-command]"))) {
-    btn.addEventListener("click", async () => {
-      const [pid, cid] = ((btn as HTMLElement).dataset.pluginCommand ?? "").split(":");
-      if (!pid || !cid) return;
-      await runPluginCommand(pid, cid);
       render();
     });
   }
@@ -2130,6 +2151,14 @@ async function init(): Promise<void> {
     save: () => save(),
     render: () => render(),
     setTool: (toolName: string) => setTool(toolName),
+    getPenColor: () => penColor,
+    setPenColor: (hex: string) => {
+      if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return false;
+      penColor = hex.toUpperCase();
+      render();
+      emitPluginEvent("pen");
+      return true;
+    },
     getCamera: () => board.camera,
     setCamera: (cam) => {
       if (!isFinite(cam.x) || !isFinite(cam.y) || !isFinite(cam.zoom)) return;

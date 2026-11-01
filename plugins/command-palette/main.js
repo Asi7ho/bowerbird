@@ -62,11 +62,8 @@ function buildEntries() {
   const out = [];
 
   // Plugin commands first: these are the commands other plugins
-  // registered, the ones Settings shows as Run buttons. The
-  // palette's own Open command is left out — running it while
-  // the palette is already open would do nothing useful.
+  // registered, if any. No plugin currently registers one.
   const commands = apiRef.ui.listCommands()
-    .filter((c) => !(c.pluginId === "command-palette" && c.id === "open"))
     .sort((a, b) => a.title.localeCompare(b.title));
   for (const c of commands) {
     out.push({
@@ -327,11 +324,11 @@ export function activate(api) {
     id: "palette",
     render: (container) => initOverlay(container),
   });
-  api.ui.registerCommand({
-    id: "open",
-    title: "Open command palette",
-    run: () => open(),
-  });
+  // No command is registered for opening the palette:
+  // it opens with Cmd/Ctrl+K, and a Settings Run button
+  // for it was just a second, redundant way in — the
+  // palette is the place commands are run from, not a
+  // command to run from Settings.
   window.addEventListener("keydown", onKeyDown, true);
 }
 
