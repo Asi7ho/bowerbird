@@ -313,6 +313,11 @@ let pendingZoomFactor = 1;
 let pendingZoomAnchor: Pt | null = null;
 let zoomFrame: number | null = null;
 let zoomSettleTimer: ReturnType<typeof setTimeout> | null = null;
+// Content refresh during a long pinch: without this, cards
+// that scroll into view while zooming only appear after
+// the gesture ends, which feels frozen and rigid.
+let lastZoomRefreshZoom = 1;
+let lastZoomRefreshTime = 0;
 let lastToolbarKey = "";
 
 const boardEl = document.getElementById("board") as HTMLDivElement;
@@ -1499,12 +1504,17 @@ window.addEventListener("wheel", (e: WheelEvent) => {
   e.preventDefault();
   if (e.ctrlKey || e.metaKey) {
     // Pinch / Ctrl+wheel zoom: accumulate, apply once per
-    // frame, rebuild content only when the gesture settles
-    // (120 ms after the last tick, including momentum).
-    // Applying the transform without a DOM rebuild is what
-    // makes a continuous pinch feel like one motion instead
-    // of a series of steps.
-    pendingZoomFactor *= Math.exp(-e.deltaY * 0.0015);
+    // frame, rebuild content when the gesture settles and
+    // periodically during a long gesture, so cards that
+    // come into view appear while zooming, not only after.
+    // Sensitivity: 0.003, not 0.0015 — a full trackpad
+    // pinch used to give only ~1.35x and felt slow, and a
+    // mouse-wheel notch almost nothing. deltaMode is
+    // normalised first, so a line-based wheel (deltaY in
+    // lines) and a pixel-based trackpad pinch both land
+    // on the same scale.
+    const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
+    pendingZoomFactor *= Math.exp(-dy * 0.003);
     pendingZoomAnchor = boardPoint(e.clientX, e.clientY);
     if (zoomFrame === null) {
       zoomFrame = requestAnimationFrame(() => {
@@ -1515,11 +1525,20 @@ window.addEventListener("wheel", (e: WheelEvent) => {
         pendingZoomFactor = 1;
         pendingZoomAnchor = null;
         applyCamera();
+        const now = performance.now();
+        const ratio = board.camera.zoom / lastZoomRefreshZoom;
+        if (now - lastZoomRefreshTime > 250 || ratio > 1.25 || ratio < 0.8) {
+          refreshContentIfVisibleChanged();
+          lastZoomRefreshZoom = board.camera.zoom;
+          lastZoomRefreshTime = now;
+        }
       });
     }
     if (zoomSettleTimer) clearTimeout(zoomSettleTimer);
     zoomSettleTimer = setTimeout(() => {
       refreshContentIfVisibleChanged();
+      lastZoomRefreshZoom = board.camera.zoom;
+      lastZoomRefreshTime = performance.now();
       save();
     }, 120);
     return;
