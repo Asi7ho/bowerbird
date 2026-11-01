@@ -13,13 +13,14 @@
 // transformers to 1.4.2, which depends on canvas 2.11.2,
 // which has no prebuilt binary for Node 26 on Mac arm64
 // and fails to build from source (needs pkg-config and
-// pixman). Transformers 2.x uses sharp, not canvas.
-// On newer npm, sharp's install script (which downloads
-// libvips) is blocked by default: approve it with
-// `npm install-scripts approve sharp`, then `npm install`
-// again, or image indexing will fail and search will
-// fall back to filenames. Bowerbird itself still runs
-// without it; only context search is unavailable.
+// pixman). Instead, package.json `overrides` force
+// sharp to 0.35.5 and protobufjs to 7.6.6, which fixes
+// all 5 audit vulnerabilities (sharp libvips/libheif/
+// librsvg, protobufjs critical code execution) and
+// drops the deprecated prebuild-install, with no
+// downgrade and no install-script approval needed.
+// Bowerbird itself still runs without the models; only
+// context search is unavailable if they fail to load.
 //
 // CLIP in Transformers.js v2 needs both an image and a
 // text input for a forward pass, even when only one

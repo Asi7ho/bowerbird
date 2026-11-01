@@ -15,14 +15,7 @@ npm run dev
 
 That starts the board in development mode. No Xcode is needed on a Mac to run it from source.
 
-On newer npm, the install may warn that `sharp`'s install script was skipped. That script downloads libvips, which context search needs to read images. If search shows "Context unavailable", approve it and install again:
-
-```sh
-npm install-scripts approve sharp
-npm install
-```
-
-Do not run `npm audit fix --force`. It downgrades `@xenova/transformers` to 1.x, which depends on `canvas` — and `canvas` has no prebuilt binary for Node 26 on Mac arm64 and fails to build from source. The pinned 2.x version uses `sharp`, not `canvas`. The audit warnings are in local-only dependencies and are not a reason to break the install.
+Do not run `npm audit fix --force`. It downgrades `@xenova/transformers` to 1.x, which depends on `canvas` — and `canvas` has no prebuilt binary for Node 26 on Mac arm64 and fails to build from source. Instead, the known vulnerabilities in transformers 2.x are fixed by the `overrides` in `package.json`: `sharp` is forced to 0.35.5 (fixing its libvips/libheif/librsvg advisories and dropping the deprecated `prebuild-install`) and `protobufjs` to 7.6.6 (fixing its critical code-execution advisory). With those overrides, `npm audit` reports 0 vulnerabilities, and `npm install` shows no deprecated-package warnings. If search ever shows "Context unavailable", it means a model failed to load — it does not mean the install is broken.
 
 The first run opens a welcome board that explains the controls on the board itself.
 
