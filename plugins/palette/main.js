@@ -85,7 +85,6 @@ let wheelCanvas = null;
 let wheelMarker = null;
 let previewSwatch = null;
 let previewHex = null;
-let colorPicker = null;
 let lightnessSlider = null;
 let lightnessValue = null;
 let palettesEl = null;
@@ -265,7 +264,6 @@ function updateAll(setPen) {
     previewSwatch.title = hex;
   }
   if (previewHex) previewHex.textContent = hex;
-  if (colorPicker && colorPicker.value.toUpperCase() !== hex) colorPicker.value = hex;
   // Picking sets the pen, but only when a pick actually
   // happened: the initial render must not overwrite the
   // pen colour the user already had with Palette's
@@ -309,6 +307,41 @@ function pickFromWheel(clientX, clientY) {
   updateAll(true);
 }
 
+function applyPickedHex(hex) {
+  if (!/^#[0-9a-fA-F]{6}$/.test(hex ?? "")) return;
+  const hsl = hexToHsl(hex);
+  baseH = hsl.h;
+  baseS = hsl.s;
+  baseL = hsl.l;
+  updateAll(true);
+}
+
+async function pickWithEyeDropper() {
+  // No await before open(): the call has to stay inside
+  // the click's user gesture, or the browser rejects it.
+  if (typeof window.EyeDropper === "function") {
+    try {
+      const result = await new window.EyeDropper().open();
+      applyPickedHex(result?.sRGBHex);
+      return;
+    } catch (e) {
+      // AbortError is Esc / cancel: nothing to do. Any
+      // other failure (no sampler on this platform, no
+      // secure context) falls through to the native input,
+      // which still picks a colour, just with its dialog.
+      if (e && e.name === "AbortError") return;
+    }
+  }
+  const fallback = document.createElement("input");
+  fallback.type = "color";
+  fallback.value = hslToHex(baseH, baseS, baseL);
+  fallback.style.cssText = "position:fixed;left:-100px;top:-100px;width:1px;height:1px;opacity:0;";
+  fallback.addEventListener("input", () => applyPickedHex(fallback.value));
+  fallback.addEventListener("change", () => fallback.remove(), { once: true });
+  document.body.appendChild(fallback);
+  fallback.click();
+}
+
 function renderPanel(container) {
   container.innerHTML = "";
   const wheelSection = document.createElement("div");
@@ -339,35 +372,27 @@ function renderPanel(container) {
   previewHex = document.createElement("div");
   previewHex.className = "pal-hex";
   previewRow.appendChild(previewHex);
-  // A native colour picker, as an icon only — not a
-  // second colour square: the preview swatch already is
-  // the picked colour, so the picker must not add another
-  // square beside it. The icon is a button-sized wrapper
-  // with an eyedropper glyph; the native input itself is
-  // transparent and covers the wrapper, so clicking the
-  // icon opens the system picker directly (an input hidden
-  // with display:none would not open it reliably). Picking
-  // here sets the wheel, the palettes and the pen, like
-  // any other pick.
-  const pickerWrap = document.createElement("div");
-  pickerWrap.className = "pal-picker-wrap";
-  pickerWrap.title = "Pick a colour";
-  pickerWrap.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 4.5 19.5 9.5 9 20H4v-5L14.5 4.5Z" /><path d="M13 6l5 5" /><path d="M18 3l3 3" /></svg>';
-  colorPicker = document.createElement("input");
-  colorPicker.className = "pal-color-picker";
-  colorPicker.type = "color";
-  colorPicker.value = hslToHex(baseH, baseS, baseL);
-  colorPicker.setAttribute("aria-label", "Pick a colour");
-  colorPicker.title = "Pick a colour";
-  colorPicker.addEventListener("input", () => {
-    const hsl = hexToHsl(colorPicker.value);
-    baseH = hsl.h;
-    baseS = hsl.s;
-    baseL = hsl.l;
-    updateAll(true);
-  });
-  pickerWrap.appendChild(colorPicker);
-  previewRow.appendChild(pickerWrap);
+  // The eyedropper, directly — not a native colour
+  // input. A native <input type="color"> opens its own
+  // colour dialog, and that dialog has yet another
+  // eyedropper inside it, which is the tool that actually
+  // samples a colour from the screen: two steps where
+  // one was wanted. The browser's EyeDropper API is the
+  // sampler itself: clicking this icon starts sampling
+  // at once, and the next click anywhere picks that
+  // colour. It must be called from the click itself, with
+  // nothing awaited first, or the browser refuses it as
+  // not a user gesture. Picking here sets the wheel, the
+  // palettes and the pen, like any other pick. Esc (an
+  // AbortError) just cancels, silently.
+  const pickerBtn = document.createElement("button");
+  pickerBtn.type = "button";
+  pickerBtn.className = "pal-picker-wrap";
+  pickerBtn.title = "Pick a colour from the screen";
+  pickerBtn.setAttribute("aria-label", "Pick a colour from the screen");
+  pickerBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 4.5 19.5 9.5 9 20H4v-5L14.5 4.5Z" /><path d="M13 6l5 5" /><path d="M18 3l3 3" /></svg>';
+  pickerBtn.addEventListener("click", () => void pickWithEyeDropper());
+  previewRow.appendChild(pickerBtn);
   wheelSection.appendChild(previewRow);
   const sliderRow = document.createElement("div");
   sliderRow.className = "pal-slider-row";
@@ -496,7 +521,6 @@ function deactivate() {
   wheelMarker = null;
   previewSwatch = null;
   previewHex = null;
-  colorPicker = null;
   lightnessSlider = null;
   lightnessValue = null;
   palettesEl = null;
