@@ -898,6 +898,46 @@ function registerIpc() {
     return { mime, base64: fs.readFileSync(filePath).toString('base64') };
   });
   ipcMain.handle('bowerbird:file-size', (_event, filePath) => fs.statSync(filePath).size);
+  // Context search (local ML, see electron/context.js).
+  // Image and video-frame embeddings and audio labels are
+  // computed here, in the main process, where the models
+  // run. The renderer only sends board-local paths, frame
+  // data URLs, or decoded audio samples, and gets back
+  // embeddings and labels — never the other way round.
+  const context = require('./context.js');
+  ipcMain.handle('bowerbird:context-embed-image', async (_event, filePath) => {
+    if (!isBoardLocal(filePath)) throw new Error('not a board-local file');
+    return context.embedImageFile(app, filePath);
+  });
+  ipcMain.handle('bowerbird:context-embed-frame', async (_event, dataUrl) => {
+    if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) throw new Error('not an image data URL');
+    return context.embedImageDataUrl(app, dataUrl);
+  });
+  ipcMain.handle('bowerbird:context-embed-text', async (_event, text) => {
+    if (typeof text !== 'string' || text.length > 500) throw new Error('text too long');
+    return context.embedText(app, text);
+  });
+  ipcMain.handle('bowerbird:context-classify-audio', async (_event, pcm) => {
+    if (!pcm || pcm.length > 16000 * 60) throw new Error('audio too long for classification');
+    return context.classifyAudio(app, pcm);
+  });
+  // Context index persistence: one JSON file next to the
+  // board, keyed by media path, so a board that is already
+  // indexed does not re-run the models on every launch.
+  ipcMain.handle('bowerbird:context-index-load', () => {
+    try {
+      const file = path.join(boardDir(), 'context-index.json');
+      if (!fs.existsSync(file)) return {};
+      return JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch { return {}; }
+  });
+  ipcMain.handle('bowerbird:context-index-save', (_event, index) => {
+    try {
+      const file = path.join(boardDir(), 'context-index.json');
+      fs.writeFileSync(file, JSON.stringify(index));
+      return true;
+    } catch { return false; }
+  });
 
   ipcMain.handle('bowerbird:fetch-preview', async (_event, url) => {
     let parsed;

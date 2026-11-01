@@ -9,6 +9,12 @@ interface BowerbirdAPI {
   restoreShowcase(): Promise<{ copied: string[]; missing: string[]; srcDir: string; destDir: string }>;
   checkFile(filePath: string): Promise<{ path: string; exists: boolean; size: number; bundlePath: string; bundleExists: boolean; bundleSize: number }>;
   readFileBase64(filePath: string): Promise<{ mime: string; base64: string }>;
+  contextEmbedImage(filePath: string): Promise<number[]>;
+  contextEmbedFrame(dataUrl: string): Promise<number[]>;
+  contextEmbedText(text: string): Promise<number[]>;
+  contextClassifyAudio(pcm: Float32Array): Promise<{ label: string; score: number }[]>;
+  contextIndexLoad(): Promise<Record<string, unknown>>;
+  contextIndexSave(index: Record<string, unknown>): Promise<boolean>;
   embedFile(path: string): Promise<string>;
   listLibrary(): Promise<{ path: string; items: Array<{ name: string; path: string; relativePath: string; ext: string; kind: string; category: string | null; size_bytes: number; mtime_ms: number }>; categories: Array<{ name: string; count: number }>; uncategorizedCount: number }>;
   addToLibrary(path: string): Promise<string>;
@@ -1832,6 +1838,218 @@ document.getElementById("btn-delete")?.addEventListener("click", () => {
 document.getElementById("btn-undo")?.addEventListener("click", () => { undo(); });
 document.getElementById("btn-redo")?.addEventListener("click", () => { redo(); });
 
+// ---------------------------------------------------------------- context search
+// Local ML index, keyed by media path, persisted next to
+// the board in context-index.json so a board that is
+// already indexed does not re-run the models.
+// - Image: one CLIP embedding (512 floats).
+// - Video: CLIP embeddings of sampled frames, plus audio
+//   labels if the video file decodes as audio.
+// - Audio: AST labels, e.g. "Bird vocalization, bird
+//   call, bird song" — searching "bird" matches them.
+// Indexing starts on the first search, in the background,
+// one item at a time, so the board never blocks on a
+// model download. Until an item is indexed, search falls
+// back to its filename and type, as before.
+type ContextEntry = { embedding?: number[]; frames?: number[][]; labels?: string[] };
+const contextIndex = new Map<string, ContextEntry>();
+let contextIndexLoaded = false;
+let contextIndexing = false;
+let contextIndexTotal = 0;
+let contextIndexDone = 0;
+let contextIndexFailed = false;
+let contextQueryEmbedding: { query: string; embedding: number[] } | null = null;
+async function loadContextIndex(): Promise<void> {
+  if (contextIndexLoaded) return;
+  contextIndexLoaded = true;
+  try {
+    const raw = await api.contextIndexLoad();
+    for (const [k, v] of Object.entries(raw)) {
+      const e = v as ContextEntry;
+      if (e && (Array.isArray(e.embedding) || Array.isArray(e.frames) || Array.isArray(e.labels))) contextIndex.set(k, e);
+    }
+  } catch { /* no saved index yet */ }
+}
+function saveContextIndex(): void {
+  const obj: Record<string, ContextEntry> = {};
+  for (const [k, v] of contextIndex.entries()) obj[k] = v;
+  void api.contextIndexSave(obj).catch(() => undefined);
+}
+function cosineSim(a: number[], b: number[]): number {
+  let dot = 0, na = 0, nb = 0;
+  const n = Math.min(a.length, b.length);
+  for (let i = 0; i < n; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+  if (na === 0 || nb === 0) return 0;
+  return dot / (Math.sqrt(na) * Math.sqrt(nb));
+}
+async function decodeAudio16k(fileUrl: string): Promise<Float32Array | null> {
+  try {
+    const res = await fetch(fileUrl);
+    if (!res.ok) return null;
+    const buf = await res.arrayBuffer();
+    const ctx = new AudioContext();
+    try {
+      const decoded = await ctx.decodeAudioData(buf);
+      const targetRate = 16000;
+      const offline = new OfflineAudioContext(1, Math.ceil(decoded.duration * targetRate), targetRate);
+      const src = offline.createBufferSource();
+      src.buffer = decoded;
+      src.connect(offline.destination);
+      src.start();
+      const rendered = await offline.startRendering();
+      const data = rendered.getChannelData(0);
+      const maxSamples = targetRate * 30;
+      return data.length > maxSamples ? data.slice(0, maxSamples) : data;
+    } finally {
+      void ctx.close().catch(() => undefined);
+    }
+  } catch { return null; }
+}
+async function captureVideoFrames(source: string): Promise<string[]> {
+  const urls: string[] = [];
+  try {
+    const video = document.createElement("video");
+    video.src = api.fileUrl(source);
+    video.muted = true;
+    video.preload = "auto";
+    await new Promise<void>((resolve) => {
+      video.onloadedmetadata = () => resolve();
+      video.onerror = () => resolve();
+      setTimeout(resolve, 5000);
+    });
+    if (!isFinite(video.duration) || video.duration <= 0) return urls;
+    const times = [Math.min(1, video.duration * 0.25), video.duration * 0.5, video.duration * 0.75];
+    const canvas = document.createElement("canvas");
+    canvas.width = 224; canvas.height = 224;
+    const ctx2d = canvas.getContext("2d");
+    if (!ctx2d) return urls;
+    for (const t of times) {
+      try {
+        video.currentTime = t;
+        await new Promise<void>((resolve) => {
+          video.onseeked = () => resolve();
+          setTimeout(resolve, 2000);
+        });
+        ctx2d.drawImage(video, 0, 0, 224, 224);
+        urls.push(canvas.toDataURL("image/jpeg", 0.8));
+      } catch { /* skip this frame */ }
+    }
+  } catch { /* video frames are a bonus, not a failure */ }
+  return urls;
+}
+async function indexContextItem(item: Item): Promise<void> {
+  const k = item.kind;
+  try {
+    if ("Image" in k) {
+      if (contextIndex.get(k.Image.path)?.embedding) return;
+      const embedding = await api.contextEmbedImage(k.Image.path);
+      contextIndex.set(k.Image.path, { embedding });
+    } else if ("Audio" in k) {
+      if (contextIndex.get(k.Audio.path)?.labels) return;
+      const pcm = await decodeAudio16k(api.fileUrl(k.Audio.path));
+      if (!pcm) return;
+      const out = await api.contextClassifyAudio(pcm);
+      const labels = out.map((o) => o.label.toLowerCase());
+      contextIndex.set(k.Audio.path, { labels });
+    } else if ("Video" in k && !k.Video.remote) {
+      const existing = contextIndex.get(k.Video.source);
+      if (existing?.frames) return;
+      const frames: number[][] = [];
+      for (const url of await captureVideoFrames(k.Video.source)) {
+        try { frames.push(await api.contextEmbedFrame(url)); } catch { /* skip this frame */ }
+      }
+      const labels: string[] = [];
+      const pcm = await decodeAudio16k(api.fileUrl(k.Video.source));
+      if (pcm) {
+        try {
+          const out = await api.contextClassifyAudio(pcm);
+          labels.push(...out.map((o) => o.label.toLowerCase()));
+        } catch { /* visual frames alone are enough */ }
+      }
+      if (frames.length > 0 || labels.length > 0) contextIndex.set(k.Video.source, { frames, labels });
+    } else {
+      return;
+    }
+    saveContextIndex();
+  } catch {
+    // One failed item must not stop the rest, and must
+    // not break ordinary search.
+  }
+}
+function hasUnindexedMedia(): boolean {
+  return board.items.some((it) => {
+    if ("Image" in it.kind) return !contextIndex.get(it.kind.Image.path)?.embedding;
+    if ("Audio" in it.kind) return !contextIndex.get(it.kind.Audio.path)?.labels;
+    if ("Video" in it.kind && !it.kind.Video.remote) {
+      const e = contextIndex.get(it.kind.Video.source);
+      return !(e?.frames || e?.labels);
+    }
+    return false;
+  });
+}
+async function startContextIndexing(): Promise<void> {
+  if (contextIndexing) return;
+  // Set synchronously, before any await, so the search
+  // count shows "Indexing context…" during the model
+  // download itself, which is the longest part.
+  contextIndexing = true;
+  await loadContextIndex();
+  // If everything is already indexed, stop here: without
+  // this guard, the updateSearch call at the end of this
+  // function would restart indexing forever, ping-ponging
+  // with updateSearch once the index is complete.
+  if (!hasUnindexedMedia()) {
+    contextIndexing = false;
+    return;
+  }
+  contextIndexFailed = false;
+  const items = board.items.filter((it) => ("Image" in it.kind) || ("Audio" in it.kind) || (("Video" in it.kind) && !it.kind.Video.remote));
+  contextIndexTotal = items.length;
+  contextIndexDone = 0;
+  for (const it of items) {
+    try { await indexContextItem(it); } catch { contextIndexFailed = true; }
+    contextIndexDone++;
+    const input = document.getElementById("search-input") as HTMLInputElement | null;
+    if (input && input.value.trim() !== "") updateSearch();
+  }
+  contextIndexing = false;
+  const input = document.getElementById("search-input") as HTMLInputElement | null;
+  if (input && input.value.trim() !== "") updateSearch();
+}
+async function contextMatches(item: Item, query: string, words: string[]): Promise<boolean> {
+  const k = item.kind;
+  if ("Image" in k) {
+    const e = contextIndex.get(k.Image.path)?.embedding;
+    if (!e) return false;
+    if (!contextQueryEmbedding || contextQueryEmbedding.query !== query) {
+      try {
+        const embedding = await api.contextEmbedText(`a photo of ${query}`);
+        contextQueryEmbedding = { query, embedding };
+      } catch { return false; }
+    }
+    return cosineSim(e, contextQueryEmbedding.embedding) >= 0.23;
+  }
+  if ("Video" in k && !k.Video.remote) {
+    const entry = contextIndex.get(k.Video.source);
+    if (entry?.labels && words.every((w) => entry.labels!.join(" ").includes(w))) return true;
+    if (!entry?.frames || entry.frames.length === 0) return false;
+    if (!contextQueryEmbedding || contextQueryEmbedding.query !== query) {
+      try {
+        const embedding = await api.contextEmbedText(`a photo of ${query}`);
+        contextQueryEmbedding = { query, embedding };
+      } catch { return false; }
+    }
+    return entry.frames.some((f) => cosineSim(f, contextQueryEmbedding!.embedding) >= 0.23);
+  }
+  if ("Audio" in k) {
+    const labels = contextIndex.get(k.Audio.path)?.labels;
+    if (!labels) return false;
+    const joined = labels.join(" ");
+    return words.every((w) => joined.includes(w));
+  }
+  return false;
+}
+
 // ---------------------------------------------------------------- search
 
 // Search normalisation: separators become spaces, so
@@ -1911,6 +2129,24 @@ function searchMatchesQuery(item: Item, words: string[]): boolean {
   return words.every((w) => hay.includes(w));
 }
 
+let searchGeneration = 0;
+function applySearchMatches(countEl: HTMLElement): void {
+  if (searchIndex >= searchMatches.length) searchIndex = -1;
+  const matchSet = new Set(searchMatches);
+  for (const child of Array.from(cardsEl.children)) {
+    const el = child as HTMLElement;
+    const id = Number(el.dataset.id);
+    el.classList.toggle("search-match", matchSet.has(id));
+    el.classList.toggle("search-dim", !matchSet.has(id));
+  }
+  let text = "";
+  if (searchMatches.length === 0) text = "No matches";
+  else if (searchIndex >= 0) text = `${searchIndex + 1} of ${searchMatches.length}`;
+  else text = searchMatches.length === 1 ? "1 match" : `${searchMatches.length} matches`;
+  if (contextIndexing) text += contextIndexTotal > 0 ? ` · Indexing context ${contextIndexDone}/${contextIndexTotal}` : " · Indexing context…";
+  else if (contextIndexFailed) text += " · Context unavailable";
+  countEl.textContent = text;
+}
 function updateSearch(): void {
   const input = document.getElementById("search-input") as HTMLInputElement | null;
   const countEl = document.getElementById("search-count") as HTMLSpanElement | null;
@@ -1933,17 +2169,38 @@ function updateSearch(): void {
   searchMatches = board.items
     .filter((it) => !("Stroke" in it.kind) && !("Connector" in it.kind) && searchMatchesQuery(it, words))
     .map((it) => it.id);
-  if (searchIndex >= searchMatches.length) searchIndex = -1;
-  const matchSet = new Set(searchMatches);
-  for (const child of Array.from(cardsEl.children)) {
-    const el = child as HTMLElement;
-    const id = Number(el.dataset.id);
-    el.classList.toggle("search-match", matchSet.has(id));
-    el.classList.toggle("search-dim", !matchSet.has(id));
-  }
-  if (searchMatches.length === 0) countEl.textContent = "No matches";
-  else if (searchIndex >= 0) countEl.textContent = `${searchIndex + 1} of ${searchMatches.length}`;
-  else countEl.textContent = searchMatches.length === 1 ? "1 match" : `${searchMatches.length} matches`;
+  applySearchMatches(countEl);
+  // Context search, in the background: index media that
+  // is not indexed yet, then check the rest of the board
+  // against the query's CLIP embedding / audio labels.
+  // Results merge in as they arrive; a stale query (the
+  // user kept typing) discards its own context results.
+  const gen = ++searchGeneration;
+  void startContextIndexing();
+  applySearchMatches(countEl);
+  void (async () => {
+    // Wait for indexing to finish, then check context.
+    // startContextIndexing is already running above; this
+    // waits for it by polling its flag, so a new search
+    // (new generation) supersedes this one cleanly.
+    while (contextIndexing) await new Promise((r) => setTimeout(r, 200));
+    if (gen !== searchGeneration) return;
+    const inputNow = document.getElementById("search-input") as HTMLInputElement | null;
+    if (!inputNow || normaliseSearch(inputNow.value) !== query) return;
+    const extra: number[] = [];
+    for (const it of board.items) {
+      if (("Stroke" in it.kind) || ("Connector" in it.kind)) continue;
+      if (searchMatches.includes(it.id)) continue;
+      if (await contextMatches(it, query, words)) extra.push(it.id);
+    }
+    if (gen !== searchGeneration) return;
+    if (extra.length > 0) searchMatches = [...searchMatches, ...extra];
+    // Always refresh the count, even with no extra matches:
+    // otherwise the "Indexing context…" text stays stuck
+    // after indexing finishes with nothing new to add.
+    const countNow = document.getElementById("search-count") as HTMLElement | null;
+    if (countNow) applySearchMatches(countNow);
+  })().catch(() => { contextIndexFailed = true; });
 }
 
 function clearSearch(): void {
