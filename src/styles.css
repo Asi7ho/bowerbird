@@ -87,33 +87,117 @@ button { font-family: inherit; }
 #title-bar button.dim { opacity: 0.35; cursor: default; }
 #title-bar button.dim:hover { background: transparent; }
 #title-bar button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-/* Traffic lights: macOS window controls, at the far left
-   of the custom title bar (the window is frameless, so
-   there are no native ones). 12px circles in the macOS
-   colours, red close, yellow minimise, green full screen,
-   in that order, with a hairline edge. The symbols are
-   hidden until the group is hovered, as on macOS, and
-   the buttons never take the title bar's grey hover tint
-   — their colour is the control. They opt out of dragging
-   like every other title-bar button, or a click on one
-   would move the window instead of acting. */
-#traffic-lights {
-  display: flex; align-items: center; gap: 8px; flex: none;
+/* Window controls: the window is frameless, so there
+   are no native ones — the app draws what each OS would
+   draw, and the renderer puts the group where that OS
+   puts it (left on macOS, right on Windows and Linux).
+   Every button opts out of dragging like every other
+   title-bar button, or a click on it would move the
+   window instead of acting. The icon-os icons (Windows
+   and Linux) and the macOS icons are both in the DOM;
+   each platform's rules show only its own set, and the
+   order and visibility rules below are what make the
+   same four buttons read as three different OS controls.
+   - macOS: traffic lights, far left, close, minimise,
+     full screen, 12px circles in the macOS colours.
+     Hover keeps the colour — the earlier bug was a
+     hover rule that set the background to transparent,
+     so hovering made a light lose its colour entirely.
+     Only the symbol appears on hover, as on macOS.
+   - Windows: caption buttons, far right, minimise,
+     maximise/restore, close, 46px wide and the full
+     48px title-bar height, flush to the window edge.
+     Hover is a grey tint, except Close, which goes
+     solid red with a white icon, as on Windows 11.
+   - Linux: GNOME-style, far right, minimise,
+     maximise/restore, close, 32px round icon buttons.
+     Hover is a grey circle, except Close, whose hover
+     is a red tint with a red icon — not Windows' solid
+     red, and not macOS' coloured circles. */
+#window-controls {
+  display: flex; align-items: center; flex: none;
   -webkit-app-region: no-drag;
 }
-#title-bar button.traffic-light {
+/* Shared: one button is shown per platform, the other
+   icon set is hidden; the maximise button shows its
+   restore icon only while maximised, and the full
+   screen button shows its exit icon only while in
+   full screen. */
+#window-controls .icon-os { display: none; }
+#window-controls .icon-exit, #window-controls .icon-restore { display: none; }
+#window-controls .win-fullscreen.is-fullscreen .icon-enter { display: none; }
+#window-controls .win-fullscreen.is-fullscreen .icon-exit { display: inline; }
+#window-controls .win-maximise.is-maximised .icon-maximise { display: none; }
+#window-controls .win-maximise.is-maximised .icon-restore { display: inline; }
+/* The restore icon's front square masks the back square's
+   corner: it must actually be filled white, not the
+   title-bar buttons' usual fill:none. */
+#window-controls .icon-restore path:nth-child(2) { fill: #fff; }
+/* macOS */
+body.platform-darwin #window-controls { gap: 8px; }
+body.platform-darwin #title-bar button.win-close,
+body.platform-darwin #title-bar button.win-minimise,
+body.platform-darwin #title-bar button.win-fullscreen {
   width: 12px; height: 12px; padding: 0; border-radius: 50%;
   box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.15);
 }
-#title-bar button.traffic-light:hover { background: transparent; }
-#title-bar button.traffic-light svg {
+body.platform-darwin #title-bar button.win-close { background: #ff5f57; order: 1; }
+body.platform-darwin #title-bar button.win-minimise { background: #febc2e; order: 2; }
+body.platform-darwin #title-bar button.win-fullscreen { background: #28c840; order: 3; }
+/* Hover keeps the colour: each hover rule repeats the
+   button's own colour, so the generic title-bar grey
+   hover tint never replaces it. */
+body.platform-darwin #title-bar button.win-close:hover { background: #ff5f57; }
+body.platform-darwin #title-bar button.win-minimise:hover { background: #febc2e; }
+body.platform-darwin #title-bar button.win-fullscreen:hover { background: #28c840; }
+body.platform-darwin #title-bar button.win-maximise { display: none; }
+body.platform-darwin #window-controls svg {
   width: 8px; height: 8px; stroke: rgba(0, 0, 0, 0.55); stroke-width: 1.4;
   opacity: 0;
 }
-#traffic-lights:hover button.traffic-light svg { opacity: 1; }
-#title-bar button.traffic-close { background: #ff5f57; }
-#title-bar button.traffic-minimise { background: #febc2e; }
-#title-bar button.traffic-fullscreen { background: #28c840; }
+body.platform-darwin #window-controls:hover svg { opacity: 1; }
+/* Windows */
+body.platform-win32 #title-bar { padding-right: 0; }
+body.platform-win32 #window-controls { gap: 0; height: 48px; }
+body.platform-win32 #title-bar button.win-close,
+body.platform-win32 #title-bar button.win-minimise,
+body.platform-win32 #title-bar button.win-maximise {
+  width: 46px; height: 48px; padding: 0; border-radius: 0;
+}
+body.platform-win32 #title-bar button.win-minimise { order: 1; }
+body.platform-win32 #title-bar button.win-maximise { order: 2; }
+body.platform-win32 #title-bar button.win-close { order: 3; }
+body.platform-win32 #title-bar button.win-fullscreen { display: none; }
+body.platform-win32 #window-controls .icon-mac { display: none; }
+body.platform-win32 #window-controls .icon-os { display: inline; }
+body.platform-win32 #window-controls svg {
+  width: 16px; height: 16px; stroke-width: 1.5;
+}
+body.platform-win32 #title-bar button.win-minimise:hover,
+body.platform-win32 #title-bar button.win-maximise:hover { background: rgba(0, 0, 0, 0.06); }
+body.platform-win32 #title-bar button.win-minimise:active,
+body.platform-win32 #title-bar button.win-maximise:active { background: rgba(0, 0, 0, 0.12); }
+body.platform-win32 #title-bar button.win-close:hover { background: #e81123; color: #fff; }
+body.platform-win32 #title-bar button.win-close:active { background: #c50f1f; color: #fff; }
+/* Linux (GNOME-style) */
+body.platform-linux #window-controls { gap: 4px; }
+body.platform-linux #title-bar button.win-close,
+body.platform-linux #title-bar button.win-minimise,
+body.platform-linux #title-bar button.win-maximise {
+  width: 32px; height: 32px; padding: 0; border-radius: 50%;
+}
+body.platform-linux #title-bar button.win-minimise { order: 1; }
+body.platform-linux #title-bar button.win-maximise { order: 2; }
+body.platform-linux #title-bar button.win-close { order: 3; }
+body.platform-linux #title-bar button.win-fullscreen { display: none; }
+body.platform-linux #window-controls .icon-mac { display: none; }
+body.platform-linux #window-controls .icon-os { display: inline; }
+body.platform-linux #window-controls svg {
+  width: 16px; height: 16px; stroke-width: 1.5;
+}
+body.platform-linux #title-bar button.win-minimise:hover,
+body.platform-linux #title-bar button.win-maximise:hover { background: var(--fill); }
+body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57, 70, 0.12); color: #e63946; }
 #canvas-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 #grid { position: absolute; inset: 0; pointer-events: none; }
 /* #cards must NOT have overflow:hidden: cards live in world

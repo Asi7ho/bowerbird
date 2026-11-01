@@ -4,6 +4,7 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('bowerbird', {
   isDemo: process.env.BOWERBIRD_DEMO === '1',
+  platform: process.platform,
   loadBoard: () => ipcRenderer.invoke('bowerbird:load-board'),
   saveBoard: (json) => ipcRenderer.invoke('bowerbird:save-board', json),
   listBoards: () => ipcRenderer.invoke('bowerbird:list-boards'),
@@ -38,6 +39,8 @@ contextBridge.exposeInMainWorld('bowerbird', {
   closeWindow: () => ipcRenderer.invoke('bowerbird:close-window'),
   quit: () => ipcRenderer.invoke('bowerbird:quit'),
   fullscreen: () => ipcRenderer.invoke('bowerbird:fullscreen'),
+  maximise: () => ipcRenderer.invoke('bowerbird:maximise'),
+  windowState: () => ipcRenderer.invoke('bowerbird:window-state'),
   getPathForFile: (file) => webUtils.getPathForFile(file),
   // app-file://localhost + path, NOT app-file:// + path:
   // Chromium lowercases the hostname of a standard

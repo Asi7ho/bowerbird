@@ -1460,7 +1460,13 @@ function registerIpc() {
   // closing the only window does not by itself end the app, and
   // BaseWindow.close() alone did not end the process in testing.
   ipcMain.handle('bowerbird:quit', () => { if (peekWin) peekWin.destroy(); if (win) win.destroy(); app.quit(); });
-  ipcMain.handle('bowerbird:fullscreen', () => { if (win) win.setFullScreen(!win.isFullScreen()); });
+  ipcMain.handle('bowerbird:fullscreen', () => { if (win) win.setFullScreen(!win.isFullScreen()); return win ? win.isFullScreen() : false; });
+  ipcMain.handle('bowerbird:maximise', () => {
+    if (!win) return false;
+    if (win.isMaximized()) win.unmaximize(); else win.maximize();
+    return win.isMaximized();
+  });
+  ipcMain.handle('bowerbird:window-state', () => ({ maximised: win ? win.isMaximized() : false, fullscreen: win ? win.isFullScreen() : false }));
 }
 
 // ---------------------------------------------------------------- app

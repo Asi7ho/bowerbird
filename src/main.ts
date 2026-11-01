@@ -3,6 +3,7 @@
 // this bridge, which the main process exposes with context isolation on.
 interface BowerbirdAPI {
   isDemo: boolean;
+  platform: string;
   loadBoard(): Promise<{ json: string | null; board_path: string; board_dir: string; pdf_size_bytes: number; video_size_bytes: number; panelOrder?: string[]; buildId?: string }>;
   saveBoard(json: string): Promise<void>;
   listBoards(): Promise<Array<{ name: string; current: boolean; items: number }>>;
@@ -39,7 +40,9 @@ interface BowerbirdAPI {
   minimise(): Promise<void>;
   closeWindow(): Promise<void>;
   quit(): Promise<void>;
-  fullscreen(): Promise<void>;
+  fullscreen(): Promise<boolean>;
+  maximise(): Promise<boolean>;
+  windowState(): Promise<{ maximised: boolean; fullscreen: boolean }>;
   getPathForFile(file: File): string;
   fileUrl(path: string): string;
   listPlugins(): Promise<PluginManifest[]>;
@@ -2872,25 +2875,75 @@ document.getElementById("search-clear")?.addEventListener("click", () => {
   document.getElementById("search-input")?.focus();
 });
 
-// Traffic lights: the window is frameless, so these are
-// the only window controls. Close quits the app (the old
-// Settings Quit button did exactly this: commit, save,
-// then api.quit, which destroys the peek window too),
-// minimise minimises, full screen toggles full screen —
-// all through the main process IPC that already existed
-// for them. The buttons opt out of the title bar's drag
-// region in CSS, so a click acts instead of moving.
-document.getElementById("traffic-close")?.addEventListener("click", async () => {
+// Window controls: the window is frameless, so these
+// are the only window controls, and they are drawn the
+// way the OS the app is running on draws them — macOS
+// traffic lights on the left, Windows caption buttons
+// on the right, GNOME-style round buttons on the right
+// on Linux (see the per-platform CSS). The platform
+// comes from the preload bridge, with a user-agent
+// fallback for a renderer that predates it, and the
+// group is moved to the right-hand actions only on
+// non-macOS platforms; on macOS it stays where the
+// HTML puts it, at the far left. Close quits the app
+// (the old Settings Quit button did exactly this:
+// commit, save, then api.quit, which destroys the peek
+// window too), minimise minimises, full screen toggles
+// full screen on macOS, maximise toggles maximise on
+// Windows/Linux. The buttons opt out of the title
+// bar's drag region in CSS, so a click acts instead
+// of moving the window.
+const osPlatform = ((): "darwin" | "win32" | "linux" => {
+  const p = typeof api.platform === "string" ? api.platform : "";
+  if (p === "darwin" || p === "win32" || p === "linux") return p;
+  const ua = (navigator as unknown as { userAgentData?: { platform?: string } }).userAgentData?.platform ?? "";
+  if (ua === "macOS") return "darwin";
+  if (ua === "Windows") return "win32";
+  return "linux";
+})();
+document.body.classList.add(`platform-${osPlatform}`);
+if (osPlatform !== "darwin") {
+  const controls = document.getElementById("window-controls");
+  const actions = document.getElementById("title-bar-actions");
+  if (controls && actions) actions.appendChild(controls);
+}
+const syncWindowState = async () => {
+  try {
+    const state = await api.windowState();
+    document.getElementById("win-maximise")?.classList.toggle("is-maximised", state.maximised);
+    document.getElementById("win-fullscreen")?.classList.toggle("is-fullscreen", state.fullscreen);
+  } catch { /* icons keep their last state */ }
+};
+document.getElementById("win-close")?.addEventListener("click", async () => {
   commitEditingIfAny();
   if (!DEMO) { try { await api.saveBoard(JSON.stringify(board)); } catch { /* closing anyway */ } }
   api.quit().catch(() => undefined);
 });
-document.getElementById("traffic-minimise")?.addEventListener("click", () => {
+document.getElementById("win-minimise")?.addEventListener("click", () => {
   api.minimise().catch(() => undefined);
 });
-document.getElementById("traffic-fullscreen")?.addEventListener("click", () => {
-  api.fullscreen().catch(() => undefined);
+document.getElementById("win-fullscreen")?.addEventListener("click", async () => {
+  try {
+    const fullscreen = await api.fullscreen();
+    document.getElementById("win-fullscreen")?.classList.toggle("is-fullscreen", fullscreen);
+  } catch { /* state sync on resize will correct the icon */ }
 });
+document.getElementById("win-maximise")?.addEventListener("click", async () => {
+  try {
+    const maximised = await api.maximise();
+    document.getElementById("win-maximise")?.classList.toggle("is-maximised", maximised);
+  } catch { /* state sync on resize will correct the icon */ }
+});
+// A maximise or full screen done outside the buttons
+// (an OS shortcut, a snap) still has to flip the icon,
+// so re-read the real window state after resizes settle
+// and once at startup.
+let windowStateTimer: ReturnType<typeof setTimeout> | undefined;
+window.addEventListener("resize", () => {
+  if (windowStateTimer) clearTimeout(windowStateTimer);
+  windowStateTimer = setTimeout(() => { void syncWindowState(); }, 200);
+});
+void syncWindowState();
 document.getElementById("btn-reset")?.addEventListener("click", () => {
   const confirmEl = document.getElementById("reset-confirm") as HTMLDivElement;
   const btn = document.getElementById("btn-reset") as HTMLButtonElement;
