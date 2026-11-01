@@ -137,6 +137,10 @@ export interface PluginBridge {
   pluginStorageGet(pluginId: string, key: string): Promise<unknown>;
   pluginStorageSet(pluginId: string, key: string, value: unknown): Promise<void>;
   pluginStorageDelete(pluginId: string, key: string): Promise<void>;
+  secureStorageAvailable(): Promise<boolean>;
+  secureStorageGet(pluginId: string, key: string): Promise<string | null>;
+  secureStorageSet(pluginId: string, key: string, value: string): Promise<boolean>;
+  secureStorageDelete(pluginId: string, key: string): Promise<void>;
   listLibrary: () => Promise<{ path: string; items: Array<{ name: string; path: string; relativePath: string; ext: string; kind: string; category: string | null; size_bytes: number; mtime_ms: number }>; categories: Array<{ name: string; count: number }>; uncategorizedCount: number }>;
   createLibraryCategory: (name: string) => Promise<string>;
   moveLibraryItem: (relativePath: string, category: string | null) => Promise<string>;
@@ -195,6 +199,11 @@ export interface PluginHost {
   overlaysEl: HTMLElement;
   settingsSectionsEl: HTMLElement;
   commitEditing: () => void;
+  // Panel tab order: the core owns the persisted order, the
+  // plugin system owns the tab DOM, so both sides go through
+  // these two calls instead of either side keeping its own list.
+  getPanelOrder: () => string[];
+  setPanelOrder: (order: string[]) => void;
 }
 
 export interface PluginContext {
@@ -294,6 +303,19 @@ export interface PluginContext {
     set: (key: string, value: unknown) => Promise<void>;
     delete: (key: string) => Promise<void>;
   };
+  // Secure storage: for secrets, which survive restarts like
+  // storage, but are encrypted by the OS keychain where the
+  // OS can encrypt (macOS always can), and flagged plain
+  // where it cannot. Same "storage" permission as storage:
+  // a plugin that may store settings may store a secret
+  // securely, but only its own secrets, never another
+  // plugin's — the main process scopes by plugin id.
+  secureStorage: {
+    available: () => Promise<boolean>;
+    get: (key: string) => Promise<string | null>;
+    set: (key: string, value: string) => Promise<boolean>;
+    delete: (key: string) => Promise<void>;
+  };
   ai: {
     chat: (req: { baseUrl: string; model: string; key: string; messages: Array<{ role: string; content: string }> }) => Promise<string>;
   };
@@ -358,6 +380,42 @@ let dockVisible = true;
 let tabsEl: HTMLElement | null = null;
 let tabsListEl: HTMLElement | null = null;
 let tabsToggleWired = false;
+// Tab drag state: a tab drag is a reorder, not a click, so
+// the click that fires after mouseup must be suppressed when
+// the pointer actually moved. The saved order is the tab
+// DOM order, so a dragged tab stays where the user left it
+// across restarts, and a new panel appends at the end.
+let tabDrag: { key: string; startX: number; dragged: boolean } | null = null;
+let suppressTabClick = false;
+
+function applyPanelOrder(): void {
+  if (!host || !tabsListEl) return;
+  const order = host.getPanelOrder();
+  if (order.length === 0) return;
+  const sorted = Array.from(panels.entries()).sort((a, b) => {
+    const ia = order.indexOf(a[0]), ib = order.indexOf(b[0]);
+    if (ia < 0 && ib < 0) return 0;
+    if (ia < 0) return 1;
+    if (ib < 0) return -1;
+    return ia - ib;
+  });
+  panels.clear();
+  for (const [key, p] of sorted) {
+    panels.set(key, p);
+    tabsListEl.appendChild(p.tab);
+  }
+}
+
+function panelDomOrder(): string[] {
+  if (!tabsListEl) return [];
+  const keys: string[] = [];
+  for (const child of Array.from(tabsListEl.children)) {
+    for (const [key, p] of panels.entries()) {
+      if (p.tab === child) keys.push(key);
+    }
+  }
+  return keys;
+}
 
 function wirePanelsToggle(): void {
   // Title-bar toggle, wired once: it lives outside the
@@ -731,6 +789,21 @@ function createContext(manifest: PluginManifest): PluginContext {
         return bridge!.pluginStorageDelete(pluginId, key);
       },
     },
+    secureStorage: {
+      available: async () => bridge!.secureStorageAvailable(),
+      get: async (key: string) => {
+        require("storage");
+        return bridge!.secureStorageGet(pluginId, key);
+      },
+      set: async (key: string, value: string) => {
+        require("storage");
+        return bridge!.secureStorageSet(pluginId, key, value);
+      },
+      delete: async (key: string) => {
+        require("storage");
+        return bridge!.secureStorageDelete(pluginId, key);
+      },
+    },
     ai: {
       chat: async (req) => {
         require("ai");
@@ -812,12 +885,54 @@ function registerPanel(pluginId: string, def: PluginPanelDef): void {
   } else {
     tab.textContent = def.title;
   }
-  tab.title = def.title;
+  tab.title = `${def.title} — drag to reorder`;
   tab.setAttribute("aria-label", def.title);
   const key = `${pluginId}:${def.id}`;
-  tab.addEventListener("click", () => setActivePanel(key));
+  tab.addEventListener("click", () => {
+    if (suppressTabClick) { suppressTabClick = false; return; }
+    setActivePanel(key);
+  });
+  // Drag a tab left or right to reorder the tabs. A drag is
+  // any pointer move over 4px; a smaller move is a click.
+  // The tab follows the pointer live, and the new order is
+  // saved on mouseup, so it survives a restart.
+  tab.addEventListener("mousedown", (e: MouseEvent) => {
+    if (e.button !== 0) return;
+    tabDrag = { key, startX: e.clientX, dragged: false };
+    const onMove = (ev: MouseEvent) => {
+      if (!tabDrag || tabDrag.key !== key) return;
+      if (Math.abs(ev.clientX - tabDrag.startX) <= 4) return;
+      tabDrag.dragged = true;
+      tab.classList.add("dragging");
+      if (!tabsListEl) return;
+      const visible = Array.from(tabsListEl.children).filter((c) => (c as HTMLElement).style.display !== "none");
+      let target: Element | null = null;
+      for (const c of visible) {
+        if (c === tab) continue;
+        const r = c.getBoundingClientRect();
+        if (ev.clientX < r.left + r.width / 2) { target = c; break; }
+      }
+      if (target) tabsListEl.insertBefore(tab, target);
+      else tabsListEl.appendChild(tab);
+      // DOM order is the order that gets saved on mouseup;
+      // the panel map order does not affect what is shown.
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      tab.classList.remove("dragging");
+      if (tabDrag && tabDrag.dragged) {
+        suppressTabClick = true;
+        host?.setPanelOrder(panelDomOrder());
+      }
+      tabDrag = null;
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  });
   tabsListEl!.appendChild(tab);
   panels.set(key, { ...def, pluginId, el: wrap, body, tab, hidden: false });
+  applyPanelOrder();
   try {
     def.render(body);
   } catch (e) {
@@ -876,10 +991,25 @@ export function renderSettingsSections(): void {
     const wrap = document.createElement("div");
     wrap.className = "plugin-settings-section";
     wrap.dataset.plugin = s.pluginId;
+    // Header row: title plus a Disable button, so a plugin can
+    // be turned off from its own settings without switching
+    // back to the Plugins tab to find its row.
+    const headRow = document.createElement("div");
+    headRow.className = "plugin-settings-head";
     const head = document.createElement("h3");
     head.textContent = s.title;
+    const toggle = document.createElement("button");
+    toggle.className = "plugin-settings-toggle";
+    toggle.textContent = "Disable";
+    toggle.title = `Disable ${s.title}`;
+    toggle.addEventListener("click", () => {
+      void setPluginEnabled(s.pluginId, false);
+      host?.render();
+    });
+    headRow.appendChild(head);
+    headRow.appendChild(toggle);
     const body = document.createElement("div");
-    wrap.appendChild(head);
+    wrap.appendChild(headRow);
     wrap.appendChild(body);
     el.appendChild(wrap);
     try {

@@ -116,6 +116,12 @@
   position: absolute; overflow: hidden; cursor: pointer;
   -webkit-user-select: none; user-select: none;
 }
+/* Selected on the board: the library preview shows the same
+   selection, so the user can see at a glance which library
+   cards are selected, and the first one scrolls into view. */
+.vl-board-wrap.vl-selected {
+  outline: 2px solid #007AFF; outline-offset: 2px; border-radius: 12px;
+}
 /* Drag ghost: the same board card, scaled to 120px wide. */
 .vl-ghost {
   position: fixed; z-index: 100; pointer-events: none;

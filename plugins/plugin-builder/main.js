@@ -31,7 +31,13 @@
 // the closest plugin-only version, not a core edit.
 
 let apiRef = null;
-// Session-only, never stored: see the note above.
+// The key, once saved, survives restarts: it lives in secure
+// storage (encrypted by the OS keychain where the OS can
+// encrypt, plain where it cannot — the Settings status says
+// which), and is loaded into memory on activate. sessionKey
+// is only a fallback for a save that failed: a key entered
+// but not saved still works for this session.
+let savedKey = "";
 let sessionKey = "";
 let panelEls = null;
 // The last generation, as a chat history, so a steer
@@ -166,10 +172,19 @@ async function loadProviderSettings() {
   return { baseUrl, model };
 }
 
+async function loadSavedKey() {
+  try {
+    const k = await apiRef.secureStorage.get("apiKey");
+    if (typeof k === "string" && k) savedKey = k;
+  } catch { /* no saved key yet */ }
+}
+
 async function runChat(messages, statusEl, busyBtn) {
   const { baseUrl, model } = await loadProviderSettings();
+  await loadSavedKey();
+  const key = savedKey || sessionKey;
   const isLocal = /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?\//.test(baseUrl + "/");
-  if (!sessionKey && !isLocal) {
+  if (!key && !isLocal) {
     throw new Error("Enter an API key in Settings → Plugin settings → Plugin Builder, or point the provider at a local model.");
   }
   busyBtn.disabled = true;
@@ -177,7 +192,7 @@ async function runChat(messages, statusEl, busyBtn) {
     const raw = await apiRef.ai.chat({
       baseUrl,
       model,
-      key: sessionKey,
+      key,
       messages,
     });
     const jsonText = raw.replace(/^\s*```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
@@ -204,52 +219,80 @@ function renderSettings(container) {
   const model = el("input", "pres-builder-input");
   model.type = "text";
   model.placeholder = "gpt-4o-mini";
-  const keyLabel = el("label", "pres-builder-label", "API key (this session only, never saved)");
+  const keyLabel = el("label", "pres-builder-label", "API key (saved once, so you don't retype it)");
   const key = el("input", "pres-builder-input");
   key.type = "password";
-  key.placeholder = "Leave empty for a local model";
+  key.placeholder = "Leave empty for a local model, or to keep the saved key";
   key.autocomplete = "off";
   const row = el("div", "pres-builder-row");
   const save = el("button", "pres-builder-btn", "Save provider");
   const forget = el("button", "pres-builder-btn", "Forget key");
   row.append(save, forget);
-  const status = el("div", "pres-builder-status",
-    sessionKey ? "Key entered for this session." : "No key entered yet.");
+  const status = el("div", "pres-builder-status", "Loading saved key…");
   const help = el("p", "pres-builder-help",
-    "Your key is only sent to the provider you set above, and is forgotten when the app closes. " +
-    "Provider and model are saved on this computer, in plugin storage; the key never is. " +
+    "Your key is only sent to the provider you set above. " +
+    "It is saved once, in secure storage — encrypted by your system's keychain where the system can encrypt it — " +
+    "so you don't have to type it again after a restart. " +
+    "Provider and model are saved on this computer, in plugin storage. " +
     "Calls are charged by your provider. The AI only writes plugins, using the plugin api — it never sees or changes the core of the app.");
   wrap.append(baseLabel, base, modelLabel, model, keyLabel, key, row, status, help);
   container.appendChild(wrap);
 
-  // Saved provider and model only; the key is never read back.
+  // Saved provider, model and key: an empty key field keeps
+  // the saved key, it does not clear it — only Forget does.
+  const refreshStatus = async () => {
+    await loadSavedKey();
+    let encrypted = true;
+    try { encrypted = await apiRef.secureStorage.available(); } catch { /* assume encrypted */ }
+    if (savedKey) {
+      status.textContent = encrypted
+        ? "Key saved, encrypted by your system's keychain. You won't need to type it again."
+        : "Key saved, but your system can't encrypt it — it is stored on this computer in plain text. Anyone with access to this computer could read it.";
+    } else if (sessionKey) {
+      status.textContent = "Key entered for this session only (it could not be saved).";
+    } else {
+      status.textContent = "No key saved yet.";
+    }
+  };
   apiRef.storage.get("settings").then((saved) => {
     if (saved && typeof saved === "object") {
       if (typeof saved.baseUrl === "string") base.value = saved.baseUrl;
       if (typeof saved.model === "string") model.value = saved.model;
     }
   }).catch(() => {});
+  void refreshStatus();
 
   save.addEventListener("click", async () => {
     const baseUrl = base.value.trim() || "https://api.openai.com/v1";
     const modelName = model.value.trim() || "gpt-4o-mini";
     base.value = baseUrl;
     model.value = modelName;
-    if (key.value) sessionKey = key.value;
+    const newKey = key.value.trim();
     key.value = "";
     try {
       await apiRef.storage.set("settings", { baseUrl, model: modelName });
-      status.textContent = sessionKey
-        ? "Provider saved. Key entered for this session."
-        : "Provider saved. No key entered yet.";
+      if (newKey) {
+        try {
+          await apiRef.secureStorage.set("apiKey", newKey);
+          savedKey = newKey;
+          sessionKey = "";
+        } catch {
+          // Saving failed: keep it for this session, and say so.
+          sessionKey = newKey;
+        }
+      }
+      await refreshStatus();
+      status.textContent = "Provider saved. " + status.textContent;
     } catch (e) {
       status.textContent = `Could not save provider: ${e.message}`;
     }
   });
 
-  forget.addEventListener("click", () => {
+  forget.addEventListener("click", async () => {
+    savedKey = "";
     sessionKey = "";
     key.value = "";
+    try { await apiRef.secureStorage.delete("apiKey"); } catch { /* already gone */ }
     status.textContent = "Key forgotten.";
   });
 }
@@ -380,6 +423,10 @@ function initPanel(container) {
 
 function activate(api) {
   apiRef = api;
+  // Load the saved key early, so Generate works without
+  // opening Settings first — that was the whole point of
+  // saving it.
+  void loadSavedKey();
   api.ui.registerPanel({
     id: "builder",
     title: "Plugin Builder",
@@ -394,9 +441,11 @@ function activate(api) {
 }
 
 function deactivate() {
-  // The key is session-only by design: forgetting it here
-  // means disabling the plugin forgets it too, not just
-  // closing the app.
+  // Only the in-memory copy is cleared here: the saved key
+  // stays in secure storage, so disabling and re-enabling
+  // the plugin does not make the user retype it. Forget
+  // in Settings is what deletes the saved key.
+  savedKey = "";
   sessionKey = "";
   panelEls = null;
   lastMessages = null;

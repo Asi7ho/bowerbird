@@ -3,7 +3,7 @@
 // this bridge, which the main process exposes with context isolation on.
 interface BowerbirdAPI {
   isDemo: boolean;
-  loadBoard(): Promise<{ json: string | null; board_path: string; board_dir: string; pdf_size_bytes: number; video_size_bytes: number }>;
+  loadBoard(): Promise<{ json: string | null; board_path: string; board_dir: string; pdf_size_bytes: number; video_size_bytes: number; panelOrder?: string[] }>;
   saveBoard(json: string): Promise<void>;
   resetBoard(): Promise<{ pdf_size_bytes: number; video_size_bytes: number }>;
   embedFile(path: string): Promise<string>;
@@ -15,8 +15,9 @@ interface BowerbirdAPI {
   fileSize(path: string): Promise<number>;
   fetchPreview(url: string): Promise<{ title: string | null; description: string | null; image: string | null; icon: string | null }>;
   openExternal(target: string): Promise<void>;
-  getAppSettings(): Promise<{ corner: string }>;
+  getAppSettings(): Promise<{ corner: string; panelOrder?: string[] }>;
   setCorner(corner: string): Promise<string>;
+  setPanelOrder(order: string[]): Promise<string[]>;
   collapse(): Promise<void>;
   restore(): Promise<void>;
   moveWindow(dx: number, dy: number): void;
@@ -34,6 +35,10 @@ interface BowerbirdAPI {
   pluginStorageGet(pluginId: string, key: string): Promise<unknown>;
   pluginStorageSet(pluginId: string, key: string, value: unknown): Promise<void>;
   pluginStorageDelete(pluginId: string, key: string): Promise<void>;
+  secureStorageAvailable(): Promise<boolean>;
+  secureStorageGet(pluginId: string, key: string): Promise<string | null>;
+  secureStorageSet(pluginId: string, key: string, value: string): Promise<boolean>;
+  secureStorageDelete(pluginId: string, key: string): Promise<void>;
 }
 declare global {
   interface Window { bowerbird: BowerbirdAPI }
@@ -169,10 +174,16 @@ function updateAudioProgress(): void {
     if (document.activeElement !== seekEl) seekEl.value = String(Math.round((cur / dur) * 1000));
   }
 }
+const audioFailed = new Set<string>();
 function loadAudioDuration(id: number, path: string): void {
-  if (audioDurations.has(path) || audioProbing.has(path)) return;
+  if (audioDurations.has(path) || audioProbing.has(path) || audioFailed.has(path)) return;
   audioProbing.add(path);
   const probe = new Audio(api.fileUrl(path));
+  probe.onerror = () => {
+    audioProbing.delete(path);
+    audioFailed.add(path);
+    render();
+  };
   probe.preload = "metadata";
   probe.onloadedmetadata = () => {
     audioProbing.delete(path);
@@ -682,7 +693,14 @@ function cardHtml(item: Item, plain = false): string {
   }
   if ("Image" in item.kind) {
     const { path } = item.kind.Image;
-    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner"><img src="${api.fileUrl(path)}" draggable="false" style="width:100%;height:100%;object-fit:cover;border-radius:12px" alt="" /></div></div>`;
+    const name = path.split("/").pop() ?? path;
+    // A selected image shows whole, not cropped: the board
+    // crops images to fill the card, which is the right look
+    // for a board, but a poor preview of what you just
+    // selected. Selecting switches to contain, so the full
+    // image is visible; deselecting goes back to cover.
+    const fit = sel ? "contain" : "cover";
+    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner" style="background:#f5f5f7"><img src="${api.fileUrl(path)}" data-name="${escapeHtml(name)}" draggable="false" style="width:100%;height:100%;object-fit:${fit};border-radius:12px" alt="" /></div></div>`;
   }
   if ("UrlCard" in item.kind) {
     const { url, title, description, image, icon } = item.kind.UrlCard;
@@ -748,6 +766,9 @@ function cardHtml(item: Item, plain = false): string {
   if ("Audio" in item.kind) {
     const { path } = item.kind.Audio;
     const name = path.split("/").pop() ?? path;
+    if (audioFailed.has(path)) {
+      return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px"><div class="missing-media" style="flex:1 1 auto">File missing: ${escapeHtml(name)}</div></div></div>`;
+    }
     const playing = !plain && audioId === id && audioEl && !audioEl.paused;
     const isCurrent = !plain && audioId === id && audioEl;
     const dur = isCurrent && isFinite(audioEl!.duration) ? audioEl!.duration : (audioDurations.get(path) ?? NaN);
@@ -784,11 +805,11 @@ function cardHtml(item: Item, plain = false): string {
       const src = api.fileUrl(source);
       if (hh >= thumbH + 70) {
         return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
-          <video controls preload="metadata" playsinline src="${src}" style="width:${ww - 24}px;height:${thumbH}px;object-fit:cover;border-radius:10px;background:#1d1d1f;pointer-events:auto"></video>
+          <video controls preload="metadata" playsinline src="${src}" data-name="${escapeHtml(name)}" style="width:${ww - 24}px;height:${thumbH}px;object-fit:${sel ? "contain" : "cover"};border-radius:10px;background:#1d1d1f;pointer-events:auto"></video>
           <div class="title" style="font-size:14px">${escapeHtml(elide(name, ww - 24, 14, true))}</div><div class="sub" style="font-size:12px">${sub}</div></div></div>`;
       }
       return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner row" style="padding:12px">
-        <video controls preload="metadata" playsinline src="${src}" style="width:96px;height:56px;object-fit:cover;border-radius:10px;background:#1d1d1f;pointer-events:auto"></video>
+        <video controls preload="metadata" playsinline src="${src}" data-name="${escapeHtml(name)}" style="width:96px;height:56px;object-fit:${sel ? "contain" : "cover"};border-radius:10px;background:#1d1d1f;pointer-events:auto"></video>
         <div class="col"><div class="title" style="font-size:14px">${escapeHtml(elide(name, ww - 132, 14, true))}</div><div class="sub" style="font-size:12px">${sub}</div></div></div></div>`;
     }
     if (hh >= thumbH + 70) {
@@ -953,7 +974,16 @@ function updateToolbar(): void {
 function updateSelectionInner(): void {
   for (const child of Array.from(cardsEl.children)) {
     const el = child as HTMLElement;
-    el.classList.toggle("selected", selected.includes(Number(el.dataset.id)));
+    const isSel = selected.includes(Number(el.dataset.id));
+    el.classList.toggle("selected", isSel);
+    // A selected image or video shows whole (contain), not
+    // cropped (cover): cardHtml sets this at render time,
+    // but a plain click only toggles the class here, without
+    // a full render — and a full render would restart a
+    // playing video — so update the fit here too.
+    for (const media of Array.from(el.querySelectorAll("img, video"))) {
+      (media as HTMLElement).style.objectFit = isSel ? "contain" : "cover";
+    }
   }
   const del = document.getElementById("btn-delete") as HTMLButtonElement;
   del.classList.toggle("dim", selected.length === 0);
@@ -1426,6 +1456,22 @@ window.addEventListener("wheel", (e: WheelEvent) => {
 }, { passive: false });
 
 window.addEventListener("resize", () => { applyCamera(); refreshContentIfVisibleChanged(); });
+// A media file that is missing shows as a blank card, which
+// looks like a rendering bug and tells the user nothing.
+// Catch load errors in the capture phase (img/video errors
+// do not bubble) and swap the element for a plain tile
+// naming the missing file, so a broken board is diagnosable
+// instead of silently blank.
+window.addEventListener("error", (e: Event) => {
+  const t = e.target as HTMLElement | null;
+  if (!t || (t.tagName !== "IMG" && t.tagName !== "VIDEO")) return;
+  if (t.closest(".plugin-panel-body") || t.closest(".plugin-view")) return;
+  const name = (t as HTMLElement).dataset?.name ?? "media file";
+  const div = document.createElement("div");
+  div.className = "missing-media";
+  div.textContent = `File missing: ${name}`;
+  if (t.parentElement) t.parentElement.replaceChild(div, t);
+}, true);
 
 // Card button / link clicks (delegated; cards are pointer-events:none
 // except these controls, so clicks here never start a board drag).
@@ -1824,10 +1870,25 @@ function renderPluginSettings(): void {
     // palette's own Open command was the only command any
     // plugin registered, so a Run button here was just a
     // second way to open the palette.
-    html += `</div><button data-plugin-toggle="${m.id}">${lp.active ? "Disable" : "Enable"}</button>`;
+    // A Settings button, when the plugin has a settings
+    // section: it jumps to the Plugin settings tab and
+    // scrolls to that plugin's section, so settings are
+    // reachable from the plugin list, not only by tab.
+    const hasSettings = document.querySelector(`#plugin-settings-sections [data-plugin="${m.id}"]`) !== null;
+    html += `</div><span style="display:flex;gap:8px;flex:none">`;
+    if (lp.active && hasSettings) html += `<button data-plugin-settings="${m.id}">Settings</button>`;
+    html += `<button data-plugin-toggle="${m.id}">${lp.active ? "Disable" : "Enable"}</button></span>`;
     html += `</div>`;
   }
   list.innerHTML = html;
+  for (const btn of Array.from(list.querySelectorAll("[data-plugin-settings]"))) {
+    btn.addEventListener("click", () => {
+      const id = (btn as HTMLElement).dataset.pluginSettings ?? "";
+      setSettingsTab("plugin-settings");
+      const section = document.querySelector(`#plugin-settings-sections [data-plugin="${id}"]`);
+      if (section) section.scrollIntoView({ block: "start" });
+    });
+  }
   for (const btn of Array.from(list.querySelectorAll("[data-plugin-toggle]"))) {
     btn.addEventListener("click", async () => {
       const id = (btn as HTMLElement).dataset.pluginToggle ?? "";
@@ -2084,9 +2145,13 @@ window.addEventListener("paste", (e: ClipboardEvent) => {
 // ---------------------------------------------------------------- init
 
 async function init(): Promise<void> {
+  let panelOrderList: string[] = [];
   try {
     const loaded = await api.loadBoard();
     boardDir = loaded.board_dir;
+    if (Array.isArray(loaded.panelOrder)) panelOrderList = loaded.panelOrder.filter((x: unknown) => typeof x === "string");
+    const boardDirEl = document.getElementById("board-dir-meta");
+    if (boardDirEl) boardDirEl.textContent = `Board folder: ${boardDir}`;
     if (loaded.json) {
       const parsed = JSON.parse(loaded.json) as Board;
       board = parsed;
@@ -2112,6 +2177,9 @@ async function init(): Promise<void> {
   // The loaded board is the first undo baseline: nothing before
   // it is undoable, and the first saved change pushes it as step 1.
   resetUndo();
+  // Panel tab order, loaded with the board: the plugin system
+  // applies it once panels are registered, and saves it back
+  // whenever the user drags a tab.
   const pluginHost: PluginHost = {
     getBoard: () => board,
     getSelected: () => selected,
@@ -2215,6 +2283,11 @@ async function init(): Promise<void> {
     viewSwitcherEl: document.getElementById("view-switcher") as HTMLElement,
     overlaysEl: document.getElementById("plugin-overlays") as HTMLElement,
     settingsSectionsEl: document.getElementById("plugin-settings-sections") as HTMLElement,
+    getPanelOrder: () => [...panelOrderList],
+    setPanelOrder: (order: string[]) => {
+      panelOrderList = order.filter((x) => typeof x === "string");
+      void api.setPanelOrder(panelOrderList);
+    },
   };
   await initPlugins(pluginHost, api);
   render();

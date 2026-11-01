@@ -58,6 +58,7 @@ let viewSearch = null;
 let viewSections = null;
 
 let onBoardHandler = null;
+let onSelectionHandler = null;
 let resizeHandler = null;
 
 // One library audio preview at a time, played through a plain
@@ -153,6 +154,28 @@ function updateAllDynamic() {
   stopLibraryAudio();
   if (panelSections) renderSections(panelSections, "panel");
   if (viewSections) renderSections(viewSections, "view");
+}
+
+// Selection preview: when the board selection changes, the
+// library marks the selected cards and scrolls the first one
+// into view, so selecting on the board previews in the
+// library and vice versa. No re-render: re-rendering would
+// drop the scroll position and any audio preview.
+function updateSelectionHighlight() {
+  if (!apiRef) return;
+  const selected = new Set(apiRef.board.getSelected());
+  let first = null;
+  for (const sections of [panelSections, viewSections]) {
+    if (!sections) continue;
+    for (const wrap of sections.querySelectorAll(".vl-board-wrap")) {
+      const isSel = selected.has(Number(wrap.dataset.boardId));
+      wrap.classList.toggle("vl-selected", isSel);
+      if (isSel && !first) first = wrap;
+    }
+  }
+  if (first && typeof first.scrollIntoView === "function") {
+    try { first.scrollIntoView({ block: "nearest" }); } catch { /* older Chromium */ }
+  }
 }
 
 function syncFromBoard(force) {
@@ -415,6 +438,7 @@ function layoutMasonry(container, items, mode) {
     }
     const wrap = document.createElement("div");
     wrap.className = "vl-board-wrap";
+    if (apiRef.board.getSelected().includes(item.id)) wrap.classList.add("vl-selected");
     wrap.dataset.boardId = String(item.id);
     wrap.style.left = `${start * (colWidth + gap) + (spanWidth - w) / 2}px`;
     wrap.style.top = `${best}px`;
@@ -557,6 +581,8 @@ function activate(api) {
   apiRef = api;
   onBoardHandler = () => syncFromBoard(false);
   apiRef.events.on("board", onBoardHandler);
+  onSelectionHandler = () => updateSelectionHighlight();
+  apiRef.events.on("selection", onSelectionHandler);
   resizeHandler = () => {
     if (viewSections) renderSections(viewSections, "view");
   };
@@ -625,8 +651,10 @@ function viewContainerClear() {
 function deactivate() {
   stopLibraryAudio();
   if (apiRef && onBoardHandler) apiRef.events.off("board", onBoardHandler);
+  if (apiRef && onSelectionHandler) apiRef.events.off("selection", onSelectionHandler);
   if (resizeHandler) window.removeEventListener("resize", resizeHandler);
   onBoardHandler = null;
+  onSelectionHandler = null;
   resizeHandler = null;
   panelSearch = null;
   panelSections = null;

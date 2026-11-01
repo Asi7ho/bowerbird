@@ -11,7 +11,7 @@
 // The board file format is unchanged from the GPUI board, so existing
 // boards load as-is (an old embed:true flag is simply ignored).
 
-const { app, BaseWindow, WebContentsView, ipcMain, shell, protocol, screen } = require('electron');
+const { app, BaseWindow, WebContentsView, ipcMain, shell, protocol, screen, safeStorage } = require('electron');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -70,6 +70,11 @@ function demoShowcaseSizes() {
 // Default bottom-left, per the user's choice. "off" disables it.
 const CORNERS = ["bottom-left", "bottom-right", "top-left", "top-right", "off"];
 let cornerReveal = "bottom-left";
+// Panel tab order, as the user dragged it: an array of
+// "pluginId:panelId" keys, in tab-bar order. Panels not in
+// the list (new plugins, or a first run) go at the end, in
+// registration order, so an old list never hides a panel.
+let panelOrder = [];
 
 function appSettingsPath() {
   return path.join(app.getPath("userData"), "settings.json");
@@ -79,6 +84,7 @@ function loadAppSettings() {
   try {
     const parsed = JSON.parse(fs.readFileSync(appSettingsPath(), "utf8"));
     if (parsed && CORNERS.includes(parsed.corner)) cornerReveal = parsed.corner;
+    if (parsed && Array.isArray(parsed.panelOrder)) panelOrder = parsed.panelOrder.filter((x) => typeof x === "string");
   } catch {
     // No settings file yet: keep the default.
   }
@@ -89,7 +95,7 @@ function saveAppSettings() {
     const file = appSettingsPath();
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const tmp = file + ".tmp";
-    fs.writeFileSync(tmp, JSON.stringify({ corner: cornerReveal }));
+    fs.writeFileSync(tmp, JSON.stringify({ corner: cornerReveal, panelOrder }));
     fs.renameSync(tmp, file);
   } catch {
     // Settings are a convenience, not board data: never fail the app
@@ -311,27 +317,29 @@ function iconPath() {
 }
 
 function createWindow() {
-  // Default size: 800x600, centred in the work area (so it never
-  // sits under the menu bar or the Dock). 800x600 is also the
+  // Default size: 1200x800, centred in the work area (so it never
+  // sits under the menu bar or the Dock). 1000x700 is also the
   // minimum size: the window cannot be resized smaller than this.
+  // 800x600 was too small on a Mac screen: the board felt cramped
+  // and the welcome board needed scrolling to be seen at all.
   const wa0 = screen.getPrimaryDisplay().workArea;
   // Screenshot override (not a user setting): BOWERBIRD_WINDOW_SIZE
   // e.g. 1440x900 makes the window fill the frame for App Store
   // screenshots. Used only by screenshots/README.md recapture
-  // instructions. The 800x600 minimum still applies to it.
+  // instructions. The 1000x700 minimum still applies to it.
   const sizeOverride = /^([0-9]+)x([0-9]+)$/.exec(process.env.BOWERBIRD_WINDOW_SIZE || "");
   // The minimum applies to the initial size too, not just to
-  // later resizing: an override smaller than 800x600 still opens
-  // at 800x600.
-  const defaultWidth = Math.max(sizeOverride ? Number(sizeOverride[1]) : 800, 800);
-  const defaultHeight = Math.max(sizeOverride ? Number(sizeOverride[2]) : 600, 600);
+  // later resizing: an override smaller than 1000x700 still opens
+  // at 1000x700.
+  const defaultWidth = Math.max(sizeOverride ? Number(sizeOverride[1]) : 1200, 1000);
+  const defaultHeight = Math.max(sizeOverride ? Number(sizeOverride[2]) : 800, 700);
   const defaultX = wa0.x + Math.round((wa0.width - defaultWidth) / 2);
   const defaultY = wa0.y + Math.round((wa0.height - defaultHeight) / 2);
   win = new BaseWindow({
     width: defaultWidth,
     height: defaultHeight,
-    minWidth: 800,
-    minHeight: 600,
+    minWidth: 1000,
+    minHeight: 700,
     frame: false,
     title: DEMO ? 'Bowerbird \u2014 Demo' : 'Bowerbird',
     backgroundColor: '#ffffff',
@@ -360,8 +368,8 @@ function createWindow() {
     // resize) can bypass the option, but it cannot bypass this.
     // Clamping triggers one more resize event, which then passes
     // this check and updates the board view.
-    if (b.width < 800 || b.height < 600) {
-      win.setBounds({ x: b.x, y: b.y, width: Math.max(b.width, 800), height: Math.max(b.height, 600) });
+    if (b.width < 1000 || b.height < 700) {
+      win.setBounds({ x: b.x, y: b.y, width: Math.max(b.width, 1000), height: Math.max(b.height, 700) });
       return;
     }
     boardView.setBounds({ x: 0, y: 0, width: b.width, height: b.height });
@@ -505,6 +513,37 @@ function savePluginStorage(data) {
   fs.renameSync(tmp, file);
 }
 
+// Secure storage: for secrets like an AI provider key, which
+// must survive restarts but must not sit in plain text in
+// plugin-storage.json. On macOS this is the Keychain, via
+// safeStorage; where the OS cannot encrypt (some Linux
+// setups), the value is still stored, but flagged plain, and
+// the plugin UI says so plainly instead of pretending it
+// is encrypted. Secure values live in their own file, so a
+// plain storage read can never return a secret by accident.
+function secureStoragePath() {
+  return path.join(app.getPath("userData"), "secure-storage.json");
+}
+function loadSecureStorage() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(secureStoragePath(), "utf8"));
+    if (parsed && typeof parsed === "object") return parsed;
+  } catch {
+    // No file yet.
+  }
+  return {};
+}
+function saveSecureStorage(data) {
+  const file = secureStoragePath();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = file + ".tmp";
+  fs.writeFileSync(tmp, JSON.stringify(data));
+  fs.renameSync(tmp, file);
+}
+function secureStorageAvailable() {
+  try { return safeStorage.isEncryptionAvailable(); } catch { return false; }
+}
+
 // ---------------------------------------------------------------- IPC
 
 // Security boundaries for the renderer. The renderer (and any
@@ -562,8 +601,14 @@ function registerIpc() {
     }
     const file = boardPath();
     const dir = path.dirname(file);
-    let showcase = { pdf_size_bytes: 0, video_size_bytes: 0 };
-    if (!fs.existsSync(file)) showcase = installShowcaseAssets(dir);
+    // Always fill in missing welcome files, not only on first
+    // run: a board created before the welcome files existed,
+    // or a board whose files were deleted, otherwise stays
+    // broken forever — the image shows nothing, audio and
+    // video play nothing, and nothing ever repairs it.
+    // installShowcaseAssets only fills what is missing, so
+    // this never overwrites a user's own files.
+    let showcase = installShowcaseAssets(dir);
     let json = null;
     try {
       json = fs.readFileSync(file, 'utf8');
@@ -586,7 +631,7 @@ function registerIpc() {
         }
       } catch { /* old reference stays, video still opens outside */ }
     }
-    return { json, board_path: file, board_dir: dir, ...showcase };
+    return { json, board_path: file, board_dir: dir, panelOrder: [...panelOrder], ...showcase };
   });
 
   ipcMain.handle('bowerbird:save-board', (_event, json) => {
@@ -839,7 +884,13 @@ function registerIpc() {
     if (isBoardLocal(local)) return shell.openPath(local);
     throw new Error('not a public web address or a board-local file');
   });
-  ipcMain.handle('bowerbird:get-app-settings', () => ({ corner: cornerReveal }));
+  ipcMain.handle('bowerbird:get-app-settings', () => ({ corner: cornerReveal, panelOrder: [...panelOrder] }));
+  ipcMain.handle('bowerbird:set-panel-order', (_event, order) => {
+    if (!Array.isArray(order)) return panelOrder;
+    panelOrder = order.filter((x) => typeof x === "string").slice(0, 100);
+    if (!DEMO) saveAppSettings();
+    return panelOrder;
+  });
   ipcMain.handle('bowerbird:list-plugins', () => listPlugins());
   ipcMain.handle('bowerbird:read-plugin-file', (_event, pluginId, relativePath) => {
     if (typeof pluginId !== "string" || typeof relativePath !== "string") {
@@ -967,6 +1018,35 @@ function registerIpc() {
     if (data[pluginId] && typeof data[pluginId] === "object") {
       delete data[pluginId][key];
       savePluginStorage(data);
+    }
+  });
+  ipcMain.handle('bowerbird:secure-storage-available', () => secureStorageAvailable());
+  ipcMain.handle('bowerbird:secure-storage-get', (_event, pluginId, key) => {
+    const data = loadSecureStorage();
+    const per = data[pluginId];
+    if (!per || typeof per !== "object" || !per[key]) return null;
+    const entry = per[key];
+    if (entry.encrypted) {
+      try { return safeStorage.decryptString(Buffer.from(entry.value, "base64")); } catch { return null; }
+    }
+    return entry.value ?? null;
+  });
+  ipcMain.handle('bowerbird:secure-storage-set', (_event, pluginId, key, value) => {
+    const data = loadSecureStorage();
+    if (!data[pluginId] || typeof data[pluginId] !== "object") data[pluginId] = {};
+    if (secureStorageAvailable()) {
+      data[pluginId][key] = { encrypted: true, value: safeStorage.encryptString(String(value)).toString("base64") };
+    } else {
+      data[pluginId][key] = { encrypted: false, value: String(value) };
+    }
+    saveSecureStorage(data);
+    return secureStorageAvailable();
+  });
+  ipcMain.handle('bowerbird:secure-storage-delete', (_event, pluginId, key) => {
+    const data = loadSecureStorage();
+    if (data[pluginId] && typeof data[pluginId] === "object") {
+      delete data[pluginId][key];
+      saveSecureStorage(data);
     }
   });
   ipcMain.handle('bowerbird:set-corner', (_event, corner) => {
