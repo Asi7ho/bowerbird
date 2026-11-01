@@ -206,34 +206,49 @@ function assetsDir() {
     path.join(__dirname, '..', 'assets'),
     path.join(process.cwd(), 'assets'),
     path.join(app.getAppPath(), 'assets'),
+    // Packaged Mac app, via resourcesPath, in case __dirname
+    // or getAppPath ever resolve differently (translocation,
+    // a renamed bundle): Resources/app/assets is where the
+    // packaging script puts the showcase files, full stop.
+    path.join(process.resourcesPath || '', 'app', 'assets'),
   ];
   for (const dir of candidates) {
-    if (fs.existsSync(path.join(dir, 'sample.pdf'))) return dir;
+    if (dir && fs.existsSync(path.join(dir, 'sample.pdf'))) return dir;
   }
   return candidates[0];
 }
 
-function installShowcaseAssets(dir) {
+function installShowcaseAssets(dir, force = false) {
   fs.mkdirSync(dir, { recursive: true });
   const src = assetsDir();
+  const sizeOf = (file) => { try { return fs.statSync(file).size; } catch { return 0; } };
+  const copied = [];
+  const missing = [];
   // Real photographs for the welcome board (Wikimedia Commons).
-  // installShowcaseAssets only fills in what is missing, so a
-  // reset that deletes the board dir gets a full fresh set, while
-  // an existing board keeps the copies it already has.
-  for (const name of ['welcome-bower.jpg', 'welcome-birdsong.mp3', 'welcome-video.mp4']) {
+  // Normally only fills in what is missing, so a reset that
+  // deletes the board dir gets a full fresh set, while an
+  // existing board keeps the copies it already has. But a
+  // file that exists with the wrong size — empty, truncated,
+  // a failed earlier copy — is just as broken as a missing
+  // file, and the old missing-only check left it broken
+  // forever. So copy when missing, when forced (the Restore
+  // button), or when the size does not match the bundle.
+  for (const name of ['welcome-bower.jpg', 'welcome-birdsong.mp3', 'welcome-video.mp4', 'sample.pdf']) {
+    const srcFile = path.join(src, name);
     const dest = path.join(dir, name);
-    if (!fs.existsSync(dest) && fs.existsSync(path.join(src, name))) {
-      fs.copyFileSync(path.join(src, name), dest);
+    if (!fs.existsSync(srcFile)) { missing.push(name); continue; }
+    if (force || !fs.existsSync(dest) || sizeOf(dest) !== sizeOf(srcFile)) {
+      try { fs.copyFileSync(srcFile, dest); copied.push(name); } catch (e) { missing.push(`${name} (${e.message})`); }
     }
   }
   const pdf = path.join(dir, 'sample.pdf');
-  if (!fs.existsSync(pdf) && fs.existsSync(path.join(src, 'sample.pdf'))) {
-    fs.copyFileSync(path.join(src, 'sample.pdf'), pdf);
-  }
-  const sizeOf = (file) => { try { return fs.statSync(file).size; } catch { return 0; } };
   return {
     pdf_size_bytes: sizeOf(pdf),
     video_size_bytes: sizeOf(path.join(dir, 'welcome-video.mp4')),
+    copied,
+    missing,
+    srcDir: src,
+    destDir: dir,
   };
 }
 
@@ -656,6 +671,21 @@ function registerIpc() {
     try { fs.rmSync(file, { force: true }); } catch { /* already gone */ }
     try { fs.rmSync(path.join(dir, 'assets'), { recursive: true, force: true }); } catch { /* already gone */ }
     return installShowcaseAssets(dir);
+  });
+
+  // Force-restore the welcome media, even if files already
+  // exist: the Settings button for a board whose image,
+  // audio or video shows "File missing". Returns what was
+  // copied and what could not be found, so the user can
+  // report the exact failure instead of a blank card.
+  ipcMain.handle('bowerbird:restore-showcase', () => {
+    if (DEMO) return { copied: [], missing: ['demo mode'], srcDir: assetsDir(), destDir: '' };
+    const dir = path.dirname(boardPath());
+    try {
+      return installShowcaseAssets(dir, true);
+    } catch (e) {
+      return { copied: [], missing: [String(e.message)], srcDir: assetsDir(), destDir: dir };
+    }
   });
 
   // Visual Library folder: a user's personal collection of images

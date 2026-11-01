@@ -922,7 +922,14 @@ function registerPanel(pluginId: string, def: PluginPanelDef): void {
       window.removeEventListener("mouseup", onUp);
       tab.classList.remove("dragging");
       if (tabDrag && tabDrag.dragged) {
+        // Suppress only the click that belongs to this drag:
+        // it fires right after mouseup, before the timeout
+        // below runs. A drag that ends outside a tab fires
+        // no click at all, and without the timeout the flag
+        // would stay set and swallow the user's next real
+        // tab click — the extra click this fix removes.
         suppressTabClick = true;
+        setTimeout(() => { suppressTabClick = false; }, 0);
         host?.setPanelOrder(panelDomOrder());
       }
       tabDrag = null;

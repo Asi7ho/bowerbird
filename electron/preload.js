@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('bowerbird', {
   loadBoard: () => ipcRenderer.invoke('bowerbird:load-board'),
   saveBoard: (json) => ipcRenderer.invoke('bowerbird:save-board', json),
   resetBoard: () => ipcRenderer.invoke('bowerbird:reset-board'),
+  restoreShowcase: () => ipcRenderer.invoke('bowerbird:restore-showcase'),
   embedFile: (filePath) => ipcRenderer.invoke('bowerbird:embed-file', filePath),
   readTextFile: (filePath) => ipcRenderer.invoke('bowerbird:read-text-file', filePath),
   fileSize: (filePath) => ipcRenderer.invoke('bowerbird:file-size', filePath),

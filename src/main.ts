@@ -6,6 +6,7 @@ interface BowerbirdAPI {
   loadBoard(): Promise<{ json: string | null; board_path: string; board_dir: string; pdf_size_bytes: number; video_size_bytes: number; panelOrder?: string[] }>;
   saveBoard(json: string): Promise<void>;
   resetBoard(): Promise<{ pdf_size_bytes: number; video_size_bytes: number }>;
+  restoreShowcase(): Promise<{ copied: string[]; missing: string[]; srcDir: string; destDir: string }>;
   embedFile(path: string): Promise<string>;
   listLibrary(): Promise<{ path: string; items: Array<{ name: string; path: string; relativePath: string; ext: string; kind: string; category: string | null; size_bytes: number; mtime_ms: number }>; categories: Array<{ name: string; count: number }>; uncategorizedCount: number }>;
   addToLibrary(path: string): Promise<string>;
@@ -1040,6 +1041,19 @@ function startTextEdit(id: number): void {
   const commit = () => {
     if (editingId !== id) return;
     const text = ta.value;
+    // An empty note is not a note: double-clicking empty
+    // space creates a text box, and if nothing is typed
+    // before it is committed, it must vanish, not stay as
+    // a blank card on the board. Whitespace only counts
+    // as empty. Removing here is undoable, like any edit.
+    if (text.trim() === "") {
+      board.items = board.items.filter((it) => it.id !== id);
+      selected = selected.filter((s) => s !== id);
+      editingId = null;
+      save();
+      render();
+      return;
+    }
     const it = boardGet(board, id);
     if (it && "Text" in it.kind) {
       it.kind.Text.text = text;
@@ -1170,7 +1184,9 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
     } else {
       const id = allocId();
       board.items.push({ id, pos: world, size: { w: 260, h: 48 }, group: null, kind: { Text: { text: "", bold: false, size: 16, color: "#1A1A1A" } } });
-      save();
+      // No save here: the commit saves the typed text, or
+      // removes the note if it is empty, so an empty note
+      // leaves no board change and no undo step behind.
       startTextEdit(id);
       return;
     }
@@ -1798,6 +1814,28 @@ document.getElementById("btn-quit")?.addEventListener("click", async () => {
   if (!DEMO) { try { await api.saveBoard(JSON.stringify(board)); } catch { /* closing anyway */ } }
   setSettings(false);
   api.quit().catch(() => undefined);
+});
+document.getElementById("btn-restore-media")?.addEventListener("click", async () => {
+  try {
+    const result = await api.restoreShowcase();
+    if (result.missing.length > 0 && result.copied.length === 0) {
+      toast(`Welcome media could not be restored: ${result.missing.join(", ")} (looked in ${result.srcDir})`);
+      return;
+    }
+    // Clear the failed-media marks, so the next render
+    // tries the restored files instead of showing the
+    // missing tile again.
+    audioFailed.clear();
+    pdfFailed.clear();
+    pdfDocs.clear();
+    setSettings(false);
+    render();
+    toast(result.missing.length > 0
+      ? `Welcome media restored, except: ${result.missing.join(", ")}`
+      : `Welcome media restored (${result.copied.length} files).`);
+  } catch (e) {
+    toast(`Restore failed: ${String(e)}`);
+  }
 });
 document.getElementById("btn-reset")?.addEventListener("click", () => {
   const confirmEl = document.getElementById("reset-confirm") as HTMLDivElement;
