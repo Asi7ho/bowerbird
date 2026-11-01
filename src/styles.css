@@ -87,6 +87,13 @@ button { font-family: inherit; }
 #title-bar button.dim { opacity: 0.35; cursor: default; }
 #title-bar button.dim:hover { background: transparent; }
 #title-bar button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+/* Focus: the header comment promises a 2px ring, and
+   only audio seek had one. Every button, input and
+   tab now gets the same accent ring on keyboard
+   focus, so keyboard use is visible everywhere. */
+button:focus-visible, input:focus-visible, .plugin-tab:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
 /* Window controls: the window is frameless, so there
    are no native ones — the app draws what each OS would
    draw, and the renderer puts the group where that OS
@@ -388,19 +395,21 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 }
 .card .audio-seek::-webkit-slider-thumb {
   -webkit-appearance: none; appearance: none;
-  width: 12px; height: 12px; margin-top: -4px; border-radius: 50%;
+  width: 16px; height: 16px; margin-top: -6px; border-radius: 50%;
   background: #fff; border: 1px solid rgba(0, 0, 0, 0.12);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
 }
+.card .audio-seek:hover::-webkit-slider-thumb { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22); }
 .card .audio-seek::-moz-range-track {
   height: 4px; border-radius: 2px;
   background: linear-gradient(to right, #6a4c93 var(--seek-pct, 0%), #e9e9ec var(--seek-pct, 0%));
 }
 .card .audio-seek::-moz-range-thumb {
-  width: 12px; height: 12px; border-radius: 50%;
+  width: 16px; height: 16px; border-radius: 50%;
   background: #fff; border: 1px solid rgba(0, 0, 0, 0.12);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
 }
+.card .audio-seek:hover::-moz-range-thumb { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22); }
 .card .audio-seek:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
 .card .wave { display: flex; align-items: flex-end; gap: 2px; height: 18px; }
 .card .wave i { display: block; width: 3px; background: #6a4c93; border-radius: 1px; }
@@ -495,10 +504,10 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 .missing-media {
   width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
   padding: 12px; box-sizing: border-box; text-align: center;
-  background: #f5f5f7; color: #8a8a8e; font-size: 13px; border-radius: 12px;
+  background: var(--bg-system); color: var(--grey); font-size: 13px; border-radius: 12px;
   word-break: break-all;
 }
-/* Settings: a centred macOS sheet — opaque, 14px radius, soft shadow.
+/* Settings: a centred macOS sheet — opaque, 16px radius, soft shadow.
    It used to be frosted (white at 0.92 over a blurred board), so board
    content showed through the text and made it harder to read. Opaque
    also drops a full-board backdrop blur while Settings is open. */
@@ -537,7 +546,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   flex: none; border: 1px solid var(--hairline); background: #fff; border-radius: 8px;
   padding: 4px 10px; font-size: 13px; cursor: pointer; color: var(--ink);
 }
-.plugin-settings-toggle:hover { background: #f5f5f7; }
+.plugin-settings-toggle:hover { background: var(--fill); }
 .settings-section > h3:first-child { margin-top: 0; }
 #settings-layout { display: flex; flex: 1 1 auto; min-height: 0; }
 #settings-content {
@@ -613,7 +622,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
   margin: 0; flex: none; color: var(--ink);
 }
-#settings .backup-row button:hover { background: #f5f5f7; }
+#settings .backup-row button:hover { background: var(--fill); }
 #settings .backup-row button.armed {
   color: #e63946; border-color: rgba(230, 57, 70, 0.4);
 }
@@ -622,7 +631,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #toast {
   position: absolute; left: 16px; bottom: 16px;
   background: rgba(28, 28, 30, 0.88); backdrop-filter: blur(12px);
-  color: #fff; font-size: 13px; padding: 10px 14px; border-radius: 10px;
+  color: #fff; font-size: 13px; padding: 10px 14px; border-radius: 12px;
   display: none; z-index: 30; max-width: 70vw; box-shadow: var(--shadow-md);
 }
 #toast.show { display: block; }
@@ -763,6 +772,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 }
 .plugin-tab.has-icon svg { width: 20px; height: 20px; display: block; }
 .plugin-tab.dragging { opacity: 0.5; cursor: grabbing; }
+.plugin-tab:hover { background: var(--fill); }
 .plugin-tab.active {
   background: #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
@@ -770,9 +780,10 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 .plugin-tabs-close {
   flex: none; border: none; background: transparent; cursor: pointer;
   font-size: 16px; line-height: 1; color: var(--grey);
-  padding: 2px 6px; border-radius: 6px;
+  width: 22px; height: 22px; padding: 0; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
 }
-.plugin-tabs-close:hover { background: rgba(0, 0, 0, 0.05); }
+.plugin-tabs-close:hover { background: rgba(0, 0, 0, 0.1); }
 .plugin-panel {
   /* One panel at a time fills the dock below the tab bar,
      so it gets the full dock height instead of half a
@@ -791,6 +802,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   border: 1px solid var(--separator); background: #fff; border-radius: 9px;
   padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
 }
+.plugin-panel-body button:hover { background: var(--fill); }
 #plugin-view {
   position: absolute; inset: 0; background: #fff; overflow: auto; z-index: 5;
   padding: 24px; font-size: 14px; line-height: 1.6;
@@ -807,7 +819,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #view-switcher button {
   border: 1px solid transparent; background: transparent; border-radius: 9px;
   padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
-  color: #6e6e73;
+  color: var(--grey);
 }
 /* The bar itself is frosted white over a white board, so a
    white active button on it was white on white — the selected

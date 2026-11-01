@@ -11,13 +11,13 @@
 .plugin-panel[data-panel="boards"] .bd-input {
   flex: 1 1 auto; min-width: 0; box-sizing: border-box;
   font: inherit; font-size: 13px; color: var(--ink);
-  background: var(--fill-2); border: none; border-radius: 9px;
+  background: var(--bg-system); border: none; border-radius: 8px;
   padding: 8px 12px;
 }
 .plugin-panel[data-panel="boards"] .bd-create {
-  flex: none; font: inherit; font-size: 13px; color: var(--ink);
-  background: var(--fill-2); border: none; border-radius: 9px;
-  padding: 8px 12px; cursor: pointer;
+  flex: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--ink);
+  background: #fff; border: 1px solid var(--separator); border-radius: 9px;
+  padding: 6px 12px; cursor: pointer;
 }
 .plugin-panel[data-panel="boards"] .bd-create:hover { background: var(--fill); }
 .plugin-panel[data-panel="boards"] .bd-list {
@@ -25,9 +25,8 @@
 }
 .plugin-panel[data-panel="boards"] .bd-row {
   display: flex; align-items: center; gap: 8px;
-  padding: 10px 12px; border-radius: 9px; border-top: 1px solid var(--hairline);
+  padding: 10px 12px; border-radius: 9px; border-bottom: 1px solid var(--separator);
 }
-.plugin-panel[data-panel="boards"] .bd-row:last-child { border-bottom: 1px solid var(--hairline); }
 .plugin-panel[data-panel="boards"] .bd-row:hover { background: var(--fill); }
 .plugin-panel[data-panel="boards"] .bd-name {
   flex: 1 1 auto; min-width: 0; text-align: left;
@@ -51,7 +50,7 @@
 .plugin-panel[data-panel="boards"] .bd-rename {
   flex: 1 1 auto; min-width: 0; box-sizing: border-box;
   font: inherit; font-size: 13px; font-weight: 600; color: var(--ink);
-  background: var(--fill-2); border: none; border-radius: 9px; padding: 6px 10px;
+  background: var(--bg-system); border: none; border-radius: 8px; padding: 6px 10px;
 }
 .plugin-panel[data-panel="boards"] .bd-armed {
   width: auto; padding: 0 8px; color: #e63946; font-size: 13px;

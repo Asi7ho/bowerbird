@@ -21,8 +21,8 @@
 }
 .plugin-panel-body .pres-builder-input, .plugin-settings-section .pres-builder-input{
   width: 100%; box-sizing: border-box;
-  border: 1px solid var(--separator); background: #fff;
-  border-radius: 9px; padding: 8px 10px;
+  border: none; background: var(--bg-system);
+  border-radius: 8px; padding: 8px 12px;
   font-size: 13px; color: var(--ink);
 }
 .plugin-panel-body .pres-builder-text, .plugin-settings-section .pres-builder-text{
@@ -39,7 +39,7 @@
 .plugin-panel-body .pres-builder-btn, .plugin-settings-section .pres-builder-btn{
   flex: 1 1 0; display: flex; align-items: center; justify-content: center;
   border: 1px solid var(--separator); background: #fff;
-  border-radius: 9px; padding: 8px 6px;
+  border-radius: 9px; padding: 6px 12px;
   cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink);
   white-space: nowrap;
 }
@@ -47,7 +47,10 @@
   background: var(--fill);
 }
 .plugin-panel-body .pres-builder-btn:disabled, .plugin-settings-section .pres-builder-btn:disabled{
-  background: var(--fill); color: var(--grey); cursor: default;
+  opacity: 0.35; cursor: default;
+}
+.plugin-panel-body .pres-builder-btn:disabled:hover, .plugin-settings-section .pres-builder-btn:disabled:hover{
+  background: transparent;
 }
 .plugin-panel-body .pres-builder-wide, .plugin-settings-section .pres-builder-wide{
   width: 100%; margin-top: 8px;
@@ -63,7 +66,7 @@
   color: var(--ink); font-size: 12px; line-height: 1.5;
 }
 .plugin-panel-body .pres-builder-bad, .plugin-settings-section .pres-builder-bad{
-  color: #b3261e; font-size: 12px; line-height: 1.5;
+  color: #e63946; font-size: 12px; line-height: 1.5;
 }
 .plugin-panel-body .pres-builder-help, .plugin-settings-section .pres-builder-help{
   color: var(--grey); font-size: 12px; line-height: 1.5;

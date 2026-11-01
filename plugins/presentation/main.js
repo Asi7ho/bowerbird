@@ -573,7 +573,7 @@ function buildView(container) {
   row.className = "pres-stage-row";
   prevBtn = document.createElement("button");
   prevBtn.className = "pres-nav";
-  prevBtn.textContent = "‹";
+  prevBtn.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5l-7 7 7 7" /></svg>`;
   prevBtn.title = "Previous (Left arrow)";
   prevBtn.setAttribute("aria-label", "Previous slide");
   prevBtn.addEventListener("click", () => goTo(index - 1));
@@ -582,7 +582,7 @@ function buildView(container) {
   stage.addEventListener("click", onStageClick);
   nextBtn = document.createElement("button");
   nextBtn.className = "pres-nav";
-  nextBtn.textContent = "›";
+  nextBtn.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5l7 7-7 7" /></svg>`;
   nextBtn.title = "Next (Right arrow or Space)";
   nextBtn.setAttribute("aria-label", "Next slide");
   nextBtn.addEventListener("click", () => goTo(index + 1));
@@ -856,7 +856,8 @@ async function exportSlides() {
 :root { --accent:#007aff; --ink:#1d1d1f; --grey:#86868b; --hairline:rgba(0,0,0,0.08); --separator:rgba(0,0,0,0.10); --bg-system:#f5f5f7; --shadow-sm:0 1px 2px rgba(0,0,0,0.06); }
 body { margin:0; padding:32px; background:var(--bg-system); color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif; letter-spacing:-0.01em; display:flex; flex-direction:column; align-items:center; gap:16px; }
 .export-nav { display:flex; align-items:center; gap:16px; }
-.export-nav button { flex:none; width:48px; height:48px; border:none; background:transparent; border-radius:9px; cursor:pointer; font-size:28px; line-height:1; color:var(--grey); display:flex; align-items:center; justify-content:center; }
+.export-nav button { flex:none; width:48px; height:48px; border:none; background:transparent; border-radius:9px; cursor:pointer; color:var(--grey); display:flex; align-items:center; justify-content:center; }
+.export-nav button svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
 .export-nav button:hover { background:rgba(0,0,0,0.05); color:var(--ink); }
 .export-nav button:disabled { opacity:0.35; cursor:default; }
 .export-nav button:disabled:hover { background:transparent; color:var(--grey); }
@@ -906,7 +907,7 @@ body { margin:0; padding:32px; background:var(--bg-system); color:var(--ink); fo
 </style>
 </head>
 <body>
-<nav class="export-nav"><button id="export-prev" aria-label="Previous slide" disabled>‹</button><span class="export-counter" id="export-counter">1 / ${slides.length}</span><button id="export-next" aria-label="Next slide"${slides.length <= 1 ? " disabled" : ""}>›</button></nav>
+<nav class="export-nav"><button id="export-prev" aria-label="Previous slide" disabled><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5l-7 7 7 7" /></svg></button><span class="export-counter" id="export-counter">1 / ${slides.length}</span><button id="export-next" aria-label="Next slide"${slides.length <= 1 ? " disabled" : ""}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 5l7 7-7 7" /></svg></button></nav>
 ${sections}
 <div class="export-hint">← → to move</div>
 <script>

@@ -29,8 +29,12 @@
 #plugin-view[data-plugin="presentation"] .pres-nav {
   flex: none; align-self: center; width: 48px; height: 48px; border: none;
   background: transparent; border-radius: 9px; cursor: pointer;
-  font-size: 28px; line-height: 1; color: var(--grey);
+  color: var(--grey);
   display: flex; align-items: center; justify-content: center;
+}
+#plugin-view[data-plugin="presentation"] .pres-nav svg {
+  width: 20px; height: 20px; fill: none; stroke: currentColor;
+  stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
 }
 #plugin-view[data-plugin="presentation"] .pres-nav:hover {
   background: rgba(0, 0, 0, 0.05); color: var(--ink);
@@ -115,7 +119,7 @@
 .plugin-panel-body .pres-panel-draw {
   flex: 1 1 0; display: flex; align-items: center; justify-content: center;
   gap: 6px; min-width: 0; border: 1px solid var(--separator);
-  background: #fff; border-radius: 9px; padding: 8px 6px;
+  background: #fff; border-radius: 9px; padding: 6px 12px;
   cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink);
   white-space: nowrap;
 }
@@ -124,7 +128,10 @@
   background: var(--fill);
 }
 .plugin-panel-body .pres-panel-play:disabled {
-  background: var(--fill); color: var(--grey); cursor: default;
+  opacity: 0.35; cursor: default;
+}
+.plugin-panel-body .pres-panel-play:disabled:hover {
+  background: transparent;
 }
 .plugin-panel-body .pres-panel-draw svg {
   flex: none; display: block;
@@ -152,7 +159,7 @@
   flex: none; display: flex; align-items: center; justify-content: center;
   gap: 6px; width: 100%;
   border: 1px solid var(--separator); background: #fff;
-  border-radius: 9px; padding: 8px 6px; margin-top: 12px;
+  border-radius: 9px; padding: 6px 12px; margin-top: 12px;
   cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink);
   white-space: nowrap;
 }
@@ -160,7 +167,10 @@
   background: var(--fill);
 }
 .plugin-panel-body .pres-panel-export:disabled {
-  background: var(--fill); color: var(--grey); cursor: default;
+  opacity: 0.35; cursor: default;
+}
+.plugin-panel-body .pres-panel-export:disabled:hover {
+  background: transparent;
 }
 .plugin-panel-body .pres-panel-export svg {
   flex: none; display: block;
@@ -179,7 +189,7 @@
 .plugin-panel-body .pres-panel-row {
   display: flex; align-items: center; gap: 8px;
   border-bottom: 1px solid var(--separator);
-  padding: 8px 4px; cursor: pointer; border-radius: 8px;
+  padding: 10px 12px; cursor: pointer; border-radius: 9px;
 }
 .plugin-panel-body .pres-panel-row:hover {
   background: var(--fill);

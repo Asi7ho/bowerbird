@@ -104,7 +104,7 @@ import {
 // the form "plugin:<pluginId>:<toolId>" (see src/plugins.ts); the
 // type stays open so a plugin tool is a valid Tool.
 type Tool = string;
-const PALETTE = ["#1A1A1A", "#E63946", "#2E86AB", "#FF6B35", "#6A4C93", "#2A9D8F"];
+const PALETTE = ["#1A1A1A", "#E63946", "#2E86AB", "#FF6B35", "#6a4c93", "#2A9D8F"];
 // Note background colours: light pastels only, so dark note text
 // stays readable on every one. White is the default (no bg set).
 const NOTE_COLOURS = ["#FFFFFF", "#FEF3C7", "#FCE7F3", "#DCFCE7", "#DBEAFE", "#FFEDD5", "#EDE9FE", "#F3F4F6"];
@@ -975,7 +975,7 @@ function cardHtml(item: Item, plain = false): string {
     // selected. Selecting switches to contain, so the full
     // image is visible; deselecting goes back to cover.
     const fit = sel ? "contain" : "cover";
-    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner" style="background:#f5f5f7"><img src="${api.fileUrl(path)}" data-name="${escapeHtml(name)}" data-path="${escapeHtml(path)}" draggable="false" style="width:100%;height:100%;object-fit:${fit};border-radius:12px" alt="" /></div></div>`;
+    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner" style="background:var(--bg-system)"><img src="${api.fileUrl(path)}" data-name="${escapeHtml(name)}" data-path="${escapeHtml(path)}" draggable="false" style="width:100%;height:100%;object-fit:${fit};border-radius:12px" alt="" /></div></div>`;
   }
   if ("UrlCard" in item.kind) {
     const { url, title, description, image, icon } = item.kind.UrlCard;
@@ -1003,6 +1003,9 @@ function cardHtml(item: Item, plain = false): string {
         ${footer}
       </div></div></div>`;
   }
+  // PDF tiles use red as the PDF file-type colour (the
+  // Adobe/document red), not the destructive-action red:
+  // it is a kind colour, like audio purple, not a warning.
   if ("PdfCard" in item.kind) {
     const { path, size_bytes } = item.kind.PdfCard;
     const name = path.split("/").pop() ?? path;
@@ -1025,11 +1028,11 @@ function cardHtml(item: Item, plain = false): string {
       // preview on the left, name and page count on the right,
       // the same row shape as audio and video cards.
       return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner row" style="padding:12px" data-pdf-wrap="${id}">
-        <div style="width:56px;height:${hh - 24}px;flex:none;background:#f5f5f7;border-radius:6px;overflow:hidden"><canvas data-pdf-canvas="${id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
+        <div style="width:56px;height:${hh - 24}px;flex:none;background:var(--bg-system);border-radius:6px;overflow:hidden"><canvas data-pdf-canvas="${id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
         <div class="col"><div class="title" style="font-size:14px">${escapeHtml(elide(name, ww - 92, 14, true))}</div><div class="sub" style="font-size:12px">${kb} KB · <span data-pdf-count="${id}">…</span></div></div></div></div>`;
     }
     return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px" data-pdf-wrap="${id}">
-      <div style="flex:1 1 auto;min-height:0;background:#f5f5f7;border-radius:8px;overflow:hidden"><canvas data-pdf-canvas="${id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
+      <div style="flex:1 1 auto;min-height:0;background:var(--bg-system);border-radius:8px;overflow:hidden"><canvas data-pdf-canvas="${id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
       <div style="display:flex;align-items:center;gap:8px"><div class="title" style="font-size:14px;flex:1 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(name)}</div>
       <button class="pdf-nav" data-action="pdf-prev" data-id="${id}" title="Previous page" aria-label="Previous page" ${pageNum <= 1 ? "disabled" : ""}>‹</button><span class="sub" data-pdf-count="${id}">…</span><button class="pdf-nav" data-action="pdf-next" data-id="${id}" title="Next page" aria-label="Next page">›</button></div>
       <div class="sub" style="font-size:12px">${kb} KB</div></div></div>`;
