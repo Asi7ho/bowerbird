@@ -26,7 +26,14 @@ contextBridge.exposeInMainWorld('bowerbird', {
   quit: () => ipcRenderer.invoke('bowerbird:quit'),
   fullscreen: () => ipcRenderer.invoke('bowerbird:fullscreen'),
   getPathForFile: (file) => webUtils.getPathForFile(file),
-  fileUrl: (filePath) => 'app-file://' + filePath.split('/').map(encodeURIComponent).join('/'),
+  // app-file://localhost + path, NOT app-file:// + path:
+  // Chromium lowercases the hostname of a standard
+  // scheme, so app-file:///Users/x became app-file://users/x
+  // and the handler's board-local check rejected it — the
+  // Mac media failure. With a literal localhost host, the
+  // real path stays in the pathname, whose case Chromium
+  // preserves.
+  fileUrl: (filePath) => 'app-file://localhost' + (filePath.startsWith('/') ? '' : '/') + filePath.split('/').map(encodeURIComponent).join('/'),
   // Plugins (see PLUGIN_API.md): discovery, file serving and
   // per-plugin storage, all through the main process. The renderer
   // never reads plugin folders directly.

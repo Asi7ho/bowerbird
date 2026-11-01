@@ -1180,9 +1180,16 @@ app.whenReady().then(() => {
   protocol.handle('app-file', (request) => {
     try {
       const u = new URL(request.url);
-      // A standard scheme parses app-file:///tmp/x as host "tmp" and
-      // path "/x", so the real filesystem path is host + pathname.
-      const raw = `/${u.hostname}${u.pathname}`;
+      // fileUrl() puts a literal localhost host in front of
+      // the path, so the real path is the pathname alone.
+      // The legacy host + pathname form is kept for URLs
+      // built before that change: a standard scheme parses
+      // app-file:///tmp/x as host "tmp" and path "/x".
+      // Note the hostname is lowercased by Chromium, which
+      // is why the legacy form broke Mac paths starting
+      // with /Users — it arrived as /users and failed the
+      // board-local check.
+      const raw = (u.hostname === 'localhost' || !u.hostname) ? u.pathname : `/${u.hostname}${u.pathname}`;
       const filePath = raw.split('/').map((seg) => {
         try {
           return decodeURIComponent(seg);
