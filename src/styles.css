@@ -278,12 +278,18 @@ button { font-family: inherit; }
 
 /* Vertical toolbar, left side: a frosted macOS material bar, centred
    vertically, 12px from the edge. The bar itself is the window drag
-   region; every control inside opts out of dragging. */
+   region; every control inside opts out of dragging. The pen palette
+   is NOT in the toolbar's flow: when it appeared inside the bar, the
+   bar grew and its centred position shifted every button by ~100px,
+   so a click meant for Select landed on Arrow and created a
+   connector the user never asked for. The palette is a flyout to
+   the toolbar's right instead, so the tools never move. */
 #toolbar-wrap {
   position: absolute; top: 50%; left: 12px; transform: translateY(-50%);
   display: flex; pointer-events: none; z-index: 10;
 }
 #toolbar {
+  position: relative;
   pointer-events: auto; display: flex; flex-direction: column; align-items: center;
   gap: 10px; padding: 12px 8px; width: 56px;
   background: rgba(255, 255, 255, 0.72);
@@ -319,7 +325,15 @@ button { font-family: inherit; }
 #toolbar .divider { width: 32px; height: 1px; background: var(--separator); flex: none; }
 #toolbar .zoom-group { display: flex; flex-direction: column; gap: 2px; width: 100%; }
 #toolbar .zoom-group button { width: 100%; }
-#toolbar .palette { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+#toolbar .palette {
+  position: absolute; left: calc(100% + 8px); top: 12px;
+  display: flex; flex-direction: column; gap: 6px; align-items: center;
+  padding: 8px; background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 16px;
+  box-shadow: var(--shadow-md);
+}
 #toolbar .swatch {
   width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.12);
   cursor: pointer; -webkit-app-region: no-drag; padding: 0;

@@ -871,7 +871,10 @@ function render(): void {
 
 function updateResizeHandle(): void {
   const el = document.getElementById("resize-handle") as HTMLDivElement;
-  if (selected.length !== 1 || settingsOpen || editingId !== null) { el.style.display = "none"; return; }
+  // A plugin view owns the screen: the board's resize handle is
+  // not part of that view, so it must never float over it — it
+  // did, at the selected card's corner, while playing a slide.
+  if (getActiveView() !== "board" || selected.length !== 1 || settingsOpen || editingId !== null) { el.style.display = "none"; return; }
   const it = boardGet(board, selected[0]);
   if (!it || "Connector" in it.kind) { el.style.display = "none"; return; }
   const [p, s] = itemBounds(board, it);
@@ -1318,7 +1321,11 @@ window.addEventListener("mouseup", (e: MouseEvent) => {
     const toAnchor: Anchor = toItem && toAnchorable ? { Item: toItem.id } : { Point: world };
     const a = anchorPoint(board, d.from);
     const degenerate = a !== null && "Point" in toAnchor && Math.hypot(a.x - toAnchor.Point.x, a.y - toAnchor.Point.y) < 4;
-    if (!degenerate) {
+    // A connector from a card to itself is a click, not a connection:
+    // it renders as a 1x1 invisible item that can never be selected
+    // or deleted except by undo, and it pollutes the board JSON.
+    const selfConnector = "Item" in d.from && "Item" in toAnchor && d.from.Item === toAnchor.Item;
+    if (!degenerate && !selfConnector) {
       const id = allocId();
       const aPt = a ?? { x: 0, y: 0 };
       const bPt = "Point" in toAnchor ? toAnchor.Point : (boardGet(board, toAnchor.Item) ? centre(boardGet(board, toAnchor.Item) as Item) : { x: 0, y: 0 });
@@ -1327,6 +1334,11 @@ window.addEventListener("mouseup", (e: MouseEvent) => {
     }
   } else if (d.kind === "marquee") {
     selected = marquee(board, d.start, world);
+  } else if (d.kind === "pan") {
+    // A Space+drag pan changes only the camera, so it must not
+    // become an undo step — but it must reach disk, or closing
+    // the window without another save loses the view.
+    saveWithoutUndo();
   } else if (d.kind === "move" || d.kind === "resize") {
     // A drag that actually moved is a board change and an undo
     // step. A click that never moved only brought a card to the
@@ -2195,6 +2207,10 @@ async function init(): Promise<void> {
       gridEl,
       document.getElementById("canvas-svg") as HTMLElement,
       cardsEl,
+      // The resize handle is board chrome, not view chrome: a view
+      // must hide it, and returning to the board restores its
+      // CSS default (hidden until updateResizeHandle shows it).
+      document.getElementById("resize-handle") as HTMLElement,
     ],
     viewSwitcherEl: document.getElementById("view-switcher") as HTMLElement,
     overlaysEl: document.getElementById("plugin-overlays") as HTMLElement,
