@@ -29,6 +29,8 @@ interface BowerbirdAPI {
   listPlugins(): Promise<PluginManifest[]>;
   readPluginFile(pluginId: string, relativePath: string): Promise<string>;
   setPluginEnabled(pluginId: string, enabled: boolean): Promise<boolean>;
+  installPlugin(plugin: { id: string; name: string; description: string; permissions: string[]; mainCode: string; styleCode: string }): Promise<PluginManifest>;
+  llmChat(req: { baseUrl: string; model: string; key: string; messages: Array<{ role: string; content: string }> }): Promise<string>;
   pluginStorageGet(pluginId: string, key: string): Promise<unknown>;
   pluginStorageSet(pluginId: string, key: string, value: unknown): Promise<void>;
   pluginStorageDelete(pluginId: string, key: string): Promise<void>;
@@ -1766,6 +1768,7 @@ function renderPluginSettings(): void {
     palette: "Colour palettes to place as swatches.",
     presentation: "Slides on the board, played in order.",
     "command-palette": "Every command, from one place.",
+    "plugin-builder": "Describe a plugin, and an AI writes it for you to check and install.",
   };
   let html = "";
   for (const lp of plugins) {

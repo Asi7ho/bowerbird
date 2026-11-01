@@ -132,6 +132,8 @@ export interface PluginBridge {
   listPlugins(): Promise<PluginManifest[]>;
   readPluginFile(pluginId: string, relativePath: string): Promise<string>;
   setPluginEnabled(pluginId: string, enabled: boolean): Promise<boolean>;
+  installPlugin(plugin: { id: string; name: string; description: string; permissions: string[]; mainCode: string; styleCode: string }): Promise<PluginManifest>;
+  llmChat(req: { baseUrl: string; model: string; key: string; messages: Array<{ role: string; content: string }> }): Promise<string>;
   pluginStorageGet(pluginId: string, key: string): Promise<unknown>;
   pluginStorageSet(pluginId: string, key: string, value: unknown): Promise<void>;
   pluginStorageDelete(pluginId: string, key: string): Promise<void>;
@@ -275,6 +277,13 @@ export interface PluginContext {
     get: (key: string) => Promise<unknown>;
     set: (key: string, value: unknown) => Promise<void>;
     delete: (key: string) => Promise<void>;
+  };
+  ai: {
+    chat: (req: { baseUrl: string; model: string; key: string; messages: Array<{ role: string; content: string }> }) => Promise<string>;
+  };
+  plugins: {
+    install: (plugin: { id: string; name: string; description: string; permissions: string[]; mainCode: string; styleCode: string }) => Promise<PluginManifest>;
+    refresh: () => Promise<void>;
   };
   events: {
     on: (event: string, handler: () => void) => void;
@@ -470,7 +479,7 @@ function createContext(manifest: PluginManifest): PluginContext {
       // Capabilities in v1: every domain documented in PLUGIN_API.md.
       // A future core may add more; a plugin should check before
       // using a capability that was added after v1.
-      return ["board", "view", "window", "ui", "cards", "files", "storage", "events", "tools", "panels", "commands", "views", "overlays", "settingsSections", "shortcuts", "library"].includes(capability);
+      return ["board", "view", "window", "ui", "cards", "files", "storage", "events", "tools", "panels", "commands", "views", "overlays", "settingsSections", "shortcuts", "library", "ai", "plugins"].includes(capability);
     },
     board: {
       get: () => {
@@ -700,6 +709,22 @@ function createContext(manifest: PluginManifest): PluginContext {
       delete: async (key: string) => {
         require("storage");
         return bridge!.pluginStorageDelete(pluginId, key);
+      },
+    },
+    ai: {
+      chat: async (req) => {
+        require("ai");
+        return bridge!.llmChat(req);
+      },
+    },
+    plugins: {
+      install: async (plugin) => {
+        require("plugins:install");
+        return bridge!.installPlugin(plugin);
+      },
+      refresh: async () => {
+        require("plugins:install");
+        await refreshPlugins();
       },
     },
     events: {
@@ -1234,5 +1259,44 @@ export async function setPluginEnabled(id: string, enabled: boolean): Promise<vo
       host.toast(`Plugin ${lp.manifest.name} failed to load: ${String(e)}`);
     }
   }
+  host.render();
+}
+
+// Re-scan for plugins installed since startup, and activate
+// any new ones that are enabled. Used after an install, so
+// a new plugin runs without restarting the app. Existing
+// plugins are untouched: this only adds manifests that are
+// not already in the loaded map.
+export async function refreshPlugins(): Promise<void> {
+  if (!bridge || !host) return;
+  let manifests: PluginManifest[] = [];
+  try {
+    manifests = await bridge.listPlugins();
+  } catch {
+    return;
+  }
+  for (const m of manifests) {
+    if (loaded.has(m.id)) continue;
+    loaded.set(m.id, { manifest: m, active: false, failed: false, error: null, module: null });
+    if (m.enabled === false) continue;
+    if (m.apiVersion !== "1") {
+      const lp = loaded.get(m.id)!;
+      lp.failed = true;
+      lp.error = `Requires plugin API ${m.apiVersion}, this app provides 1`;
+      continue;
+    }
+    try {
+      await activatePlugin(m);
+    } catch (e) {
+      const lp = loaded.get(m.id)!;
+      lp.failed = true;
+      lp.error = String(e);
+      lp.active = false;
+      unregisterPlugin(m.id);
+      host.toast(`Plugin ${m.name} failed to load: ${String(e)}`);
+    }
+  }
+  renderViewSwitcher();
+  updatePanelDock();
   host.render();
 }

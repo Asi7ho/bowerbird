@@ -1,0 +1,71 @@
+/* Plugin Builder panel, scoped to this plugin's panel body.
+   Same surface, same style: core panel buttons, quiet
+   inputs with a hairline border, core grey for status
+   and help text. The code boxes are monospace, so the
+   generated code reads as code, not as panel text.
+   The panel is long — setup, a description, and the
+   generated code — so its body scrolls, like Palette's. */
+.plugin-panel[data-plugin="plugin-builder"] .plugin-panel-body {
+  overflow-y: auto; flex: 1 1 auto; min-height: 0;
+}
+.plugin-panel-body .pres-builder h3.pres-builder-h {
+  font-size: 13px; font-weight: 600; color: var(--ink);
+  margin: 16px 0 8px;
+}
+.plugin-panel-body .pres-builder h3.pres-builder-h:first-child {
+  margin-top: 0;
+}
+.plugin-panel-body .pres-builder-label {
+  display: block; font-size: 12px; font-weight: 500; color: var(--grey);
+  margin: 8px 0 4px;
+}
+.plugin-panel-body .pres-builder-input {
+  width: 100%; box-sizing: border-box;
+  border: 1px solid var(--separator); background: #fff;
+  border-radius: 9px; padding: 8px 10px;
+  font-size: 13px; color: var(--ink);
+}
+.plugin-panel-body .pres-builder-text {
+  resize: vertical; line-height: 1.5;
+}
+.plugin-panel-body .pres-builder-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px; line-height: 1.5; resize: vertical;
+  white-space: pre; overflow: auto;
+}
+.plugin-panel-body .pres-builder-row {
+  display: flex; gap: 8px; margin-top: 8px;
+}
+.plugin-panel-body .pres-builder-btn {
+  flex: 1 1 0; display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--separator); background: #fff;
+  border-radius: 9px; padding: 8px 6px;
+  cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink);
+  white-space: nowrap;
+}
+.plugin-panel-body .pres-builder-btn:hover {
+  background: var(--fill);
+}
+.plugin-panel-body .pres-builder-btn:disabled {
+  background: var(--fill); color: var(--grey); cursor: default;
+}
+.plugin-panel-body .pres-builder-wide {
+  width: 100%; margin-top: 8px;
+}
+.plugin-panel-body .pres-builder-status {
+  color: var(--grey); font-size: 12px; line-height: 1.5;
+  margin-top: 6px; overflow-wrap: anywhere;
+}
+.plugin-panel-body .pres-builder-validation {
+  margin-top: 8px;
+}
+.plugin-panel-body .pres-builder-ok {
+  color: var(--ink); font-size: 12px; line-height: 1.5;
+}
+.plugin-panel-body .pres-builder-bad {
+  color: #b3261e; font-size: 12px; line-height: 1.5;
+}
+.plugin-panel-body .pres-builder-help {
+  color: var(--grey); font-size: 12px; line-height: 1.5;
+  margin-top: 16px;
+}

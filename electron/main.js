@@ -867,6 +867,90 @@ function registerIpc() {
     savePluginEnabled(map);
     return map[pluginId];
   });
+  // Install a plugin written by the Plugin Builder (or, in
+  // future, any plugin with the plugins:install permission).
+  // Writes only to the user plugins folder, never to the
+  // bundled folder, and never overwrites an existing plugin:
+  // a clash is an error the caller shows, not a silent
+  // replacement. Blocked in demo mode, which saves nothing.
+  ipcMain.handle('bowerbird:install-plugin', (_event, plugin) => {
+    if (DEMO) throw new Error('cannot install a plugin in demo mode');
+    if (!plugin || typeof plugin !== 'object') throw new Error('bad plugin');
+    const { id, name, description, permissions, mainCode, styleCode } = plugin;
+    if (typeof id !== 'string' || !/^[a-z0-9-]+$/.test(id)) throw new Error('plugin id must be lowercase letters, digits and hyphens');
+    if (typeof name !== 'string' || !name.trim() || typeof mainCode !== 'string' || !mainCode.trim()) throw new Error('plugin name and code are required');
+    if (mainCode.length > 200000 || (typeof styleCode === 'string' && styleCode.length > 200000)) throw new Error('plugin code is too large');
+    if (!Array.isArray(permissions) || permissions.some((p) => typeof p !== 'string')) throw new Error('plugin permissions must be strings');
+    const base = process.env.XDG_DATA_HOME
+      ? process.env.XDG_DATA_HOME
+      : path.join(process.env.HOME || '.', '.local', 'share');
+    const folder = path.join(base, 'bowerbird', 'plugins', id);
+    if (fs.existsSync(folder)) throw new Error(`a plugin called ${id} already exists`);
+    const styles = typeof styleCode === 'string' && styleCode.trim() ? ['style.css'] : [];
+    const manifest = {
+      apiVersion: '1',
+      id,
+      name: name.trim(),
+      description: typeof description === 'string' ? description : '',
+      version: '1.0.0',
+      main: 'main.js',
+      styles,
+      permissions,
+    };
+    fs.mkdirSync(folder, { recursive: true });
+    try {
+      fs.writeFileSync(path.join(folder, 'manifest.json'), JSON.stringify(manifest, null, 2));
+      fs.writeFileSync(path.join(folder, 'main.js'), mainCode);
+      if (styles.length) fs.writeFileSync(path.join(folder, 'style.css'), styleCode);
+    } catch (e) {
+      fs.rmSync(folder, { recursive: true, force: true });
+      throw e;
+    }
+    return manifest;
+  });
+  // Chat completions for a plugin with the ai permission, run
+  // in the main process, not the renderer: a browser fetch
+  // from the renderer is subject to the provider's CORS
+  // policy, and a local model server is http, not https.
+  // Only the chat-completions path of the configured base
+  // is ever called, with the caller's own key, which is
+  // never stored here. Public bases must be https; a
+  // localhost base may be http, for a local model server.
+  // Other private addresses are refused, as with fetchPreview.
+  ipcMain.handle('bowerbird:llm-chat', async (_event, req) => {
+    if (!req || typeof req !== 'object') throw new Error('bad chat request');
+    const { baseUrl, model, key, messages } = req;
+    if (typeof baseUrl !== 'string' || typeof model !== 'string' || !model.trim()) throw new Error('a provider and model are required');
+    if (!Array.isArray(messages) || messages.length === 0 || messages.some((m) => !m || typeof m.role !== 'string' || typeof m.content !== 'string')) throw new Error('bad chat messages');
+    let url;
+    try { url = new URL(baseUrl); } catch { throw new Error('bad provider address'); }
+    const isLocal = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+    if (!isLocal && (url.protocol !== 'https:' || isPrivateHost(url.hostname))) throw new Error('provider must be a public https address or localhost');
+    if (isLocal && url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('bad provider address');
+    const endpoint = new URL('chat/completions', url.href.endsWith('/') ? url.href : url.href + '/');
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 120000);
+    try {
+      const res = await fetch(endpoint.href, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(typeof key === 'string' && key ? { Authorization: `Bearer ${key}` } : {}),
+        },
+        body: JSON.stringify({ model: model.trim(), messages, temperature: 0.2, max_tokens: 4000 }),
+        signal: controller.signal,
+      });
+      const text = await res.text();
+      if (!res.ok) throw new Error(`provider error ${res.status}: ${text.slice(0, 500)}`);
+      let data;
+      try { data = JSON.parse(text); } catch { throw new Error('provider did not return JSON'); }
+      const content = data?.choices?.[0]?.message?.content;
+      if (typeof content !== 'string' || !content.trim()) throw new Error('provider returned no text');
+      return content;
+    } finally {
+      clearTimeout(timer);
+    }
+  });
   ipcMain.handle('bowerbird:plugin-storage-get', (_event, pluginId, key) => {
     const data = loadPluginStorage();
     const per = data[pluginId];

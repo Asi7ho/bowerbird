@@ -29,6 +29,8 @@ contextBridge.exposeInMainWorld('bowerbird', {
   listPlugins: () => ipcRenderer.invoke('bowerbird:list-plugins'),
   readPluginFile: (pluginId, relativePath) => ipcRenderer.invoke('bowerbird:read-plugin-file', pluginId, relativePath),
   setPluginEnabled: (pluginId, enabled) => ipcRenderer.invoke('bowerbird:set-plugin-enabled', pluginId, enabled),
+  installPlugin: (plugin) => ipcRenderer.invoke('bowerbird:install-plugin', plugin),
+  llmChat: (req) => ipcRenderer.invoke('bowerbird:llm-chat', req),
   pluginStorageGet: (pluginId, key) => ipcRenderer.invoke('bowerbird:plugin-storage-get', pluginId, key),
   pluginStorageSet: (pluginId, key, value) => ipcRenderer.invoke('bowerbird:plugin-storage-set', pluginId, key, value),
   pluginStorageDelete: (pluginId, key) => ipcRenderer.invoke('bowerbird:plugin-storage-delete', pluginId, key),

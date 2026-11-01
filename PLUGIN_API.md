@@ -161,6 +161,14 @@ All file access goes through the core, never directly. Writes need `files:embed`
 
 Plugin-scoped settings, kept out of board JSON, in the app's userData folder, one file per app, keyed by plugin id. Requires the `storage` permission. `get(key)`, `set(key, value)`, `delete(key)` are async. Values must be JSON. Do not store secrets, tokens or passwords here. There is no encryption in v1, and plugin storage is not a vault.
 
+### AI and installing plugins — `api.ai`, `api.plugins`
+
+Adding these domains did not change `apiVersion`. It stays `"1"`, because additive additions do not break existing plugins.
+
+- `ai.chat({ baseUrl, model, key, messages })` — chat completions from an OpenAI-compatible provider, run in the main process, not the renderer, so a provider's CORS policy and a local http model server are not a problem. Requires the `ai` permission. The base must be a public https address, or localhost for a local model server; other private addresses are refused. Only the provider's chat-completions path is ever called, with the caller's own key, which is never stored by the core. The Plugin Builder uses this; its key lives only in memory for the session, never in plugin storage, for exactly the reason above.
+- `plugins.install({ id, name, description, permissions, mainCode, styleCode })` — write a plugin to the user plugins folder, never the bundled folder, and never over an existing plugin with the same id. Requires the `plugins:install` permission. Blocked in demo mode. The manifest is built by the core, with `apiVersion "1"` and `version "1.0.0"`.
+- `plugins.refresh()` — re-scan for plugins installed since startup, and activate any new ones that are enabled, with no restart. Requires the `plugins:install` permission.
+
 ### Events — `api.events`
 
 `on(event, handler)`, `off(event, handler)`. Events in v1: `selection`, `board`, `view`. `board` fires after a board change that the core saved or rendered. A plugin's own board writes fire it too, after the write. Do not write to the board synchronously inside a `board` handler in a way that loops. If a handler needs to react by writing, guard against your own last write, for example by comparing ids or by a flag. The core will not prevent a loop you create in v1.
