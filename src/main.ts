@@ -1847,10 +1847,18 @@ document.getElementById("btn-redo")?.addEventListener("click", () => { redo(); }
 //   labels if the video file decodes as audio.
 // - Audio: AST labels, e.g. "Bird vocalization, bird
 //   call, bird song" — searching "bird" matches them.
-// Indexing starts on the first search, in the background,
-// one item at a time, so the board never blocks on a
-// model download. Until an item is indexed, search falls
-// back to its filename and type, as before.
+// Indexing runs in parallel (up to 4 items at once, so
+// CLIP and AST load together instead of one after the
+// other), and the index is preloaded at board load, so
+// a search never pays the index-load cost. Until an item
+// is indexed, search falls back to its filename and
+// type, as before. The search count only ever says
+// "Indexing" while unindexed media is actually being
+// indexed — never on a search where everything is
+// already indexed, which was the old misleading status.
+// Query embeddings are also persisted (as __query:
+// entries in the same file), so a repeated word after
+// restart does not need the CLIP model at all.
 type ContextEntry = { embedding?: number[]; frames?: number[][]; labels?: string[] };
 const contextIndex = new Map<string, ContextEntry>();
 let contextIndexLoaded = false;
@@ -1859,12 +1867,18 @@ let contextIndexTotal = 0;
 let contextIndexDone = 0;
 let contextIndexFailed = false;
 let contextQueryEmbedding: { query: string; embedding: number[] } | null = null;
+const contextQueryCache = new Map<string, number[]>();
 async function loadContextIndex(): Promise<void> {
   if (contextIndexLoaded) return;
   contextIndexLoaded = true;
   try {
     const raw = await api.contextIndexLoad();
     for (const [k, v] of Object.entries(raw)) {
+      if (k.startsWith("__query:")) {
+        const e = v as ContextEntry;
+        if (e && Array.isArray(e.embedding)) contextQueryCache.set(k.slice("__query:".length), e.embedding);
+        continue;
+      }
       const e = v as ContextEntry;
       if (e && (Array.isArray(e.embedding) || Array.isArray(e.frames) || Array.isArray(e.labels))) contextIndex.set(k, e);
     }
@@ -1873,7 +1887,23 @@ async function loadContextIndex(): Promise<void> {
 function saveContextIndex(): void {
   const obj: Record<string, ContextEntry> = {};
   for (const [k, v] of contextIndex.entries()) obj[k] = v;
+  for (const [q, embedding] of contextQueryCache.entries()) obj[`__query:${q}`] = { embedding };
   void api.contextIndexSave(obj).catch(() => undefined);
+}
+async function getQueryEmbedding(query: string): Promise<number[] | null> {
+  if (contextQueryEmbedding && contextQueryEmbedding.query === query) return contextQueryEmbedding.embedding;
+  const cached = contextQueryCache.get(query);
+  if (cached) {
+    contextQueryEmbedding = { query, embedding: cached };
+    return cached;
+  }
+  try {
+    const embedding = await api.contextEmbedText(`a photo of ${query}`);
+    contextQueryEmbedding = { query, embedding };
+    contextQueryCache.set(query, embedding);
+    saveContextIndex();
+    return embedding;
+  } catch { return null; }
 }
 function cosineSim(a: number[], b: number[]): number {
   let dot = 0, na = 0, nb = 0;
@@ -1898,7 +1928,10 @@ async function decodeAudio16k(fileUrl: string): Promise<Float32Array | null> {
       src.start();
       const rendered = await offline.startRendering();
       const data = rendered.getChannelData(0);
-      const maxSamples = targetRate * 30;
+      // AST's input window is 10 seconds: decoding more
+      // than that only costs time, IPC size and inference
+      // time, and the model never sees it.
+      const maxSamples = targetRate * 10;
       return data.length > maxSamples ? data.slice(0, maxSamples) : data;
     } finally {
       void ctx.close().catch(() => undefined);
@@ -1954,10 +1987,10 @@ async function indexContextItem(item: Item): Promise<void> {
     } else if ("Video" in k && !k.Video.remote) {
       const existing = contextIndex.get(k.Video.source);
       if (existing?.frames) return;
-      const frames: number[][] = [];
-      for (const url of await captureVideoFrames(k.Video.source)) {
-        try { frames.push(await api.contextEmbedFrame(url)); } catch { /* skip this frame */ }
-      }
+      const frameUrls = await captureVideoFrames(k.Video.source);
+      const frames: number[][] = (await Promise.all(frameUrls.map(async (url) => {
+        try { return await api.contextEmbedFrame(url); } catch { return null; }
+      }))).filter((f): f is number[] => f !== null);
       const labels: string[] = [];
       const pcm = await decodeAudio16k(api.fileUrl(k.Video.source));
       if (pcm) {
@@ -1993,29 +2026,52 @@ function hasUnindexedMedia(): boolean {
 }
 async function startContextIndexing(): Promise<void> {
   if (contextIndexing) return;
-  // Set synchronously, before any await, so the search
-  // count shows "Indexing context…" during the model
-  // download itself, which is the longest part.
-  contextIndexing = true;
   await loadContextIndex();
-  // If everything is already indexed, stop here: without
-  // this guard, the updateSearch call at the end of this
-  // function would restart indexing forever, ping-ponging
-  // with updateSearch once the index is complete.
-  if (!hasUnindexedMedia()) {
-    contextIndexing = false;
-    return;
-  }
-  contextIndexFailed = false;
-  const items = board.items.filter((it) => ("Image" in it.kind) || ("Audio" in it.kind) || (("Video" in it.kind) && !it.kind.Video.remote));
-  contextIndexTotal = items.length;
-  contextIndexDone = 0;
-  for (const it of items) {
-    try { await indexContextItem(it); } catch { contextIndexFailed = true; }
-    contextIndexDone++;
+  // Only ever show "Indexing" when there is actually
+  // unindexed media. Previously this flag was set on
+  // every search, before the already-indexed check, so
+  // every search flashed "Indexing context…" even
+  // though nothing was being indexed — which is why
+  // it looked like it reindexed all the time.
+  if (!hasUnindexedMedia()) return;
+  contextIndexing = true;
+  // Refresh the count now that indexing is really
+  // running, so the status appears during the model
+  // load itself, not only after the first item lands.
+  {
     const input = document.getElementById("search-input") as HTMLInputElement | null;
     if (input && input.value.trim() !== "") updateSearch();
   }
+  contextIndexFailed = false;
+  const isUnindexed = (it: Item): boolean => {
+    const k = it.kind;
+    if ("Image" in k) return !contextIndex.get(k.Image.path)?.embedding;
+    if ("Audio" in k) return !contextIndex.get(k.Audio.path)?.labels;
+    if ("Video" in k && !k.Video.remote) {
+      const e = contextIndex.get(k.Video.source);
+      return !(e?.frames || e?.labels);
+    }
+    return false;
+  };
+  const items = board.items.filter(isUnindexed);
+  contextIndexTotal = items.length;
+  contextIndexDone = 0;
+  // Parallel, capped at 4 at once: CLIP and AST load
+  // together, and image/audio/video decoding overlaps,
+  // instead of everything queuing behind one model
+  // load. For the 3-item welcome board this is roughly
+  // the slowest single item, not the sum of all three.
+  let next = 0;
+  const workers = Array.from({ length: Math.min(4, items.length) }, async () => {
+    while (next < items.length) {
+      const it = items[next++];
+      try { await indexContextItem(it); } catch { contextIndexFailed = true; }
+      contextIndexDone++;
+      const input = document.getElementById("search-input") as HTMLInputElement | null;
+      if (input && input.value.trim() !== "") updateSearch();
+    }
+  });
+  await Promise.all(workers);
   contextIndexing = false;
   const input = document.getElementById("search-input") as HTMLInputElement | null;
   if (input && input.value.trim() !== "") updateSearch();
@@ -2025,25 +2081,17 @@ async function contextMatches(item: Item, query: string, words: string[]): Promi
   if ("Image" in k) {
     const e = contextIndex.get(k.Image.path)?.embedding;
     if (!e) return false;
-    if (!contextQueryEmbedding || contextQueryEmbedding.query !== query) {
-      try {
-        const embedding = await api.contextEmbedText(`a photo of ${query}`);
-        contextQueryEmbedding = { query, embedding };
-      } catch { return false; }
-    }
-    return cosineSim(e, contextQueryEmbedding.embedding) >= 0.23;
+    const qe = await getQueryEmbedding(query);
+    if (!qe) return false;
+    return cosineSim(e, qe) >= 0.23;
   }
   if ("Video" in k && !k.Video.remote) {
     const entry = contextIndex.get(k.Video.source);
     if (entry?.labels && words.every((w) => entry.labels!.join(" ").includes(w))) return true;
     if (!entry?.frames || entry.frames.length === 0) return false;
-    if (!contextQueryEmbedding || contextQueryEmbedding.query !== query) {
-      try {
-        const embedding = await api.contextEmbedText(`a photo of ${query}`);
-        contextQueryEmbedding = { query, embedding };
-      } catch { return false; }
-    }
-    return entry.frames.some((f) => cosineSim(f, contextQueryEmbedding!.embedding) >= 0.23);
+    const qe = await getQueryEmbedding(query);
+    if (!qe) return false;
+    return entry.frames.some((f) => cosineSim(f, qe) >= 0.23);
   }
   if ("Audio" in k) {
     const labels = contextIndex.get(k.Audio.path)?.labels;
@@ -2854,6 +2902,10 @@ async function init(): Promise<void> {
   };
   await initPlugins(pluginHost, api);
   render();
+  // Preload the context index now, in the background,
+  // so the first search does not pay the index-load
+  // cost on top of everything else.
+  void loadContextIndex();
   if (DEMO) toast("Demo \u2014 try anything, nothing is saved");
   // Fill in previews for cards that never got one (welcome card, old
   // boards): title, description, image and icon, in the background.

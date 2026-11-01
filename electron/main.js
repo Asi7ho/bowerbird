@@ -934,7 +934,13 @@ function registerIpc() {
   ipcMain.handle('bowerbird:context-index-save', (_event, index) => {
     try {
       const file = path.join(boardDir(), 'context-index.json');
-      fs.writeFileSync(file, JSON.stringify(index));
+      // Write to a temp file, then rename: a crash or
+      // full disk during a direct write leaves a
+      // truncated index, which forces a full reindex
+      // next launch. A rename is atomic on one volume.
+      const tmp = `${file}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(index));
+      fs.renameSync(tmp, file);
       return true;
     } catch { return false; }
   });
