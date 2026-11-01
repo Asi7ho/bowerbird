@@ -85,12 +85,13 @@ Enable and disable are per plugin, in Settings → Plugins. Disabling unregister
 - `updateItem(id, patch)` — patch `pos`, `size`, `group`, or, for a plugin card of this plugin, `data`. Requires `board:write`.
 - `removeItem(id)` — requires `board:write`.
 - `groupSelected()`, `ungroupSelected()`, `deleteSelected()` — group, ungroup or delete the current selection, exactly as Ctrl+G, Ctrl+U and Delete do, including group ids from `board.next_group`. Requires `board:write`. Returns false when there is nothing to do.
+- `undo()`, `redo()` — undo or redo one step, exactly as Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z do. Requires `board:write`. Returns false when there is nothing to undo or redo. `canUndo()`, `canRedo()` need no permission.
 - `save()` — save through the core's save path, including the demo-mode no-op. Most board methods save automatically. Call this after a batch of changes made without a method call. Requires `board:write`.
 - `render()` — re-render the board.
 
 Board methods validate their input and throw on bad ids, bad positions, or a plugin trying to edit another plugin's card data. A plugin may read any card, but may only write its own plugin cards, plus core kinds for position, size and group.
 
-There is no undo in v1, core or plugin. A plugin board change saves immediately, like a core drag or note commit.
+Undo is snapshots, not operations: every save compares the board content with the last saved content, and a change becomes one undo step, up to 50 steps. A plugin board change saves immediately, like a core drag or note commit, so it is undoable too. Panning and zooming never create a step, and undoing never moves the view. `api.board.undo()`, `redo()`, `canUndo()` and `canRedo()` run undo from a plugin; undo and redo need `board:write`.
 
 ### Window — `api.window`
 
@@ -220,7 +221,6 @@ Frame cards should use kind `"slide"` by convention, so library-style plugins ca
 
 - No drag tools. Click tools only.
 - No menu bar contributions. The command palette is a bundled plugin, not core, and it runs on the API above.
-- No undo for plugin actions.
 - No network access except through `fetchPreview`.
 - No main-process plugins, no Node access, no direct filesystem or shell access.
 - No plugin store, no paid plugins, no auto-update.

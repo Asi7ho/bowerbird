@@ -41,8 +41,9 @@ The build is unsigned, so a recipient must right-click it and choose Open the fi
 - **Connector:** drag from one item to another, or from empty space to empty space. Ends anchored to items follow them when they move.
 - **Resize:** drag the small handle at a card's bottom-right corner. Connectors have no handle: move the cards they connect instead.
 - **Group:** `Ctrl/Cmd + G` groups the selection, `Ctrl/Cmd + U` ungroups it.
+- **Undo and redo:** `Ctrl/Cmd + Z` undoes, `Ctrl/Cmd + Shift + Z` or `Ctrl/Cmd + Y` redoes, or use the toolbar buttons. Undo covers board changes, including plugin actions and deleting all data, up to 50 steps. Panning and zooming are not undo steps, and undoing never moves the view.
 - **Hide:** the button in a corner hides the whole board into that corner. Only a small round icon stays visible. Click it to restore the board. Change the corner in Settings, under Plugin settings → Hide, or turn it off there. Pressing `H` minimises the board.
-- **Delete all data:** Settings → General → Data → Delete all board data. It asks you to confirm first, then removes the board file and every dropped file, and restores a fresh welcome board. The corner setting is kept. There is no undo.
+- **Delete all data:** Settings → General → Data → Delete all board data. It asks you to confirm first, then removes the board file and every dropped file, and restores a fresh welcome board. The corner setting is kept. You can undo it with `Ctrl/Cmd + Z`.
 
 Shortcuts in full are in Settings, under General.
 
@@ -69,7 +70,7 @@ General holds the keyboard shortcuts, the canvas background and grid, Data, and 
 
 ## Plugins
 
-Bowerbird has plugins. The bundled ones are Hide, Visual Library, Palette and Presentation. See `plugins/README.md` for what each one does, and `PLUGIN_API.md` if you want to write one.
+Bowerbird has plugins. The bundled ones are Hide, Visual Library, Palette, Presentation and Command Palette. See `plugins/README.md` for what each one does, and `PLUGIN_API.md` if you want to write one.
 
 ## Icon
 
@@ -96,7 +97,7 @@ src/        renderer
   welcome.ts  the welcome board
   styles.css  board styling
 plugins/    bundled plugins: hide, visual-library, palette,
-            presentation (see plugins/README.md)
+            presentation, command-palette (see plugins/README.md)
 index.html  board shell and toolbar
 assets/     welcome photo, birdsong, video, sample PDF, icon
 screenshots/  App Store screenshots
@@ -114,7 +115,6 @@ npm run build
 - No system-wide global hotkey. That needs an OS-level hook, with accessibility permission on macOS.
 - No PDF pages rendered inside the canvas. A PDF card opens in your system viewer.
 - No multi-board switching.
-- No command palette, no undo for plugin actions. See `PLUGIN_API.md`.
 
 ## License
 

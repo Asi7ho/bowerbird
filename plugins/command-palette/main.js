@@ -129,6 +129,10 @@ function buildEntries() {
     { title: "Zoom out", run: () => zoom(1 / 1.2) },
     { title: "Reset view", run: () => apiRef.view.setCamera({ x: 0, y: 0, zoom: 1 }) },
   ];
+  // Undo and Redo only appear when they can do something, like
+  // Group and Delete below: the palette never lists a dead action.
+  if (apiRef.board.canUndo()) actions.push({ title: "Undo", run: () => apiRef.board.undo() });
+  if (apiRef.board.canRedo()) actions.push({ title: "Redo", run: () => apiRef.board.redo() });
   if (selected.length >= 2) actions.push({ title: "Group selection", run: () => apiRef.board.groupSelected() });
   if (hasGrouped) actions.push({ title: "Ungroup selection", run: () => apiRef.board.ungroupSelected() });
   if (selected.length >= 1) actions.push({ title: "Delete selection", run: () => apiRef.board.deleteSelected() });

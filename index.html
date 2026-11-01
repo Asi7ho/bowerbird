@@ -42,6 +42,11 @@
             <button id="zoom-in" title="Zoom in (+)" aria-label="Zoom in"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg></button>
           </div>
           <div class="divider"></div>
+          <div class="zoom-group">
+            <button id="btn-undo" title="Undo (Ctrl / Cmd + Z)" aria-label="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5 3.5 8.5 7 12" /><path d="M3.5 8.5H13a5.5 5.5 0 0 1 0 11H10" /></svg></button>
+            <button id="btn-redo" title="Redo (Ctrl / Cmd + Shift + Z)" aria-label="Redo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 5l3.5 3.5L17 12" /><path d="M20.5 8.5H11a5.5 5.5 0 0 0 0 11h3" /></svg></button>
+          </div>
+          <div class="divider"></div>
           <button id="btn-delete" title="Delete selection (Delete)" aria-label="Delete"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13" /><path d="M10 10.5v5M14 10.5v5" /></svg></button>
           <button id="btn-settings" title="Settings (?)" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h9M17 8h3M4 16h3M11 16h9" /><circle cx="15" cy="8" r="2.2" /><circle cx="9" cy="16" r="2.2" /></svg></button>
         </div>
@@ -71,7 +76,7 @@
                 <p class="meta">Deletes everything and starts again.</p>
                 <button id="btn-reset">Delete all board data</button>
                 <div id="reset-confirm" style="display:none">
-                  <p class="meta"><strong>This cannot be undone.</strong> Delete everything on this board?</p>
+                  <p class="meta">Delete everything on this board? You can undo it with Ctrl / Cmd + Z.</p>
                   <button id="btn-reset-confirm">Delete everything</button>
                 </div>
                 <h3>App</h3>

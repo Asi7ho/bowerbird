@@ -172,6 +172,10 @@ export interface PluginHost {
   openSettings: () => void;
   closeSettings: () => void;
   isSettingsOpen: () => boolean;
+  undo: () => boolean;
+  redo: () => boolean;
+  canUndo: () => boolean;
+  canRedo: () => boolean;
   groupSelection: () => boolean;
   ungroupSelection: () => boolean;
   deleteSelection: () => boolean;
@@ -209,6 +213,10 @@ export interface PluginContext {
     groupSelected: () => boolean;
     ungroupSelected: () => boolean;
     deleteSelected: () => boolean;
+    undo: () => boolean;
+    redo: () => boolean;
+    canUndo: () => boolean;
+    canRedo: () => boolean;
   };
   window: {
     hide: () => Promise<void>;
@@ -530,6 +538,18 @@ function createContext(manifest: PluginManifest): PluginContext {
         require("board:write");
         return host!.deleteSelection();
       },
+      // Undo is a board change, so it needs board:write, like any
+      // other board write. canUndo/canRedo only read stack state.
+      undo: () => {
+        require("board:write");
+        return host!.undo();
+      },
+      redo: () => {
+        require("board:write");
+        return host!.redo();
+      },
+      canUndo: () => host!.canUndo(),
+      canRedo: () => host!.canRedo(),
     },
     window: {
       hide: async () => {

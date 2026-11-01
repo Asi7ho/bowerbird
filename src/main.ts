@@ -67,6 +67,9 @@ const SHORTCUTS: Array<[string, string]> = [
   ["P", "Pen tool"],
   ["A", "Arrow (connector) tool"],
   ["Delete / Backspace", "Delete the selection"],
+  ["Ctrl / Cmd + Z", "Undo"],
+  ["Ctrl / Cmd + Shift + Z", "Redo"],
+  ["Ctrl / Cmd + Y", "Redo"],
   ["Ctrl / Cmd + G", "Group the selection"],
   ["Ctrl / Cmd + U", "Ungroup the selection"],
   ["+ / =", "Zoom in"],
@@ -216,12 +219,154 @@ function zoomCentre(factor: number): void {
 }
 const DEMO = api.isDemo === true;
 function save(): void {
+  // Undo capture runs before the demo return, so undo works in
+  // demo too, in memory, even though nothing is written to disk.
+  captureUndoStep();
   // Demo mode saves nothing: not even an IPC call, so a main-process
   // guard failure alone could never write. The main process also
   // no-ops save-board in demo mode, as a second guard.
   if (DEMO) return;
   api.saveBoard(JSON.stringify(board)).catch((e) => toast(`Save failed: ${String(e)}`));
   emitPluginEvent("board");
+}
+
+// ---------------------------------------------------------------- undo / redo
+//
+// Undo is snapshots, not operations. Every save() compares the
+// board content with the last saved content, and if it changed,
+// the previous content becomes one undo step. That covers every
+// mutation without hunting for it: core drags, text commits,
+// drops, plugin actions, Settings canvas changes and delete-all
+// all save, so all are undoable, including plugin actions, which
+// is why PLUGIN_API.md no longer says plugin actions have no undo.
+//
+// What a snapshot holds, and what it does not:
+// - Items, next_id, next_group, bg and grid: restored on undo.
+// - Camera: not stored, so panning and zooming never create an
+//   undo step, and undoing never jumps the view.
+// - Selection at the time of the change: restored, so undoing a
+//   delete re-selects the restored cards.
+// - One save is one step, however many items it changed: a drag
+//   that moved five cards, or a drop that added three files, is
+//   one Ctrl+Z, because those saves happen once, at mouseup.
+// - Background link-preview fills save without undo (see
+//   saveWithoutUndo), or adding one link would take two undos:
+//   one to un-fill its preview, one to remove the card.
+// - Clicking a card brings it to the front without saving, so a
+//   click alone is never an undo step; that stacking change rides
+//   along with the next saved change, which is cosmetic only.
+// - 50 steps, oldest dropped. Items are paths, not image bytes,
+//   so a snapshot is board JSON, not media.
+const UNDO_LIMIT = 50;
+interface UndoState {
+  items: Item[];
+  next_id: number;
+  next_group: number;
+  bg: string;
+  grid: Board["grid"];
+  selected: number[];
+}
+let undoStack: UndoState[] = [];
+let redoStack: UndoState[] = [];
+let lastSnapshot: UndoState | null = null;
+let suppressUndoCapture = false;
+
+function contentSnapshot(): UndoState {
+  return {
+    items: JSON.parse(JSON.stringify(board.items)) as Item[],
+    next_id: board.next_id,
+    next_group: board.next_group,
+    bg: board.bg,
+    grid: board.grid,
+    selected: [...selected],
+  };
+}
+
+function contentKey(s: UndoState): string {
+  // Selection is restored by undo, but a selection change alone
+  // is not a board change, so it is not part of the key.
+  return JSON.stringify({ items: s.items, next_id: s.next_id, next_group: s.next_group, bg: s.bg, grid: s.grid });
+}
+
+function updateUndoButtons(): void {
+  const undoBtn = document.getElementById("btn-undo") as HTMLButtonElement | null;
+  const redoBtn = document.getElementById("btn-redo") as HTMLButtonElement | null;
+  if (undoBtn) undoBtn.classList.toggle("dim", undoStack.length === 0);
+  if (redoBtn) redoBtn.classList.toggle("dim", redoStack.length === 0);
+}
+
+function captureUndoStep(): void {
+  if (suppressUndoCapture) return;
+  const cur = contentSnapshot();
+  if (lastSnapshot !== null && contentKey(lastSnapshot) === contentKey(cur)) return;
+  if (lastSnapshot !== null) {
+    undoStack.push(lastSnapshot);
+    if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+    // A new change after an undo discards the redo chain, as in
+    // every editor: redo only redoes the change just undone.
+    redoStack = [];
+  }
+  lastSnapshot = cur;
+  updateUndoButtons();
+}
+
+function saveWithoutUndo(): void {
+  // For background changes the user did not make, like a link
+  // preview filling in: the file still saves, but no undo step
+  // is created, and lastSnapshot moves to the new content, so
+  // the next user change is still one step from here.
+  suppressUndoCapture = true;
+  try {
+    save();
+  } finally {
+    suppressUndoCapture = false;
+  }
+  lastSnapshot = contentSnapshot();
+  updateUndoButtons();
+}
+
+function restoreUndoState(s: UndoState): void {
+  board.items = JSON.parse(JSON.stringify(s.items)) as Item[];
+  board.next_id = s.next_id;
+  board.next_group = s.next_group;
+  board.bg = s.bg;
+  board.grid = s.grid;
+  selected = s.selected.filter((id) => boardGet(board, id) !== undefined);
+  editingId = null;
+}
+
+function undo(): boolean {
+  if (undoStack.length === 0) return false;
+  redoStack.push(contentSnapshot());
+  const prev = undoStack.pop() as UndoState;
+  restoreUndoState(prev);
+  // Set lastSnapshot before save, so save's capture sees the
+  // restored content as already known and does not push a step
+  // or clear the redo chain we just built.
+  lastSnapshot = contentSnapshot();
+  save(); render();
+  renderBgOpts(); renderGridOpts();
+  updateUndoButtons();
+  return true;
+}
+
+function redo(): boolean {
+  if (redoStack.length === 0) return false;
+  undoStack.push(contentSnapshot());
+  const next = redoStack.pop() as UndoState;
+  restoreUndoState(next);
+  lastSnapshot = contentSnapshot();
+  save(); render();
+  renderBgOpts(); renderGridOpts();
+  updateUndoButtons();
+  return true;
+}
+
+function resetUndo(): void {
+  undoStack = [];
+  redoStack = [];
+  lastSnapshot = contentSnapshot();
+  updateUndoButtons();
 }
 function allocId(): number {
   board.next_id += 1;
@@ -1261,7 +1406,20 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
     render();
     return;
   }
-  if (e.key.toLowerCase() === "v" && !ctrl) setTool("select");
+  // Ctrl+Z in a text input is text undo, not board undo: the
+  // search box is already guarded above, and this covers plugin
+  // inputs like the Visual Library search. Without the guard,
+  // Ctrl+Z there would undo a board change instead of the text.
+  if (e.key.toLowerCase() === "z" && ctrl && !e.shiftKey && !(active && active.tagName === "INPUT")) {
+    e.preventDefault();
+    undo();
+  } else if (e.key.toLowerCase() === "z" && ctrl && e.shiftKey && !(active && active.tagName === "INPUT")) {
+    e.preventDefault();
+    redo();
+  } else if (e.key.toLowerCase() === "y" && ctrl && !(active && active.tagName === "INPUT")) {
+    e.preventDefault();
+    redo();
+  } else if (e.key.toLowerCase() === "v" && !ctrl) setTool("select");
   else if (e.key.toLowerCase() === "p" && !ctrl) setTool("pen");
   else if (e.key.toLowerCase() === "a" && !ctrl) setTool("connector");
   else if (e.key.toLowerCase() === "g" && ctrl) {
@@ -1292,11 +1450,10 @@ document.getElementById("tool-connector")?.addEventListener("click", () => setTo
 document.getElementById("zoom-in")?.addEventListener("click", () => { zoomCentre(1.2); save(); render(); });
 document.getElementById("zoom-out")?.addEventListener("click", () => { zoomCentre(1 / 1.2); save(); render(); });
 document.getElementById("btn-delete")?.addEventListener("click", () => {
-  if (selected.length === 0) return;
-  board.items = board.items.filter((it) => !selected.includes(it.id));
-  selected = [];
-  save(); render();
+  deleteSelected();
 });
+document.getElementById("btn-undo")?.addEventListener("click", () => { undo(); });
+document.getElementById("btn-redo")?.addEventListener("click", () => { redo(); });
 
 // ---------------------------------------------------------------- search
 
@@ -1650,7 +1807,9 @@ async function addUrlAt(at: Pt, url: string): Promise<void> {
       it.kind.UrlCard.icon = preview.icon;
       // A preview image makes the card taller: banner on top, text below.
       if (preview.image) it.size = { w: 320, h: 300 };
-      save(); render();
+      // A preview fill is background work, not a user change: it
+      // must not become its own undo step (see saveWithoutUndo).
+      saveWithoutUndo(); render();
     }
   } catch { /* domain-only card is fine */ }
 }
@@ -1777,6 +1936,9 @@ async function init(): Promise<void> {
     toast(`Could not load the board: ${String(err)}`);
     board = welcomeBoard(boardDir, 0, 0);
   }
+  // The loaded board is the first undo baseline: nothing before
+  // it is undoable, and the first saved change pushes it as step 1.
+  resetUndo();
   const pluginHost: PluginHost = {
     getBoard: () => board,
     getSelected: () => selected,
@@ -1836,6 +1998,10 @@ async function init(): Promise<void> {
     openSettings: () => setSettings(true),
     closeSettings: () => setSettings(false),
     isSettingsOpen: () => settingsOpen,
+    undo: () => undo(),
+    redo: () => redo(),
+    canUndo: () => undoStack.length > 0,
+    canRedo: () => redoStack.length > 0,
     groupSelection: () => groupSelected(),
     ungroupSelection: () => ungroupSelected(),
     deleteSelection: () => deleteSelected(),
@@ -1877,7 +2043,7 @@ async function refreshLinkPreviews(): Promise<void> {
         if (preview.description && current.kind.UrlCard.description !== preview.description) { current.kind.UrlCard.description = preview.description; changed = true; }
         if (preview.image && current.kind.UrlCard.image !== preview.image) { current.kind.UrlCard.image = preview.image; current.size = { w: 320, h: 300 }; changed = true; }
         if (preview.icon && current.kind.UrlCard.icon !== preview.icon) { current.kind.UrlCard.icon = preview.icon; changed = true; }
-        if (changed) { save(); render(); }
+        if (changed) { saveWithoutUndo(); render(); }
       } catch { /* keep the domain card */ }
     })());
   }
