@@ -44,6 +44,12 @@ import {
   resizeItem, select, tileColorFor, tint,
 } from "./model";
 import { welcomeBoard } from "./welcome";
+import * as pdfjsLib from "pdfjs-dist";
+import PdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?worker";
+// PDF.js renders PDF pages to canvas in the renderer, with its
+// parser in a worker so a large PDF never blocks the board.
+// The worker is bundled by Vite from the ?worker import above.
+pdfjsLib.GlobalWorkerOptions.workerPort = new PdfWorker();
 import {
   emitPluginEvent, getActiveView, getCardHtml, getCardRenderer, getPluginCardSearchText,
   getPluginTool, handlePluginCardAction, handlePluginCardDoubleClick, handlePluginShortcut,
@@ -129,6 +135,18 @@ let audioEl: HTMLAudioElement | null = null;
 let audioId: number | null = null;
 const audioDurations = new Map<string, number>();
 const audioProbing = new Set<string>();
+// PDF rendering, like audio durations: a PDF card is built as
+// HTML first, then its page is drawn into the canvas in it,
+// because PDF.js loads and renders asynchronously. The
+// document is cached by path, the current page by card id,
+// so flipping pages and re-rendering after a board change
+// do not reload the file, and a failed PDF falls back to
+// its name and size instead of an empty card.
+type PdfDoc = Awaited<ReturnType<typeof pdfjsLib.getDocument>["promise"]>;
+const pdfDocs = new Map<string, Promise<PdfDoc>>();
+const pdfFailed = new Set<string>();
+const pdfPages = new Map<number, number>();
+const pdfRendering = new Set<number>();
 function formatAudioTime(sec: number): string {
   if (!isFinite(sec) || sec < 0) return "–:––";
   const m = Math.floor(sec / 60);
@@ -162,6 +180,72 @@ function loadAudioDuration(id: number, path: string): void {
       if (durEl) durEl.textContent = formatAudioTime(probe.duration);
     }
   };
+}
+async function renderPdfPage(id: number, path: string): Promise<void> {
+  if (pdfRendering.has(id) || pdfFailed.has(path)) return;
+  pdfRendering.add(id);
+  let canvas: HTMLCanvasElement | null = null;
+  let renderedPage = 0;
+  try {
+    // The canvas is queried after the document loads, not
+    // before: loadPdfPage runs while cardHtml is still
+    // building the new HTML, so a canvas queried here
+    // would be the old render's, about to be discarded.
+    // Every await below yields past the synchronous render
+    // that puts the new canvas in the DOM.
+    // One shared promise per path, so two cards showing the
+    // same PDF wait on the same load instead of racing it.
+    let docPromise = pdfDocs.get(path);
+    if (!docPromise) {
+      docPromise = (async () => {
+        const res = await fetch(api.fileUrl(path));
+        if (!res.ok) throw new Error(`PDF fetch failed: ${res.status}`);
+        const data = await res.arrayBuffer();
+        return pdfjsLib.getDocument({ data }).promise;
+      })();
+      pdfDocs.set(path, docPromise);
+    }
+    const doc = await docPromise;
+    canvas = cardsEl.querySelector(`[data-pdf-canvas="${id}"]`) as HTMLCanvasElement | null;
+    if (!canvas) return;
+    const pageNum = pdfPages.get(id) ?? 1;
+    renderedPage = pageNum;
+    const page = await doc.getPage(Math.max(1, Math.min(pageNum, doc.numPages)));
+    // Render at device scale, then let CSS fit the canvas to
+    // its box: a portrait page in a wide card letterboxes,
+    // a landscape page fills it, and zoom scales the layer.
+    const viewport = page.getViewport({ scale: 2 });
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    await page.render({ canvas, viewport }).promise;
+    const countEl = cardsEl.querySelector(`[data-pdf-count="${id}"]`);
+    if (countEl) countEl.textContent = `${pageNum} / ${doc.numPages}`;
+    const prev = cardsEl.querySelector(`[data-action="pdf-prev"][data-id="${id}"]`) as HTMLButtonElement | null;
+    const next = cardsEl.querySelector(`[data-action="pdf-next"][data-id="${id}"]`) as HTMLButtonElement | null;
+    if (prev) prev.disabled = pageNum <= 1;
+    if (next) next.disabled = pageNum >= doc.numPages;
+  } catch {
+    pdfFailed.add(path);
+    const wrap = cardsEl.querySelector(`[data-pdf-wrap="${id}"]`);
+    if (wrap) wrap.textContent = "Could not render this PDF. Double-click to open it.";
+  } finally {
+    pdfRendering.delete(id);
+    // If a board render replaced the canvas while this page
+    // was loading, the new canvas is still blank, and if
+    // the user flipped pages while this render was in
+    // flight, the page shown is now stale: render again.
+    const current = cardsEl.querySelector(`[data-pdf-canvas="${id}"]`) as HTMLCanvasElement | null;
+    const stale = renderedPage !== 0 && (pdfPages.get(id) ?? 1) !== renderedPage;
+    if (current && (current !== canvas || stale) && !pdfFailed.has(path)) void renderPdfPage(id, path);
+  }
+}
+function loadPdfPage(id: number, path: string): void {
+  // Fire and forget from cardHtml, like loadAudioDuration:
+  // the canvas is already in the DOM, renderPdfPage fills
+  // it, and a later render re-runs this for the new canvas.
+  void renderPdfPage(id, path);
 }
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 let wheelSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -253,9 +337,9 @@ function save(): void {
 //   saveWithoutUndo), or adding one link would take two undos:
 //   one to un-fill its preview, one to remove the card.
 // - Clicking a card brings it to the front, and the move drag's
-//   mouseup saves even when nothing moved, so that stacking
-//   change can itself become an undo step. It is cosmetic only:
-//   undoing it just puts the card back where it was in the order.
+//   mouseup saves even when nothing moved, but through
+//   saveWithoutUndo, so that stacking change never becomes
+//   an undo step on its own.
 // - 50 steps, oldest dropped. Items are paths, not image bytes,
 //   so a snapshot is board JSON, not media.
 const UNDO_LIMIT = 50;
@@ -312,10 +396,12 @@ function captureUndoStep(): void {
 }
 
 function saveWithoutUndo(): void {
-  // For background changes the user did not make, like a link
-  // preview filling in: the file still saves, but no undo step
-  // is created, and lastSnapshot moves to the new content, so
-  // the next user change is still one step from here.
+  // For changes that should save but not become an undo step:
+  // background changes the user did not make, like a link
+  // preview filling in, and a click's stacking change. The
+  // file still saves, but no undo step is created, and
+  // lastSnapshot moves to the new content, so the next user
+  // change is still one step from here.
   suppressUndoCapture = true;
   try {
     save();
@@ -626,9 +712,32 @@ function cardHtml(item: Item, plain = false): string {
     const { path, size_bytes } = item.kind.PdfCard;
     const name = path.split("/").pop() ?? path;
     const kb = Math.round(num(size_bytes, 0) / 1024);
-    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner row" style="padding:12px">
-      <div class="tile" style="background:${tint("#E63946", 0.88)};color:#E63946;font-size:13px">PDF</div>
-      <div class="col"><div class="title" style="font-size:14px">${escapeHtml(elide(name, ww - 92, 14, true))}</div><div class="sub" style="font-size:12px">${kb} KB</div></div></div></div>`;
+    const tile = `<div class="tile" style="background:${tint("#E63946", 0.88)};color:#E63946;font-size:13px">PDF</div>
+      <div class="col"><div class="title" style="font-size:14px">${escapeHtml(elide(name, ww - 92, 14, true))}</div><div class="sub" style="font-size:12px">${kb} KB</div></div>`;
+    // Plain rendering (slides, library, export) stays a tile:
+    // a canvas drawn by PDF.js does not survive as HTML, so
+    // a rendered page there would export as a blank box.
+    if (plain) {
+      return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner row" style="padding:12px">${tile}</div></div>`;
+    }
+    if (pdfFailed.has(path)) {
+      return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner row" style="padding:12px">${tile}</div></div>`;
+    }
+    loadPdfPage(id, path);
+    const pageNum = pdfPages.get(id) ?? 1;
+    if (hh < 200) {
+      // A short card, like the old 96px tile: a small page
+      // preview on the left, name and page count on the right,
+      // the same row shape as audio and video cards.
+      return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner row" style="padding:12px" data-pdf-wrap="${id}">
+        <div style="width:56px;height:${hh - 24}px;flex:none;background:#f5f5f7;border-radius:6px;overflow:hidden"><canvas data-pdf-canvas="${id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
+        <div class="col"><div class="title" style="font-size:14px">${escapeHtml(elide(name, ww - 92, 14, true))}</div><div class="sub" style="font-size:12px">${kb} KB · <span data-pdf-count="${id}">…</span></div></div></div></div>`;
+    }
+    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px" data-pdf-wrap="${id}">
+      <div style="flex:1 1 auto;min-height:0;background:#f5f5f7;border-radius:8px;overflow:hidden"><canvas data-pdf-canvas="${id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
+      <div style="display:flex;align-items:center;gap:8px"><div class="title" style="font-size:14px;flex:1 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(name)}</div>
+      <button class="pdf-nav" data-action="pdf-prev" data-id="${id}" title="Previous page" aria-label="Previous page" ${pageNum <= 1 ? "disabled" : ""}>‹</button><span class="sub" data-pdf-count="${id}">…</span><button class="pdf-nav" data-action="pdf-next" data-id="${id}" title="Next page" aria-label="Next page">›</button></div>
+      <div class="sub" style="font-size:12px">${kb} KB</div></div></div>`;
   }
   if ("Swatch" in item.kind) {
     const { hex } = item.kind.Swatch;
@@ -853,10 +962,16 @@ function applyStacking(): void {
 function startTextEdit(id: number): void {
   const item = boardGet(board, id);
   if (!item || !("Text" in item.kind)) return;
-  editingId = id;
+  // Render first, then mark the note as editing: render() skips
+  // the editing note, so setting editingId before it would
+  // leave a brand-new note with no card in the DOM to edit —
+  // double-clicking empty space created a note that only
+  // appeared after the next click. A later render preserves
+  // the textarea through editingHtml, as before.
   render();
+  editingId = id;
   const card = cardsEl.querySelector(`[data-id="${id}"]`);
-  if (!card) return;
+  if (!card) { editingId = null; return; }
   const { size } = item.kind.Text;
   const ta = document.createElement("textarea");
   ta.className = "note-edit";
@@ -1192,7 +1307,13 @@ window.addEventListener("mouseup", (e: MouseEvent) => {
   } else if (d.kind === "marquee") {
     selected = marquee(board, d.start, world);
   } else if (d.kind === "move" || d.kind === "resize") {
-    save();
+    // A drag that actually moved is a board change and an undo
+    // step. A click that never moved only brought a card to the
+    // front: that stacking change still saves to disk, but it
+    // must not become an undo step, or every click would take
+    // a Ctrl+Z to get past before the real change undoes.
+    if (d.moved) save();
+    else saveWithoutUndo();
   }
   // A move/resize that actually moved is safe to rebuild once at
   // the end (it refreshes truncation and connector endpoints with
@@ -1282,6 +1403,18 @@ cardsEl.addEventListener("click", (e: MouseEvent) => {
   if (!it) return;
   if (action === "open-link" && "UrlCard" in it.kind) openExternal(it.kind.UrlCard.url);
   if (action === "play-audio" && "Audio" in it.kind) toggleAudio(id, it.kind.Audio.path);
+  if ((action === "pdf-prev" || action === "pdf-next") && "PdfCard" in it.kind) {
+    const pdfPath = it.kind.PdfCard.path;
+    const docPromise = pdfDocs.get(pdfPath);
+    if (!docPromise) return;
+    void docPromise.then((doc) => {
+      const cur = pdfPages.get(id) ?? 1;
+      const nextPage = action === "pdf-prev" ? cur - 1 : cur + 1;
+      if (nextPage < 1 || nextPage > doc.numPages) return;
+      pdfPages.set(id, nextPage);
+      void renderPdfPage(id, pdfPath);
+    });
+  }
 
   if (action === "play-video" && "Video" in it.kind) openExternal(it.kind.Video.source);
 });
@@ -1835,7 +1968,10 @@ async function dropPaths(paths: string[], atScreen: Pt): Promise<void> {
         const stored = await api.embedFile(path);
         const size = await api.fileSize(stored).catch(() => 0);
         const id = allocId();
-        board.items.push({ id, pos: at, size: { w: 260, h: 96 }, group: null, kind: { PdfCard: { path: stored, size_bytes: size } } });
+        // Tall enough to show a page, not just a tile: the
+        // page preview needs height, and a user can still
+        // resize it smaller, where it falls back to a row.
+        board.items.push({ id, pos: at, size: { w: 260, h: 360 }, group: null, kind: { PdfCard: { path: stored, size_bytes: size } } });
         added++;
       } else if (kind === "audio") {
         const stored = await api.embedFile(path);
@@ -1957,6 +2093,19 @@ async function init(): Promise<void> {
       if (patch.size) it.size = patch.size;
       if (patch.group !== undefined) it.group = patch.group;
       if (patch.data !== undefined && "Plugin" in it.kind) it.kind.Plugin.data = patch.data;
+      save(); render();
+      return true;
+    },
+    moveItem: (id, toIndex) => {
+      // Board order is the order things paint and, for frames,
+      // the slide order, so moving an item here reorders it
+      // everywhere that order matters, and saves like any
+      // other board change, so it is undoable.
+      const from = board.items.findIndex((it) => it.id === id);
+      if (from < 0) return false;
+      const [it] = board.items.splice(from, 1);
+      const clamped = Math.max(0, Math.min(toIndex, board.items.length));
+      board.items.splice(clamped, 0, it);
       save(); render();
       return true;
     },

@@ -37,6 +37,7 @@ The build is unsigned, so a recipient must right-click it and choose Open the fi
 - **Select:** click an item, `Shift`-click to add to the selection, or drag a box around several items. Dragging one member of a group moves the whole group. Clicking a card brings it to the front.
 - **Find:** `Tab` steps through elements in board order and centres each one. `Shift + Tab` steps backwards. Pen strokes and connectors are skipped.
 - **Text:** double-click empty space for a new note, double-click a note to edit it. `Esc` commits, and the note renders markdown: headings, bullets, numbered lists, quotes, code blocks, bold, italic, code, links and strikethrough.
+- **PDF:** a PDF card shows its pages, one at a time, with previous/next buttons and a page count. Double-click still opens it outside Bowerbird. New PDFs are dropped at a tall size so the page is readable; a short card shows a small page preview instead.
 - **Pen:** drag on the canvas to sketch.
 - **Connector:** drag from one item to another, or from empty space to empty space. Ends anchored to items follow them when they move.
 - **Resize:** drag the small handle at a card's bottom-right corner. Connectors have no handle: move the cards they connect instead.
@@ -52,7 +53,7 @@ Shortcuts in full are in Settings, under General.
 Dropped files are copied into an `assets` folder next to your board file, so deleting the original later never breaks the card. Drop several at once and they fan out from the drop point.
 
 - Images: PNG, JPG, GIF, WebP, BMP, SVG
-- PDFs: a card with the name and size. It opens in your system viewer on double-click.
+- PDFs: a card showing its pages, with previous/next buttons and a page count. It opens in your system viewer on double-click.
 - Audio: MP3, WAV, FLAC, OGG, M4A. It plays in place, with a play button, the file name, time and a seek control.
 - Video: MP4, MOV, WebM, MKV, AVI. Local MP4, WebM and M4V files play in place. Other local files and video links open outside Bowerbird.
 - Text: `.txt` and `.md` files become notes. A file whose whole content is a colour code, like `#FF6B35`, becomes a swatch instead.
@@ -113,7 +114,6 @@ npm run build
 ## Not yet
 
 - No system-wide global hotkey. That needs an OS-level hook, with accessibility permission on macOS.
-- No PDF pages rendered inside the canvas. A PDF card opens in your system viewer.
 - No multi-board switching.
 
 ## License

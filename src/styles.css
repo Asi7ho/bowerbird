@@ -178,6 +178,13 @@ button { font-family: inherit; }
 .card .col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .card .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card .sub { color: var(--grey); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card .pdf-nav {
+  flex: none; border: none; background: transparent; border-radius: 6px;
+  width: 24px; height: 24px; cursor: pointer; font-size: 16px; color: var(--ink);
+}
+.card .pdf-nav:hover { background: rgba(0, 0, 0, 0.05); }
+.card .pdf-nav:disabled { opacity: 0.35; cursor: default; }
+.card .pdf-nav:disabled:hover { background: transparent; }
 .card .desc {
   color: var(--grey); display: -webkit-box; -webkit-line-clamp: 2;
   -webkit-box-orient: vertical; overflow: hidden; font-size: 12px; line-height: 1.45;

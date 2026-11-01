@@ -195,6 +195,12 @@
 .plugin-panel-body .pres-panel-icon-btn:hover {
   background: rgba(0, 0, 0, 0.05); color: var(--ink);
 }
+.plugin-panel-body .pres-panel-icon-btn:disabled {
+  opacity: 0.35; cursor: default;
+}
+.plugin-panel-body .pres-panel-icon-btn:disabled:hover {
+  background: transparent; color: var(--grey);
+}
 
 /* Draw mode overlay, scoped to this plugin's overlay.
    The draw layer covers the board and takes clicks, so

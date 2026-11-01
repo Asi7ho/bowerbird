@@ -160,6 +160,7 @@ export interface PluginHost {
   setSelected: (ids: number[]) => void;
   addItem: (kind: Kind, pos: Pt, size: Size) => number;
   updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown }) => boolean;
+  moveItem: (id: number, toIndex: number) => boolean;
   removeItem: (id: number) => boolean;
   renderBoardCard: (id: number) => string | null;
   save: () => void;
@@ -206,6 +207,7 @@ export interface PluginContext {
     addItem: (kind: Kind, pos: Pt, size: Size) => number;
     addPluginCard: (kind: string, data: unknown, pos: Pt, size: Size) => number;
     updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown }) => boolean;
+    moveItem: (id: number, toIndex: number) => boolean;
     removeItem: (id: number) => boolean;
     save: () => void;
     render: () => void;
@@ -511,6 +513,10 @@ function createContext(manifest: PluginManifest): PluginContext {
         }
         const ok = host!.updateItem(id, patch);
         return ok;
+      },
+      moveItem: (id: number, toIndex: number) => {
+        require("board:write");
+        return host!.moveItem(id, toIndex);
       },
       removeItem: (id: number) => {
         require("board:write");

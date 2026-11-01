@@ -20,13 +20,14 @@
 //
 // What plays: the panel's Play button, a slide row's play
 // button, or double-clicking a frame on the board. Slides
-// play in frame creation order — the order frames appear
-// on the board — and a new frame always goes last, so
-// creating slides in presentation order is creating them
-// in play order. Clicking a frame to move it never reorders
-// its slides: core never brings a frame to the front, so
-// frame order only changes when a frame is created or
-// deleted.
+// play in frame board order, and a new frame always goes
+// last, so creating slides in presentation order is
+// creating them in play order. The panel's up and down
+// buttons move a frame in board order to reorder it.
+// Clicking a frame to move it never reorders its slides:
+// core never brings a frame to the front, so frame order
+// only changes when a frame is created, deleted or moved
+// with those buttons.
 //
 // What a slide looks like when played: almost a
 // screenshot of the frame area, scaled uniformly to fit
@@ -638,6 +639,43 @@ function updatePanel() {
     const name = document.createElement("span");
     name.className = "pres-panel-name";
     name.textContent = `Slide ${i + 1}`;
+    // Reordering is moving the frame in board order, which
+    // is the slide order: slide numbers, play order and
+    // export order all follow from it, so nothing else
+    // needs storing. Moving up puts the frame before the
+    // previous frame; moving down puts it after the next
+    // one (moveItem inserts at the given index after
+    // removing it, so the next frame's original index is
+    // exactly the spot after it). It saves like any board
+    // change, so reordering is undoable.
+    const move = (delta) => {
+      const all = apiRef.board.getItems();
+      const frames = all.filter(isFrameItem);
+      const target = frames[i + delta];
+      if (!target) return;
+      const targetIndex = all.findIndex((it) => it.id === target.id);
+      apiRef.board.moveItem(slide.frame.id, targetIndex);
+    };
+    const up = document.createElement("button");
+    up.className = "pres-panel-icon-btn";
+    up.textContent = "↑";
+    up.title = `Move Slide ${i + 1} up`;
+    up.setAttribute("aria-label", `Move Slide ${i + 1} up`);
+    up.disabled = i === 0;
+    up.addEventListener("click", (e) => {
+      e.stopPropagation();
+      move(-1);
+    });
+    const down = document.createElement("button");
+    down.className = "pres-panel-icon-btn";
+    down.textContent = "↓";
+    down.title = `Move Slide ${i + 1} down`;
+    down.setAttribute("aria-label", `Move Slide ${i + 1} down`);
+    down.disabled = i === slides.length - 1;
+    down.addEventListener("click", (e) => {
+      e.stopPropagation();
+      move(1);
+    });
     const play = document.createElement("button");
     play.className = "pres-panel-icon-btn";
     play.textContent = "▶";
@@ -656,7 +694,7 @@ function updatePanel() {
       e.stopPropagation();
       apiRef.board.removeItem(slide.frame.id);
     });
-    row.append(name, play, del);
+    row.append(name, up, down, play, del);
     panelList.appendChild(row);
   });
 }

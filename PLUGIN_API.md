@@ -86,6 +86,7 @@ Enable and disable are per plugin, in Settings → Plugins. Disabling unregister
 - `removeItem(id)` — requires `board:write`.
 - `groupSelected()`, `ungroupSelected()`, `deleteSelected()` — group, ungroup or delete the current selection, exactly as Ctrl+G, Ctrl+U and Delete do, including group ids from `board.next_group`. Requires `board:write`. Returns false when there is nothing to do.
 - `undo()`, `redo()` — undo or redo one step, exactly as Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z do. Requires `board:write`. Returns false when there is nothing to undo or redo. `canUndo()`, `canRedo()` need no permission.
+- `moveItem(id, toIndex)` — move an item to a position in board order, which is also paint order and, for frames, slide order. Requires `board:write`. Returns false when the item does not exist. It saves like any board change, so it is undoable.
 - `save()` — save through the core's save path, including the demo-mode no-op. Most board methods save automatically. Call this after a batch of changes made without a method call. Requires `board:write`.
 - `render()` — re-render the board.
 
