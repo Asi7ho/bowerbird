@@ -179,27 +179,52 @@
 .plugin-panel-body .pres-panel-row {
   display: flex; align-items: center; gap: 8px;
   border-bottom: 1px solid var(--separator);
-  padding: 8px 0; cursor: pointer;
+  padding: 8px 4px; cursor: pointer; border-radius: 8px;
 }
 .plugin-panel-body .pres-panel-row:hover {
   background: var(--fill);
 }
+.plugin-panel-body .pres-panel-row.active {
+  background: var(--fill);
+}
 .plugin-panel-body .pres-panel-name {
   flex: 1 1 auto; font-size: 13px; font-weight: 600; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+/* A slide's thumbnail: its frame as a small white box,
+   with each card inside drawn as a rectangle in its
+   frame-relative position. Swatches keep their colour,
+   everything else is a quiet grey, so the row reads as
+   the slide's layout at a glance, not just its number.
+   An empty slide shows an empty box. */
+.plugin-panel-body .pres-panel-thumb {
+  flex: none; width: 56px; height: 36px; position: relative;
+  background: #fff; border: 1px solid var(--separator);
+  border-radius: 6px; overflow: hidden;
+}
+.plugin-panel-body .pres-panel-thumb-rect {
+  position: absolute; background: var(--fill);
+  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 1px;
 }
 .plugin-panel-body .pres-panel-icon-btn {
   flex: none; border: none; background: transparent;
-  border-radius: 6px; padding: 2px 6px; cursor: pointer;
-  font-size: 14px; color: var(--grey);
+  border-radius: 7px; width: 28px; height: 28px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--ink);
+}
+.plugin-panel-body .pres-panel-icon-btn svg {
+  flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor;
+  stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  display: block;
 }
 .plugin-panel-body .pres-panel-icon-btn:hover {
-  background: rgba(0, 0, 0, 0.05); color: var(--ink);
+  background: rgba(0, 0, 0, 0.05);
 }
 .plugin-panel-body .pres-panel-icon-btn:disabled {
   opacity: 0.35; cursor: default;
 }
 .plugin-panel-body .pres-panel-icon-btn:disabled:hover {
-  background: transparent; color: var(--grey);
+  background: transparent;
 }
 
 /* Draw mode overlay, scoped to this plugin's overlay.

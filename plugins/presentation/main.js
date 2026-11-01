@@ -351,6 +351,7 @@ function goTo(next) {
   if (clamped === index) return;
   index = clamped;
   renderSlide();
+  if (panelList) updatePanel();
 }
 
 function renderSlide() {
@@ -628,6 +629,7 @@ function updatePanel() {
   slides.forEach((slide, i) => {
     const row = document.createElement("div");
     row.className = "pres-panel-row";
+    if (apiRef.view.getView() === "presentation" && i === index) row.classList.add("active");
     row.title = "Show this slide on the board";
     row.addEventListener("click", () => {
       if (apiRef.view.getView() === "presentation") {
@@ -636,6 +638,31 @@ function updatePanel() {
         apiRef.view.centreOn(slide.frame.id);
       }
     });
+    // Thumbnail: the frame's cards as rectangles in
+    // frame-relative positions, so the row shows the
+    // slide's layout, not just its number.
+    const thumb = document.createElement("div");
+    thumb.className = "pres-panel-thumb";
+    thumb.setAttribute("aria-hidden", "true");
+    const frame = slide.frame;
+    for (const it of slide.cards) {
+      const left = Math.max(it.pos.x, frame.pos.x) - frame.pos.x;
+      const top = Math.max(it.pos.y, frame.pos.y) - frame.pos.y;
+      const right = Math.min(it.pos.x + it.size.w, frame.pos.x + frame.size.w) - frame.pos.x;
+      const bottom = Math.min(it.pos.y + it.size.h, frame.pos.y + frame.size.h) - frame.pos.y;
+      if (right <= left || bottom <= top) continue;
+      const rect = document.createElement("div");
+      rect.className = "pres-panel-thumb-rect";
+      rect.style.left = `${(left / frame.size.w) * 100}%`;
+      rect.style.top = `${(top / frame.size.h) * 100}%`;
+      rect.style.width = `${((right - left) / frame.size.w) * 100}%`;
+      rect.style.height = `${((bottom - top) / frame.size.h) * 100}%`;
+      if ("Swatch" in it.kind && typeof it.kind.Swatch.hex === "string" && /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(it.kind.Swatch.hex)) {
+        rect.style.background = it.kind.Swatch.hex;
+        rect.style.borderColor = "rgba(0,0,0,0.08)";
+      }
+      thumb.appendChild(rect);
+    }
     const name = document.createElement("span");
     name.className = "pres-panel-name";
     name.textContent = `Slide ${i + 1}`;
@@ -658,7 +685,7 @@ function updatePanel() {
     };
     const up = document.createElement("button");
     up.className = "pres-panel-icon-btn";
-    up.textContent = "↑";
+    up.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>';
     up.title = `Move Slide ${i + 1} up`;
     up.setAttribute("aria-label", `Move Slide ${i + 1} up`);
     up.disabled = i === 0;
@@ -668,7 +695,7 @@ function updatePanel() {
     });
     const down = document.createElement("button");
     down.className = "pres-panel-icon-btn";
-    down.textContent = "↓";
+    down.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
     down.title = `Move Slide ${i + 1} down`;
     down.setAttribute("aria-label", `Move Slide ${i + 1} down`);
     down.disabled = i === slides.length - 1;
@@ -678,7 +705,7 @@ function updatePanel() {
     });
     const play = document.createElement("button");
     play.className = "pres-panel-icon-btn";
-    play.textContent = "▶";
+    play.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/></svg>';
     play.title = `Play from Slide ${i + 1}`;
     play.setAttribute("aria-label", `Play from Slide ${i + 1}`);
     play.addEventListener("click", (e) => {
@@ -687,14 +714,14 @@ function updatePanel() {
     });
     const del = document.createElement("button");
     del.className = "pres-panel-icon-btn";
-    del.textContent = "×";
+    del.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>';
     del.title = `Delete Slide ${i + 1}`;
     del.setAttribute("aria-label", `Delete Slide ${i + 1}`);
     del.addEventListener("click", (e) => {
       e.stopPropagation();
       apiRef.board.removeItem(slide.frame.id);
     });
-    row.append(name, up, down, play, del);
+    row.append(thumb, name, up, down, play, del);
     panelList.appendChild(row);
   });
 }
@@ -1193,6 +1220,7 @@ function activate(api) {
         index = 0;
       }
       if (viewBuilt) renderSlide();
+      if (panelList) updatePanel();
     },
     onHide: () => {
       window.removeEventListener("keydown", onKeyDown, true);
