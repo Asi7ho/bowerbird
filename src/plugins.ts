@@ -169,6 +169,12 @@ export interface PluginHost {
   setCamera: (cam: Camera) => void;
   centreOn: (id: number) => void;
   toast: (msg: string) => void;
+  openSettings: () => void;
+  closeSettings: () => void;
+  isSettingsOpen: () => boolean;
+  groupSelection: () => boolean;
+  ungroupSelection: () => boolean;
+  deleteSelection: () => boolean;
   // DOM the plugin system is allowed to manage. The core passes
   // these elements in; plugins never query core DOM themselves.
   toolbarToolsEl: HTMLElement;
@@ -200,6 +206,9 @@ export interface PluginContext {
     save: () => void;
     render: () => void;
     commitEditing: () => void;
+    groupSelected: () => boolean;
+    ungroupSelected: () => boolean;
+    deleteSelected: () => boolean;
   };
   window: {
     hide: () => Promise<void>;
@@ -222,6 +231,13 @@ export interface PluginContext {
     registerTool: (def: PluginToolDef) => void;
     registerPanel: (def: PluginPanelDef) => void;
     registerCommand: (def: PluginCommandDef) => void;
+    listCommands: () => Array<{ pluginId: string; pluginName: string; id: string; title: string }>;
+    listTools: () => Array<{ pluginId: string; pluginName: string; id: string; title: string }>;
+    runCommand: (pluginId: string, commandId: string) => Promise<void>;
+    setTool: (id: string) => void;
+    openSettings: () => void;
+    closeSettings: () => void;
+    isSettingsOpen: () => boolean;
     registerView: (def: PluginViewDef) => void;
     registerOverlay: (def: PluginOverlayDef) => void;
     registerSettingsSection: (def: PluginSettingsSectionDef) => void;
@@ -502,6 +518,18 @@ function createContext(manifest: PluginManifest): PluginContext {
         require("board:write");
         host!.commitEditing();
       },
+      groupSelected: () => {
+        require("board:write");
+        return host!.groupSelection();
+      },
+      ungroupSelected: () => {
+        require("board:write");
+        return host!.ungroupSelection();
+      },
+      deleteSelected: () => {
+        require("board:write");
+        return host!.deleteSelection();
+      },
     },
     window: {
       hide: async () => {
@@ -546,6 +574,18 @@ function createContext(manifest: PluginManifest): PluginContext {
       registerTool: (def: PluginToolDef) => registerTool(pluginId, def),
       registerPanel: (def: PluginPanelDef) => registerPanel(pluginId, def),
       registerCommand: (def: PluginCommandDef) => registerCommand(pluginId, def),
+      // Commands are user actions, not code: listing and running
+      // them is what Settings' Run buttons already do, so a
+      // palette plugin can do the same without a permission.
+      // A command still runs with its own plugin's API object,
+      // so it cannot do anything its plugin could not do itself.
+      listCommands: () => listPluginCommands().map((c) => ({ pluginId: c.pluginId, pluginName: c.pluginName, id: c.id, title: c.title })),
+      listTools: () => Array.from(tools.values()).map((t) => ({ pluginId: t.pluginId, pluginName: loaded.get(t.pluginId)?.manifest.name ?? t.pluginId, id: t.fullId, title: t.title })),
+      runCommand: (pid: string, cid: string) => runPluginCommand(pid, cid),
+      setTool: (id: string) => host!.setTool(id),
+      openSettings: () => host!.openSettings(),
+      closeSettings: () => host!.closeSettings(),
+      isSettingsOpen: () => host!.isSettingsOpen(),
       registerView: (def: PluginViewDef) => {
         require("view:replace");
         registerView(pluginId, def);

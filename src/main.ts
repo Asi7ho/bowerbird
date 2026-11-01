@@ -757,6 +757,36 @@ function setTool(t: Tool): void {
   render();
 }
 
+// Selection actions, shared by the keyboard shortcuts and by the
+// plugin API (so a palette plugin can group, ungroup or delete
+// exactly as Ctrl+G / Ctrl+U / Delete do, instead of reimplementing
+// them and drifting — in particular, group ids must come from
+// board.next_group, or a later core group can collide with them).
+function groupSelected(): boolean {
+  if (selected.length < 2) return false;
+  board.next_group += 1;
+  const g = board.next_group;
+  for (const it of board.items) if (selected.includes(it.id)) it.group = g;
+  save(); render();
+  return true;
+}
+
+function ungroupSelected(): boolean {
+  const groups = new Set(selected.map((id) => boardGet(board, id)?.group).filter((g): g is number => g !== null && g !== undefined));
+  if (groups.size === 0) return false;
+  for (const it of board.items) if (it.group !== null && groups.has(it.group)) it.group = null;
+  save(); render();
+  return true;
+}
+
+function deleteSelected(): boolean {
+  if (selected.length === 0) return false;
+  board.items = board.items.filter((it) => !selected.includes(it.id));
+  selected = [];
+  save(); render();
+  return true;
+}
+
 function cornerHit(id: number, world: Pt): boolean {
   const cam = board.camera;
   const it = boardGet(board, id);
@@ -1236,23 +1266,12 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   else if (e.key.toLowerCase() === "a" && !ctrl) setTool("connector");
   else if (e.key.toLowerCase() === "g" && ctrl) {
     e.preventDefault();
-    if (selected.length >= 2) {
-      board.next_group += 1;
-      const g = board.next_group;
-      for (const it of board.items) if (selected.includes(it.id)) it.group = g;
-      save(); render();
-    }
+    groupSelected();
   } else if (e.key.toLowerCase() === "u" && ctrl) {
     e.preventDefault();
-    const groups = new Set(selected.map((id) => boardGet(board, id)?.group).filter((g): g is number => g !== null && g !== undefined));
-    for (const it of board.items) if (it.group !== null && groups.has(it.group)) it.group = null;
-    save(); render();
+    ungroupSelected();
   } else if (e.key === "Backspace" || e.key === "Delete") {
-    if (selected.length > 0) {
-      board.items = board.items.filter((it) => !selected.includes(it.id));
-      selected = [];
-      save(); render();
-    }
+    deleteSelected();
   } else if (e.key === "+" || e.key === "=") { zoomCentre(1.2); save(); render(); }
   else if (e.key === "-") { zoomCentre(1 / 1.2); save(); render(); }
   else if (e.key === "0") { board.camera = { x: 0, y: 0, zoom: 1 }; save(); render(); }
@@ -1455,6 +1474,7 @@ function renderPluginSettings(): void {
     "visual-library": "The board's cards, as a library.",
     palette: "Colour palettes to place as swatches.",
     presentation: "Slides on the board, played in order.",
+    "command-palette": "Every command, from one place.",
   };
   let html = "";
   for (const lp of plugins) {
@@ -1813,6 +1833,12 @@ async function init(): Promise<void> {
     },
     toast: (msg: string) => toast(msg),
     commitEditing: () => commitEditingIfAny(),
+    openSettings: () => setSettings(true),
+    closeSettings: () => setSettings(false),
+    isSettingsOpen: () => settingsOpen,
+    groupSelection: () => groupSelected(),
+    ungroupSelection: () => ungroupSelected(),
+    deleteSelection: () => deleteSelected(),
     toolbarToolsEl: document.getElementById("tools") as HTMLElement,
     panelsEl: document.getElementById("plugin-panels") as HTMLElement,
     panelsToggleEl: document.getElementById("panels-toggle") as HTMLElement,

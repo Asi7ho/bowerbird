@@ -84,6 +84,7 @@ Enable and disable are per plugin, in Settings → Plugins. Disabling unregister
 - `addPluginCard(kind, data, pos, size)` — add one of this plugin's own card kinds. Requires `board:write`.
 - `updateItem(id, patch)` — patch `pos`, `size`, `group`, or, for a plugin card of this plugin, `data`. Requires `board:write`.
 - `removeItem(id)` — requires `board:write`.
+- `groupSelected()`, `ungroupSelected()`, `deleteSelected()` — group, ungroup or delete the current selection, exactly as Ctrl+G, Ctrl+U and Delete do, including group ids from `board.next_group`. Requires `board:write`. Returns false when there is nothing to do.
 - `save()` — save through the core's save path, including the demo-mode no-op. Most board methods save automatically. Call this after a batch of changes made without a method call. Requires `board:write`.
 - `render()` — re-render the board.
 
@@ -119,10 +120,14 @@ A view is a view of the board, not a separate app. Extra per-item data (depth, r
 - `registerTool({ id, title, icon, onMouseDown, onMouseUp })` — adds a button to the toolbar's tool segment, after the core tools. `icon` is an SVG string. The core rejects icons containing `<script>`. Tools in v1 are click tools, not drag tools: core drag state (pen strokes, connectors, marquee, move, resize) is not handed to plugins. A tool that needs dragging should be built as a card editor or a view for now. Tools that write need `board:write`.
 - `registerPanel({ id, title, icon, render })` — adds a panel to the right dock, full window height, as a mini tab in the dock's tab bar. The dock is core-owned: one panel is shown at a time, switched by its tab. There is no per-panel header. Tabs are icons only: `icon` is an SVG string, shown at 20px in a 32px tab. The title stays as the tab's tooltip and aria-label. A panel with no icon falls back to its title text in the tab. A close button in the tab bar hides the whole dock, and a panels toggle in the title bar shows it again with its tabs and active panel intact. `render(container)` is called when the panel is created. Listen to `api.events` and update your own panel DOM from there. Panels are contextual by convention: show content only when it is relevant, by calling `showPanel` / `hidePanel`, or by rendering an empty state. The core does not guess relevance for you.
 - `showPanel(id)`, `hidePanel(id)`, `getPanelElement(id)` — showing a panel also activates its tab. Hiding the active panel switches to another shown panel.
-- `registerCommand({ id, title, run })` — a command listed in Settings → Plugins under this plugin, with a Run button. There is no command palette in v1. Commands are run from Settings, from a panel, or from a tool. `run` may be async.
+- `registerCommand({ id, title, run })` — a command listed in Settings → Plugins under this plugin, with a Run button. Commands are run from Settings, from a panel, from a tool, or from the Command Palette plugin. `run` may be async.
+- `listCommands()` — every registered command: `[{ pluginId, pluginName, id, title }]`. `runCommand(pluginId, id)` runs one. Commands are user actions, not code: listing and running them is what Settings' Run buttons already do, so these need no permission, and a command still runs with its own plugin's API object.
+- `listTools()` — every registered plugin tool: `[{ pluginId, pluginName, id, title }]`, where `id` is the tool id `setTool` accepts. Core tools (Select, Pen, Arrow) are not plugin tools, so they are not listed; their ids are `"select"`, `"pen"` and `"connector"`.
+- `setTool(id)` — activate a core or plugin tool, as if its toolbar button was clicked.
+- `openSettings()`, `closeSettings()`, `isSettingsOpen()` — open, close, and check Settings.
 - `registerOverlay({ id, render })` — a full-board overlay layer that takes no clicks itself (pointer-events: none). Interactive elements inside it must set pointer-events: auto on themselves, so board clicks pass through everywhere except on your own controls. This is how a corner button can sit in a corner without blocking the board.
 - `registerSettingsSection({ id, title, render })` — a section in Settings → Plugin settings, rendered with its own heading when that tab is shown, and only for plugins that are on. Use it for app-level settings, like the Hide plugin's corner picker. Board-level controls belong in a panel, not here.
-- `registerShortcut({ key, title, run })` — a single-key shortcut, no modifiers, listed in Settings' shortcuts table with the plugin's name. Core keys win: the core checks its own shortcuts first, and a plugin shortcut is only tried for keys the core did not handle, with Ctrl/Cmd held keys excluded, so a plugin cannot steal Ctrl+G. Shortcuts do not fire in a textarea, in the search box, while editing, or while Settings is open.
+- `registerShortcut({ key, title, run })` — a single-key shortcut, no modifiers, listed in Settings' shortcuts table with the plugin's name. Core keys win: the core checks its own shortcuts first, and a plugin shortcut is only tried for keys the core did not handle, with Ctrl/Cmd held keys excluded, so a plugin cannot steal Ctrl+G. Shortcuts do not fire in a textarea, in the search box, while editing, or while Settings is open. A plugin that needs a modifier shortcut listens for it itself, in the capture phase, as the Command Palette does for Cmd/Ctrl+K, and must remove that listener in `deactivate`.
 - `registerView({ id, title, render, onShow, onHide })` — see View above. Requires `view:replace`.
 
 ### Cards — `api.cards`
@@ -203,6 +208,7 @@ Plugins in `plugins/` ship inside the app, are listed in Settings as "Built in",
 - `visual-library/` — the library is the board. Every board card except strokes and connectors, in board order, under a single Uncategorized section. Click duplicates at the camera centre, drag duplicates at the drop point. A view shows the same cards as a masonry board, and hides the panel while it is active.
 - `palette/` — a colour wheel panel. Pick a colour and five palettes are made from it live: Monochromatic, Analogous, Complementary, Split complementary, Triadic, five colours each. Click a colour, or the preview swatch, to place a 120x120 swatch at the camera centre. Drag to place it at the drop point. Placed swatches are ordinary board Swatch items, so they survive disabling the plugin. Needs only `board:write`.
 - `presentation/` — slides are frames on the board. Draw a rectangle around cards to make a slide, then play it. The panel lists slides in frame creation order, with Play and Draw a slide at the top, per-slide Play and Delete, and Export pinned to the very bottom, below a scrolling slide list. Double-clicking a frame on the board plays from that slide. Export downloads all slides, in order, as a single HTML file that shows one slide at a time, with arrows and a counter: images, audio and video are embedded, links become real links, and print CSS gives one slide per page. Playing shows a frame's area, scaled to fit, cropped to the frame: every card that overlaps it at all, every pen stroke and connector segment that enters it, drawing under cards. Video and audio play in place, a link opens outside, other clicks do nothing. Needs `board:write`, `view:replace` and `files:read`.
+- `command-palette/` — Cmd or Ctrl + K opens one place to run anything: plugin commands, jumping to a board card, switching views, picking a tool, and core actions like zoom, group, ungroup, delete, Settings, minimise and hide. Type to search, Arrow keys to move, Enter to run, Esc to close. Needs `board:write` and `window`.
 
 ## Frame cards
 
@@ -213,7 +219,7 @@ Frame cards should use kind `"slide"` by convention, so library-style plugins ca
 ## What is not in v1
 
 - No drag tools. Click tools only.
-- No command palette, no menu bar contributions.
+- No menu bar contributions. The command palette is a bundled plugin, not core, and it runs on the API above.
 - No undo for plugin actions.
 - No network access except through `fetchPreview`.
 - No main-process plugins, no Node access, no direct filesystem or shell access.
