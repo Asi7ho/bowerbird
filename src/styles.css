@@ -494,6 +494,24 @@ button { font-family: inherit; }
   border: none; background: #e63946; color: #fff; border-radius: 9px;
   padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 600; margin-right: 8px;
 }
+/* Backups: one row, last backup only — info on the left,
+   Restore on the right, in the same button style as the
+   plugin rows in Settings (white, hairline border, 9px
+   radius), not a browser-default button. The armed
+   confirm state reads red, like other confirm states. */
+#settings .backup-row {
+  display: flex; align-items: center; gap: 12px; margin: 6px 0;
+}
+#settings .backup-row .meta { flex: 1 1 auto; margin: 0; }
+#settings .backup-row button {
+  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
+  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
+  margin: 0; flex: none; color: var(--ink);
+}
+#settings .backup-row button:hover { background: #f5f5f7; }
+#settings .backup-row button.armed {
+  color: #e63946; border-color: rgba(230, 57, 70, 0.4);
+}
 
 
 #toast {

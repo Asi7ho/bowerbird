@@ -3053,35 +3053,36 @@ async function renderBackups(): Promise<void> {
     const m = /^(\d{4})-(\d{2})-(\d{2})-(\d{2})(\d{2})(\d{2})/.exec(n);
     return m ? `${m[1]}-${m[2]}-${m[3]} ${m[4]}:${m[5]}:${m[6]}` : n;
   };
+  // Only the last backup is shown: listBackups is newest
+  // first, so that is list[0]. Older backups are still
+  // kept on disk, but they are not listed here.
+  const b = list[0];
   el.innerHTML = "";
-  for (const b of list) {
-    const row = document.createElement("div");
-    row.className = "backup-row";
-    row.style.cssText = "display:flex;align-items:center;gap:12px;margin:6px 0";
-    const meta = document.createElement("span");
-    meta.className = "meta";
-    meta.style.flex = "1 1 auto";
-    meta.textContent = `${fmtName(b.name)} · ${b.items} items · ${fmtSize(b.size)}`;
-    const btn = document.createElement("button");
-    btn.textContent = "Restore";
-    let armed = false;
-    btn.addEventListener("click", async () => {
-      // Two-click confirm, like Delete all data: the first
-      // click arms the button, the second restores. The app
-      // never uses a native confirm dialog.
-      if (!armed) {
-        armed = true;
-        btn.textContent = "Confirm restore?";
-        setTimeout(() => { if (btn.isConnected) { armed = false; btn.textContent = "Restore"; } }, 4000);
-        return;
-      }
-      const ok = await restoreBoardBackup(b.name);
-      if (ok) { setSettings(false); void renderBackups(); }
-    });
-    row.appendChild(meta);
-    row.appendChild(btn);
-    el.appendChild(row);
-  }
+  const row = document.createElement("div");
+  row.className = "backup-row";
+  const meta = document.createElement("span");
+  meta.className = "meta";
+  meta.textContent = `${fmtName(b.name)} · ${b.items} items · ${fmtSize(b.size)}`;
+  const btn = document.createElement("button");
+  btn.textContent = "Restore";
+  let armed = false;
+  btn.addEventListener("click", async () => {
+    // Two-click confirm, like Delete all data: the first
+    // click arms the button, the second restores. The app
+    // never uses a native confirm dialog.
+    if (!armed) {
+      armed = true;
+      btn.textContent = "Confirm restore?";
+      btn.classList.add("armed");
+      setTimeout(() => { if (btn.isConnected) { armed = false; btn.textContent = "Restore"; btn.classList.remove("armed"); } }, 4000);
+      return;
+    }
+    const ok = await restoreBoardBackup(b.name);
+    if (ok) { setSettings(false); void renderBackups(); }
+  });
+  row.appendChild(meta);
+  row.appendChild(btn);
+  el.appendChild(row);
 }
 
 function renderBgOpts(): void {
