@@ -2179,7 +2179,10 @@ function searchDoc(item: Item): SearchDoc | null {
     let domain = "";
     try { domain = new URL(k.UrlCard.url).hostname.replace(/^www\./, ""); } catch { /* keep empty */ }
     const title = k.UrlCard.title ?? domain ?? k.UrlCard.url;
-    return { id: item.id, title, headings: "", body: [k.UrlCard.title ?? "", k.UrlCard.description ?? "", k.UrlCard.url, domain, "link"].join(" "), typeLabel: "Link", excerptText: [k.UrlCard.title ?? "", k.UrlCard.description ?? ""].filter(Boolean).join(" — ") || k.UrlCard.url, ext: "" };
+    // Excerpt is the description only: the title is
+    // already the row's title, so repeating it in the
+    // excerpt would duplicate the first line.
+    return { id: item.id, title, headings: "", body: [k.UrlCard.title ?? "", k.UrlCard.description ?? "", k.UrlCard.url, domain, "link"].join(" "), typeLabel: "Link", excerptText: k.UrlCard.description ?? "", ext: "" };
   }
   if ("Image" in k) return { id: item.id, title: fileName(k.Image.path), headings: "", body: `${fileName(k.Image.path)} image picture photo`, typeLabel: "Image", excerptText: fileName(k.Image.path), ext: extOf(k.Image.path) };
   if ("PdfCard" in k) {
@@ -2189,12 +2192,12 @@ function searchDoc(item: Item): SearchDoc | null {
   }
   if ("Audio" in k) {
     const lab = labels(k.Audio.path).join(" ");
-    return { id: item.id, title: fileName(k.Audio.path), headings: "", body: `${fileName(k.Audio.path)} audio sound music ${lab}`, typeLabel: "Audio", excerptText: lab ? `${fileName(k.Audio.path)} — ${lab}` : fileName(k.Audio.path), ext: extOf(k.Audio.path) };
+    return { id: item.id, title: fileName(k.Audio.path), headings: "", body: `${fileName(k.Audio.path)} audio sound music ${lab}`, typeLabel: "Audio", excerptText: lab, ext: extOf(k.Audio.path) };
   }
   if ("Video" in k) {
-    if (k.Video.remote) return { id: item.id, title: k.Video.source, headings: "", body: `${k.Video.source} video remote link`, typeLabel: "Video", excerptText: k.Video.source, ext: "" };
+    if (k.Video.remote) return { id: item.id, title: k.Video.source, headings: "", body: `${k.Video.source} video remote link`, typeLabel: "Video", excerptText: "", ext: "" };
     const lab = labels(k.Video.source).join(" ");
-    return { id: item.id, title: fileName(k.Video.source), headings: "", body: `${fileName(k.Video.source)} video ${lab}`, typeLabel: "Video", excerptText: lab ? `${fileName(k.Video.source)} — ${lab}` : fileName(k.Video.source), ext: extOf(k.Video.source) };
+    return { id: item.id, title: fileName(k.Video.source), headings: "", body: `${fileName(k.Video.source)} video ${lab}`, typeLabel: "Video", excerptText: lab, ext: extOf(k.Video.source) };
   }
   if ("Swatch" in k) {
     const name = colorNameForHex(k.Swatch.hex).split(" ")[0];
@@ -2297,7 +2300,13 @@ function renderSearchResults(): void {
   box.style.display = "block";
   box.innerHTML = searchRows.slice(0, 30).map((r, i) => {
     const sel = i === searchIndex ? " search-result-selected" : "";
-    return `<div class="search-result${sel}" data-id="${r.id}" data-index="${i}"><div class="search-result-top"><span class="search-result-type">${escapeHtml(r.typeLabel)}${r.isContext ? " · Visual" : ""}</span><span class="search-result-title">${escapeHtml(r.title)}</span></div><div class="search-result-excerpt">${r.excerptHtml}</div></div>`;
+    // No excerpt line when it would just repeat the
+    // title (a filename-only image, a link with no
+    // description, a video with no labels): a row with
+    // the same text twice reads like a bug, not a result.
+    const plain = r.excerptHtml.replace(/<[^>]+>/g, "").trim();
+    const excerpt = plain && plain !== r.title ? `<div class="search-result-excerpt">${r.excerptHtml}</div>` : "";
+    return `<div class="search-result${sel}" data-id="${r.id}" data-index="${i}"><div class="search-result-top"><span class="search-result-type">${escapeHtml(r.typeLabel)}${r.isContext ? " · Visual" : ""}</span><span class="search-result-title">${escapeHtml(r.title)}</span></div>${excerpt}</div>`;
   }).join("");
   const selected = box.querySelector(".search-result-selected") as HTMLElement | null;
   selected?.scrollIntoView({ block: "nearest" });
