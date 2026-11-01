@@ -70,12 +70,25 @@ import {
 } from "./model";
 import { welcomeBoard } from "./welcome";
 import MiniSearch from "minisearch";
-import * as pdfjsLib from "pdfjs-dist";
-import PdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?worker";
-// PDF.js renders PDF pages to canvas in the renderer, with its
-// parser in a worker so a large PDF never blocks the board.
-// The worker is bundled by Vite from the ?worker import above.
-pdfjsLib.GlobalWorkerOptions.workerPort = new PdfWorker();
+// PDF.js is loaded lazily, not statically imported: it
+// used to sit in the main chunk (533 KB) and every launch
+// paid for it, including boards with no PDFs. It is now
+// imported on first PDF render or PDF search indexing,
+// with its parser in a worker so a large PDF never
+// blocks the board. The worker is bundled by Vite from
+// the ?worker import below.
+let pdfjsLibPromise: Promise<typeof import("pdfjs-dist")> | null = null;
+async function loadPdfjs(): Promise<typeof import("pdfjs-dist")> {
+  if (!pdfjsLibPromise) {
+    pdfjsLibPromise = (async () => {
+      const lib = await import("pdfjs-dist");
+      const { default: PdfWorker } = await import("pdfjs-dist/build/pdf.worker.min.mjs?worker");
+      lib.GlobalWorkerOptions.workerPort = new PdfWorker();
+      return lib;
+    })();
+  }
+  return pdfjsLibPromise;
+}
 import {
   emitPluginEvent, getActiveView, getCardHtml, getCardRenderer, getPluginCardSearchText,
   getPluginTool, handlePluginCardAction, handlePluginCardDoubleClick, handlePluginShortcut,
@@ -173,7 +186,7 @@ const audioProbing = new Set<string>();
 // so flipping pages and re-rendering after a board change
 // do not reload the file, and a failed PDF falls back to
 // its name and size instead of an empty card.
-type PdfDoc = Awaited<ReturnType<typeof pdfjsLib.getDocument>["promise"]>;
+type PdfDoc = import("pdfjs-dist").PDFDocumentProxy;
 const pdfDocs = new Map<string, Promise<PdfDoc>>();
 const pdfFailed = new Set<string>();
 // Extracted PDF text for search, keyed by path. Filled
@@ -185,6 +198,7 @@ function getPdfDoc(path: string): Promise<PdfDoc> {
   let docPromise = pdfDocs.get(path);
   if (!docPromise) {
     docPromise = (async () => {
+      const pdfjsLib = await loadPdfjs();
       try {
         const res = await fetch(api.fileUrl(path));
         if (!res.ok) throw new Error(`PDF fetch failed: ${res.status}`);
@@ -217,6 +231,7 @@ function indexPdfForSearch(path: string): void {
         }
       }
       pdfSearchText.set(path, parts.join(" "));
+      boardSearchVersion++;
     } catch { /* search falls back to the filename */ }
     pdfSearchIndexing.delete(path);
     const input = document.getElementById("search-input") as HTMLInputElement | null;
@@ -419,6 +434,7 @@ function zoomCentre(factor: number): void {
 }
 const DEMO = api.isDemo === true;
 function save(): void {
+  boardSearchVersion++;
   // Undo capture runs before the demo return, so undo works in
   // demo too, in memory, even though nothing is written to disk.
   captureUndoStep();
@@ -470,6 +486,15 @@ interface UndoState {
 let undoStack: UndoState[] = [];
 let redoStack: UndoState[] = [];
 let lastSnapshot: UndoState | null = null;
+// The content key of lastSnapshot, cached alongside it:
+// recomputing it on every capture used to re-stringify the
+// whole board a second time per save, for a snapshot that
+// had not changed since the last capture.
+let lastSnapshotKey: string | null = null;
+function setLastSnapshot(s: UndoState): void {
+  lastSnapshot = s;
+  lastSnapshotKey = contentKey(s);
+}
 let suppressUndoCapture = false;
 
 function contentSnapshot(): UndoState {
@@ -499,7 +524,8 @@ function updateUndoButtons(): void {
 function captureUndoStep(): void {
   if (suppressUndoCapture) return;
   const cur = contentSnapshot();
-  if (lastSnapshot !== null && contentKey(lastSnapshot) === contentKey(cur)) return;
+  const curKey = contentKey(cur);
+  if (lastSnapshot !== null && lastSnapshotKey === curKey) return;
   if (lastSnapshot !== null) {
     undoStack.push(lastSnapshot);
     if (undoStack.length > UNDO_LIMIT) undoStack.shift();
@@ -508,10 +534,12 @@ function captureUndoStep(): void {
     redoStack = [];
   }
   lastSnapshot = cur;
+  lastSnapshotKey = curKey;
   updateUndoButtons();
 }
 
 function saveWithoutUndo(): void {
+  boardSearchVersion++;
   // For changes that should save but not become an undo step:
   // background changes the user did not make, like a link
   // preview filling in, and a click's stacking change. The
@@ -524,7 +552,7 @@ function saveWithoutUndo(): void {
   } finally {
     suppressUndoCapture = false;
   }
-  lastSnapshot = contentSnapshot();
+  setLastSnapshot(contentSnapshot());
   updateUndoButtons();
 }
 
@@ -546,7 +574,7 @@ function undo(): boolean {
   // Set lastSnapshot before save, so save's capture sees the
   // restored content as already known and does not push a step
   // or clear the redo chain we just built.
-  lastSnapshot = contentSnapshot();
+  setLastSnapshot(contentSnapshot());
   save(); render();
   renderBgOpts(); renderGridOpts();
   updateUndoButtons();
@@ -558,7 +586,7 @@ function redo(): boolean {
   undoStack.push(contentSnapshot());
   const next = redoStack.pop() as UndoState;
   restoreUndoState(next);
-  lastSnapshot = contentSnapshot();
+  setLastSnapshot(contentSnapshot());
   save(); render();
   renderBgOpts(); renderGridOpts();
   updateUndoButtons();
@@ -568,7 +596,7 @@ function redo(): boolean {
 function resetUndo(): void {
   undoStack = [];
   redoStack = [];
-  lastSnapshot = contentSnapshot();
+  setLastSnapshot(contentSnapshot());
   updateUndoButtons();
 }
 // Undo is per board, not per app: each board keeps its own
@@ -585,7 +613,7 @@ function restoreUndoForBoard(dir: string, preserve: boolean): void {
     // stays, so undo can step back to before the reload,
     // but the redo chain is for the old content, so it goes.
     redoStack = [];
-    lastSnapshot = contentSnapshot();
+    setLastSnapshot(contentSnapshot());
     updateUndoButtons();
     return;
   }
@@ -593,11 +621,12 @@ function restoreUndoForBoard(dir: string, preserve: boolean): void {
   if (saved) {
     undoStack = saved.undo;
     redoStack = saved.redo;
-    lastSnapshot = saved.last ?? contentSnapshot();
+    if (saved.last) setLastSnapshot(saved.last);
+    else setLastSnapshot(contentSnapshot());
   } else {
     undoStack = [];
     redoStack = [];
-    lastSnapshot = contentSnapshot();
+    setLastSnapshot(contentSnapshot());
   }
   updateUndoButtons();
 }
@@ -615,12 +644,24 @@ async function loadBoardFromJson(json: string, dir: string, preserveUndo = false
   // Save the outgoing board's stack before replacing it,
   // unless this is the same board reloaded (a restore or
   // a rename): then the stack is kept, not filed away.
-  if (!sameBoard && !preserveUndo && oldDir !== "") undoByBoard.set(oldDir, { undo: undoStack, redo: redoStack, last: lastSnapshot });
+  if (!sameBoard && !preserveUndo && oldDir !== "") {
+    undoByBoard.set(oldDir, { undo: undoStack, redo: redoStack, last: lastSnapshot });
+    // 50 snapshots per board, unbounded across boards,
+    // is 250 full-board copies for 5 boards. Keep at
+    // most 3 filed boards; evict the oldest filed one
+    // (never the board being loaded).
+    while (undoByBoard.size > 3) {
+      const first = undoByBoard.keys().next().value as string | undefined;
+      if (first === undefined || first === dir) break;
+      undoByBoard.delete(first);
+    }
+  }
   const parsed = JSON.parse(json) as Board;
   parsed.bg = parsed.bg ?? "#FFFFFF";
   parsed.grid = parsed.grid ?? "Dots";
   parsed.camera = parsed.camera ?? { x: 0, y: 0, zoom: 1 };
   board = parsed;
+  boardSearchVersion++;
   boardDir = dir;
   selected = [];
   editingId = null;
@@ -629,6 +670,13 @@ async function loadBoardFromJson(json: string, dir: string, preserveUndo = false
   searchIndex = -1;
   const input = document.getElementById("search-input") as HTMLInputElement | null;
   if (input) input.value = "";
+  // A pending debounced save belongs to the outgoing
+  // board: flush it only if the main process is still on
+  // that board (same-board reload/restore); on a switch
+  // the main process has already moved on, so flushing
+  // would write the old index into the new board's file
+  // — discard it instead, the new board re-indexes.
+  if (oldDir !== "" && oldDir === dir) flushContextIndex(); else cancelContextIndexSave();
   contextIndex.clear();
   contextIndexLoaded = false;
   contextIndexFailed = false;
@@ -637,6 +685,15 @@ async function loadBoardFromJson(json: string, dir: string, preserveUndo = false
   pdfSearchText.clear();
   pdfSearchIndexing.clear();
   pdfPages.clear();
+  // These two were NOT cleared on board switch, unlike
+  // every other per-board cache above: parsed PDF
+  // documents and full base64 data URLs (each up to
+  // 50 MB) survived for the app lifetime, so switching
+  // boards often leaked memory. They are caches only
+  // and re-load on demand for the new board.
+  pdfDocs.clear();
+  pdfFailed.clear();
+  mediaDataUrls.clear();
   audioDurations.clear();
   audioFailed.clear();
   const boardDirEl = document.getElementById("board-dir-meta");
@@ -650,6 +707,7 @@ async function switchToBoard(name: string, preserveUndo = false): Promise<boolea
   try {
     commitEditingIfAny();
     await api.saveBoard(JSON.stringify(board));
+    flushContextIndex();
     const loaded = await api.switchBoard(name);
     await loadBoardFromJson(loaded.json, loaded.board_dir, preserveUndo);
     toast(`Board: ${name}`);
@@ -2236,12 +2294,37 @@ async function loadContextIndex(): Promise<void> {
     }
   } catch { /* no saved index yet */ }
 }
-function saveContextIndex(): void {
+// Context-index saves used to rewrite the whole index
+// (every 512-float CLIP embedding) after every single
+// indexed item, and on every new query word — O(N^2)
+// bytes for a media-heavy board, each write blocking
+// the main process. Now saves are debounced to 1s, and
+// flushed at batch end and before a board switch; the
+// in-memory maps are the source of truth during the
+// session, so a delayed write loses nothing.
+let contextIndexSaveTimer: ReturnType<typeof setTimeout> | undefined;
+function doSaveContextIndex(): void {
   const obj: Record<string, ContextEntry> = {};
   for (const [k, v] of contextIndex.entries()) obj[k] = v;
   for (const [q, embedding] of contextQueryCache.entries()) obj[`__query:${q}`] = { embedding };
   void api.contextIndexSave(obj).catch(() => undefined);
 }
+function saveContextIndex(): void {
+  if (contextIndexSaveTimer) return;
+  contextIndexSaveTimer = setTimeout(() => { contextIndexSaveTimer = undefined; doSaveContextIndex(); }, 1000);
+}
+function flushContextIndex(): void {
+  if (!contextIndexSaveTimer) return;
+  clearTimeout(contextIndexSaveTimer);
+  contextIndexSaveTimer = undefined;
+  doSaveContextIndex();
+}
+function cancelContextIndexSave(): void {
+  if (!contextIndexSaveTimer) return;
+  clearTimeout(contextIndexSaveTimer);
+  contextIndexSaveTimer = undefined;
+}
+window.addEventListener("beforeunload", () => { flushContextIndex(); });
 async function getQueryEmbedding(query: string): Promise<number[] | null> {
   if (contextQueryEmbedding && contextQueryEmbedding.query === query) return contextQueryEmbedding.embedding;
   const cached = contextQueryCache.get(query);
@@ -2425,6 +2508,7 @@ async function startContextIndexing(): Promise<void> {
   });
   await Promise.all(workers);
   contextIndexing = false;
+  flushContextIndex();
   const input = document.getElementById("search-input") as HTMLInputElement | null;
   if (input && input.value.trim() !== "") updateSearch();
 }
@@ -2598,10 +2682,17 @@ function docPassesFilters(doc: SearchDoc, q: ParsedQuery): boolean {
   }
   return true;
 }
-let miniSearchCache: { key: string; ms: MiniSearch<SearchDoc> } | null = null;
+// Search documents and the MiniSearch index are cached
+// by board version, not rebuilt on every keystroke:
+// building the old cache key alone joined every doc's
+// full text (including PDF text) on every keystroke,
+// and render() re-ran updateSearch() on every visible
+// change. The version bumps on save, on board switch,
+// and when new PDF text or context labels land, so a
+// cached index is never stale for the board it covers.
+let boardSearchVersion = 0;
+let searchDocsCache: { version: number; docs: SearchDoc[]; ms: MiniSearch<SearchDoc> } | null = null;
 function buildMiniSearch(docs: SearchDoc[]): MiniSearch<SearchDoc> {
-  const key = docs.map((d) => `${d.id}|${d.title}|${d.headings}|${d.body}`).join("\n");
-  if (miniSearchCache && miniSearchCache.key === key) return miniSearchCache.ms;
   const ms = new MiniSearch<SearchDoc>({
     fields: ["title", "headings", "body"],
     storeFields: ["id"],
@@ -2616,7 +2707,6 @@ function buildMiniSearch(docs: SearchDoc[]): MiniSearch<SearchDoc> {
     headings: normaliseSearch(`${d.headings} ${splitCamel(d.headings)}`),
     body: normaliseSearch(`${d.body} ${splitCamel(d.body)}`),
   })));
-  miniSearchCache = { key, ms };
   return ms;
 }
 function escapeRegExp(s: string): string { return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
@@ -2715,7 +2805,16 @@ function updateSearch(): void {
     return;
   }
   const parsed = parseSearchQuery(raw);
-  const docs = board.items.map(searchDoc).filter((d): d is SearchDoc => d !== null);
+  let docs: SearchDoc[];
+  let ms: MiniSearch<SearchDoc>;
+  if (searchDocsCache && searchDocsCache.version === boardSearchVersion) {
+    docs = searchDocsCache.docs;
+    ms = searchDocsCache.ms;
+  } else {
+    docs = board.items.map(searchDoc).filter((d): d is SearchDoc => d !== null);
+    ms = buildMiniSearch(docs);
+    searchDocsCache = { version: boardSearchVersion, docs, ms };
+  }
   const byId = new Map(docs.map((d) => [d.id, d]));
   let results: { id: number; terms: string[] }[];
   if (parsed.terms.length === 0) {
@@ -2723,15 +2822,19 @@ function updateSearch(): void {
     // board order among cards passing the filters.
     results = docs.filter((d) => docPassesFilters(d, parsed)).map((d) => ({ id: d.id, terms: parsed.phrases.flatMap((p) => p.split(" ")) }));
   } else {
-    const ms = buildMiniSearch(docs);
     results = ms.search(parsed.terms.join(" "))
       .map((r) => ({ id: Number(r.id), terms: r.terms }))
       .filter((r) => { const d = byId.get(r.id); return d ? docPassesFilters(d, parsed) : false; });
   }
   searchMatches = results.map((r) => r.id);
-  searchRows = results.map((r) => {
+  // Excerpts are only ever shown for the first 30 rows
+  // (renderSearchResults slices there); building them
+  // for every match, with a regex per row, was pure
+  // waste on a many-match query. Later rows carry the
+  // title, which render omits as a duplicate excerpt.
+  searchRows = results.map((r, i) => {
     const d = byId.get(r.id)!;
-    return { id: r.id, title: d.title, typeLabel: d.typeLabel, excerptHtml: excerptFor(d, r.terms), isContext: false };
+    return { id: r.id, title: d.title, typeLabel: d.typeLabel, excerptHtml: i < 30 ? excerptFor(d, r.terms) : d.title, isContext: false };
   });
   if (searchIndex >= searchMatches.length) searchIndex = searchMatches.length > 0 ? 0 : -1;
   searchResultsOpen = searchMatches.length > 0;
@@ -2756,9 +2859,10 @@ function updateSearch(): void {
     if (!inputNow || normaliseSearch(inputNow.value) !== query) return;
     const extra: number[] = [];
     const contextQuery = [...parsed.terms, ...parsed.phrases].join(" ");
+    const matchSet = new Set(searchMatches);
     for (const it of board.items) {
       if (("Stroke" in it.kind) || ("Connector" in it.kind)) continue;
-      if (searchMatches.includes(it.id)) continue;
+      if (matchSet.has(it.id)) continue;
       if (await contextMatches(it, contextQuery, parsed.terms)) extra.push(it.id);
     }
     if (gen !== searchGeneration) return;
@@ -2818,15 +2922,25 @@ function jumpToSearchIndex(idx: number): void {
   render();
 }
 
+// Search input is debounced 150 ms: without it, every
+// keystroke rebuilt the search documents and index.
+// Enter flushes immediately, so it still opens the
+// top result for the text just typed, not a stale one.
+let searchInputTimer: ReturnType<typeof setTimeout> | undefined;
 document.getElementById("search-input")?.addEventListener("input", () => {
   // A new query selects the top-ranked result, like
   // Omnisearch: Enter opens it, arrows move selection.
   searchIndex = 0;
-  updateSearch();
+  if (searchInputTimer) clearTimeout(searchInputTimer);
+  searchInputTimer = setTimeout(() => { searchInputTimer = undefined; updateSearch(); }, 150);
 });
 document.getElementById("search-input")?.addEventListener("keydown", (e: KeyboardEvent) => {
   if (e.key === "Enter") {
     e.preventDefault();
+    // A debounced search may not have run yet for the
+    // text just typed: run it now, so Enter opens the
+    // top result for that text, not a stale list.
+    if (searchInputTimer) { clearTimeout(searchInputTimer); searchInputTimer = undefined; updateSearch(); }
     if (searchResultsOpen) {
       // List open: open the selected result, close list.
       jumpToSearchIndex(e.shiftKey ? searchIndex - 1 : searchIndex);

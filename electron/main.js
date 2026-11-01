@@ -485,13 +485,17 @@ function maybeBackup(dir, json) {
   try { makeBackup(dir, json); } catch { /* backups must never break a save */ }
 }
 function listBackups(dir) {
+  // The Settings UI shows only the last backup, so
+  // computing item counts and recursive sizes for all
+  // 10 backups on every Settings open was pure waste.
+  // Return just the newest entry.
   const backups = backupsDirFor(dir);
   let entries = [];
   try { entries = fs.readdirSync(backups, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort().reverse(); } catch { return []; }
-  return entries.map((name) => {
-    const folder = path.join(backups, name);
-    return { name, items: boardItemCount(path.join(folder, 'board.json')), size: dirSize(folder) };
-  });
+  if (entries.length === 0) return [];
+  const name = entries[0];
+  const folder = path.join(backups, name);
+  return [{ name, items: boardItemCount(path.join(folder, 'board.json')), size: dirSize(folder) }];
 }
 function restoreBackup(dir, name) {
   if (DEMO) throw new Error('cannot restore a backup in demo mode');

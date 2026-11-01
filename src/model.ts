@@ -115,6 +115,12 @@ function itemHit(board: Board, item: Item, world: Pt): boolean {
   if ("Stroke" in item.kind) {
     const { points, width } = item.kind.Stroke;
     const tol = Math.max(width / 2 + 6, 8);
+    // Bounding-box reject first: the old code scanned
+    // every point of every stroke on every cursor move,
+    // even for strokes far from the cursor. Cards get
+    // a rect test; strokes did not.
+    if (world.x < item.pos.x - tol || world.x > item.pos.x + item.size.w + tol ||
+        world.y < item.pos.y - tol || world.y > item.pos.y + item.size.h + tol) return false;
     for (let i = 0; i + 1 < points.length; i++) {
       if (distToSegment(world, points[i], points[i + 1]) <= tol) return true;
     }
@@ -185,8 +191,12 @@ export function select(board: Board, selected: number[], id: number, additive: b
 }
 
 export function moveSelection(board: Board, selected: number[], dx: number, dy: number): void {
+  // Called on every move-drag mousemove: an includes()
+  // scan per item made this O(items x selection) per
+  // event. One Set for the whole drag is O(items).
+  const sel = new Set(selected);
   for (const it of board.items) {
-    if (!selected.includes(it.id)) continue;
+    if (!sel.has(it.id)) continue;
     it.pos.x += dx; it.pos.y += dy;
     if ("Stroke" in it.kind) for (const p of it.kind.Stroke.points) { p.x += dx; p.y += dy; }
     if ("Connector" in it.kind) {
