@@ -40,7 +40,11 @@
   flex: none; margin: 0; white-space: nowrap;
 }
 .plugin-panel[data-panel="boards"] .bd-del {
-  flex: none; width: 24px; height: 24px; font-size: 16px; line-height: 1;
+  /* A × glyph sits high in its box on its baseline, so
+     line-height alone leaves it off-centre: flex-centre it,
+     with no padding, and the glyph lands in the middle. */
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; padding: 0; font-size: 16px; line-height: 1;
   color: var(--grey); background: none; border: none; border-radius: 9px; cursor: pointer;
 }
 .plugin-panel[data-panel="boards"] .bd-del:hover { background: rgba(0, 0, 0, 0.05); color: var(--ink); }
@@ -50,5 +54,5 @@
   background: var(--fill-2); border: none; border-radius: 9px; padding: 6px 10px;
 }
 .plugin-panel[data-panel="boards"] .bd-armed {
-  width: auto; color: #e63946; font-size: 13px;
+  width: auto; padding: 0 8px; color: #e63946; font-size: 13px;
 }

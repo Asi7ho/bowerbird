@@ -13,7 +13,6 @@ interface BowerbirdAPI {
   listBackups(): Promise<Array<{ name: string; items: number; size: number }>>;
   restoreBackup(name: string): Promise<{ json: string; board_path: string; board_dir: string }>;
   resetBoard(): Promise<{ pdf_size_bytes: number; video_size_bytes: number }>;
-  restoreShowcase(): Promise<{ copied: string[]; missing: string[]; srcDir: string; destDir: string }>;
   checkFile(filePath: string): Promise<{ path: string; exists: boolean; size: number; bundlePath: string; bundleExists: boolean; bundleSize: number }>;
   readFileBase64(filePath: string): Promise<{ mime: string; base64: string }>;
   contextEmbedImage(filePath: string): Promise<number[]>;
@@ -569,6 +568,36 @@ function resetUndo(): void {
   lastSnapshot = contentSnapshot();
   updateUndoButtons();
 }
+// Undo is per board, not per app: each board keeps its own
+// stack in this map, keyed by its folder, so creating a new
+// board, or switching away and back, never wipes another
+// board's history. Undo is in-session only — nothing here
+// is written to disk, so a fresh app start still starts
+// with an empty stack for every board.
+const undoByBoard = new Map<string, { undo: UndoState[]; redo: UndoState[]; last: UndoState | null }>();
+function restoreUndoForBoard(dir: string, preserve: boolean): void {
+  if (preserve) {
+    // Same board, reloaded (a backup restore, or a rename
+    // followed by a switch to the new name): the stack
+    // stays, so undo can step back to before the reload,
+    // but the redo chain is for the old content, so it goes.
+    redoStack = [];
+    lastSnapshot = contentSnapshot();
+    updateUndoButtons();
+    return;
+  }
+  const saved = undoByBoard.get(dir);
+  if (saved) {
+    undoStack = saved.undo;
+    redoStack = saved.redo;
+    lastSnapshot = saved.last ?? contentSnapshot();
+  } else {
+    undoStack = [];
+    redoStack = [];
+    lastSnapshot = contentSnapshot();
+  }
+  updateUndoButtons();
+}
 // Replace the board in place, from a JSON string the main
 // process just handed over (a board switch, or a backup
 // restore). The old board's undo, search, context index and
@@ -576,8 +605,14 @@ function resetUndo(): void {
 // carried over — a restored board must not undo back into
 // the board it replaced, and its context index is its own
 // file in its own folder.
-async function loadBoardFromJson(json: string, dir: string): Promise<void> {
+async function loadBoardFromJson(json: string, dir: string, preserveUndo = false): Promise<void> {
   commitEditingIfAny();
+  const oldDir = boardDir;
+  const sameBoard = oldDir !== "" && oldDir === dir;
+  // Save the outgoing board's stack before replacing it,
+  // unless this is the same board reloaded (a restore or
+  // a rename): then the stack is kept, not filed away.
+  if (!sameBoard && !preserveUndo && oldDir !== "") undoByBoard.set(oldDir, { undo: undoStack, redo: redoStack, last: lastSnapshot });
   const parsed = JSON.parse(json) as Board;
   parsed.bg = parsed.bg ?? "#FFFFFF";
   parsed.grid = parsed.grid ?? "Dots";
@@ -603,17 +638,17 @@ async function loadBoardFromJson(json: string, dir: string): Promise<void> {
   audioFailed.clear();
   const boardDirEl = document.getElementById("board-dir-meta");
   if (boardDirEl) boardDirEl.textContent = `Board folder: ${boardDir}`;
-  resetUndo();
+  restoreUndoForBoard(dir, sameBoard || preserveUndo);
   render();
   void loadContextIndex();
 }
-async function switchToBoard(name: string): Promise<boolean> {
+async function switchToBoard(name: string, preserveUndo = false): Promise<boolean> {
   if (DEMO) { toast("Demo — boards do not switch in demo mode"); return false; }
   try {
     commitEditingIfAny();
     await api.saveBoard(JSON.stringify(board));
     const loaded = await api.switchBoard(name);
-    await loadBoardFromJson(loaded.json, loaded.board_dir);
+    await loadBoardFromJson(loaded.json, loaded.board_dir, preserveUndo);
     toast(`Board: ${name}`);
     return true;
   } catch (e) {
@@ -1118,6 +1153,14 @@ function updateResizeHandle(): void {
     }
     rotEl.style.left = `${rs.x}px`;
     rotEl.style.top = `${rs.y}px`;
+    // The grip's position already follows the rotation, but
+    // its stem did not: it always pointed straight down, so
+    // at 180° the stem pointed away from the card instead
+    // of back to it, and the handle looked detached. Rotate
+    // the grip itself with the card, around its centre, so
+    // the stem always points at the card's centre — down
+    // at 0°, up at 180°, sideways at 90°.
+    rotEl.style.transform = rot ? `rotate(${rot}deg)` : "";
     rotEl.style.display = "block";
   }
 }
@@ -1143,8 +1186,47 @@ function updateToolbar(): void {
   setActive("tool-select", tool === "select");
   setActive("tool-pen", tool === "pen");
   setActive("tool-connector", tool === "connector");
-  setActive("tool-rect", tool === "rect");
-  setActive("tool-ellipse", tool === "ellipse");
+  // Shapes are one toolbar button, like the pen: the button
+  // shows the shape last chosen, and the flyout beside the
+  // toolbar (same .palette surface as the pen colours)
+  // chooses between rectangle and ellipse.
+  const shapeBtn = document.getElementById("tool-shape") as HTMLButtonElement | null;
+  const isShape = tool === "rect" || tool === "ellipse";
+  if (shapeBtn) {
+    setActive("tool-shape", isShape);
+    if (shapeBtn.dataset.shape !== tool && isShape) {
+      shapeBtn.dataset.shape = tool;
+      shapeBtn.innerHTML = tool === "ellipse"
+        ? '<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="12" rx="8" ry="6.5" /></svg>'
+        : '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2" /></svg>';
+      shapeBtn.title = tool === "ellipse" ? "Ellipse (E)" : "Rectangle (R)";
+      shapeBtn.setAttribute("aria-label", tool === "ellipse" ? "Ellipse" : "Rectangle");
+    }
+  }
+  const shapePicker = document.getElementById("shape-picker") as HTMLDivElement | null;
+  if (shapePicker) {
+    shapePicker.style.display = isShape ? "flex" : "none";
+    if (isShape && shapePicker.childElementCount === 0) {
+      for (const [kind, label, svg] of [
+        ["rect", "Rectangle", '<rect x="4" y="5" width="16" height="14" rx="2" />'],
+        ["ellipse", "Ellipse", '<ellipse cx="12" cy="12" rx="8" ry="6.5" />'],
+      ] as const) {
+        const b = document.createElement("button");
+        b.className = "shape-option";
+        b.dataset.shape = kind;
+        b.title = label;
+        b.setAttribute("aria-label", label);
+        b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${svg}</svg>`;
+        b.addEventListener("click", () => setTool(kind));
+        shapePicker.appendChild(b);
+      }
+    }
+    if (isShape) {
+      for (const child of Array.from(shapePicker.children)) {
+        (child as HTMLButtonElement).classList.toggle("active", (child as HTMLButtonElement).dataset.shape === tool);
+      }
+    }
+  }
   // Note colours: shown when at least one selected card is a
   // text note and the pen flyout is not showing (pen tool).
   // Clicking a colour sets the background of every selected
@@ -2093,8 +2175,10 @@ window.addEventListener("keyup", (e: KeyboardEvent) => {
 document.getElementById("tool-select")?.addEventListener("click", () => setTool("select"));
 document.getElementById("tool-pen")?.addEventListener("click", () => setTool("pen"));
 document.getElementById("tool-connector")?.addEventListener("click", () => setTool("connector"));
-document.getElementById("tool-rect")?.addEventListener("click", () => setTool("rect"));
-document.getElementById("tool-ellipse")?.addEventListener("click", () => setTool("ellipse"));
+document.getElementById("tool-shape")?.addEventListener("click", () => {
+  const btn = document.getElementById("tool-shape") as HTMLButtonElement | null;
+  setTool(btn?.dataset.shape === "ellipse" ? "ellipse" : "rect");
+});
 document.getElementById("zoom-in")?.addEventListener("click", () => { zoomCentre(1.2); save(); render(); });
 document.getElementById("zoom-out")?.addEventListener("click", () => { zoomCentre(1 / 1.2); save(); render(); });
 document.getElementById("btn-delete")?.addEventListener("click", () => {
@@ -2797,62 +2881,6 @@ document.getElementById("btn-quit")?.addEventListener("click", async () => {
   setSettings(false);
   api.quit().catch(() => undefined);
 });
-document.getElementById("btn-restore-media")?.addEventListener("click", async () => {
-  try {
-    const result = await api.restoreShowcase();
-    if (result.missing.length > 0 && result.copied.length === 0) {
-      toast(`Welcome media could not be restored: ${result.missing.join(", ")} (looked in ${result.srcDir})`);
-      return;
-    }
-    // Clear the failed-media marks, so the next render
-    // tries the restored files instead of showing the
-    // missing tile again.
-    audioFailed.clear();
-    pdfFailed.clear();
-    pdfDocs.clear();
-    pdfSearchText.clear();
-    pdfSearchIndexing.clear();
-    setSettings(false);
-    render();
-    toast(result.missing.length > 0
-      ? `Welcome media restored, except: ${result.missing.join(", ")}`
-      : `Welcome media restored (${result.copied.length} files).`);
-  } catch (e) {
-    toast(`Restore failed: ${String(e)}`);
-  }
-});
-document.getElementById("btn-check-media")?.addEventListener("click", async () => {
-  const out = document.getElementById("media-check-meta");
-  if (!out) return;
-  out.textContent = "Checking…";
-  const names = ["welcome-bower.jpg", "welcome-birdsong.mp3", "welcome-video.mp4", "sample.pdf"];
-  const lines: string[] = [];
-  for (const name of names) {
-    // Find the board item for this welcome file, if any, so
-    // the check reports the actual path the board uses,
-    // not just the expected board-folder path.
-    let boardPath = `${boardDir}/${name}`;
-    for (const it of board.items) {
-      const p = ("Image" in it.kind) ? it.kind.Image.path
-        : ("Audio" in it.kind) ? it.kind.Audio.path
-        : ("Video" in it.kind) ? it.kind.Video.source
-        : ("PdfCard" in it.kind) ? it.kind.PdfCard.path : null;
-      if (p && p.endsWith(`/${name}`)) { boardPath = p; break; }
-    }
-    try {
-      const info = await api.checkFile(boardPath);
-      let fetchStatus = "not tried";
-      try {
-        const res = await fetch(api.fileUrl(boardPath));
-        fetchStatus = `${res.status} (${res.headers.get("Content-Length") ?? "?"} bytes)`;
-      } catch (e) { fetchStatus = `fetch failed: ${String(e)}`; }
-      lines.push(`${name}\n  board: ${info.exists ? `${info.size} bytes` : "missing"} — ${info.path}\n  bundle: ${info.bundleExists ? `${info.bundleSize} bytes` : "missing"} — ${info.bundlePath}\n  served: ${fetchStatus}`);
-    } catch (e) {
-      lines.push(`${name}: check failed: ${String(e)}`);
-    }
-  }
-  out.textContent = lines.join("\n");
-});
 document.getElementById("btn-reset")?.addEventListener("click", () => {
   const confirmEl = document.getElementById("reset-confirm") as HTMLDivElement;
   const btn = document.getElementById("btn-reset") as HTMLButtonElement;
@@ -3364,7 +3392,7 @@ async function init(): Promise<void> {
     },
     save: () => save(),
     render: () => render(),
-    switchBoard: (name: string) => switchToBoard(name),
+    switchBoard: (name: string, preserveUndo = false) => switchToBoard(name, preserveUndo),
     setTool: (toolName: string) => setTool(toolName),
     getPenColor: () => penColor,
     setPenColor: (hex: string) => {

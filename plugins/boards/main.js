@@ -4,9 +4,11 @@
 // owns one board at a time (its file, its assets, its undo),
 // and this plugin is only the list and the switching. The
 // core's api.boards does the actual switch — it saves the
-// current board, loads the new one, and resets undo, search
-// and the context index, which are all per-board — so a
-// plugin cannot strand the core in a half-switched state.
+// current board, loads the new one, and swaps in that
+// board's own undo stack, search and context index, which
+// are all per-board — so a plugin cannot strand the core
+// in a half-switched state, and creating a board never
+// wipes another board's undo.
 //
 // Layout (see electron/main.js): Main is the default board
 // at the base folder's board.json; every other board is a
@@ -108,8 +110,10 @@ function startRename(row, board) {
       // Renaming the open board moves its folder, so the
       // renderer's board folder is stale until it reloads:
       // switch to the new name, which saves to the new
-      // folder and reloads with the right folder.
-      if (board.current) await apiRef.boards.switch(next);
+      // folder and reloads with the right folder, keeping
+      // this board's undo stack (a rename is not a new
+      // board, so it must not reset undo either).
+      if (board.current) await apiRef.boards.switch(next, true);
       apiRef.ui.toast(`Renamed to ${next}`);
     } catch (err) { apiRef.ui.toast(`Could not rename: ${String(err.message || err)}`); }
     void refresh();

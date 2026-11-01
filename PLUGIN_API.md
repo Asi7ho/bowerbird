@@ -96,12 +96,12 @@ Undo is snapshots, not operations: every save compares the board content with th
 
 ### Boards — `api.boards`
 
-Multi-board is a plugin, not core UI: the core owns one board at a time, and this domain is how a plugin lists and switches boards. Switching saves the current board, loads the new one, and resets undo, search and the context index, which are all per-board. All methods except `list` and `current` need `board:write`.
+Multi-board is a plugin, not core UI: the core owns one board at a time, and this domain is how a plugin lists and switches boards. Switching saves the current board, loads the new one, and swaps in that board's own undo stack, search and context index, which are all per-board — creating or switching boards never wipes another board's undo. All methods except `list` and `current` need `board:write`.
 
 - `list()` — `[{ name, current, items }]`, Main first, then other boards by name. Main is the default board; other boards live in their own folders under the base folder's `boards/`, each with its own assets and backups.
 - `current()` — the current board's name.
 - `create(name)` — create an empty board. Names are 1–64 characters; Main is reserved and cannot be created, renamed or deleted.
-- `switch(name)` — switch to a board, returning true on success. The current board name is stored in app settings, so the last board survives the Boards plugin being turned off.
+- `switch(name, preserveUndo?)` — switch to a board, returning true on success. `preserveUndo` is for a rename followed by a switch to the new name, where the board is the same board in a new folder, so its undo stack is kept instead of swapped. The current board name is stored in app settings, so the last board survives the Boards plugin being turned off.
 - `rename(oldName, newName)` — rename a board's folder and display name.
 - `delete(name)` — delete a board's folder, including its assets and backups, after the plugin's own confirmation. It refuses the current board: switch to another board first, then delete, or the renderer would be left on a deleted folder.
 

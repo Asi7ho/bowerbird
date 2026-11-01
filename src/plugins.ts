@@ -175,7 +175,7 @@ export interface PluginHost {
   renderBoardCard: (id: number) => string | null;
   save: () => void;
   render: () => void;
-  switchBoard: (name: string) => Promise<boolean>;
+  switchBoard: (name: string, preserveUndo?: boolean) => Promise<boolean>;
   setTool: (tool: string) => void;
   getPenColor: () => string;
   setPenColor: (hex: string) => boolean;
@@ -663,9 +663,9 @@ function createContext(manifest: PluginManifest): PluginContext {
         require("board:write");
         return bridge!.createBoard(name);
       },
-      switch: async (name: string) => {
+      switch: async (name: string, preserveUndo = false) => {
         require("board:write");
-        return host!.switchBoard(name);
+        return host!.switchBoard(name, preserveUndo);
       },
       rename: async (oldName: string, newName: string) => {
         require("board:write");

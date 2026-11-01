@@ -36,7 +36,7 @@ The build is unsigned, so a recipient must right-click it and choose Open the fi
 ## Use it
 
 - **Pan:** hold `Space` and drag, or scroll. **Zoom:** `Ctrl` + scroll, `+` / `-`, or the toolbar buttons.
-- **Shapes:** the rectangle (R) and ellipse (E) tools draw a shape in the pen colour. Drag on the board to size it.
+- **Shapes:** one shape button in the toolbar, with a flyout beside it to choose rectangle (R) or ellipse (E). Drag on the board to size it, in the pen colour.
 - **Rotate:** drag the round handle above a selected card, or press `[` / `]` to rotate the selection by 15°. Strokes, connectors and slide frames do not rotate.
 - **Note colours:** select a text note and pick a background from the colour flyout beside the toolbar. Light pastels only, so the text stays readable.
 - **Boards:** the Boards plugin (on by default) lists boards in the right panel. Click a board to open it, click the current board's name to rename it, × to delete it. Main is the default board.

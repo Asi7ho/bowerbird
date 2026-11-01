@@ -42,10 +42,10 @@
             <button id="tool-select" title="Select (V)" aria-label="Select"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5 19 12l-7.5 1.4L8.6 20.5 6 3.5Z" /></svg></button>
             <button id="tool-pen" title="Pen (P)" aria-label="Pen"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 19.5 5.6 15 16.2 4.4a2.12 2.12 0 0 1 3 3L8.6 18l-4.1 1.5Z" fill="none"/><path d="M14.5 6.5l3 3" /></svg></button>
             <button id="tool-connector" title="Arrow (A)" aria-label="Arrow"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 20 4" /><path d="M14 4h6v6" /></svg></button>
-            <button id="tool-rect" title="Rectangle (R)" aria-label="Rectangle"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2" /></svg></button>
-            <button id="tool-ellipse" title="Ellipse (E)" aria-label="Ellipse"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="12" rx="8" ry="6.5" /></svg></button>
+            <button id="tool-shape" title="Shape (R for rectangle, E for ellipse)" aria-label="Shape"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2" /></svg></button>
           </div>
           <div class="palette" id="palette" style="display:none"></div>
+          <div class="palette" id="shape-picker" style="display:none"></div>
           <div class="palette" id="note-colours" style="display:none"></div>
           <div class="divider"></div>
           <div class="zoom-group">
@@ -82,10 +82,6 @@
                 <p class="meta">Deletes everything and starts again.</p>
                 <p class="meta" id="board-dir-meta"></p>
                 <p class="meta" id="build-meta"></p>
-                <p class="meta">If the welcome image, audio or video shows "File missing", this restores those files from the app bundle, without deleting anything else.</p>
-                <button id="btn-restore-media">Restore welcome media</button>
-                <button id="btn-check-media">Check welcome media</button>
-                <p class="meta" id="media-check-meta" style="white-space: pre-wrap; word-break: break-all;"></p>
                 <button id="btn-reset">Delete all board data</button>
                 <div id="reset-confirm" style="display:none">
                   <p class="meta">Delete everything on this board? You can undo it with Ctrl / Cmd + Z.</p>

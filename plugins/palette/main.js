@@ -51,7 +51,7 @@
 // extremes, where a monochromatic palette is shifted).
 //
 // Picking a colour — on the wheel, on the lightness
-// slider, or in the colour picker below — also sets the
+// slider, or with the picker icon beside the preview — also sets the
 // pen to that colour, through api.pen.setColor, so the
 // next pen stroke is the colour you just picked, and the
 // toolbar's pen swatches show it (as a custom swatch
@@ -339,11 +339,20 @@ function renderPanel(container) {
   previewHex = document.createElement("div");
   previewHex.className = "pal-hex";
   previewRow.appendChild(previewHex);
-  // A native colour picker, beside the preview: the
-  // system picker is the fastest way to an exact colour,
-  // and it is the control a user reaches for when the
-  // wheel is not precise enough. Picking here sets the
-  // wheel, the palettes and the pen, like any other pick.
+  // A native colour picker, as an icon only — not a
+  // second colour square: the preview swatch already is
+  // the picked colour, so the picker must not add another
+  // square beside it. The icon is a button-sized wrapper
+  // with an eyedropper glyph; the native input itself is
+  // transparent and covers the wrapper, so clicking the
+  // icon opens the system picker directly (an input hidden
+  // with display:none would not open it reliably). Picking
+  // here sets the wheel, the palettes and the pen, like
+  // any other pick.
+  const pickerWrap = document.createElement("div");
+  pickerWrap.className = "pal-picker-wrap";
+  pickerWrap.title = "Pick a colour";
+  pickerWrap.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 4.5 19.5 9.5 9 20H4v-5L14.5 4.5Z" /><path d="M13 6l5 5" /><path d="M18 3l3 3" /></svg>';
   colorPicker = document.createElement("input");
   colorPicker.className = "pal-color-picker";
   colorPicker.type = "color";
@@ -357,7 +366,8 @@ function renderPanel(container) {
     baseL = hsl.l;
     updateAll(true);
   });
-  previewRow.appendChild(colorPicker);
+  pickerWrap.appendChild(colorPicker);
+  previewRow.appendChild(pickerWrap);
   wheelSection.appendChild(previewRow);
   const sliderRow = document.createElement("div");
   sliderRow.className = "pal-slider-row";

@@ -117,7 +117,11 @@ button { font-family: inherit; }
 /* Rotation handle: a round grip above the selected card's top
    centre, joined to the card by a short stem (the stem is drawn
    by the handle's own ::before, so no extra element is needed).
-   Dragging it rotates the card around its centre. */
+   Dragging it rotates the card around its centre, and the
+   grip itself is rotated with the card in updateResizeHandle,
+   so the stem always points at the card's centre — without
+   that, the stem stayed straight down at every angle, and
+   at 180° it pointed away from the card. */
 #rotate-handle {
   position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px;
   background: #fff; border: 1.5px solid #007aff; border-radius: 50%;
@@ -357,6 +361,25 @@ button { font-family: inherit; }
 #toolbar .swatch.active {
   width: 26px; height: 26px;
   box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent);
+}
+/* Shape picker: the same floating .palette surface as the
+   pen colours, but lower, so it sits beside the shape
+   button (the fourth tool) instead of at the top, and so
+   it never overlaps the note-colours flyout, which sits
+   at the top when a text note is selected. Its options
+   are icon buttons, not swatches, in toolbar-button style. */
+#toolbar .palette#shape-picker { top: 140px; }
+#toolbar .palette .shape-option {
+  width: 36px; height: 36px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+#toolbar .palette .shape-option.active {
+  background: #fff; color: var(--ink);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+}
+#toolbar .palette .shape-option svg {
+  width: 20px; height: 20px; fill: none; stroke: currentColor;
+  stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
 }
 .missing-media {
   width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
