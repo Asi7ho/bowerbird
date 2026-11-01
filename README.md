@@ -41,7 +41,7 @@ The build is unsigned, so a recipient must right-click it and choose Open the fi
 - **Connector:** drag from one item to another, or from empty space to empty space. Ends anchored to items follow them when they move.
 - **Resize:** drag the small handle at a card's bottom-right corner. Connectors have no handle: move the cards they connect instead.
 - **Group:** `Ctrl/Cmd + G` groups the selection, `Ctrl/Cmd + U` ungroups it.
-- **Undo and redo:** `Ctrl/Cmd + Z` undoes, `Ctrl/Cmd + Shift + Z` or `Ctrl/Cmd + Y` redoes, or use the toolbar buttons. Undo covers board changes, including plugin actions and deleting all data, up to 50 steps. Panning and zooming are not undo steps, and undoing never moves the view.
+- **Undo and redo:** `Ctrl/Cmd + Z` undoes, `Ctrl/Cmd + Shift + Z` or `Ctrl/Cmd + Y` redoes, or use the undo and redo buttons in the top bar, next to the panels toggle. Undo covers board changes, including plugin actions and deleting all data, up to 50 steps. Panning and zooming are not undo steps, and undoing never moves the view.
 - **Hide:** the button in a corner hides the whole board into that corner. Only a small round icon stays visible. Click it to restore the board. Change the corner in Settings, under Plugin settings → Hide, or turn it off there. Pressing `H` minimises the board.
 - **Delete all data:** Settings → General → Data → Delete all board data. It asks you to confirm first, then removes the board file and every dropped file, and restores a fresh welcome board. The corner setting is kept. You can undo it with `Ctrl/Cmd + Z`.
 

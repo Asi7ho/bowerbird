@@ -57,27 +57,29 @@ button { font-family: inherit; }
   -webkit-app-region: drag;
 }
 #title-bar-actions {
-  display: flex; align-items: center; justify-content: flex-end;
+  display: flex; align-items: center; justify-content: flex-end; gap: 2px;
   -webkit-app-region: drag;
 }
-/* Panels toggle, as a toolbar icon button: borderless,
-   32px, 9px radius, hover a quiet black tint, active
-   white with the toolbar active shadow, dim (opacity
-   0.35, no hover) when no panel exists to show. */
-#panels-toggle {
+/* Title-bar icon buttons (undo, redo, panels toggle), as a
+   toolbar icon button: borderless, 32px, 9px radius, hover a
+   quiet black tint, active white with the toolbar active
+   shadow, dim (opacity 0.35, no hover) when unavailable.
+   Every button opts out of the title bar's drag region, or a
+   click on it would move the window instead of acting. */
+#title-bar-actions button {
   border: none; background: transparent; border-radius: 9px;
   width: 32px; height: 32px; display: flex; align-items: center;
   justify-content: center; cursor: pointer; color: var(--ink);
   -webkit-app-region: no-drag;
 }
-#panels-toggle:hover { background: rgba(0, 0, 0, 0.05); }
+#title-bar-actions button:hover { background: rgba(0, 0, 0, 0.05); }
 #panels-toggle.active {
   background: #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
 }
-#panels-toggle.dim { opacity: 0.35; cursor: default; }
-#panels-toggle.dim:hover { background: transparent; }
-#panels-toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+#title-bar-actions button.dim { opacity: 0.35; cursor: default; }
+#title-bar-actions button.dim:hover { background: transparent; }
+#title-bar-actions button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 #canvas-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 #grid { position: absolute; inset: 0; pointer-events: none; }
 /* #cards must NOT have overflow:hidden: cards live in world

@@ -252,9 +252,10 @@ function save(): void {
 // - Background link-preview fills save without undo (see
 //   saveWithoutUndo), or adding one link would take two undos:
 //   one to un-fill its preview, one to remove the card.
-// - Clicking a card brings it to the front without saving, so a
-//   click alone is never an undo step; that stacking change rides
-//   along with the next saved change, which is cosmetic only.
+// - Clicking a card brings it to the front, and the move drag's
+//   mouseup saves even when nothing moved, so that stacking
+//   change can itself become an undo step. It is cosmetic only:
+//   undoing it just puts the card back where it was in the order.
 // - 50 steps, oldest dropped. Items are paths, not image bytes,
 //   so a snapshot is board JSON, not media.
 const UNDO_LIMIT = 50;
