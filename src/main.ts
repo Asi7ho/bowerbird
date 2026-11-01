@@ -1928,7 +1928,7 @@ window.addEventListener("wheel", (e: WheelEvent) => {
   // JSON on every tick is the worst save cost for a large board.
   // Save once, 400ms after the last wheel event instead. Content
   // edits still save immediately (move/resize mouseup, note commit),
-  // and Quit saves explicitly before closing.
+  // and Close saves explicitly before closing.
   if (wheelSaveTimer) clearTimeout(wheelSaveTimer);
   wheelSaveTimer = setTimeout(() => save(), 400);
   applyCamera();
@@ -2872,14 +2872,24 @@ document.getElementById("search-clear")?.addEventListener("click", () => {
   document.getElementById("search-input")?.focus();
 });
 
-document.getElementById("btn-quit")?.addEventListener("click", async () => {
-  // Commit any note being edited, save, then quit. closeWindow
-  // closes the only window, and the main process quits on
-  // window-all-closed, so this is a full app quit.
+// Traffic lights: the window is frameless, so these are
+// the only window controls. Close quits the app (the old
+// Settings Quit button did exactly this: commit, save,
+// then api.quit, which destroys the peek window too),
+// minimise minimises, full screen toggles full screen —
+// all through the main process IPC that already existed
+// for them. The buttons opt out of the title bar's drag
+// region in CSS, so a click acts instead of moving.
+document.getElementById("traffic-close")?.addEventListener("click", async () => {
   commitEditingIfAny();
   if (!DEMO) { try { await api.saveBoard(JSON.stringify(board)); } catch { /* closing anyway */ } }
-  setSettings(false);
   api.quit().catch(() => undefined);
+});
+document.getElementById("traffic-minimise")?.addEventListener("click", () => {
+  api.minimise().catch(() => undefined);
+});
+document.getElementById("traffic-fullscreen")?.addEventListener("click", () => {
+  api.fullscreen().catch(() => undefined);
 });
 document.getElementById("btn-reset")?.addEventListener("click", () => {
   const confirmEl = document.getElementById("reset-confirm") as HTMLDivElement;

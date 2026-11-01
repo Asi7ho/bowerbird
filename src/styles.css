@@ -87,6 +87,33 @@ button { font-family: inherit; }
 #title-bar button.dim { opacity: 0.35; cursor: default; }
 #title-bar button.dim:hover { background: transparent; }
 #title-bar button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+/* Traffic lights: macOS window controls, at the far left
+   of the custom title bar (the window is frameless, so
+   there are no native ones). 12px circles in the macOS
+   colours, red close, yellow minimise, green full screen,
+   in that order, with a hairline edge. The symbols are
+   hidden until the group is hovered, as on macOS, and
+   the buttons never take the title bar's grey hover tint
+   — their colour is the control. They opt out of dragging
+   like every other title-bar button, or a click on one
+   would move the window instead of acting. */
+#traffic-lights {
+  display: flex; align-items: center; gap: 8px; flex: none;
+  -webkit-app-region: no-drag;
+}
+#title-bar button.traffic-light {
+  width: 12px; height: 12px; padding: 0; border-radius: 50%;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.15);
+}
+#title-bar button.traffic-light:hover { background: transparent; }
+#title-bar button.traffic-light svg {
+  width: 8px; height: 8px; stroke: rgba(0, 0, 0, 0.55); stroke-width: 1.4;
+  opacity: 0;
+}
+#traffic-lights:hover button.traffic-light svg { opacity: 1; }
+#title-bar button.traffic-close { background: #ff5f57; }
+#title-bar button.traffic-minimise { background: #febc2e; }
+#title-bar button.traffic-fullscreen { background: #28c840; }
 #canvas-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 #grid { position: absolute; inset: 0; pointer-events: none; }
 /* #cards must NOT have overflow:hidden: cards live in world
@@ -478,12 +505,6 @@ button { font-family: inherit; }
 }
 #settings .meta { color: var(--grey); font-size: 12px; line-height: 1.5; word-break: break-all; margin: 0 0 12px; }
 #settings #reset-confirm { margin-top: 12px; }
-#settings #btn-quit {
-  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
-  padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 600;
-  color: #e63946; box-shadow: var(--shadow-sm);
-}
-#settings #btn-quit:hover { background: rgba(230, 57, 70, 0.06); }
 #settings #btn-reset {
   border: 1px solid var(--separator); background: #fff; border-radius: 9px;
   padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 600;

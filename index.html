@@ -11,6 +11,11 @@
     <div id="main-column">
     <div id="title-bar">
       <div id="title-bar-left">
+        <div id="traffic-lights" aria-label="Window controls">
+          <button id="traffic-close" class="traffic-light traffic-close" title="Close" aria-label="Close"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2l6 6M8 2L2 8" /></svg></button>
+          <button id="traffic-minimise" class="traffic-light traffic-minimise" title="Minimise" aria-label="Minimise"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 5h6" /></svg></button>
+          <button id="traffic-fullscreen" class="traffic-light traffic-fullscreen" title="Full screen" aria-label="Full screen"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2.5 7.5L7.5 2.5M5.5 2.5H7.5V4.5M4.5 7.5H2.5V5.5" /></svg></button>
+        </div>
         <span id="title-bar-name">Bowerbird</span>
         <div id="title-bar-undo">
           <button id="btn-undo" title="Undo (Ctrl / Cmd + Z)" aria-label="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5 3.5 8.5 7 12" /><path d="M3.5 8.5H13a5.5 5.5 0 0 1 0 11H10" /></svg></button>
@@ -89,9 +94,6 @@
                 </div>
                 <h3>Backups</h3>
                 <div id="backups-list"></div>
-                <h3>App</h3>
-                <p class="meta">Closes Bowerbird.</p>
-                <button id="btn-quit">Quit Bowerbird</button>
               </div>
               <div id="settings-section-plugins" class="settings-section" style="display:none">
                 <p class="meta">Turn plugins on or off. Drag a tab in the right panel to reorder the tabs.</p>

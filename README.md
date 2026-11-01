@@ -73,7 +73,7 @@ Long names are clipped to the card. Nothing runs onto the canvas or over a neigh
 
 Settings has three tabs: General, Plugins, and Plugin settings.
 
-General holds the keyboard shortcuts, the canvas background and grid, Data, and Quit. Plugins turns plugins on and off. Plugin settings holds one section per plugin that is on and has settings. Each setting has a one-line description.
+General holds the keyboard shortcuts, the canvas background and grid, and Data. Plugins turns plugins on and off. Plugin settings holds one section per plugin that is on and has settings. Each setting has a one-line description.
 
 ## Plugins
 
