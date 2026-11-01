@@ -691,6 +691,24 @@ function registerIpc() {
     return installShowcaseAssets(dir);
   });
 
+  // Media diagnostic: for a given board path, report
+  // whether the board copy exists and its size, whether
+  // the bundle copy exists and its size, and both paths —
+  // so a user can report exactly which link in the chain
+  // fails on their machine, instead of "File missing".
+  ipcMain.handle('bowerbird:check-file', (_event, filePath) => {
+    const sizeOf = (file) => { try { return fs.statSync(file).size; } catch { return -1; } };
+    const bundle = path.join(assetsDir(), path.basename(String(filePath)));
+    return {
+      path: String(filePath),
+      exists: fs.existsSync(filePath),
+      size: sizeOf(filePath),
+      bundlePath: bundle,
+      bundleExists: fs.existsSync(bundle),
+      bundleSize: sizeOf(bundle),
+    };
+  });
+
   // Force-restore the welcome media, even if files already
   // exist: the Settings button for a board whose image,
   // audio or video shows "File missing". Returns what was

@@ -32,8 +32,14 @@
      scrollbar would sit hard against them. The masonry below
      lays out in the content width (clientWidth minus padding),
      so cards end at the content edge and the scrollbar — in
-     either form — sits in this padding, never over a card. */
-  padding-right: 15px;
+     either form — sits in this padding, never over a card.
+     4px on the left is the same idea for the other side:
+     a selected card's outline (2px, offset 2px) and its
+     blue shadow extend past the card, and with no left
+     padding the left-column cards sat flush against the
+     scroller edge, so that small part on the left was
+     clipped by overflow-x: hidden. */
+  padding: 0 15px 0 4px;
 }
 /* Search row: search input plus a single icon button for the
    mode switch. The button matches the search input's height. */

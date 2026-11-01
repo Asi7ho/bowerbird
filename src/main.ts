@@ -7,6 +7,7 @@ interface BowerbirdAPI {
   saveBoard(json: string): Promise<void>;
   resetBoard(): Promise<{ pdf_size_bytes: number; video_size_bytes: number }>;
   restoreShowcase(): Promise<{ copied: string[]; missing: string[]; srcDir: string; destDir: string }>;
+  checkFile(filePath: string): Promise<{ path: string; exists: boolean; size: number; bundlePath: string; bundleExists: boolean; bundleSize: number }>;
   embedFile(path: string): Promise<string>;
   listLibrary(): Promise<{ path: string; items: Array<{ name: string; path: string; relativePath: string; ext: string; kind: string; category: string | null; size_bytes: number; mtime_ms: number }>; categories: Array<{ name: string; count: number }>; uncategorizedCount: number }>;
   addToLibrary(path: string): Promise<string>;
@@ -1837,6 +1838,38 @@ document.getElementById("btn-restore-media")?.addEventListener("click", async ()
     toast(`Restore failed: ${String(e)}`);
   }
 });
+document.getElementById("btn-check-media")?.addEventListener("click", async () => {
+  const out = document.getElementById("media-check-meta");
+  if (!out) return;
+  out.textContent = "Checking…";
+  const names = ["welcome-bower.jpg", "welcome-birdsong.mp3", "welcome-video.mp4", "sample.pdf"];
+  const lines: string[] = [];
+  for (const name of names) {
+    // Find the board item for this welcome file, if any, so
+    // the check reports the actual path the board uses,
+    // not just the expected board-folder path.
+    let boardPath = `${boardDir}/${name}`;
+    for (const it of board.items) {
+      const p = ("Image" in it.kind) ? it.kind.Image.path
+        : ("Audio" in it.kind) ? it.kind.Audio.path
+        : ("Video" in it.kind) ? it.kind.Video.source
+        : ("PdfCard" in it.kind) ? it.kind.PdfCard.path : null;
+      if (p && p.endsWith(`/${name}`)) { boardPath = p; break; }
+    }
+    try {
+      const info = await api.checkFile(boardPath);
+      let fetchStatus = "not tried";
+      try {
+        const res = await fetch(api.fileUrl(boardPath));
+        fetchStatus = `${res.status} (${res.headers.get("Content-Length") ?? "?"} bytes)`;
+      } catch (e) { fetchStatus = `fetch failed: ${String(e)}`; }
+      lines.push(`${name}\n  board: ${info.exists ? `${info.size} bytes` : "missing"} — ${info.path}\n  bundle: ${info.bundleExists ? `${info.bundleSize} bytes` : "missing"} — ${info.bundlePath}\n  served: ${fetchStatus}`);
+    } catch (e) {
+      lines.push(`${name}: check failed: ${String(e)}`);
+    }
+  }
+  out.textContent = lines.join("\n");
+});
 document.getElementById("btn-reset")?.addEventListener("click", () => {
   const confirmEl = document.getElementById("reset-confirm") as HTMLDivElement;
   const btn = document.getElementById("btn-reset") as HTMLButtonElement;
@@ -2210,6 +2243,36 @@ async function init(): Promise<void> {
       board = welcomeBoard(boardDir, loaded.pdf_size_bytes, loaded.video_size_bytes ?? 0);
       save();
     }
+    // Self-heal for welcome media: if a welcome item points
+    // at a board file that is missing or empty, but the
+    // bundle copy exists, point the item at the bundle
+    // copy and save. This fixes the board permanently,
+    // instead of relying on the file handler's fallback
+    // on every load, and it works even if the board
+    // folder itself is the wrong or broken one.
+    try {
+      const WELCOME = ["welcome-bower.jpg", "welcome-birdsong.mp3", "welcome-video.mp4", "sample.pdf"];
+      let healed = false;
+      for (const it of board.items) {
+        const getPath = (): string | null =>
+          ("Image" in it.kind) ? it.kind.Image.path
+          : ("Audio" in it.kind) ? it.kind.Audio.path
+          : ("Video" in it.kind) ? it.kind.Video.source
+          : ("PdfCard" in it.kind) ? it.kind.PdfCard.path : null;
+        const p = getPath();
+        if (!p) continue;
+        const name = p.split("/").pop() ?? "";
+        if (!WELCOME.includes(name)) continue;
+        const info = await api.checkFile(p);
+        if ((info.exists && info.size > 0) || !info.bundleExists || info.bundleSize <= 0) continue;
+        if ("Image" in it.kind) it.kind.Image.path = info.bundlePath;
+        else if ("Audio" in it.kind) it.kind.Audio.path = info.bundlePath;
+        else if ("Video" in it.kind) it.kind.Video.source = info.bundlePath;
+        else if ("PdfCard" in it.kind) it.kind.PdfCard.path = info.bundlePath;
+        healed = true;
+      }
+      if (healed) saveWithoutUndo();
+    } catch { /* a failed heal must never block startup */ }
   } catch (err) {
     toast(`Could not load the board: ${String(err)}`);
     board = welcomeBoard(boardDir, 0, 0);

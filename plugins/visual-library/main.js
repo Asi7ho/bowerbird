@@ -277,11 +277,19 @@ function loadLibraryAudioDuration(wrap, item) {
   audio.addEventListener("error", () => {});
 }
 
-function focusOnBoard(item) {
+function focusOnBoard(item, mode) {
   // Focus, not duplication: show the original on the
-  // board, centred and selected, and add nothing. In
-  // whiteboard mode the board is hidden behind the view,
-  // so go back to the board first, then centre on it.
+  // board, centred and selected, and add nothing.
+  // In whiteboard view mode, clicking a card must NOT
+  // leave the library: it only selects the card in
+  // place (the library's selection highlight follows),
+  // and the board view stays hidden behind the view.
+  // Panel mode keeps the old behaviour: go back to the
+  // board first, then centre on the original.
+  if (mode === "view") {
+    apiRef.board.setSelected([item.id]);
+    return;
+  }
   if (apiRef.view.getView() !== "board") apiRef.view.setView("board");
   apiRef.board.setSelected([item.id]);
   apiRef.view.centreOn(item.id);
@@ -294,7 +302,7 @@ function attachCardInteractions(wrap, item, mode) {
     // focuses the original on the board. Dragging, below,
     // is still how a card is duplicated.
     if (isMediaTarget(e.target)) return;
-    focusOnBoard(item);
+    focusOnBoard(item, mode);
   });
   const tile = wrap.querySelector(".audio-tile");
   if (tile) {
@@ -402,13 +410,13 @@ function layoutMasonry(container, items, mode) {
   // empty until a collapse/reopen re-rendered it at its
   // real width. The panel is a fixed 290px dock, its body
   // has 12px padding each side, and the sections have
-  // 15px of right padding, so a hidden panel's content
-  // width is 290 - 24 - 15 = 251. Lay out at that when
-  // the real width is not known yet; the observer below
-  // re-lays out at the real width as soon as the panel
-  // is actually shown, so a classic scrollbar's narrower
-  // lane is corrected too.
-  if (containerWidth <= 0 && mode === "panel") containerWidth = 251;
+  // 4px of left padding and 15px of right padding, so a
+  // hidden panel's content width is 290 - 24 - 4 - 15 = 247.
+  // Lay out at that when the real width is not known yet;
+  // the observer below re-lays out at the real width as
+  // soon as the panel is actually shown, so a classic
+  // scrollbar's narrower lane is corrected too.
+  if (containerWidth <= 0 && mode === "panel") containerWidth = 247;
   const smallTarget = mode === "panel" ? 105 : 110;
   const gap = 16;
   const colCount = Math.max(1, Math.floor((containerWidth + gap) / (smallTarget + gap)));
@@ -556,6 +564,23 @@ function initPanel(body) {
       }
     });
     observer.observe(sections);
+  }
+  // Re-lay out when the visible width changes: a classic
+  // scrollbar appearing (or the window resizing) narrows
+  // the sections, and cards laid out at the old, wider
+  // width would otherwise overflow and be clipped by
+  // overflow-x: hidden. Only re-render when the width
+  // actually moved, so laying out does not loop.
+  if (typeof ResizeObserver !== "undefined") {
+    let lastWidth = 0;
+    const ro = new ResizeObserver(() => {
+      if (!panelSections) return;
+      const w = panelSections.clientWidth;
+      if (Math.abs(w - lastWidth) <= 1) return;
+      lastWidth = w;
+      renderSections(panelSections, "panel");
+    });
+    ro.observe(sections);
   }
 }
 
