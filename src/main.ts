@@ -1973,7 +1973,11 @@ async function indexContextItem(item: Item): Promise<void> {
     saveContextIndex();
   } catch {
     // One failed item must not stop the rest, and must
-    // not break ordinary search.
+    // not break ordinary search — but it must be visible,
+    // otherwise context search silently does nothing (e.g.
+    // sharp's install script was skipped on a Mac, so
+    // image indexing fails on every item).
+    contextIndexFailed = true;
   }
 }
 function hasUnindexedMedia(): boolean {

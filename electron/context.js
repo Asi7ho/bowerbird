@@ -7,6 +7,20 @@
 // userData/models, and are cached there afterwards.
 // Nothing about a board file ever leaves the machine.
 //
+// Package warning, learned the hard way on 2026-11-01:
+// @xenova/transformers is pinned to exactly 2.17.2.
+// Do NOT run `npm audit fix --force`: it downgrades
+// transformers to 1.4.2, which depends on canvas 2.11.2,
+// which has no prebuilt binary for Node 26 on Mac arm64
+// and fails to build from source (needs pkg-config and
+// pixman). Transformers 2.x uses sharp, not canvas.
+// On newer npm, sharp's install script (which downloads
+// libvips) is blocked by default: approve it with
+// `npm install-scripts approve sharp`, then `npm install`
+// again, or image indexing will fail and search will
+// fall back to filenames. Bowerbird itself still runs
+// without it; only context search is unavailable.
+//
 // CLIP in Transformers.js v2 needs both an image and a
 // text input for a forward pass, even when only one
 // embedding is wanted, so image-only calls use a dummy
