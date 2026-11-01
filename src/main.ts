@@ -302,6 +302,17 @@ function loadPdfPage(id: number, path: string): void {
 }
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 let wheelSaveTimer: ReturnType<typeof setTimeout> | null = null;
+// Trackpad zoom coalescing: a pinch sends wheel events at
+// ~120 Hz, and every tick used to rebuild the card DOM
+// whenever the visible set changed — re-creating images
+// and videos mid-pinch, which is what made zoom feel
+// stepped instead of smooth. Now ticks only accumulate
+// a factor, one frame applies it as a GPU transform, and
+// content rebuilds once, when the pinch settles.
+let pendingZoomFactor = 1;
+let pendingZoomAnchor: Pt | null = null;
+let zoomFrame: number | null = null;
+let zoomSettleTimer: ReturnType<typeof setTimeout> | null = null;
 let lastToolbarKey = "";
 
 const boardEl = document.getElementById("board") as HTMLDivElement;
@@ -1487,18 +1498,40 @@ window.addEventListener("wheel", (e: WheelEvent) => {
   if ((e.target as HTMLElement).closest("#settings, #toolbar, #title-bar")) return;
   e.preventDefault();
   if (e.ctrlKey || e.metaKey) {
-    const factor = Math.exp(-e.deltaY * 0.0015);
-    zoomAt(boardPoint(e.clientX, e.clientY), factor);
-  } else {
-    // Pan follows standard Mac scrolling: scrolling down moves
-    // the content up, as in Safari, Notes and every other Mac
-    // app. The previous code moved the content with the scroll,
-    // which is the opposite of what a Mac trackpad user expects.
-    // (Dragging with Space still grabs the paper and moves it
-    // with the pointer — that is a grab, not a scroll, and stays.)
-    board.camera.x += e.deltaX / board.camera.zoom;
-    board.camera.y += e.deltaY / board.camera.zoom;
+    // Pinch / Ctrl+wheel zoom: accumulate, apply once per
+    // frame, rebuild content only when the gesture settles
+    // (120 ms after the last tick, including momentum).
+    // Applying the transform without a DOM rebuild is what
+    // makes a continuous pinch feel like one motion instead
+    // of a series of steps.
+    pendingZoomFactor *= Math.exp(-e.deltaY * 0.0015);
+    pendingZoomAnchor = boardPoint(e.clientX, e.clientY);
+    if (zoomFrame === null) {
+      zoomFrame = requestAnimationFrame(() => {
+        zoomFrame = null;
+        if (pendingZoomAnchor && pendingZoomFactor !== 1) {
+          zoomAt(pendingZoomAnchor, pendingZoomFactor);
+        }
+        pendingZoomFactor = 1;
+        pendingZoomAnchor = null;
+        applyCamera();
+      });
+    }
+    if (zoomSettleTimer) clearTimeout(zoomSettleTimer);
+    zoomSettleTimer = setTimeout(() => {
+      refreshContentIfVisibleChanged();
+      save();
+    }, 120);
+    return;
   }
+  // Pan follows standard Mac scrolling: scrolling down moves
+  // the content up, as in Safari, Notes and every other Mac
+  // app. The previous code moved the content with the scroll,
+  // which is the opposite of what a Mac trackpad user expects.
+  // (Dragging with Space still grabs the paper and moves it
+  // with the pointer — that is a grab, not a scroll, and stays.)
+  board.camera.x += e.deltaX / board.camera.zoom;
+  board.camera.y += e.deltaY / board.camera.zoom;
   // Wheel events fire many times a second; writing the whole board
   // JSON on every tick is the worst save cost for a large board.
   // Save once, 400ms after the last wheel event instead. Content
