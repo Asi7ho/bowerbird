@@ -2,7 +2,7 @@
 
 An infinite whiteboard for creatives, built like a quick note: one window, always there, ready to drop things onto.
 
-Drop images, notes, links, PDFs, audio, video and colours onto the board. Pan and zoom freely, sketch with a pen, connect things with lines, draw rectangles and ellipses, rotate cards, and group items that belong together. The board saves on every change, so closing it never loses anything, and it backs itself up at most once an hour, plus before a reset or a restore — see Settings → Data → Backups.
+Drop images, notes, links, PDFs, audio, video and colours onto the board. Pan and zoom freely, sketch with a pen, connect things with lines, draw shapes, rotate cards and strokes, and group items that belong together. The board saves on every change, so closing it never loses anything, and it backs itself up at most once an hour, plus before a reset or a restore — see Settings → Data → Backups.
 
 Link cards are previews only. They do not embed web pages.
 
@@ -36,8 +36,8 @@ The build is unsigned, so a recipient must right-click it and choose Open the fi
 ## Use it
 
 - **Pan:** hold `Space` and drag, or scroll. **Zoom:** `Ctrl` + scroll, `+` / `-`, or the toolbar buttons.
-- **Shapes:** one shape button in the toolbar, with a flyout beside it to choose rectangle (R) or ellipse (E). Drag on the board to size it, in the pen colour.
-- **Rotate:** drag the round handle above a selected card, or press `[` / `]` to rotate the selection by 15°. Strokes, connectors and slide frames do not rotate.
+- **Shapes:** one shape button in the toolbar, with a flyout beside it to choose rectangle (R), ellipse (E), triangle, diamond, hexagon, star, or block arrow. Drag on the board to size it, in the pen colour.
+- **Rotate:** drag the round handle above a selected card or stroke, or press `[` / `]` to rotate the selection by 15°. Connectors and slide frames do not rotate.
 - **Note colours:** select a text note and pick a background from the colour flyout beside the toolbar. Light pastels only, so the text stays readable.
 - **Boards:** the Boards plugin (on by default) lists boards in the right panel. Click a board to open it, click the current board's name to rename it, × to delete it. Main is the default board.
 - **Select:** click an item, `Shift`-click to add to the selection, or drag a box around several items. Dragging one member of a group moves the whole group. Clicking a card brings it to the front.

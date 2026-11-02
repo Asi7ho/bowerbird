@@ -63,7 +63,7 @@ declare global {
 }
 const api = window.bowerbird;
 import {
-  Anchor, Board, GRID, Item, Pt,
+  Anchor, Board, GRID, Item, Pt, ShapeKind,
   anchorPoint, boardGet, centre, clippedEnds, domainOf, elide, escapeHtml, estimateTextHeight,
   hitTest, itemBounds, itemRotation, marquee, moveSelection, normaliseHex, parseHex, renderMarkdownHtml,
   resizeItem, rotatePoint, select, tileColorFor, tint,
@@ -171,7 +171,7 @@ let drag: null
   | { kind: "stroke"; points: Pt[] }
   | { kind: "connector"; from: Anchor; current: Pt }
   | { kind: "marquee"; start: Pt; current: Pt }
-  | { kind: "shape"; shape: "rect" | "ellipse"; start: Pt; current: Pt }
+  | { kind: "shape"; shape: ShapeKind; start: Pt; current: Pt }
   | { kind: "rotate"; id: number; origRot: number; moved: boolean }
   | { kind: "resize"; id: number; startWorld: Pt; origW: number; origH: number; moved: boolean } = null;
 let pluginToolDown = false;
@@ -858,16 +858,31 @@ function renderSvgOnly(): void {
 function renderStrokesAndConnectors(): void {
   const v = visibleRect();
   for (const item of board.items) {
-    if (!isVisibleItem(item, v)) continue;
+    // A rotated stroke's extent can exceed its unrotated
+    // bounding box, so culling it by that box would hide
+    // it at the viewport edge: rotated strokes are always
+    // drawn. The count is small, so this costs nothing.
+    if (!("Stroke" in item.kind && itemRotation(item) !== 0) && !isVisibleItem(item, v)) continue;
     if ("Stroke" in item.kind) {
       const { points, color, width, marker } = item.kind.Stroke;
       if (points.length < 2) continue;
       const d = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
       const sel = selected.includes(item.id);
+      // Rotation is an SVG transform around the stroke's
+      // bounding-box centre, in world coords: the points
+      // themselves are never rewritten, so undo, resize
+      // and hit-testing all keep working in the local
+      // frame, and rotation is just item.rotation.
+      const rot = itemRotation(item);
+      const c = centre(item);
+      const transform = rot !== 0 ? `rotate(${rot} ${c.x} ${c.y})` : undefined;
       if (sel) {
-        worldEl.appendChild(svgEl2("path", { d, fill: "none", stroke: ACCENT, "stroke-width": String(width + 6), "stroke-linecap": "round", "stroke-linejoin": "round" }));
+        const selPath = svgEl2("path", { d, fill: "none", stroke: ACCENT, "stroke-width": String(width + 6), "stroke-linecap": "round", "stroke-linejoin": "round" });
+        if (transform) selPath.setAttribute("transform", transform);
+        worldEl.appendChild(selPath);
       }
       const path = svgEl2("path", { d, fill: "none", stroke: color, "stroke-width": String(width), "stroke-linecap": "round", "stroke-linejoin": "round" });
+      if (transform) path.setAttribute("transform", transform);
       if (marker) path.setAttribute("opacity", "0.45");
       worldEl.appendChild(path);
     }
@@ -957,14 +972,21 @@ function cardHtml(item: Item, plain = false): string {
   }
   if ("Shape" in item.kind) {
     const fill = safeColor(item.kind.Shape.fill, "#1A1A1A");
-    const radius = item.kind.Shape.shape === "ellipse" ? "50%" : "12px";
-    // Outer card is transparent with no hairline border, so
-    // an ellipse is really an ellipse: a filled outer rect
+    const shape = item.kind.Shape.shape;
+    const radius = shape === "ellipse" ? "50%" : shape === "rect" ? "12px" : "0px";
+    // Polygon shapes are cut with clip-path on the inner
+    // fill, so a triangle is really a triangle, not a
+    // rectangle with a triangle drawn on it. Outer card
+    // is transparent with no hairline border, so an
+    // ellipse is really an ellipse: a filled outer rect
     // would show its corners outside the ellipse, and a
     // rectangular hairline would frame it. The selected
-    // ring (box-shadow) follows the outer border-radius,
-    // so it wraps an ellipse as an ellipse, not a rect.
-    return `<div class="${cls}" data-id="${id}" style="${style}background:transparent;border:none;border-radius:${radius}"><div class="inner" style="background:${fill};border-radius:${radius};width:100%;height:100%;box-shadow:var(--shadow-sm)"></div></div>`;
+    // ring follows the outer border-radius for rect and
+    // ellipse; for polygons it is the bounding rect,
+    // which is how a polygon selection reads.
+    const clip = shapeClipPath(shape);
+    const clipStyle = clip ? `clip-path:${clip};` : "";
+    return `<div class="${cls}" data-id="${id}" style="${style}background:transparent;border:none;border-radius:${radius}"><div class="inner" style="background:${fill};border-radius:${radius};${clipStyle}width:100%;height:100%;box-shadow:var(--shadow-sm)"></div></div>`;
   }
   if ("Image" in item.kind) {
     const { path } = item.kind.Image;
@@ -1169,7 +1191,7 @@ function render(): void {
 }
 
 function isRotatable(it: Item | undefined): boolean {
-  if (!it || "Stroke" in it.kind || "Connector" in it.kind) return false;
+  if (!it || "Connector" in it.kind) return false;
   return !isFrameCard(it);
 }
 function rotateHandleWorld(it: Item): Pt {
@@ -1236,6 +1258,56 @@ function noteBgOfSelected(): string | null {
   }
   return null;
 }
+// Shapes: one toolbar button, like the pen, with a flyout
+// beside it to choose the shape. The table is the single
+// source for the flyout, the toolbar button icon, search
+// labels and drag previews, so adding a shape means one
+// row here, not edits in four places. Keyboard shortcuts
+// stay R/E only: the flyout is how the new shapes are
+// picked, and no new key is stolen from plugins or text.
+const SHAPES: { kind: ShapeKind; label: string; key: string; svg: string }[] = [
+  { kind: "rect", label: "Rectangle", key: "R", svg: '<rect x="4" y="5" width="16" height="14" rx="2" />' },
+  { kind: "ellipse", label: "Ellipse", key: "E", svg: '<ellipse cx="12" cy="12" rx="8" ry="6.5" />' },
+  { kind: "triangle", label: "Triangle", key: "", svg: '<path d="M12 4 L20 20 L4 20 Z" />' },
+  { kind: "diamond", label: "Diamond", key: "", svg: '<path d="M12 3 L21 12 L12 21 L3 12 Z" />' },
+  { kind: "hexagon", label: "Hexagon", key: "", svg: '<path d="M8 3 L16 3 L21 12 L16 21 L8 21 L3 12 Z" />' },
+  { kind: "star", label: "Star", key: "", svg: '<path d="M12 3 L14.7 9 L21 9.5 L16.2 13.8 L17.8 20 L12 16.5 L6.2 20 L7.8 13.8 L3 9.5 L9.3 9 Z" />' },
+  { kind: "arrow", label: "Block arrow", key: "", svg: '<path d="M3 10 H15 V5 L21 12 L15 19 V14 H3 Z" />' },
+];
+function shapeMeta(kind: ShapeKind): { label: string; key: string; svg: string } {
+  return SHAPES.find((s) => s.kind === kind) ?? SHAPES[0];
+}
+function shapeLabel(kind: ShapeKind): string { return shapeMeta(kind).label; }
+function isShapeTool(t: string): t is ShapeKind {
+  return SHAPES.some((s) => s.kind === t);
+}
+// clip-path polygons, in % of the shape's box. The arrow
+// points right; rotate it (handle or [ ]) to point
+// anywhere else, like any other shape.
+function shapeClipPath(kind: ShapeKind): string | null {
+  switch (kind) {
+    case "triangle": return "polygon(50% 0, 100% 100%, 0 100%)";
+    case "diamond": return "polygon(50% 0, 100% 50%, 50% 100%, 0 50%)";
+    case "hexagon": return "polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)";
+    case "star": return "polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)";
+    case "arrow": return "polygon(0 40%, 60% 40%, 60% 15%, 100% 50%, 60% 85%, 60% 60%, 0 60%)";
+    default: return null;
+  }
+}
+// Drag-preview polygon points, in board coords for a
+// box from (x0, y0) sized w x h. Same geometry as the
+// clip-paths above, so the preview is the shape drawn.
+function shapePreviewPoints(kind: ShapeKind, x0: number, y0: number, w: number, h: number): string {
+  const px = (fx: number, fy: number) => `${x0 + fx * w},${y0 + fy * h}`;
+  switch (kind) {
+    case "triangle": return [px(0.5, 0), px(1, 1), px(0, 1)].join(" ");
+    case "diamond": return [px(0.5, 0), px(1, 0.5), px(0.5, 1), px(0, 0.5)].join(" ");
+    case "hexagon": return [px(0.25, 0), px(0.75, 0), px(1, 0.5), px(0.75, 1), px(0.25, 1), px(0, 0.5)].join(" ");
+    case "star": return [[0.5, 0], [0.61, 0.35], [0.98, 0.35], [0.68, 0.57], [0.79, 0.91], [0.5, 0.7], [0.21, 0.91], [0.32, 0.57], [0.02, 0.35], [0.39, 0.35]].map(([fx, fy]) => px(fx, fy)).join(" ");
+    case "arrow": return [px(0, 0.4), px(0.6, 0.4), px(0.6, 0.15), px(1, 0.5), px(0.6, 0.85), px(0.6, 0.6), px(0, 0.6)].join(" ");
+    default: return "";
+  }
+}
 function updateToolbar(): void {
   // render() runs on every mousemove; rebuilding the toolbar's DOM
   // every time is wasted work when nothing about it changed.
@@ -1253,35 +1325,31 @@ function updateToolbar(): void {
   // Shapes are one toolbar button, like the pen: the button
   // shows the shape last chosen, and the flyout beside the
   // toolbar (same .palette surface as the pen colours)
-  // chooses between rectangle and ellipse.
+  // chooses between all shapes in the SHAPES table.
   const shapeBtn = document.getElementById("tool-shape") as HTMLButtonElement | null;
-  const isShape = tool === "rect" || tool === "ellipse";
+  const isShape = isShapeTool(tool);
   if (shapeBtn) {
     setActive("tool-shape", isShape);
-    if (shapeBtn.dataset.shape !== tool && isShape) {
+    if (isShapeTool(tool) && shapeBtn.dataset.shape !== tool) {
+      const meta = shapeMeta(tool);
       shapeBtn.dataset.shape = tool;
-      shapeBtn.innerHTML = tool === "ellipse"
-        ? '<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="12" rx="8" ry="6.5" /></svg>'
-        : '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2" /></svg>';
-      shapeBtn.title = tool === "ellipse" ? "Ellipse (E)" : "Rectangle (R)";
-      shapeBtn.setAttribute("aria-label", tool === "ellipse" ? "Ellipse" : "Rectangle");
+      shapeBtn.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${meta.svg}</svg>`;
+      shapeBtn.title = meta.key ? `${meta.label} (${meta.key})` : meta.label;
+      shapeBtn.setAttribute("aria-label", meta.label);
     }
   }
   const shapePicker = document.getElementById("shape-picker") as HTMLDivElement | null;
   if (shapePicker) {
     shapePicker.style.display = isShape ? "flex" : "none";
     if (isShape && shapePicker.childElementCount === 0) {
-      for (const [kind, label, svg] of [
-        ["rect", "Rectangle", '<rect x="4" y="5" width="16" height="14" rx="2" />'],
-        ["ellipse", "Ellipse", '<ellipse cx="12" cy="12" rx="8" ry="6.5" />'],
-      ] as const) {
+      for (const meta of SHAPES) {
         const b = document.createElement("button");
         b.className = "shape-option";
-        b.dataset.shape = kind;
-        b.title = label;
-        b.setAttribute("aria-label", label);
-        b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${svg}</svg>`;
-        b.addEventListener("click", () => setTool(kind));
+        b.dataset.shape = meta.kind;
+        b.title = meta.key ? `${meta.label} (${meta.key})` : meta.label;
+        b.setAttribute("aria-label", meta.label);
+        b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${meta.svg}</svg>`;
+        b.addEventListener("click", () => setTool(meta.kind));
         shapePicker.appendChild(b);
       }
     }
@@ -1586,8 +1654,8 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
     return;
   }
   if (spaceDown) { drag = { kind: "pan", last: winPt }; return; }
-  if (tool === "rect" || tool === "ellipse") {
-    drag = { kind: "shape", shape: tool === "rect" ? "rect" : "ellipse", start: world, current: world };
+  if (isShapeTool(tool)) {
+    drag = { kind: "shape", shape: tool, start: world, current: world };
     return;
   }
   if (tool === "pen") {
@@ -1772,10 +1840,14 @@ window.addEventListener("mousemove", (e: MouseEvent) => {
       el.setAttribute("width", String(w)); el.setAttribute("height", String(h));
       el.setAttribute("rx", "12");
       el.setAttribute("fill", penColor); el.setAttribute("fill-opacity", "0.85");
-    } else {
+    } else if (drag.shape === "ellipse") {
       const el = dragPreview("shape-preview", "ellipse");
       el.setAttribute("cx", String(x0 + w / 2)); el.setAttribute("cy", String(y0 + h / 2));
       el.setAttribute("rx", String(w / 2)); el.setAttribute("ry", String(h / 2));
+      el.setAttribute("fill", penColor); el.setAttribute("fill-opacity", "0.85");
+    } else {
+      const el = dragPreview("shape-preview", "polygon");
+      el.setAttribute("points", shapePreviewPoints(drag.shape, x0, y0, w, h));
       el.setAttribute("fill", penColor); el.setAttribute("fill-opacity", "0.85");
     }
   } else if (drag.kind === "rotate") {
@@ -1789,6 +1861,10 @@ window.addEventListener("mousemove", (e: MouseEvent) => {
       it.rotation = rot;
       const el = cardsEl.querySelector(`[data-id="${drag.id}"]`) as HTMLElement | null;
       if (el) el.style.transform = rot ? `rotate(${rot}deg)` : "";
+      // Strokes have no card element to transform live,
+      // so rebuild the SVG layer instead: the stroke
+      // visibly follows the handle, like a card does.
+      if ("Stroke" in it.kind) renderSvgOnly();
       updateResizeHandle();
     }
   } else if (drag.kind === "marquee") {
@@ -2241,7 +2317,8 @@ document.getElementById("tool-pen")?.addEventListener("click", () => setTool("pe
 document.getElementById("tool-connector")?.addEventListener("click", () => setTool("connector"));
 document.getElementById("tool-shape")?.addEventListener("click", () => {
   const btn = document.getElementById("tool-shape") as HTMLButtonElement | null;
-  setTool(btn?.dataset.shape === "ellipse" ? "ellipse" : "rect");
+  const last = btn?.dataset.shape ?? "rect";
+  setTool(isShapeTool(last) ? last : "rect");
 });
 document.getElementById("zoom-in")?.addEventListener("click", () => { zoomCentre(1.2); save(); render(); });
 document.getElementById("zoom-out")?.addEventListener("click", () => { zoomCentre(1 / 1.2); save(); render(); });
@@ -2616,7 +2693,8 @@ function searchDoc(item: Item): SearchDoc | null {
   }
   if ("Shape" in k) {
     const name = colorNameForHex(k.Shape.fill).split(" ")[0];
-    return { id: item.id, title: `${name} ${k.Shape.shape === "ellipse" ? "ellipse" : "rectangle"}`, headings: "", body: `${k.Shape.shape} shape ${k.Shape.fill} ${colorNameForHex(k.Shape.fill)} color colour`, typeLabel: "Shape", excerptText: `${name} ${k.Shape.shape}`, ext: "" };
+    const label = shapeLabel(k.Shape.shape);
+    return { id: item.id, title: `${name} ${label}`, headings: "", body: `${k.Shape.shape} ${label} shape ${k.Shape.fill} ${colorNameForHex(k.Shape.fill)} color colour`, typeLabel: "Shape", excerptText: `${name} ${label}`, ext: "" };
   }
   if ("UrlCard" in k) {
     let domain = "";

@@ -7,10 +7,11 @@
 export interface Pt { x: number; y: number }
 export interface Size { w: number; h: number }
 export type Anchor = { Point: Pt } | { Item: number };
+export type ShapeKind = "rect" | "ellipse" | "triangle" | "diamond" | "hexagon" | "star" | "arrow";
 
 export type Kind =
   | { Text: { text: string; bold: boolean; size: number; color: string; bg?: string } }
-  | { Shape: { shape: "rect" | "ellipse"; fill: string } }
+  | { Shape: { shape: ShapeKind; fill: string } }
   | { Image: { path: string } }
   | { UrlCard: { url: string; title: string | null; description: string | null; image?: string | null; icon?: string | null; embed?: boolean } }
   | { PdfCard: { path: string; size_bytes: number } }
@@ -32,9 +33,10 @@ export interface Item {
   size: Size;
   group: number | null;
   kind: Kind;
-  // Rotation in degrees, clockwise, around the card's centre.
+  // Rotation in degrees, clockwise, around the item's centre
+  // (card centre, or stroke bounding-box centre).
   // Optional so old boards load unchanged: missing means 0.
-  // Only cards rotate; strokes and connectors never carry it,
+  // Cards and strokes rotate; connectors never carry it,
   // and slide frames are excluded by the rotate action.
   rotation?: number;
 }
@@ -115,16 +117,23 @@ function itemHit(board: Board, item: Item, world: Pt): boolean {
   if ("Stroke" in item.kind) {
     const { points, width } = item.kind.Stroke;
     const tol = Math.max(width / 2 + 6, 8);
+    // A rotated stroke is hit in its own frame, like a
+    // rotated card: rotate the point back by -rotation
+    // around the bounding-box centre, then test the
+    // unrotated points. Without this, a rotated stroke
+    // could only be selected in its old position.
+    const rot = itemRotation(item);
+    const p = rot !== 0 ? rotatePoint(world, centre(item), -rot) : world;
     // Bounding-box reject first: the old code scanned
     // every point of every stroke on every cursor move,
     // even for strokes far from the cursor. Cards get
     // a rect test; strokes did not.
-    if (world.x < item.pos.x - tol || world.x > item.pos.x + item.size.w + tol ||
-        world.y < item.pos.y - tol || world.y > item.pos.y + item.size.h + tol) return false;
+    if (p.x < item.pos.x - tol || p.x > item.pos.x + item.size.w + tol ||
+        p.y < item.pos.y - tol || p.y > item.pos.y + item.size.h + tol) return false;
     for (let i = 0; i + 1 < points.length; i++) {
-      if (distToSegment(world, points[i], points[i + 1]) <= tol) return true;
+      if (distToSegment(p, points[i], points[i + 1]) <= tol) return true;
     }
-    return points.some((p) => Math.hypot(p.x - world.x, p.y - world.y) <= tol);
+    return points.some((q) => Math.hypot(q.x - p.x, q.y - p.y) <= tol);
   }
   // A rotated card is hit in its own frame: rotate the point
   // back by -rotation around the centre, then test the
