@@ -540,7 +540,13 @@ function initPanel(container) {
   const input = el("textarea", "pres-builder-input pres-builder-text");
   input.placeholder = "A panel that lists every image on the board, with a button to duplicate each one.";
   input.rows = 5;
-  const send = el("button", "pres-builder-btn pres-builder-send", "Send");
+  const send = el("button", "pres-builder-btn pres-builder-send");
+  // Icon only, no text: a paper plane, in the app's
+  // line-icon style, so the button takes as little of
+  // the row as possible and the text box gets the rest.
+  send.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>';
+  send.setAttribute("aria-label", "Send");
+  send.title = "Send (Enter)";
   inputRow.append(input, send);
   wrap.append(log, inputRow);
   container.appendChild(wrap);
