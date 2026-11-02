@@ -1523,7 +1523,7 @@ export async function setPluginEnabled(id: string, enabled: boolean): Promise<vo
   if (!bridge || !host) return;
   const lp = loaded.get(id);
   if (!lp) return;
-  // A trial plugin is owned by the Builder panel (Keep/Discard),
+  // A trial plugin is owned by the Builder panel (Install/Clean),
   // not by the Settings toggle, so a toggle must not desync it
   // or write a persisted enabled state for a plugin that is
   // not on disk.
