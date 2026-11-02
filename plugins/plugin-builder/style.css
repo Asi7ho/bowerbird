@@ -72,3 +72,42 @@
   color: var(--grey); font-size: 12px; line-height: 1.5;
   margin-top: 16px;
 }
+/* The summary card: the whole review for a person who
+   does not code. A plain white card with a hairline
+   border, not a badge or pill. */
+.plugin-panel-body .pres-builder-summary{
+  background: #fff; border: 1px solid var(--hairline);
+  border-radius: 12px; padding: 12px; margin-top: 8px;
+}
+.plugin-panel-body .pres-builder-summary-name{
+  font-size: 14px; font-weight: 600; color: var(--ink);
+}
+.plugin-panel-body .pres-builder-summary-desc{
+  font-size: 13px; line-height: 1.5; color: var(--ink);
+  margin: 4px 0 0;
+}
+.plugin-panel-body .pres-builder-summary-h{
+  font-size: 12px; font-weight: 600; color: var(--grey);
+  margin: 12px 0 4px;
+}
+.plugin-panel-body .pres-builder-summary-list{
+  margin: 0; padding-left: 16px;
+  font-size: 13px; line-height: 1.6; color: var(--ink);
+}
+.plugin-panel-body .pres-builder-summary-note{
+  font-size: 12px; line-height: 1.5; color: var(--grey);
+  margin: 12px 0 0;
+}
+/* The trial banner: a quiet fill, not an accent box —
+   trying is a normal state, not an alarm. */
+.plugin-panel-body .pres-builder-trial{
+  background: var(--bg-system); border-radius: 12px;
+  padding: 12px; margin-top: 12px;
+}
+.plugin-panel-body .pres-builder-trial-text{
+  font-size: 13px; color: var(--ink);
+}
+.plugin-panel-body .pres-builder-trial-note{
+  font-size: 12px; line-height: 1.5; color: var(--grey);
+  margin: 6px 0 0;
+}

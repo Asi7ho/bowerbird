@@ -1,29 +1,32 @@
 // Plugin Builder: describe a plugin, an AI writes it, you
-// check the code, and only then install it.
+// try it, and only then keep it — or discard it.
 //
-// The panel is deliberately small: a box to describe the
-// plugin, a Generate button, then the generated plugin,
-// and a box to steer the AI if the first version is not
-// right. Everything about the provider — address, model
-// and key — lives in Settings, under Plugin settings, so
-// the panel never asks for it.
+// The panel is deliberately small for a person who does
+// not code: a box to describe the plugin, a Generate
+// button, then a plain-language summary of what the
+// plugin adds and what it can do. The code is behind a
+// "Show code" button, for people who want it — you do
+// not need to read it to try the plugin. Everything
+// about the provider — address, model and key — lives
+// in Settings, under Plugin settings, so the panel
+// never asks for it.
 //
 // The AI is bring-your-own: you set a provider and model
-// in Settings, and enter your key there. The key is never
-// saved to disk, never put in a board, and never sent
-// anywhere except the provider you set. It lives only in
-// memory for this session, and is forgotten when the app
-// closes or this plugin is disabled. The provider and
-// model are not secrets, so those are saved in plugin
-// storage. A local model server needs no key: set the
-// provider to http://localhost:11434/v1 (or wherever it
-// runs) and leave the key empty.
+// in Settings, and enter your key there. The key is only
+// ever sent to the provider you set, and is saved once in
+// secure storage (see the Settings status for whether
+// your system encrypts it). A local model server needs
+// no key: set the provider to http://localhost:11434/v1
+// (or wherever it runs) and leave the key empty.
 //
-// Nothing is installed automatically. Generation only
-// fills the code boxes below. Install writes the plugin
-// to your user plugins folder, then activates it at
-// once, with no restart. Installing a plugin is trusting
-// its code, like any plugin, so read it first.
+// Nothing is installed automatically. Try runs the
+// plugin in memory only — it is never written to disk,
+// and Discard (or quitting the app) removes it
+// completely. Keep installs it to your user plugins
+// folder, then activates it at once, with no restart.
+// Installing a plugin is trusting its code, like any
+// plugin; trying it first is how you check it without
+// having to read it.
 //
 // The AI never sees or changes the core of the app. It
 // only writes a plugin, using the api object in its
@@ -40,6 +43,11 @@ let apiRef = null;
 let savedKey = "";
 let sessionKey = "";
 let panelEls = null;
+// The plugin currently being tried, if any: { id, name }.
+// Module-level, so it survives the panel being re-rendered
+// when the user switches tabs — the panel restores the
+// trial banner from this on every render.
+let trialState = null;
 // The last generation, as a chat history, so a steer
 // message refines that version instead of starting over:
 // system prompt, first description, assistant JSON, then
@@ -57,6 +65,74 @@ const KNOWN_PERMISSIONS = [
   "ai",
   "plugins:install",
 ];
+
+// Permissions in plain language, for the summary card.
+// A plugin can only do what is listed here, plus reading
+// the board (which needs no permission) — and it can
+// never change the app itself.
+const PERMISSION_TEXT = {
+  "board:write": "Can add, move and delete cards on your board",
+  "window": "Can hide, show and minimise the app window",
+  "view:replace": "Can replace the board with its own full view",
+  "files:read": "Can read files and open links",
+  "files:embed": "Can save files into your board",
+  "storage": "Can save its own settings on this computer",
+  "ai": "Can ask the AI provider you set in Settings",
+  "plugins:install": "Can install other plugins",
+};
+
+// What the generated code adds, detected from the code
+// itself — not from what the AI claimed in its description.
+// Titles are taken from the registration call when the
+// code gives one; otherwise the kind of thing is enough.
+function detectedAdditions(main) {
+  const out = [];
+  const kinds = [
+    ["registerPanel", "panel"],
+    ["registerTool", "toolbar tool"],
+    ["registerView", "full-board view"],
+    ["registerCommand", "command (in Cmd/Ctrl+K)"],
+    ["registerSettingsSection", "settings section"],
+    ["registerOverlay", "overlay"],
+    ["registerShortcut", "keyboard shortcut"],
+  ];
+  for (const [fn, label] of kinds) {
+    let idx = main.indexOf(fn + "(");
+    while (idx !== -1) {
+      const slice = main.slice(idx, idx + 300);
+      const title = slice.match(/title:\s*["'`]([^"'`]+)["'`]/);
+      out.push(title ? `A ${label}: ${title[1]}` : `A ${label}`);
+      idx = main.indexOf(fn + "(", idx + 1);
+    }
+  }
+  const cardKinds = [...main.matchAll(/cards\.register\(\{\s*kind:\s*["'`]([^"'`]+)["'`]/g)];
+  for (const m of cardKinds) out.push(`A new card kind: ${m[1]}`);
+  return out;
+}
+
+function renderSummary(g) {
+  const e = panelEls;
+  if (!e) return;
+  e.summaryName.textContent = g.name || "Unnamed plugin";
+  e.summaryDesc.textContent = g.description || "No description given.";
+  e.summaryAdds.innerHTML = "";
+  const adds = detectedAdditions(g.main);
+  if (adds.length === 0) {
+    e.summaryAdds.appendChild(el("li", "pres-builder-summary-item",
+      "Nothing visible yet — it may only work in the background, or the AI may have missed what you asked for. Tell it what to change below."));
+  } else {
+    for (const a of adds) e.summaryAdds.appendChild(el("li", "pres-builder-summary-item", a));
+  }
+  e.summaryPerms.innerHTML = "";
+  if (g.permissions.length === 0) {
+    e.summaryPerms.appendChild(el("li", "pres-builder-summary-item", "Needs no special access."));
+  } else {
+    for (const p of g.permissions) {
+      e.summaryPerms.appendChild(el("li", "pres-builder-summary-item",
+        PERMISSION_TEXT[p] || `Permission: ${p}`));
+    }
+  }
+}
 
 const SYSTEM_PROMPT = `You write plugins for Bowerbird, a macOS-style infinite whiteboard app. API version is "1". Return JSON only, no markdown, no explanation outside the JSON, with exactly these fields: id, name, description, permissions, main, style.
 - id: lowercase letters, digits and hyphens only, e.g. "my-plugin".
@@ -134,10 +210,14 @@ function showValidation(g) {
   const problems = validate(g);
   panelEls.validation.innerHTML = "";
   if (problems.length === 0) {
-    panelEls.validation.appendChild(el("div", "pres-builder-ok", "Looks good. Read the code, then Install."));
+    panelEls.validation.appendChild(el("div", "pres-builder-ok", "Ready to try."));
   } else {
     for (const p of problems) panelEls.validation.appendChild(el("div", "pres-builder-bad", p));
   }
+  // Try and Install share the same gate: a plugin that does
+  // not pass validation is not tried either, because a
+  // failed trial tells a non-coder nothing useful.
+  if (panelEls.tryBtn) panelEls.tryBtn.disabled = problems.length > 0;
   panelEls.install.disabled = problems.length > 0;
   return problems.length === 0;
 }
@@ -151,8 +231,42 @@ function fillGenerated(parsed) {
   e.main.value = typeof parsed.main === "string" ? parsed.main : "";
   e.style.value = typeof parsed.style === "string" ? parsed.style : "";
   e.resultWrap.style.display = "";
+  renderSummary(readGenerated());
   const ok = showValidation(readGenerated());
   return ok;
+}
+
+// Restore the trial banner and button state when the panel
+// is re-rendered while a trial is running (tab switch).
+function restoreTrialUI() {
+  const e = panelEls;
+  if (!e || !trialState) return;
+  e.trialName.textContent = trialState.name;
+  e.trialWrap.style.display = "";
+  e.tryBtn.disabled = true;
+  e.install.disabled = true;
+  if (e.gen) e.gen.disabled = true;
+  if (e.refine) e.refine.disabled = true;
+  e.trialStatus.textContent = "Trying — try its panel, tool or view, then Keep it or Discard it.";
+}
+
+function setTrialUI(active) {
+  const e = panelEls;
+  if (!e) return;
+  e.trialWrap.style.display = active ? "" : "none";
+  if (active) {
+    e.trialName.textContent = trialState ? trialState.name : "";
+    e.tryBtn.disabled = true;
+    e.install.disabled = true;
+    if (e.gen) e.gen.disabled = true;
+    if (e.refine) e.refine.disabled = true;
+  } else {
+    e.tryBtn.disabled = false;
+    e.install.disabled = false;
+    if (e.gen) e.gen.disabled = false;
+    if (e.refine) e.refine.disabled = false;
+    showValidation(readGenerated());
+  }
 }
 
 async function loadProviderSettings() {
@@ -311,7 +425,53 @@ function initPanel(container) {
 
   const resultWrap = el("div", "pres-builder-result");
   resultWrap.style.display = "none";
-  const resultH = el("h3", "pres-builder-h", "Generated plugin");
+  // The summary card comes first, and is the whole review
+  // for a person who does not code: what the plugin is,
+  // what it adds, and what it can do, in plain language.
+  const summary = el("div", "pres-builder-summary");
+  const summaryName = el("div", "pres-builder-summary-name");
+  const summaryDesc = el("p", "pres-builder-summary-desc");
+  const addsH = el("div", "pres-builder-summary-h", "What you'll get");
+  const summaryAdds = el("ul", "pres-builder-summary-list");
+  const permsH = el("div", "pres-builder-summary-h", "What it can do");
+  const summaryPerms = el("ul", "pres-builder-summary-list");
+  const summaryNote = el("p", "pres-builder-summary-note",
+    "It can only do what is listed above, plus reading your board. It can never change the app itself.");
+  summary.append(summaryName, summaryDesc, addsH, summaryAdds, permsH, summaryPerms, summaryNote);
+
+  // The trial banner, shown only while a trial is running.
+  const trialWrap = el("div", "pres-builder-trial");
+  trialWrap.style.display = "none";
+  const trialText = el("div", "pres-builder-trial-text");
+  const trialName = el("strong", "", "");
+  trialText.append("Trying ", trialName, " — it is not installed yet.");
+  const trialNote = el("p", "pres-builder-trial-note",
+    "Try its panel, tool or view. If it changes your board, you can undo that with Ctrl+Z / Cmd+Z. " +
+    "A plugin being tried cannot install other plugins, or create, rename or delete boards. " +
+    "If you discard it, it is gone completely — but any cards it added stay as placeholders, so delete them if you don't want them.");
+  const trialRow = el("div", "pres-builder-row");
+  const keepBtn = el("button", "pres-builder-btn", "Keep it");
+  const discardBtn = el("button", "pres-builder-btn", "Discard");
+  trialRow.append(keepBtn, discardBtn);
+  const trialStatus = el("div", "pres-builder-status");
+  trialWrap.append(trialText, trialNote, trialRow, trialStatus);
+
+  const resultRow = el("div", "pres-builder-row");
+  const tryBtn = el("button", "pres-builder-btn", "Try it");
+  tryBtn.disabled = true;
+  const install = el("button", "pres-builder-btn", "Install without trying");
+  install.disabled = true;
+  resultRow.append(tryBtn, install);
+  const installStatus = el("div", "pres-builder-status");
+  const validation = el("div", "pres-builder-validation");
+
+  // The code, behind a button — there for people who want
+  // it, not in the way of people who don't. Name and
+  // description stay editable here, and the summary above
+  // follows them.
+  const showCodeBtn = el("button", "pres-builder-btn pres-builder-wide", "Show code");
+  const codeWrap = el("div", "pres-builder-codewrap");
+  codeWrap.style.display = "none";
   const idLabel = el("label", "pres-builder-label", "Id");
   const id = el("input", "pres-builder-input");
   const nameLabel = el("label", "pres-builder-label", "Name");
@@ -320,7 +480,7 @@ function initPanel(container) {
   const desc = el("input", "pres-builder-input");
   const permsLabel = el("label", "pres-builder-label", "Permissions, comma-separated");
   const perms = el("input", "pres-builder-input");
-  const mainLabel = el("label", "pres-builder-label", "main.js — read this before installing");
+  const mainLabel = el("label", "pres-builder-label", "main.js");
   const main = el("textarea", "pres-builder-input pres-builder-code");
   main.rows = 20;
   main.spellcheck = false;
@@ -328,29 +488,30 @@ function initPanel(container) {
   const style = el("textarea", "pres-builder-input pres-builder-code");
   style.rows = 10;
   style.spellcheck = false;
-  const steerH = el("h3", "pres-builder-h", "Steer the AI");
+  codeWrap.append(idLabel, id, nameLabel, name, descLabel, desc, permsLabel, perms,
+    mainLabel, main, styleLabel, style);
+
+  const steerH = el("h3", "pres-builder-h", "Not quite right? Tell it what to change");
   const steer = el("textarea", "pres-builder-input pres-builder-text");
   steer.placeholder = "Make the list show swatches too, and sort it by size.";
   steer.rows = 3;
   const refine = el("button", "pres-builder-btn pres-builder-wide", "Refine with this");
-  const validation = el("div", "pres-builder-validation");
-  const resultRow = el("div", "pres-builder-row");
-  const check = el("button", "pres-builder-btn", "Check code");
-  const install = el("button", "pres-builder-btn", "Install");
-  install.disabled = true;
-  resultRow.append(check, install);
-  const installStatus = el("div", "pres-builder-status");
   const help = el("p", "pres-builder-help",
-    "Installing a plugin is trusting its code, like any plugin. Read the code above before you press Install. " +
-    "The AI only writes plugins — it never sees or changes the core of the app.");
-  resultWrap.append(resultH, idLabel, id, nameLabel, name, descLabel, desc, permsLabel, perms,
-    mainLabel, main, styleLabel, style, steerH, steer, refine, validation, resultRow, installStatus, help);
+    "Trying a plugin does not install it. Keeping it installs it, like any plugin — and a plugin you keep " +
+    "is trusting its code. The AI only writes plugins — it never sees or changes the core of the app.");
+  resultWrap.append(summary, trialWrap, resultRow, installStatus, validation,
+    showCodeBtn, codeWrap, steerH, steer, refine, help);
 
   wrap.append(askH, ask, gen, genStatus, settingsHint, resultWrap);
   container.appendChild(wrap);
 
   panelEls = { ask, gen, genStatus, resultWrap, id, name, desc, perms, main, style,
-    steer, refine, validation, check, install, installStatus };
+    steer, refine, validation, install, installStatus, tryBtn, keepBtn, discardBtn,
+    trialWrap, trialName, trialStatus, summaryName, summaryDesc, summaryAdds, summaryPerms,
+    showCodeBtn, codeWrap };
+  name.addEventListener("input", () => { panelEls.summaryName.textContent = name.value.trim() || "Unnamed plugin"; });
+  desc.addEventListener("input", () => { panelEls.summaryDesc.textContent = desc.value.trim() || "No description given."; });
+  restoreTrialUI();
 
   gen.addEventListener("click", async () => {
     const description = ask.value.trim();
@@ -366,8 +527,8 @@ function initPanel(container) {
       lastMessages = [...messages, { role: "assistant", content: raw }];
       const ok = fillGenerated(parsed);
       genStatus.textContent = ok
-        ? "Generated. Read the code below, then Install — or steer it further."
-        : "Generated, with problems listed below. Fix the code, then Check code again.";
+        ? "Generated. Try it below — or tell it what to change."
+        : "Generated, with problems listed below. Tell it what to change below, instead of editing code.";
     } catch (e) {
       genStatus.textContent = `Generation failed: ${e.message}`;
     }
@@ -385,21 +546,100 @@ function initPanel(container) {
       const ok = fillGenerated(parsed);
       steer.value = "";
       genStatus.textContent = ok
-        ? "Refined. Read the code below, then Install — or steer it again."
-        : "Refined, with problems listed below. Fix the code, then Check code again.";
+        ? "Refined. Try it below — or tell it what to change again."
+        : "Refined, with problems listed below. Tell it what to change below, instead of editing code.";
     } catch (e) {
       genStatus.textContent = `Refinement failed: ${e.message}`;
     }
   });
 
-  check.addEventListener("click", () => {
-    showValidation(readGenerated());
-    installStatus.textContent = "";
+  showCodeBtn.addEventListener("click", () => {
+    const showing = codeWrap.style.display !== "none";
+    codeWrap.style.display = showing ? "none" : "";
+    showCodeBtn.textContent = showing ? "Show code" : "Hide code";
+  });
+
+  tryBtn.addEventListener("click", async () => {
+    const g = readGenerated();
+    if (!showValidation(g)) { installStatus.textContent = "It needs a fix first — tell the AI what to change below, instead of editing code."; return; }
+    if (trialState) { installStatus.textContent = "You're already trying a plugin — Discard it first."; return; }
+    tryBtn.disabled = true;
+    installStatus.textContent = "Trying…";
+    try {
+      await apiRef.plugins.try({
+        id: g.id,
+        name: g.name,
+        description: g.description,
+        permissions: g.permissions,
+        mainCode: g.main,
+        styleCode: g.style,
+      });
+      trialState = { id: g.id, name: g.name };
+      setTrialUI(true);
+      installStatus.textContent = "";
+      panelEls.trialStatus.textContent = "Trying — try its panel, tool or view, then Keep it or Discard it.";
+      apiRef.ui.toast(`Trying ${g.name} — not installed yet`);
+    } catch (e) {
+      installStatus.textContent = `It didn't start: ${e.message}`;
+      tryBtn.disabled = false;
+    }
+  });
+
+  keepBtn.addEventListener("click", async () => {
+    if (!trialState) return;
+    const trialId = trialState.id;
+    keepBtn.disabled = true;
+    panelEls.trialStatus.textContent = "Keeping…";
+    // End the trial first: installing the same id while the
+    // trial is still loaded would leave the real plugin
+    // unactivated, because refresh skips ids already loaded.
+    let ended = false;
+    try {
+      await apiRef.plugins.endTrial(trialId);
+      ended = true;
+      trialState = null;
+      const g = readGenerated();
+      await apiRef.plugins.install({
+        id: g.id,
+        name: g.name,
+        description: g.description,
+        permissions: g.permissions,
+        mainCode: g.main,
+        styleCode: g.style,
+      });
+      await apiRef.plugins.refresh();
+      setTrialUI(false);
+      installStatus.textContent = `Kept ${g.name}. Find it in Settings → Plugins, and in its panel, view or tool.`;
+      apiRef.ui.toast(`Kept ${g.name}`);
+    } catch (e) {
+      // If the trial already ended but the install failed,
+      // the plugin is gone either way — clear the banner so
+      // the user can fix it and Try again.
+      if (ended) trialState = null;
+      setTrialUI(false);
+      installStatus.textContent = `Keeping failed: ${e.message}`;
+      keepBtn.disabled = false;
+    }
+  });
+
+  discardBtn.addEventListener("click", async () => {
+    if (!trialState) return;
+    const name = trialState.name;
+    discardBtn.disabled = true;
+    panelEls.trialStatus.textContent = "Discarding…";
+    try {
+      await apiRef.plugins.endTrial(trialState.id);
+    } catch { /* already gone: discard still means gone */ }
+    trialState = null;
+    setTrialUI(false);
+    discardBtn.disabled = false;
+    installStatus.textContent = `Discarded ${name}. Nothing was installed, and it won't come back. If it added cards to your board, those cards stay as placeholders — delete them if you don't want them.`;
   });
 
   install.addEventListener("click", async () => {
     const g = readGenerated();
-    if (!showValidation(g)) { installStatus.textContent = "Fix the problems above first."; return; }
+    if (trialState) { installStatus.textContent = "You're already trying a plugin — Keep it or Discard it first."; return; }
+    if (!showValidation(g)) { installStatus.textContent = "It needs a fix first — tell the AI what to change below, instead of editing code."; return; }
     install.disabled = true;
     installStatus.textContent = "Installing…";
     try {
@@ -440,7 +680,14 @@ function activate(api) {
   });
 }
 
-function deactivate() {
+async function deactivate() {
+  // If a trial is running, end it: without the Builder
+  // panel there is no Keep/Discard for it, and a trial
+  // must never be left running with no way to remove it.
+  if (trialState && apiRef) {
+    try { await apiRef.plugins.endTrial(trialState.id); } catch { /* already gone */ }
+  }
+  trialState = null;
   // Only the in-memory copy is cleared here: the saved key
   // stays in secure storage, so disabling and re-enabling
   // the plugin does not make the user retype it. Forget

@@ -3195,12 +3195,14 @@ function renderPluginSettings(): void {
     palette: "Colour palettes to place as swatches.",
     presentation: "Slides on the board, played in order.",
     "command-palette": "Every command, from one place.",
-    "plugin-builder": "Describe a plugin, and an AI writes it for you to check and install.",
+    "plugin-builder": "Describe a plugin, and an AI writes it for you to try, then keep or discard.",
   };
   let html = "";
   for (const lp of plugins) {
     const m = lp.manifest;
-    const state = lp.failed ? "Failed" : lp.active ? "On" : "Off";
+    // A trial plugin is not installed yet: the Builder panel
+    // owns it, so it shows as Trying and gets no toggle.
+    const state = lp.trial ? "Trying" : lp.failed ? "Failed" : lp.active ? "On" : "Off";
     html += `<div class="plugin-row"><div class="plugin-row-text"><div><strong>${escapeHtml(m.name)}</strong> <span class="meta">${state}</span></div>`;
     const desc = descriptions[m.id];
     if (desc) html += `<p class="meta">${desc}</p>`;
@@ -3217,7 +3219,8 @@ function renderPluginSettings(): void {
     const hasSettings = document.querySelector(`#plugin-settings-sections [data-plugin="${m.id}"]`) !== null;
     html += `</div><span style="display:flex;gap:8px;flex:none">`;
     if (lp.active && hasSettings) html += `<button data-plugin-settings="${m.id}">Settings</button>`;
-    html += `<button data-plugin-toggle="${m.id}">${lp.active ? "Disable" : "Enable"}</button></span>`;
+    if (!lp.trial) html += `<button data-plugin-toggle="${m.id}">${lp.active ? "Disable" : "Enable"}</button></span>`;
+    else html += `</span>`;
     html += `</div>`;
   }
   list.innerHTML = html;

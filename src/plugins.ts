@@ -335,6 +335,13 @@ export interface PluginContext {
   plugins: {
     install: (plugin: { id: string; name: string; description: string; permissions: string[]; mainCode: string; styleCode: string }) => Promise<PluginManifest>;
     refresh: () => Promise<void>;
+    // Try a plugin without installing it: it runs in memory only,
+    // is never written to the plugins folder, and endTrial removes
+    // it completely. Used by the Plugin Builder, so a person who
+    // did not write the code can try it first and only keep it
+    // if it does what they wanted.
+    try: (plugin: { id: string; name: string; description: string; permissions: string[]; mainCode: string; styleCode: string }) => Promise<PluginManifest>;
+    endTrial: (id: string) => Promise<void>;
   };
   events: {
     on: (event: string, handler: () => void) => void;
@@ -357,6 +364,9 @@ export interface PluginContext {
 
 interface LoadedPlugin {
   manifest: PluginManifest;
+  // Trial plugins run in memory only (see tryPlugin): they are
+  // never written to disk, and endTrial removes them entirely.
+  trial?: boolean;
   active: boolean;
   failed: boolean;
   error: string | null;
@@ -556,9 +566,21 @@ function isPluginCard(item: Item): item is Item & { kind: { Plugin: { plugin: st
 
 // ---------------------------------------------------------------- API builder
 
-function createContext(manifest: PluginManifest): PluginContext {
+function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): PluginContext {
   const pluginId = manifest.id;
+  const trial = !!opts?.trial;
   const require = (perm: string) => requirePerm(manifest, perm);
+  // A trial plugin is still a plugin, so it runs with the same
+  // permission checks as an installed one — but it must not be
+  // able to make anything permanent while it is only being
+  // tried: no installing other plugins, and no creating,
+  // renaming, switching or deleting boards. Board writes it
+  // does make (adding or deleting cards) are undoable, like
+  // any board write, and the Builder panel says so while
+  // a trial is running.
+  const requireNotTrial = (what: string) => {
+    if (trial) throw new Error(`a plugin being tried cannot ${what}`);
+  };
   return {
     version: "1",
     plugin: { id: manifest.id, name: manifest.name, version: manifest.version },
@@ -661,18 +683,22 @@ function createContext(manifest: PluginManifest): PluginContext {
       },
       create: async (name: string) => {
         require("board:write");
+        requireNotTrial("create a board");
         return bridge!.createBoard(name);
       },
       switch: async (name: string, preserveUndo = false) => {
         require("board:write");
+        requireNotTrial("switch boards");
         return host!.switchBoard(name, preserveUndo);
       },
       rename: async (oldName: string, newName: string) => {
         require("board:write");
+        requireNotTrial("rename a board");
         return bridge!.renameBoard(oldName, newName);
       },
       delete: async (name: string) => {
         require("board:write");
+        requireNotTrial("delete a board");
         return bridge!.deleteBoard(name);
       },
     },
@@ -849,11 +875,23 @@ function createContext(manifest: PluginManifest): PluginContext {
     plugins: {
       install: async (plugin) => {
         require("plugins:install");
+        requireNotTrial("install a plugin");
         return bridge!.installPlugin(plugin);
       },
       refresh: async () => {
         require("plugins:install");
+        requireNotTrial("install a plugin");
         await refreshPlugins();
+      },
+      try: async (plugin) => {
+        require("plugins:install");
+        requireNotTrial("try a plugin");
+        return tryPlugin(plugin);
+      },
+      endTrial: async (id: string) => {
+        require("plugins:install");
+        requireNotTrial("end a trial");
+        await endTrial(id);
       },
     },
     events: {
@@ -1325,23 +1363,34 @@ function unregisterPlugin(pluginId: string): void {
   host?.render();
 }
 
-async function activatePlugin(manifest: PluginManifest): Promise<void> {
+async function activatePlugin(manifest: PluginManifest, source?: { mainCode: string; styleCode: string }): Promise<void> {
   const lp = loaded.get(manifest.id);
   if (!lp || !bridge) return;
   // Styles first, so the plugin's first render already looks right.
-  for (const stylePath of manifest.styles ?? []) {
-    try {
-      const css = await bridge.readPluginFile(manifest.id, stylePath);
+  // A trial plugin has no files on disk, so its stylesheet comes
+  // from the supplied code instead of the bridge.
+  if (source) {
+    if (source.styleCode.trim()) {
       const style = document.createElement("style");
       style.dataset.plugin = manifest.id;
-      style.textContent = css;
+      style.textContent = source.styleCode;
       document.head.appendChild(style);
-    } catch (e) {
-      // A missing stylesheet must not block the plugin.
-      console.warn(`Plugin ${manifest.id} stylesheet ${stylePath} failed: ${String(e)}`);
+    }
+  } else {
+    for (const stylePath of manifest.styles ?? []) {
+      try {
+        const css = await bridge.readPluginFile(manifest.id, stylePath);
+        const style = document.createElement("style");
+        style.dataset.plugin = manifest.id;
+        style.textContent = css;
+        document.head.appendChild(style);
+      } catch (e) {
+        // A missing stylesheet must not block the plugin.
+        console.warn(`Plugin ${manifest.id} stylesheet ${stylePath} failed: ${String(e)}`);
+      }
     }
   }
-  const code = await bridge.readPluginFile(manifest.id, manifest.main);
+  const code = source ? source.mainCode : await bridge.readPluginFile(manifest.id, manifest.main);
   const blob = new Blob([code], { type: "text/javascript" });
   const url = URL.createObjectURL(blob);
   try {
@@ -1353,7 +1402,7 @@ async function activatePlugin(manifest: PluginManifest): Promise<void> {
       throw new Error(`Plugin ${manifest.id} main.js does not export activate(api)`);
     }
     lp.module = mod;
-    const api = createContext(manifest);
+    const api = createContext(manifest, { trial: !!lp.trial });
     await mod.activate(api);
     lp.active = true;
     lp.failed = false;
@@ -1377,6 +1426,58 @@ async function deactivatePlugin(manifest: PluginManifest): Promise<void> {
   lp.active = false;
   unregisterPlugin(manifest.id);
   document.querySelectorAll(`style[data-plugin="${manifest.id}"]`).forEach((el) => el.remove());
+}
+
+// ---------------------------------------------------------------- trial plugins
+//
+// A trial plugin is activated from the supplied code, in memory
+// only — nothing is written to the plugins folder, so ending the
+// trial (or quitting the app) removes it completely. This is a
+// reversibility trial, not a code sandbox: the plugin still runs
+// in the renderer with the same permission checks as an installed
+// plugin, and the trial guards in createContext only stop it
+// making permanent changes (installing plugins, creating or
+// deleting boards). A trial plugin's own storage writes, if it
+// has the storage permission, are scoped by its id and inert
+// once the trial ends, because no plugin with that id exists
+// to read them again. The Builder panel says all of this in
+// plain language while a trial is running; it must not be
+// presented to the user as a security sandbox.
+export async function tryPlugin(plugin: { id: string; name: string; description: string; permissions: string[]; mainCode: string; styleCode: string }): Promise<PluginManifest> {
+  if (!bridge || !host) throw new Error("plugins are not ready yet");
+  if (typeof plugin.id !== "string" || !/^[a-z0-9-]+$/.test(plugin.id)) throw new Error("plugin id must be lowercase letters, digits and hyphens");
+  if (typeof plugin.name !== "string" || !plugin.name.trim() || typeof plugin.mainCode !== "string" || !plugin.mainCode.trim()) throw new Error("plugin name and code are required");
+  if (plugin.mainCode.length > 200000 || (typeof plugin.styleCode === "string" && plugin.styleCode.length > 200000)) throw new Error("plugin code is too large");
+  if (!Array.isArray(plugin.permissions) || plugin.permissions.some((p) => typeof p !== "string")) throw new Error("plugin permissions must be strings");
+  if (loaded.has(plugin.id)) throw new Error(`a plugin called ${plugin.id} already exists`);
+  const manifest: PluginManifest = {
+    apiVersion: "1",
+    id: plugin.id,
+    name: plugin.name.trim(),
+    description: typeof plugin.description === "string" ? plugin.description : "",
+    version: "1.0.0",
+    main: "main.js",
+    styles: typeof plugin.styleCode === "string" && plugin.styleCode.trim() ? ["style.css"] : [],
+    permissions: plugin.permissions,
+  };
+  loaded.set(plugin.id, { manifest, trial: true, active: false, failed: false, error: null, module: null });
+  try {
+    await activatePlugin(manifest, { mainCode: plugin.mainCode, styleCode: plugin.styleCode ?? "" });
+  } catch (e) {
+    loaded.delete(plugin.id);
+    throw e;
+  }
+  renderViewSwitcher();
+  host.render();
+  return manifest;
+}
+
+export async function endTrial(id: string): Promise<void> {
+  const lp = loaded.get(id);
+  if (!lp || !lp.trial) return;
+  await deactivatePlugin(lp.manifest);
+  loaded.delete(id);
+  host?.render();
 }
 
 export async function initPlugins(h: PluginHost, b: PluginBridge): Promise<void> {
@@ -1420,9 +1521,14 @@ export async function initPlugins(h: PluginHost, b: PluginBridge): Promise<void>
 
 export async function setPluginEnabled(id: string, enabled: boolean): Promise<void> {
   if (!bridge || !host) return;
-  await bridge.setPluginEnabled(id, enabled);
   const lp = loaded.get(id);
   if (!lp) return;
+  // A trial plugin is owned by the Builder panel (Keep/Discard),
+  // not by the Settings toggle, so a toggle must not desync it
+  // or write a persisted enabled state for a plugin that is
+  // not on disk.
+  if (lp.trial) return;
+  await bridge.setPluginEnabled(id, enabled);
   lp.manifest.enabled = enabled;
   if (enabled && !lp.active && !lp.failed) {
     // A previously failed plugin gets one retry on re-enable; a
