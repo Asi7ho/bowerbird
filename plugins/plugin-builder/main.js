@@ -538,8 +538,8 @@ function initPanel(container) {
   const log = el("div", "pres-builder-log");
   const inputRow = el("div", "pres-builder-chat-input-row");
   const input = el("textarea", "pres-builder-input pres-builder-text");
-  input.placeholder = "A panel that lists every image on the board, with a button to duplicate each one.";
-  input.rows = 5;
+  input.placeholder = "Describe the plugin you want…";
+  input.rows = 2;
   const send = el("button", "pres-builder-btn pres-builder-send");
   // Icon only, no text: a paper plane, in the app's
   // line-icon style, so the button takes as little of
@@ -552,14 +552,15 @@ function initPanel(container) {
   container.appendChild(wrap);
   chatEls = { log, input, send };
   renderChatLog();
-  // The box starts tall and grows as you type, up to a
-  // cap, then scrolls internally — a two-row box is too
-  // small for describing a plugin.
+  // The box starts at the same height as every other
+  // input in the app and grows as you type, up to a
+  // cap, then scrolls internally — so it is never a
+  // big empty block, and never too small to write in.
   const autosize = () => {
     input.style.height = "auto";
-    const h = Math.min(input.scrollHeight, 180);
+    const h = Math.min(input.scrollHeight, 120);
     input.style.height = h + "px";
-    input.style.overflowY = input.scrollHeight > 180 ? "auto" : "hidden";
+    input.style.overflowY = input.scrollHeight > 120 ? "auto" : "hidden";
   };
   input.addEventListener("input", autosize);
   autosize();

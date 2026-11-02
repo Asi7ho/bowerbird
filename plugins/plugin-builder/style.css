@@ -18,7 +18,7 @@
   padding-top: 8px; border-top: 1px solid var(--hairline);
 }
 .plugin-panel-body .pres-builder-chat-input-row .pres-builder-input {
-  flex: 1 1 auto; min-height: 110px; resize: none;
+  flex: 1 1 auto; resize: none;
 }
 .plugin-panel-body .pres-builder-chat-input-row .pres-builder-send {
   flex: none; padding: 8px;
