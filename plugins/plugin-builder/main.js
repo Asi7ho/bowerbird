@@ -327,6 +327,9 @@ async function onChatSend() {
   const text = chatEls.input.value.trim();
   if (!text) return;
   chatEls.input.value = "";
+  // Back to its starting height for the next message.
+  chatEls.input.style.height = "";
+  chatEls.input.style.overflowY = "hidden";
   pushChat({ kind: "user", text });
   setChatBusy(true);
   try {
@@ -536,13 +539,24 @@ function initPanel(container) {
   const inputRow = el("div", "pres-builder-chat-input-row");
   const input = el("textarea", "pres-builder-input pres-builder-text");
   input.placeholder = "A panel that lists every image on the board, with a button to duplicate each one.";
-  input.rows = 2;
+  input.rows = 5;
   const send = el("button", "pres-builder-btn pres-builder-send", "Send");
   inputRow.append(input, send);
   wrap.append(log, inputRow);
   container.appendChild(wrap);
   chatEls = { log, input, send };
   renderChatLog();
+  // The box starts tall and grows as you type, up to a
+  // cap, then scrolls internally — a two-row box is too
+  // small for describing a plugin.
+  const autosize = () => {
+    input.style.height = "auto";
+    const h = Math.min(input.scrollHeight, 180);
+    input.style.height = h + "px";
+    input.style.overflowY = input.scrollHeight > 180 ? "auto" : "hidden";
+  };
+  input.addEventListener("input", autosize);
+  autosize();
   send.addEventListener("click", () => void onChatSend());
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
