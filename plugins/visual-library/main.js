@@ -521,6 +521,12 @@ function searchRow(targetView) {
   input.type = "text";
   input.placeholder = "Search library…";
   input.value = query;
+  // Without this, the core window keydown handler sees every
+  // key typed here: v/p/a would switch tools, Delete would
+  // delete the selected card, +/- would zoom, and so on.
+  // The core only guards textareas and the board search
+  // input, so a plugin input must stop its own keydown.
+  input.addEventListener("keydown", (e) => e.stopPropagation());
   input.addEventListener("input", () => {
     query = input.value;
     if (panelSearch && panelSearch !== input) panelSearch.value = query;
