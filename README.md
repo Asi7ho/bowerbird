@@ -117,9 +117,9 @@ npx tsc --noEmit
 npm run build
 ```
 
-## Not yet
+## Later
 
-- No system-wide global hotkey. That needs an OS-level hook, with accessibility permission on macOS.
+- Sync, sharing and collaboration: planned much later, as a plugin, not in core.
 
 ## License
 

@@ -660,6 +660,13 @@ async function loadBoardFromJson(json: string, dir: string, preserveUndo = false
   parsed.bg = parsed.bg ?? "#FFFFFF";
   parsed.grid = parsed.grid ?? "Dots";
   parsed.camera = parsed.camera ?? { x: 0, y: 0, zoom: 1 };
+  // Frames never rotate: a frame carrying rotation from
+  // an older board, or set while Presentation was
+  // disabled, is healed on load, so what is drawn always
+  // matches the unrotated rect Presentation plays.
+  for (const it of parsed.items) {
+    if (isFrameCard(it)) delete (it as { rotation?: number }).rotation;
+  }
   board = parsed;
   boardSearchVersion++;
   boardDir = dir;
@@ -752,6 +759,12 @@ function safeHttpUrl(u: string | null | undefined): string | null {
 
 function isFrameCard(it: Item | undefined): boolean {
   if (!it || !("Plugin" in it.kind)) return false;
+  // A slide is a frame by its stored kind, not only by its
+  // renderer: frames must never rotate, even if the
+  // Presentation plugin is disabled and no renderer is
+  // registered for them. Other frame kinds still come
+  // from their renderer.
+  if (it.kind.Plugin.plugin === "presentation" && it.kind.Plugin.kind === "slide") return true;
   return getCardRenderer(it)?.frame === true;
 }
 
@@ -3559,6 +3572,8 @@ async function init(): Promise<void> {
           it.kind.UrlCard.image = it.kind.UrlCard.image ?? null;
           it.kind.UrlCard.icon = it.kind.UrlCard.icon ?? null;
         }
+        // Frames never rotate; see loadBoardFromJson.
+        if (isFrameCard(it)) delete (it as { rotation?: number }).rotation;
       }
     } else {
       board = welcomeBoard(boardDir, loaded.pdf_size_bytes, loaded.video_size_bytes ?? 0);
