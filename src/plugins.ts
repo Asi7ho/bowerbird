@@ -170,6 +170,7 @@ export interface PluginHost {
   setSelected: (ids: number[]) => void;
   addItem: (kind: Kind, pos: Pt, size: Size) => number;
   updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown }) => boolean;
+  updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; data?: unknown }>) => boolean;
   moveItem: (id: number, toIndex: number) => boolean;
   removeItem: (id: number) => boolean;
   renderBoardCard: (id: number) => string | null;
@@ -225,6 +226,7 @@ export interface PluginContext {
     addItem: (kind: Kind, pos: Pt, size: Size) => number;
     addPluginCard: (kind: string, data: unknown, pos: Pt, size: Size) => number;
     updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown }) => boolean;
+    updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; data?: unknown }>) => boolean;
     moveItem: (id: number, toIndex: number) => boolean;
     removeItem: (id: number) => boolean;
     save: () => void;
@@ -631,6 +633,20 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         }
         const ok = host!.updateItem(id, patch);
         return ok;
+      },
+      updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; data?: unknown }>) => {
+        require("board:write");
+        // Same data rule as updateItem, per patch: a plugin
+        // may only rewrite its own plugin card data.
+        for (const patch of patches) {
+          if (patch.data !== undefined) {
+            const it = host!.getBoard().items.find((i) => i.id === patch.id);
+            if (!it || !isPluginCard(it) || it.kind.Plugin.plugin !== pluginId) {
+              throw new Error(`Plugin ${pluginId} cannot edit another plugin's card data`);
+            }
+          }
+        }
+        return host!.updateItems(patches);
       },
       moveItem: (id: number, toIndex: number) => {
         require("board:write");

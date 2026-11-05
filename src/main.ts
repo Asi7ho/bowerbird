@@ -1987,6 +1987,13 @@ window.addEventListener("mouseup", (e: MouseEvent) => {
   } else {
     updateSelection();
   }
+  // A marquee drag ends in render(), not updateSelection(),
+  // so without this the selection event never fires after
+  // marquee-selecting — and anything listening for it, like
+  // a plugin panel enabling its buttons for the selection,
+  // stays stale. The toolbar and resize handle update here
+  // too, for the same reason.
+  if (d.kind === "marquee") updateSelection();
 });
 
 window.addEventListener("wheel", (e: WheelEvent) => {
@@ -3636,6 +3643,25 @@ async function init(): Promise<void> {
       if (patch.size) it.size = patch.size;
       if (patch.group !== undefined) it.group = patch.group;
       if (patch.data !== undefined && "Plugin" in it.kind) it.kind.Plugin.data = patch.data;
+      save(); render();
+      return true;
+    },
+    updateItems: (patches) => {
+      // One save for the whole batch, so one tidy action
+      // is one undo step, not one per card: updateItem
+      // saves after every item, and a five-card align
+      // would otherwise take five undos to undo.
+      let changed = false;
+      for (const { id, ...patch } of patches) {
+        const it = boardGet(board, id);
+        if (!it) continue;
+        if (patch.pos) it.pos = patch.pos;
+        if (patch.size) it.size = patch.size;
+        if (patch.group !== undefined) it.group = patch.group;
+        if (patch.data !== undefined && "Plugin" in it.kind) it.kind.Plugin.data = patch.data;
+        changed = true;
+      }
+      if (!changed) return false;
       save(); render();
       return true;
     },

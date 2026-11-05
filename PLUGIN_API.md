@@ -83,6 +83,7 @@ Enable and disable are per plugin, in Settings → Plugins. Disabling unregister
 - `addItem(kind, pos, size)` — add a core card kind. Requires `board:write`.
 - `addPluginCard(kind, data, pos, size)` — add one of this plugin's own card kinds. Requires `board:write`.
 - `updateItem(id, patch)` — patch `pos`, `size`, `group`, or, for a plugin card of this plugin, `data`. Requires `board:write`.
+- `updateItems(patches)` — apply several `updateItem` patches at once, with one save at the end, so the whole batch is one undo step. Requires `board:write`. The Tidy Up plugin uses this: aligning five cards with `updateItem` would take five undos to undo.
 - `removeItem(id)` — requires `board:write`.
 - `groupSelected()`, `ungroupSelected()`, `deleteSelected()` — group, ungroup or delete the current selection, exactly as Ctrl+G, Ctrl+U and Delete do, including group ids from `board.next_group`. Requires `board:write`. Returns false when there is nothing to do.
 - `undo()`, `redo()` — undo or redo one step, exactly as Ctrl/Cmd+Z and Ctrl/Cmd+Shift+Z do. Requires `board:write`. Returns false when there is nothing to undo or redo. `canUndo()`, `canRedo()` need no permission.
@@ -241,6 +242,7 @@ Plugins in `plugins/` ship inside the app, are listed in Settings as "Built in",
 - `presentation/` — slides are frames on the board. Draw a rectangle around cards to make a slide, then play it. The panel lists slides in frame creation order, with Play and Draw a slide at the top, per-slide Play and Delete, and Export pinned to the very bottom, below a scrolling slide list. Double-clicking a frame on the board plays from that slide. Export downloads all slides, in order, as a single HTML file that shows one slide at a time, with arrows and a counter: images, audio and video are embedded, links become real links, and print CSS gives one slide per page. Playing shows a frame's area, scaled to fit, cropped to the frame: every card that overlaps it at all, every pen stroke and connector segment that enters it, drawing under cards. Video and audio play in place, a link opens outside, other clicks do nothing. Needs `board:write`, `view:replace` and `files:read`.
 - `command-palette/` — Cmd or Ctrl + K opens one place to run anything: plugin commands, jumping to a board card, switching views, picking a tool, and core actions like zoom, group, ungroup, delete, Settings, minimise and hide. Type to search, Arrow keys to move, Enter to run, Esc to close. Needs `board:write` and `window`.
 - `boards/` — multiple boards, as a panel: click a board to open it, click the current board's name to rename it inline, × to delete it (with confirmation), and a name field plus New board to create one and open it at once. Needs `board:write`.
+- `tidy-up/` — align and distribute the selected cards, from a panel: six align actions (to an edge or the centre of the selection) and two distribute actions (even spacing, first and last cards fixed). Needs 2 or more selected cards to align, 3 or more to distribute. Cards only. Needs `board:write`.
 
 ## Frame cards
 
