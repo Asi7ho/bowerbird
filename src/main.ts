@@ -152,6 +152,12 @@ let board: Board = {
   bg: "#FFFFFF", grid: "Dots",
 };
 let boardDir = "";
+// Board generation: bumped on every board load, so async
+// work started for one board (a PDF render, a search
+// index, an audio probe) can tell, after an await, that
+// the user has switched boards and must not write its
+// result into the new board's card with the same id.
+let boardGeneration = 0;
 let tool: Tool = "select";
 let penColor = PALETTE[0];
 let selected: number[] = [];
@@ -219,6 +225,11 @@ function getPdfDoc(path: string): Promise<PdfDoc> {
 function indexPdfForSearch(path: string): void {
   if (pdfSearchText.has(path) || pdfSearchIndexing.has(path)) return;
   pdfSearchIndexing.add(path);
+  // If the board switches mid-extraction, the text is
+  // still valid for its path, but bumping the new
+  // board's search version and re-running its search
+  // would be for the wrong board: skip both.
+  const gen = boardGeneration;
   void getPdfDoc(path).then(async (doc) => {
     try {
       const parts: string[] = [];
@@ -231,9 +242,10 @@ function indexPdfForSearch(path: string): void {
         }
       }
       pdfSearchText.set(path, parts.join(" "));
-      boardSearchVersion++;
+      if (gen === boardGeneration) boardSearchVersion++;
     } catch { /* search falls back to the filename */ }
     pdfSearchIndexing.delete(path);
+    if (gen !== boardGeneration) return;
     const input = document.getElementById("search-input") as HTMLInputElement | null;
     if (input && input.value.trim() !== "") updateSearch();
   }).catch(() => { pdfSearchIndexing.delete(path); });
@@ -279,6 +291,11 @@ function loadAudioDuration(id: number, path: string): void {
       retry.preload = "metadata";
       retry.onloadedmetadata = () => {
         audioProbing.delete(path);
+        // The board may have switched while probing: only
+        // write the duration if this card is still an
+        // audio card for the same file on this board.
+        const it = boardGet(board, id);
+        if (!it || !("Audio" in it.kind) || it.kind.Audio.path !== path) return;
         if (isFinite(retry.duration)) {
           audioDurations.set(path, retry.duration);
           const durEl = cardsEl.querySelector(`[data-audio-dur="${id}"]`);
@@ -299,6 +316,9 @@ function loadAudioDuration(id: number, path: string): void {
   probe.preload = "metadata";
   probe.onloadedmetadata = () => {
     audioProbing.delete(path);
+    // Same board-switch guard as the retry above.
+    const it = boardGet(board, id);
+    if (!it || !("Audio" in it.kind) || it.kind.Audio.path !== path) return;
     if (isFinite(probe.duration)) {
       audioDurations.set(path, probe.duration);
       const durEl = cardsEl.querySelector(`[data-audio-dur="${id}"]`);
@@ -321,11 +341,23 @@ async function renderPdfPage(id: number, path: string): Promise<void> {
     // One shared promise per path, so two cards showing the
     // same PDF wait on the same load instead of racing it.
     const doc = await getPdfDoc(path);
+    // The board may have switched while the document
+    // loaded: the new board can have a different card
+    // at this id, and drawing the old PDF into its
+    // canvas would show the wrong page on the wrong
+    // card. Only render when this card is still a PDF
+    // card for the same file on this board.
+    const stillPdf = () => {
+      const it = boardGet(board, id);
+      return it && "PdfCard" in it.kind && it.kind.PdfCard.path === path;
+    };
+    if (!stillPdf()) return;
     canvas = cardsEl.querySelector(`[data-pdf-canvas="${id}"]`) as HTMLCanvasElement | null;
     if (!canvas) return;
     const pageNum = pdfPages.get(id) ?? 1;
     renderedPage = pageNum;
     const page = await doc.getPage(Math.max(1, Math.min(pageNum, doc.numPages)));
+    if (!stillPdf()) return;
     // Render at device scale, then let CSS fit the canvas to
     // its box: a portrait page in a wide card letterboxes,
     // a landscape page fills it, and zoom scales the layer.
@@ -342,6 +374,11 @@ async function renderPdfPage(id: number, path: string): Promise<void> {
     if (prev) prev.disabled = pageNum <= 1;
     if (next) next.disabled = pageNum >= doc.numPages;
   } catch {
+    // Same board-switch guard: a failed render for a
+    // card that is no longer this PDF must not write
+    // into the new board's card at this id.
+    const it = boardGet(board, id);
+    if (!it || !("PdfCard" in it.kind) || it.kind.PdfCard.path !== path) return;
     pdfFailed.add(path);
     const wrap = cardsEl.querySelector(`[data-pdf-wrap="${id}"]`);
     if (wrap) wrap.textContent = "Could not render this PDF. Double-click to open it.";
@@ -351,9 +388,12 @@ async function renderPdfPage(id: number, path: string): Promise<void> {
     // was loading, the new canvas is still blank, and if
     // the user flipped pages while this render was in
     // flight, the page shown is now stale: render again.
+    // Never re-render after a board switch, for the same
+    // reason as above.
+    const it = boardGet(board, id);
     const current = cardsEl.querySelector(`[data-pdf-canvas="${id}"]`) as HTMLCanvasElement | null;
     const stale = renderedPage !== 0 && (pdfPages.get(id) ?? 1) !== renderedPage;
-    if (current && (current !== canvas || stale) && !pdfFailed.has(path)) void renderPdfPage(id, path);
+    if (it && "PdfCard" in it.kind && it.kind.PdfCard.path === path && current && (current !== canvas || stale) && !pdfFailed.has(path)) void renderPdfPage(id, path);
   }
 }
 function loadPdfPage(id: number, path: string): void {
@@ -438,12 +478,16 @@ function save(): void {
   // Undo capture runs before the demo return, so undo works in
   // demo too, in memory, even though nothing is written to disk.
   captureUndoStep();
+  // The board event fires in demo too: plugins refresh
+  // from it (library, slides, board list, tidy counts),
+  // and in demo they otherwise go stale after the first
+  // change, since nothing else re-renders them.
+  emitPluginEvent("board");
   // Demo mode saves nothing: not even an IPC call, so a main-process
   // guard failure alone could never write. The main process also
   // no-ops save-board in demo mode, as a second guard.
   if (DEMO) return;
   api.saveBoard(JSON.stringify(board)).catch((e) => toast(`Save failed: ${String(e)}`));
-  emitPluginEvent("board");
 }
 
 // ---------------------------------------------------------------- undo / redo
@@ -668,6 +712,7 @@ async function loadBoardFromJson(json: string, dir: string, preserveUndo = false
     if (isFrameCard(it)) delete (it as { rotation?: number }).rotation;
   }
   board = parsed;
+  boardGeneration++;
   boardSearchVersion++;
   boardDir = dir;
   selected = [];
@@ -2118,8 +2163,16 @@ window.addEventListener("error", (e: Event) => {
     void api.readFileBase64(path).then(({ mime, base64 }) => {
       el.src = `data:${mime};base64,${base64}`;
     }).catch(() => {
-      // Fall through to the missing tile below on the
-      // next error event, which will have fallback set.
+      // The read failed, so the data URL never loads
+      // and no second error event ever fires — the
+      // comment's "next error event" never comes. Swap
+      // the element for the missing tile right here
+      // instead of leaving a broken image forever.
+      const name = el.dataset?.name ?? "media file";
+      const div = document.createElement("div");
+      div.className = "missing-media";
+      div.textContent = `File missing: ${name}`;
+      if (el.parentElement) el.parentElement.replaceChild(div, el);
     });
     return;
   }
@@ -3443,7 +3496,10 @@ async function addUrlAt(at: Pt, url: string): Promise<void> {
   try {
     const preview = await api.fetchPreview(url);
     const it = boardGet(board, id);
-    if (it && "UrlCard" in it.kind) {
+    // The board may have switched while the preview
+    // fetched: only fill in a link card for the same
+    // URL on this board.
+    if (it && "UrlCard" in it.kind && it.kind.UrlCard.url === url.trim()) {
       it.kind.UrlCard.title = preview.title;
       it.kind.UrlCard.description = preview.description;
       it.kind.UrlCard.image = preview.image;
@@ -3569,6 +3625,7 @@ async function init(): Promise<void> {
     if (loaded.json) {
       const parsed = JSON.parse(loaded.json) as Board;
       board = parsed;
+      boardGeneration++;
       board.bg = board.bg ?? "#FFFFFF";
       board.grid = board.grid ?? "Dots";
       board.camera = board.camera ?? { x: 0, y: 0, zoom: 1 };
@@ -3701,7 +3758,12 @@ async function init(): Promise<void> {
     setPenColor: (hex: string) => {
       if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return false;
       penColor = hex.toUpperCase();
-      render();
+      // Toolbar only: the pen colour shows in the
+      // toolbar swatches and in strokes drawn next,
+      // so a full board render per pick — one per
+      // pointermove while dragging Palette's wheel —
+      // rebuilds every visible card for nothing.
+      updateToolbar();
       emitPluginEvent("pen");
       return true;
     },
@@ -3779,7 +3841,9 @@ async function refreshLinkPreviews(): Promise<void> {
       try {
         const preview = await api.fetchPreview(url);
         const current = boardGet(board, id);
-        if (!current || !("UrlCard" in current.kind)) return;
+        // Same board-switch guard as addUrlAt: the new
+        // board can have a different link card at this id.
+        if (!current || !("UrlCard" in current.kind) || current.kind.UrlCard.url !== url) return;
         let changed = false;
         if (preview.title && current.kind.UrlCard.title !== preview.title) { current.kind.UrlCard.title = preview.title; changed = true; }
         if (preview.description && current.kind.UrlCard.description !== preview.description) { current.kind.UrlCard.description = preview.description; changed = true; }

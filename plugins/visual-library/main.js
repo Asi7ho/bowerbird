@@ -60,6 +60,11 @@ let viewSections = null;
 let onBoardHandler = null;
 let onSelectionHandler = null;
 let resizeHandler = null;
+// The panel's layout observers, so deactivate() can
+// disconnect them instead of leaving a pair behind on
+// every disable/re-enable cycle.
+let panelIntersectionObserver = null;
+let panelResizeObserver = null;
 
 // One library audio preview at a time, played through a plain
 // Audio element (the core's audio player belongs to the board).
@@ -135,7 +140,11 @@ function sectionsList() {
 }
 
 function signature(items) {
-  return items.map((it) => `${it.id}:${JSON.stringify(it.kind)}:${it.size.w}x${it.size.h}`).sort().join("|");
+  // Deliberately NOT sorted: the library shows cards
+  // in board order, so a reorder must change the
+  // signature and refresh the view. (Presentation's
+  // signature is unsorted for the same reason.)
+  return items.map((it) => `${it.id}:${JSON.stringify(it.kind)}:${it.size.w}x${it.size.h}`).join("|");
 }
 
 function stopLibraryAudio() {
@@ -148,12 +157,47 @@ function stopLibraryAudio() {
   libAudioDur = null;
 }
 
+function rewireLibraryAudio() {
+  // After a re-render, point the playing preview's
+  // tile, seek and time at the fresh DOM, so the
+  // preview keeps playing and its controls keep
+  // working instead of going dead on detached nodes.
+  if (!libAudio || libAudioItemId === null) return;
+  const wrap = [panelSections, viewSections]
+    .map((c) => c && c.querySelector(`[data-board-id="${libAudioItemId}"]`))
+    .find(Boolean);
+  if (!wrap) {
+    libAudioTile = null;
+    libAudioSeek = null;
+    libAudioTime = null;
+    libAudioDur = null;
+    return;
+  }
+  libAudioTile = wrap.querySelector(".audio-tile");
+  libAudioSeek = wrap.querySelector("input.audio-seek");
+  libAudioTime = wrap.querySelector("[data-audio-time]");
+  libAudioDur = wrap.querySelector("[data-audio-dur]");
+  if (libAudioTile) libAudioTile.textContent = libAudio.paused ? "▶" : "❚❚";
+  if (libAudioDur && isFinite(libAudio.duration)) libAudioDur.textContent = formatAudioTime(libAudio.duration);
+  if (libAudioTime) libAudioTime.textContent = formatAudioTime(libAudio.currentTime);
+  if (libAudioSeek && isFinite(libAudio.duration) && libAudio.duration > 0) {
+    libAudioSeek.value = String(Math.round((libAudio.currentTime / libAudio.duration) * 1000));
+  }
+}
+
 function updateAllDynamic() {
-  // A re-render drops the DOM the audio preview was wired to,
-  // so stop the preview rather than leaving orphan playback.
-  stopLibraryAudio();
+  // A re-render drops the DOM the audio preview was wired
+  // to, but the preview itself is a standalone Audio
+  // object: keep it playing while its card is still on
+  // the board, and re-wire its controls to the fresh DOM.
+  // Only stop it when its card is gone.
+  const playingId = libAudioItemId;
   if (panelSections) renderSections(panelSections, "panel");
   if (viewSections) renderSections(viewSections, "view");
+  if (playingId !== null && libAudio) {
+    if (boardItems.some((it) => it.id === playingId)) rewireLibraryAudio();
+    else stopLibraryAudio();
+  }
 }
 
 // Selection preview: when the board selection changes, the
@@ -527,11 +571,23 @@ function searchRow(targetView) {
   // The core only guards textareas and the board search
   // input, so a plugin input must stop its own keydown.
   input.addEventListener("keydown", (e) => e.stopPropagation());
+  // Debounced like the board search (150 ms): the
+  // input handler used to rebuild the whole library —
+  // panel and view masonry — on every keystroke.
+  let searchTimer = null;
   input.addEventListener("input", () => {
     query = input.value;
     if (panelSearch && panelSearch !== input) panelSearch.value = query;
     if (viewSearch && viewSearch !== input) viewSearch.value = query;
-    updateAllDynamic();
+    if (searchTimer !== null) clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => { searchTimer = null; updateAllDynamic(); }, 150);
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && searchTimer !== null) {
+      clearTimeout(searchTimer);
+      searchTimer = null;
+      updateAllDynamic();
+    }
   });
   const btn = document.createElement("button");
   btn.className = "vl-icon-btn";
@@ -569,6 +625,7 @@ function initPanel(body) {
         if (entry.isIntersecting && panelSections) renderSections(panelSections, "panel");
       }
     });
+    panelIntersectionObserver = observer;
     observer.observe(sections);
   }
   // Re-lay out when the visible width changes: a classic
@@ -586,6 +643,7 @@ function initPanel(body) {
       lastWidth = w;
       renderSections(panelSections, "panel");
     });
+    panelResizeObserver = ro;
     ro.observe(sections);
   }
 }
@@ -684,6 +742,10 @@ function deactivate() {
   if (apiRef && onBoardHandler) apiRef.events.off("board", onBoardHandler);
   if (apiRef && onSelectionHandler) apiRef.events.off("selection", onSelectionHandler);
   if (resizeHandler) window.removeEventListener("resize", resizeHandler);
+  if (panelIntersectionObserver) panelIntersectionObserver.disconnect();
+  if (panelResizeObserver) panelResizeObserver.disconnect();
+  panelIntersectionObserver = null;
+  panelResizeObserver = null;
   onBoardHandler = null;
   onSelectionHandler = null;
   resizeHandler = null;

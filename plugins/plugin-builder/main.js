@@ -121,14 +121,16 @@ const SYSTEM_PROMPT = `You write plugins for Bowerbird, a macOS-style infinite w
 - style: the complete contents of style.css, or "" if the plugin needs no CSS. Panel CSS must be prefixed with .plugin-panel-body. View CSS must be prefixed with #plugin-view. Never use a global selector, and never style the board itself.
 - activate(api) receives the api object. deactivate() must remove every listener it added, and close anything it opened.
 The api object:
-- api.board.get(), getItems(), getItem(id), renderCard(id), getSelected(), setSelected(ids), addItem(kind, pos, size), addPluginCard(kind, data, pos, size), updateItem(id, {pos, size, group, data}), moveItem(id, toIndex), removeItem(id), save(), render(), commitEditing(), groupSelected(), ungroupSelected(), deleteSelected(), undo(), redo(), canUndo(), canRedo(). A plugin may only rewrite its own plugin card's data. Board item kinds are Text, Image, UrlCard, PdfCard, Swatch, Audio, Video, and Plugin cards with { plugin, kind, data }.
+- api.board.get(), getItems(), getItem(id), renderCard(id), getSelected(), setSelected(ids), addItem(kind, pos, size), addPluginCard(kind, data, pos, size), updateItem(id, {pos, size, group, data}), updateItems(patches) for moving or changing many cards in one undo step, moveItem(id, toIndex), removeItem(id), save(), render(), commitEditing(), groupSelected(), ungroupSelected(), deleteSelected(), undo(), redo(), canUndo(), canRedo(). A plugin may only rewrite its own plugin card's data. Board item kinds are Text, Image, UrlCard, PdfCard, Swatch, Audio, Video, and Plugin cards with { plugin, kind, data }.
 - api.ui.registerPanel({id, title, icon, render}), registerTool({id, title, icon, onSelect}), registerCommand({id, title, run}), registerView({id, title, render, onShow, onHide}), registerOverlay({id, title, render}), registerSettingsSection({id, title, render}), registerShortcut({key, title, run}), showPanel(id), hidePanel(id), toast(msg), listCommands(), listTools(), runCommand(pluginId, id), setTool(id), openSettings(), closeSettings(), isSettingsOpen(). A panel's render(container) fills the container with DOM; a view's render(container, board) does the same for a full-board view. Tool icons and panel icons are SVG strings with no script tag.
 - api.cards.register({kind, title, frame, render, onDoubleClick, searchText}). render(item) returns HTML for a plugin card. frame: true makes it a transparent frame card, hit after other cards.
 - api.view.getCamera(), setCamera(cam), centreOn(id), getView(), setView(id), listViews().
 - api.window.hide(), show(), minimise(), move(dx, dy), getCorner(), setCorner(corner).
 - api.pen.getColor(), setColor(hex). The pen's colour, shared with the toolbar's pen swatches.
 - api.files.embedFile(path), listLibrary(), createLibraryCategory(name), moveLibraryItem(path, category), addToLibrary(path), fileUrl(path), readTextFile(path), fileSize(path), openExternal(target), fetchPreview(url).
-- api.storage.get(key), set(key, value), delete(key). Values must be JSON. Never store secrets here.
+- api.storage.get(key), set(key, value), delete(key). Values must be JSON. Never store secrets here. api.secureStorage.get(key), set(key, value), delete(key) is the only place for a secret such as an API key.
+- api.boards.list(), current(), create(name), switch(name), rename(oldName, newName), delete(name). Trial plugins cannot create, rename, switch or delete boards.
+- api.plugins.try(plugin), endTrial(id), install(plugin), list(), isEnabled(id), setEnabled(id, enabled).
 - api.events.on(event, handler), off(event, handler). Events are "board", "selection", "view", "tool", "pen".
 - api.geometry.centre(item), anchorPoint(anchor), rectCrossing(from, to, pos, w, h, entry), clippedEnds(from, to), segmentIntersectsRect(a, b, rect), rectsOverlap(a, b).
 - api.has(capability) reports whether a capability exists.
@@ -386,7 +388,10 @@ async function onChatSend() {
     pushChat({ kind: "assistant", text: e.message });
   } finally {
     setChatBusy(false);
-    chatEls.input.focus();
+    // The plugin may have been disabled while the
+    // generation was in flight, which clears chatEls:
+    // focusing a null element would throw in cleanup.
+    if (chatEls && chatEls.input) chatEls.input.focus();
   }
 }
 

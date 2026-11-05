@@ -247,13 +247,32 @@ function hexToHsl(hex) {
   return { h, s, l };
 }
 
+let savePickedTimer = null;
 function savePicked() {
   if (!apiRef || !apiRef.storage) return;
-  try {
-    const hex = hslToHex(baseH, baseS, baseL);
-    void apiRef.storage.set("picked", hex).catch(() => { /* storage is a convenience, not a pick */ });
-  } catch { /* same */ }
+  // Debounced: every wheel/slider move used to rewrite
+  // the whole plugin-storage file at once (twice per
+  // move, counting the pen echo below), which is a full
+  // IPC call plus a synchronous disk write per
+  // pointermove event. A pick still persists a moment
+  // later, and a toolbar pick goes through the same
+  // debounce instead of its own immediate write.
+  if (savePickedTimer !== null) clearTimeout(savePickedTimer);
+  savePickedTimer = setTimeout(() => {
+    savePickedTimer = null;
+    if (!apiRef || !apiRef.storage) return;
+    try {
+      const hex = hslToHex(baseH, baseS, baseL);
+      void apiRef.storage.set("picked", hex).catch(() => { /* storage is a convenience, not a pick */ });
+    } catch { /* same */ }
+  }, 250);
 }
+
+// While updateAll sets the pen, the pen event it fires
+// must not echo back through penHandler: that handler
+// would re-run updateAll and save the pick a second
+// time, for every wheel/slider move.
+let settingPen = false;
 
 function updateAll(setPen) {
   const hex = hslToHex(baseH, baseS, baseL);
@@ -269,7 +288,10 @@ function updateAll(setPen) {
   // pen colour the user already had with Palette's
   // default blue, and a pen change coming back from the
   // toolbar must not echo back into a pen set.
-  if (setPen && apiRef && apiRef.pen) apiRef.pen.setColor(hex);
+  if (setPen && apiRef && apiRef.pen) {
+    settingPen = true;
+    try { apiRef.pen.setColor(hex); } finally { settingPen = false; }
+  }
   if (lightnessValue) lightnessValue.textContent = `${Math.round(baseL)}%`;
   if (lightnessSlider && Number(lightnessSlider.value) !== Math.round(baseL)) lightnessSlider.value = String(Math.round(baseL));
   if (wheelMarker && wheelCanvas) {
@@ -411,6 +433,10 @@ function renderPanel(container) {
   lightnessSlider.max = "100";
   lightnessSlider.value = String(Math.round(baseL));
   lightnessSlider.setAttribute("aria-label", "Lightness");
+  // Without this, keys pressed while the slider is
+  // focused leak to the core handler: +/- zoom, 0
+  // resets the camera, Delete deletes the selection.
+  lightnessSlider.addEventListener("keydown", (e) => e.stopPropagation());
   lightnessSlider.addEventListener("input", () => {
     baseL = Number(lightnessSlider.value);
     updateAll(true);
@@ -492,6 +518,7 @@ async function activate(api) {
   // palettes to it, and do not set the pen back, or
   // the two would echo each other forever.
   penHandler = () => {
+    if (settingPen) return;
     if (!apiRef || !apiRef.pen) return;
     const hex = apiRef.pen.getColor();
     if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return;

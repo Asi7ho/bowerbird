@@ -118,6 +118,12 @@ function startRename(row, board) {
     } catch (err) { apiRef.ui.toast(`Could not rename: ${String(err.message || err)}`); }
     void refresh();
   };
+  // Stop every keydown here: without this the core
+  // window handler sees the typing — v/p/a switch tools,
+  // Backspace deletes the selected card, Esc clears the
+  // selection as well as cancelling the rename. Same
+  // one-line fix as the Visual Library search input.
+  input.addEventListener("keydown", (e) => e.stopPropagation());
   input.addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); void finish(true); }
     else if (e.key === "Escape") { e.preventDefault(); void finish(false); }
@@ -157,6 +163,10 @@ function renderPanel(container) {
     } catch (err) { apiRef.ui.toast(`Could not create: ${String(err.message || err)}`); }
   };
   createBtn.addEventListener("click", () => void create());
+  // Same stopPropagation as the rename input above:
+  // typing a board name must never switch tools or
+  // delete the selected card.
+  nameInput.addEventListener("keydown", (e) => e.stopPropagation());
   nameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); void create(); } });
   form.appendChild(nameInput);
   form.appendChild(createBtn);

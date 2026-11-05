@@ -1564,8 +1564,20 @@ app.whenReady().then(() => {
       if (range) {
         const m = /^bytes=(\d*)-(\d*)$/.exec(range);
         if (m) {
-          const start = m[1] ? parseInt(m[1], 10) : 0;
-          const end = m[2] ? parseInt(m[2], 10) : size - 1;
+          // A suffix range (bytes=-500) asks for the last
+          // 500 bytes, not the first: RFC 9110. The old
+          // code read an empty start as 0, so a player
+          // seeking to the tail of a file got its head.
+          let start;
+          let end;
+          if (!m[1] && m[2]) {
+            const suffix = parseInt(m[2], 10);
+            start = Math.max(0, size - suffix);
+            end = size - 1;
+          } else {
+            start = m[1] ? parseInt(m[1], 10) : 0;
+            end = m[2] ? parseInt(m[2], 10) : size - 1;
+          }
           if (start < size && end >= start && end < size) {
             return new Response(Readable.toWeb(fs.createReadStream(servePath, { start, end })), {
               status: 206,
