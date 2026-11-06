@@ -597,6 +597,9 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
 }
 #settings .meta { color: var(--grey); font-size: 12px; line-height: 1.5; word-break: break-all; margin: 0 0 12px; }
+/* An email address inside a .meta line keeps together: the
+   break-all above would split it mid-word ("w\nren7762@…"). */
+#settings .meta .email { word-break: normal; }
 #settings #reset-confirm { margin-top: 12px; }
 /* Feedback box: a plain textarea in the core style — white, hairline
    border, the same radius as a card, system font. */
@@ -608,6 +611,17 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   outline: none;
 }
 #feedback-text:focus { border-color: var(--accent); }
+/* The Send button in the core button style — white, hairline
+   border, 9px radius, 6px 12px, 13px/600 — the same as Restore
+   and the plugin rows. It needs its own rule: Settings styles
+   its buttons one by one, so a bare button falls back to the
+   browser default. */
+#settings #btn-feedback {
+  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
+  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
+  color: var(--ink); box-shadow: var(--shadow-sm);
+}
+#settings #btn-feedback:hover { background: var(--fill); }
 #settings #btn-reset {
   border: 1px solid var(--separator); background: #fff; border-radius: 9px;
   padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 600;
