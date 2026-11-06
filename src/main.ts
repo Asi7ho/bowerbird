@@ -1460,7 +1460,14 @@ window.addEventListener("error", (e: Event) => {
   if (!t || (t.tagName !== "IMG" && t.tagName !== "VIDEO")) return;
   const el = t as HTMLImageElement | HTMLVideoElement;
   const path = el.dataset?.path;
-  if (path && el.dataset?.fallback !== "1") {
+  // A remote image (a link card's preview or favicon) has no
+  // data-path: it is not a board file, so there is nothing to
+  // retry and no missing file to report. Leave it alone — the
+  // card's own error handling hides the image area and shows
+  // the title and description. Only board-local media gets
+  // the missing tile below.
+  if (!path) return;
+  if (el.dataset?.fallback !== "1") {
     el.dataset.fallback = "1";
     void api.readFileBase64(path).then(({ mime, base64 }) => {
       el.src = `data:${mime};base64,${base64}`;
@@ -1478,6 +1485,8 @@ window.addEventListener("error", (e: Event) => {
     });
     return;
   }
+  // The data-URL retry also failed, so the file is genuinely
+  // unreadable — this is the only case that gets the tile.
   const name = el.dataset?.name ?? "media file";
   const div = document.createElement("div");
   div.className = "missing-media";

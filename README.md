@@ -39,7 +39,7 @@ The build is unsigned, so a recipient must right-click it and choose Open the fi
 - **Shapes:** one shape button in the toolbar, with a flyout beside it to choose rectangle (R), ellipse (E), triangle, diamond, hexagon, star, or block arrow. Drag on the board to size it, in the pen colour.
 - **Rotate:** drag the round handle above a selected card or stroke, or press `[` / `]` to rotate the selection by 15°. Connectors and slide frames do not rotate.
 - **Note colours:** select a text note and pick a background from the colour flyout beside the toolbar. Light pastels only, so the text stays readable.
-- **Boards:** the Boards plugin (on by default) lists boards in the right panel. Click a board to open it, click the current board's name to rename it, × to delete it. Main is the default board.
+- **Boards:** the Boards plugin (off by default — enable it in Settings → Plugins) lists boards in the right panel. Click a board to open it, click the current board's name to rename it, × to delete it. Main is the default board.
 - **Select:** click an item, `Shift`-click to add to the selection, or drag a box around several items. Dragging one member of a group moves the whole group. Clicking a card brings it to the front.
 - **Find:** `Tab` steps through elements in board order and centres each one. `Shift + Tab` steps backwards. Pen strokes and connectors are skipped.
 - **Text:** double-click empty space for a new note, double-click a note to edit it. `Esc` commits, and the note renders markdown: headings, bullets, numbered lists, quotes, code blocks, bold, italic, code, links and strikethrough.

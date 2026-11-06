@@ -595,7 +595,9 @@ function loadPluginEnabled() {
       return parsed.enabled;
     }
   } catch {
-    // No file yet: everything defaults to enabled.
+    // No file yet: nothing is enabled. Plugins are opt-in —
+    // a plugin runs only after the user enables it in
+    // Settings → Plugins. Only an explicit true enables one.
   }
   return {};
 }
@@ -651,7 +653,7 @@ function listPlugins() {
         styles: Array.isArray(manifest.styles) ? manifest.styles : [],
         contributions: manifest.contributions && typeof manifest.contributions === "object" ? manifest.contributions : {},
         source,
-        enabled: enabled[manifest.id] !== false,
+        enabled: enabled[manifest.id] === true,
       });
     }
   }
