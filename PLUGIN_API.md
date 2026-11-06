@@ -91,6 +91,7 @@ Enable and disable are per plugin, in Settings → Plugins. Disabling unregister
 - `save()` — save through the core's save path, including the demo-mode no-op. Most board methods save automatically. Call this after a batch of changes made without a method call. Requires `board:write`.
 - `render()` — re-render the board.
 - `setCanvas({ bg, grid })` — set the board's background colour and/or grid (`"Dots"`, `"Lines"` or `"Off"`). A board-level write, so it requires `board:write`. This is how the Settings plugin's canvas options work.
+- `setNoteBackground(ids, hex)` — set the background colour of the given text notes, in one save (one undo step). The toolbar's note-colour flyout. A board write. Only Text notes are affected; other kinds are ignored.
 - `reset()` — reset the board to a fresh welcome board, exactly as Settings → Data → Delete all board data does. Requires `board:write`. Not available to a trial plugin.
 - `getDir()` — the board's folder on disk, for display. Read-only, no permission needed.
 
@@ -135,6 +136,7 @@ Requires the `window` permission. These are main-process primitives a renderer p
 ### View and camera — `api.view`
 
 - `getCamera()`, `setCamera({ x, y, zoom })`
+- `zoomBy(factor)` — zoom around the board centre, by a factor (1.2 in, 1/1.2 out). The toolbar's zoom buttons. The core owns the camera math; a UI plugin just says "zoom in" or "zoom out".
 - `centreOn(itemId)` — move the camera like Tab does.
 - `getView()` — `"board"` or a registered view id.
 - `setView(id)` — switch views. `"board"` always exists and is always the way back. A plugin view cannot remove it, and the core draws the view switcher itself, so the exit control is never inside plugin code.
@@ -143,6 +145,10 @@ Requires the `window` permission. These are main-process primitives a renderer p
 A view is registered with `api.ui.registerView({ id, title, render, onShow, onHide })`. When the view is active, the core hides the 2D canvas layers and shows the view's container, which fills the board area. The toolbar and search stay reachable. `render(container, board)` is called on activation and whenever the board changes while the view is active. Pause expensive work (WebGL, video) when `onHide` fires. The core does not do that for you.
 
 A view is a view of the board, not a separate app. Extra per-item data (depth, rotation) lives in that plugin's namespace, never overwriting the 2D position and size. Switching back to `"board"` must restore the 2D layout exactly. A view that needs its own separate scene should store that scene as a plugin card's data, not as a replacement for the board.
+
+### Shapes — `api.shapes`
+
+- `list()` — the shape table: `[{ kind, label, key, svg }]`, for the shape picker's flyout. Read-only UI data, no permission needed. The toolbar plugin builds the flyout from this.
 
 ### UI — `api.ui`
 
@@ -154,6 +160,8 @@ A view is a view of the board, not a separate app. Extra per-item data (depth, r
 - `listCommands()` — every registered command: `[{ pluginId, pluginName, id, title }]`. `runCommand(pluginId, id)` runs one. Commands are user actions, not code: listing and running them is what Settings' Run buttons already do, so these need no permission, and a command still runs with its own plugin's API object.
 - `listTools()` — every registered plugin tool: `[{ pluginId, pluginName, id, title }]`, where `id` is the tool id `setTool` accepts. Core tools (Select, Pen, Arrow) are not plugin tools, so they are not listed; their ids are `"select"`, `"pen"` and `"connector"`.
 - `setTool(id)` — activate a core or plugin tool, as if its toolbar button was clicked.
+- `getTool()` — the current tool id (`"select"`, `"pen"`, `"connector"`, a shape kind, or a plugin tool's full id). The toolbar plugin highlights the active tool from this. Changing the tool fires a `"tool"` plugin event.
+- `setToolbarToolsEl(el)` — hand the plugin system the toolbar's tool container (the `#tools` segment), so plugin tool buttons can be added to it. The toolbar plugin provides this; other plugins do not call it.
 - `openSettings()`, `closeSettings()`, `isSettingsOpen()` — open, close, and check Settings.
 - `registerOverlay({ id, render })` — a full-board overlay layer that takes no clicks itself (pointer-events: none). Interactive elements inside it must set pointer-events: auto on themselves, so board clicks pass through everywhere except on your own controls. This is how a corner button can sit in a corner without blocking the board.
 - `registerSettingsSection({ id, title, render })` — a section in Settings → Plugin settings, rendered with its own heading when that tab is shown, and only for plugins that are on. Use it for app-level settings, like the Hide plugin's corner picker. Board-level controls belong in a panel, not here.
@@ -173,6 +181,8 @@ A view is a view of the board, not a separate app. Extra per-item data (depth, r
 - `onDoubleClick(item, data)` is called on double-click of the card, instead of core double-click handling. Use it for a card editor.
 - `onAction(action, item, data)` is called when an element inside the card with `data-plugin-action="..."` is clicked. The core routes the click by card id. Do not attach your own global click listeners for card buttons.
 - `searchText(data)` returns searchable text for the card. Without it, the core falls back to the plugin id, kind and JSON data.
+
+`registerBuiltin({ kind, title, render, onDoubleClick, onAction, searchText })` registers a renderer for a *built-in* card kind (`Text`, `Image`, `Swatch`, `UrlCard`, `PdfCard`, `Audio`, `Video`, `Shape`). `render(item, data, plain)` receives the full item and the kind's payload (for Text, `{ text, size, color, bg }`), and returns the complete card HTML — outer div, position, size, selection ring and all — exactly as the core's renderer did. `plain` is true when the card is rendered for a slide, the library or an export, where a live preview (PDF page, playing audio) cannot survive as HTML, so the renderer stays a tile. This is how the core-cards plugin provides the built-in kinds; a user plugin could replace one by registering the same kind name.
 
 Card data is always JSON. Large files go in the board's `assets` folder by reference (see Files), never inline in JSON.
 
@@ -211,11 +221,30 @@ Adding this domain did not change `apiVersion`. It stays `"1"`, because additive
 
 ### Events — `api.events`
 
-`on(event, handler)`, `off(event, handler)`. Events in v1: `selection`, `board`, `view`, `pen`. `board` fires after a board change that the core saved or rendered. A plugin's own board writes fire it too, after the write. Do not write to the board synchronously inside a `board` handler in a way that loops. If a handler needs to react by writing, guard against your own last write, for example by comparing ids or by a flag. The core will not prevent a loop you create in v1.
+`on(event, handler)`, `off(event, handler)`. Events in v1: `selection`, `board`, `view`, `pen`, `tool`. `board` fires after a board change that the core saved or rendered. A plugin's own board writes fire it too, after the write. Do not write to the board synchronously inside a `board` handler in a way that loops. If a handler needs to react by writing, guard against your own last write, for example by comparing ids or by a flag. The core will not prevent a loop you create in v1. `tool` fires when the active tool changes (via `setTool`, a toolbar button or a keyboard shortcut), so a toolbar plugin can highlight the active tool and show the right flyout without polling.
 
 ### Pen — `api.pen`
 
 The pen's colour, shared with the toolbar's pen swatches. No permission is needed, like `setTool`: it is a tool setting, not a board mutation. `getColor()` returns the current colour as a hex string. `setColor(hex)` sets it (a 6-digit hex only, anything else is ignored and returns false) and fires a `pen` event, so a listening plugin can follow it. Pen colour is session state, not saved in board JSON. Palette uses this: picking a colour there sets the pen, and picking a toolbar swatch updates Palette back.
+
+### Media — `api.media`
+
+Media state, for the cards that play or preview media (PdfCard, Audio). Read-only views of the core's media module, plus the triggers that load a PDF page or an audio duration on demand. No permission needed: these read and trigger loads for board files the plugin can already see. The raw audio element is never exposed; `getAudioState` returns the derived playback state.
+
+- `audioFailed(path)` — whether the audio file failed to load.
+- `getAudioState()` — `{ id, playing, currentTime, duration }` for the audio currently loaded in the player, or `{ id: null, playing: false, currentTime: 0, duration: 0 }`.
+- `getAudioDuration(path)` — the cached duration in seconds, or `undefined`.
+- `loadAudioDuration(id, path)` — trigger loading the duration for a card.
+- `formatAudioTime(sec)` — seconds as `m:ss` (or `0:00` for an unknown duration).
+- `pdfFailed(path)` — whether the PDF failed to load.
+- `getPdfPage(id)` — the current page number for a PDF card (1 when unset).
+- `loadPdfPage(id, path)` — trigger loading a PDF page for a card.
+
+### Text — `api.text`
+
+Pure text and colour helpers, from `src/model.ts`. No permission needed. A card renderer needs these to escape text, render markdown, and colour link tiles, the way the core's renderers did. One implementation, so a plugin's cards match the core's exactly.
+
+- `escapeHtml(s)`, `renderMarkdownHtml(text, baseSize)`, `domainOf(url)`, `elide(s, widthPx, textPx, bold)`, `tileColorFor(domain)`, `tint(hex, whiteMix)`.
 
 ### Geometry — `api.geometry`
 
@@ -229,6 +258,7 @@ Adding this domain did not change `apiVersion`. It stays `"1"`, because additive
 - `clippedEnds(from, to)` — a connector's ends, clipped to the cards it joins, or `null` if an endpoint is gone.
 - `segmentIntersectsRect(a, b, rect)` — whether a segment enters a rectangle at all, however briefly.
 - `rectsOverlap(a, b)` — strict rect overlap. Touching an edge, with no area inside, does not count.
+- `itemRotation(item)` — an item's rotation in degrees (0 when it has none).
 
 ### Errors and failure
 
@@ -271,6 +301,8 @@ Plugins in `plugins/` ship inside the app, are listed in Settings as "Built in",
 The core is headless: it owns the board model, persistence, the plugin host and this API, and it renders nothing. Every visible thing is a plugin built on this API — including the built-in UI. The built-in UI plugins live in `src/core-plugins/`, are ES modules bundled with the app, and are loaded with `activateFirstPartyPlugin` at boot, before user plugins. They get the same `PluginContext`, the same permission checks and the same manifest as a user plugin. The only difference is loading: a user plugin is a single-file `main.js` loaded from a blob URL; a first-party plugin is an ES module imported by the core. A first-party plugin has no back door: if it needs something, that something is in this API. See `ARCHITECTURE.md` for the full design and the migration order.
 
 - `core-settings/` — the Settings window (General, Plugins, Plugin settings). It builds its own DOM, registers itself as the settings UI (`api.ui.registerSettingsUI`), and hands the plugin system the container its settings sections render into (`api.ui.setSettingsSectionsContainer`). It uses `api.board` (canvas, reset, folder), `api.app`, `api.backups` and `api.plugins` (list, enable/disable). It is the reference implementation for a UI plugin: a plugin that replaces a piece of the built-in UI is built the same way.
+- `core-cards/` — the built-in card kinds (Text, Image, Swatch, UrlCard, PdfCard, Audio, Video, Shape). It registers a renderer for each kind through `api.cards.registerBuiltin`, using `api.board` (selection), `api.media` (PDF and audio state), `api.files` (file URLs) and `api.text` / `api.geometry` (the pure helpers). The core renders no card itself; it only wraps the plugin's HTML in the card chrome.
+- `core-toolbar/` — the toolbar (tools, pen palette, shape picker, note colours, zoom, delete, settings). It builds the toolbar DOM, hands the plugin system the `#tools` segment (`api.ui.setToolbarToolsEl`) so plugin tool buttons land beside the core tools, and follows the tool, the selection and the pen colour through the `"tool"`, `"selection"` and `"pen"` events. It uses `api.ui` (setTool, getTool, openSettings), `api.view` (zoomBy), `api.pen` (colour), `api.shapes` (the shape picker) and `api.board` (selection, setNoteBackground, deleteSelected). The tool behaviour itself (what a drag does) still lives in the core's input loop, which moves with core-board.
 
 ## Frame cards
 

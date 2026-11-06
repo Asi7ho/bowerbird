@@ -4,7 +4,9 @@ import { createCardRenderer, SHAPES, type CardRenderer } from "./cards";
 import { createBoardSearch, type BoardSearch } from "./search";
 import { createUndoStore, type UndoStore } from "./undo";
 import { createDrops, type Drops } from "./drops";
+import * as coreCards from "./core-plugins/cards";
 import * as coreSettings from "./core-plugins/settings";
+import * as coreToolbar from "./core-plugins/toolbar";
 import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
   anchorPoint, boardGet, centre, clippedEnds, estimateTextHeight,
@@ -29,9 +31,6 @@ import {
 // type stays open so a plugin tool is a valid Tool.
 type Tool = string;
 const PALETTE = ["#1A1A1A", "#E63946", "#2E86AB", "#FF6B35", "#6a4c93", "#2A9D8F"];
-// Note background colours: light pastels only, so dark note text
-// stays readable on every one. White is the default (no bg set).
-const NOTE_COLOURS = ["#FFFFFF", "#FEF3C7", "#FCE7F3", "#DCFCE7", "#DBEAFE", "#FFEDD5", "#EDE9FE", "#F3F4F6"];
 const ACCENT = "#007AFF";
 
 
@@ -83,7 +82,6 @@ let zoomSettleTimer: ReturnType<typeof setTimeout> | null = null;
 // the gesture ends, which feels frozen and rigid.
 let lastZoomRefreshZoom = 1;
 let lastZoomRefreshTime = 0;
-let lastToolbarKey = "";
 
 const boardEl = document.getElementById("board") as HTMLDivElement;
 const worldEl = document.getElementById("world") as unknown as SVGGElement;
@@ -607,7 +605,6 @@ function render(): void {
   }
   if (editingHtml) cardsEl.insertAdjacentHTML("beforeend", editingHtml);
   refreshActiveView();
-  updateToolbar();
   lastContentKey = visibleKey();
   applyCamera();
   search.updateSearch();
@@ -674,137 +671,6 @@ function updateResizeHandle(): void {
   }
 }
 
-function noteBgOfSelected(): string | null {
-  for (const id of selected) {
-    const it = boardGet(board, id);
-    if (it && "Text" in it.kind) return it.kind.Text.bg ?? "#FFFFFF";
-  }
-  return null;
-}
-function updateToolbar(): void {
-  // render() runs on every mousemove; rebuilding the toolbar's DOM
-  // every time is wasted work when nothing about it changed.
-  const noteBg = noteBgOfSelected();
-  const key = `${tool}|${selected.join(",")}|${penColor}|${noteBg ?? ""}`;
-  if (key === lastToolbarKey) return;
-  lastToolbarKey = key;
-  const setActive = (id: string, on: boolean) => {
-    const el = document.getElementById(id);
-    if (el) el.classList.toggle("active", on);
-  };
-  setActive("tool-select", tool === "select");
-  setActive("tool-pen", tool === "pen");
-  setActive("tool-connector", tool === "connector");
-  // Shapes are one toolbar button, like the pen: the button
-  // shows the shape last chosen, and the flyout beside the
-  // toolbar (same .palette surface as the pen colours)
-  // chooses between all shapes in the SHAPES table.
-  const shapeBtn = document.getElementById("tool-shape") as HTMLButtonElement | null;
-  const isShape = cards.isShapeTool(tool);
-  if (shapeBtn) {
-    setActive("tool-shape", isShape);
-    if (cards.isShapeTool(tool) && shapeBtn.dataset.shape !== tool) {
-      const meta = cards.shapeMeta(tool);
-      shapeBtn.dataset.shape = tool;
-      shapeBtn.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${meta.svg}</svg>`;
-      shapeBtn.title = meta.key ? `${meta.label} (${meta.key})` : meta.label;
-      shapeBtn.setAttribute("aria-label", meta.label);
-    }
-  }
-  const shapePicker = document.getElementById("shape-picker") as HTMLDivElement | null;
-  if (shapePicker) {
-    shapePicker.style.display = isShape ? "flex" : "none";
-    if (isShape && shapePicker.childElementCount === 0) {
-      for (const meta of SHAPES) {
-        const b = document.createElement("button");
-        b.className = "shape-option";
-        b.dataset.shape = meta.kind;
-        b.title = meta.key ? `${meta.label} (${meta.key})` : meta.label;
-        b.setAttribute("aria-label", meta.label);
-        b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${meta.svg}</svg>`;
-        b.addEventListener("click", () => setTool(meta.kind));
-        shapePicker.appendChild(b);
-      }
-    }
-    if (isShape) {
-      for (const child of Array.from(shapePicker.children)) {
-        (child as HTMLButtonElement).classList.toggle("active", (child as HTMLButtonElement).dataset.shape === tool);
-      }
-    }
-  }
-  // Note colours: shown when at least one selected card is a
-  // text note and the pen flyout is not showing (pen tool).
-  // Clicking a colour sets the background of every selected
-  // text note, and saves, so it is undoable like any edit.
-  const noteEl = document.getElementById("note-colours") as HTMLDivElement | null;
-  if (noteEl) {
-    const showNotes = noteBg !== null && tool !== "pen";
-    noteEl.style.display = showNotes ? "flex" : "none";
-    if (showNotes && noteEl.childElementCount === 0) {
-      for (const hex of NOTE_COLOURS) {
-        const b = document.createElement("div");
-        b.className = "swatch";
-        b.style.background = hex;
-        b.title = hex;
-        b.addEventListener("click", () => {
-          for (const id of selected) {
-            const it = boardGet(board, id);
-            if (it && "Text" in it.kind) it.kind.Text.bg = hex;
-          }
-          undoStore.save(); render();
-        });
-        noteEl.appendChild(b);
-      }
-    }
-    if (showNotes) {
-      for (const child of Array.from(noteEl.children)) {
-        const sw = child as HTMLDivElement;
-        sw.classList.toggle("active", sw.title.toUpperCase() === (noteBg ?? "#FFFFFF").toUpperCase());
-      }
-    }
-  }
-  syncPluginToolButtons(tool);
-  const palette = document.getElementById("palette") as HTMLDivElement;
-  palette.style.display = tool === "pen" ? "flex" : "none";
-  if (tool === "pen" && palette.childElementCount === 0) {
-    for (const hex of PALETTE) {
-      const b = document.createElement("div");
-      b.className = "swatch" + (hex === penColor ? " active" : "");
-      b.style.background = hex;
-      b.title = hex;
-      b.addEventListener("click", () => { penColor = hex; render(); emitPluginEvent("pen"); });
-      palette.appendChild(b);
-    }
-  }
-  if (tool === "pen") {
-    // A pen colour set elsewhere — Palette's wheel, for
-    // example — is not one of the six fixed swatches, so
-    // without this it would show no active swatch at all,
-    // and the toolbar would not say what the pen is.
-    // Keep at most one such custom swatch: drop a stale
-    // one, add the current colour if it is not fixed.
-    for (const child of Array.from(palette.children)) {
-      const sw = child as HTMLDivElement;
-      if (!PALETTE.includes(sw.title) && sw.title.toUpperCase() !== penColor.toUpperCase()) sw.remove();
-    }
-    const hasCurrent = Array.from(palette.children).some((c) => (c as HTMLDivElement).title.toUpperCase() === penColor.toUpperCase());
-    if (!hasCurrent) {
-      const b = document.createElement("div");
-      b.className = "swatch";
-      b.style.background = penColor;
-      b.title = penColor;
-      b.addEventListener("click", () => { penColor = penColor; render(); emitPluginEvent("pen"); });
-      palette.prepend(b);
-    }
-    for (const child of Array.from(palette.children)) {
-      const sw = child as HTMLDivElement;
-      sw.classList.toggle("active", sw.style.background === penColor || sw.title === penColor);
-    }
-  }
-  const del = document.getElementById("btn-delete") as HTMLButtonElement;
-  del.classList.toggle("dim", selected.length === 0);
-}
-
 // Selection changes must not rebuild the card DOM: rebuilding on
 // mousedown destroys the very element the user pressed, so its click
 // (a card button, or a double-click to edit) never fires. Bringing a
@@ -826,8 +692,6 @@ function updateSelectionInner(): void {
       (media as HTMLElement).style.objectFit = isSel ? "contain" : "cover";
     }
   }
-  const del = document.getElementById("btn-delete") as HTMLButtonElement;
-  del.classList.toggle("dim", selected.length === 0);
   // Selection changes without a full render (a plain click) still
   // need the resize handle to appear / disappear immediately.
   updateResizeHandle();
@@ -835,11 +699,9 @@ function updateSelectionInner(): void {
 
 function updateSelection(): void {
   updateSelectionInner();
-  // Toolbar state now depends on selection (note colours
-  // show only when a text note is selected), and a click
-  // only calls updateSelection, not render, so the toolbar
-  // must refresh here or the flyout would never appear.
-  updateToolbar();
+  // The toolbar plugin follows the selection through the
+  // "selection" plugin event, so its note-colours flyout
+  // appears when a text note is selected.
   emitPluginEvent("selection");
 }
 
@@ -928,14 +790,13 @@ function commitEditingIfAny(): void {
 function setTool(t: Tool): void {
   tool = t;
   drag = null;
-  // Toolbar only, not a full render: nothing in the card
-  // DOM depends on the tool — the toolbar active state,
-  // the pen palette row and the plugin tool buttons are
-  // all updateToolbar covers, and the cursor follows on
-  // the next mousemove. The old render() here rebuilt
-  // every visible card (and re-ran search) on every
-  // tool switch, including every V/P/A keypress.
-  updateToolbar();
+  // The toolbar plugin follows the tool through the "tool"
+  // plugin event, so it can highlight the active tool and
+  // show the right flyout without polling. The plugin tool
+  // buttons are the plugin system's own DOM, so the core
+  // syncs them here.
+  emitPluginEvent("tool");
+  syncPluginToolButtons(t);
 }
 
 // Selection actions, shared by the keyboard shortcuts and by the
@@ -1688,21 +1549,10 @@ window.addEventListener("keyup", (e: KeyboardEvent) => {
   if (e.key === " ") spaceDown = false;
 });
 
-// ---------------------------------------------------------------- toolbar
-
-document.getElementById("tool-select")?.addEventListener("click", () => setTool("select"));
-document.getElementById("tool-pen")?.addEventListener("click", () => setTool("pen"));
-document.getElementById("tool-connector")?.addEventListener("click", () => setTool("connector"));
-document.getElementById("tool-shape")?.addEventListener("click", () => {
-  const btn = document.getElementById("tool-shape") as HTMLButtonElement | null;
-  const last = btn?.dataset.shape ?? "rect";
-  setTool(cards.isShapeTool(last) ? last : "rect");
-});
-document.getElementById("zoom-in")?.addEventListener("click", () => { zoomCentre(1.2); undoStore.save(); render(); });
-document.getElementById("zoom-out")?.addEventListener("click", () => { zoomCentre(1 / 1.2); undoStore.save(); render(); });
-document.getElementById("btn-delete")?.addEventListener("click", () => {
-  deleteSelected();
-});
+// The toolbar (tools, zoom, delete, settings) is the
+// core-toolbar plugin now; it wires its own buttons.
+// Undo/redo live in the title bar, so their wiring stays
+// here until the title bar moves into its own plugin.
 document.getElementById("btn-undo")?.addEventListener("click", () => { undoStore.undo(); });
 document.getElementById("btn-redo")?.addEventListener("click", () => { undoStore.redo(); });
 
@@ -1965,16 +1815,32 @@ async function init(): Promise<void> {
     render: () => render(),
     switchBoard: (name: string, preserveUndo = false) => switchToBoard(name, preserveUndo),
     setTool: (toolName: string) => setTool(toolName),
+    getTool: () => tool,
+    // Zoom around the board centre, by a factor. The
+    // toolbar's zoom buttons. The camera math stays here;
+    // the plugin just says "zoom in" or "zoom out".
+    zoomBy: (factor: number) => { zoomCentre(factor); render(); },
+    // The shape table for the toolbar's shape picker.
+    listShapes: () => SHAPES.map((s) => ({ kind: s.kind, label: s.label, key: s.key, svg: s.svg })),
+    // Set the background of the given text notes, in one
+    // save (one undo step). The toolbar's note-colour
+    // flyout. Only Text notes are affected.
+    setNoteBackground: (ids: number[], hex: string) => {
+      for (const id of ids) {
+        const it = boardGet(board, id);
+        if (it && "Text" in it.kind) it.kind.Text.bg = hex;
+      }
+      undoStore.save(); render();
+    },
     getPenColor: () => penColor,
     setPenColor: (hex: string) => {
       if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return false;
       penColor = hex.toUpperCase();
-      // Toolbar only: the pen colour shows in the
-      // toolbar swatches and in strokes drawn next,
-      // so a full board render per pick — one per
-      // pointermove while dragging Palette's wheel —
-      // rebuilds every visible card for nothing.
-      updateToolbar();
+      // The toolbar plugin follows the pen colour through
+      // the "pen" plugin event, so its swatches update
+      // without a full board render per pick — one per
+      // pointermove while dragging Palette's wheel would
+      // rebuild every visible card for nothing.
       emitPluginEvent("pen");
       return true;
     },
@@ -2014,6 +1880,28 @@ async function init(): Promise<void> {
     deleteSelection: () => deleteSelected(),
     restoreBackup: (name) => restoreBoardBackup(name),
     getBuildId: () => currentBuildId,
+    // Media state, for the cards that play or preview media.
+    // The raw audio element is never handed out; the plugin
+    // gets the derived playback state (id, playing, time,
+    // duration) instead, so it can render a play/pause button
+    // and a progress bar without touching the element.
+    getAudioState: () => {
+      const s = media.getAudioState();
+      const el = s.el;
+      return {
+        id: s.id,
+        playing: !!el && !el.paused,
+        currentTime: el ? el.currentTime : 0,
+        duration: el && isFinite(el.duration) ? el.duration : 0,
+      };
+    },
+    getAudioDuration: (path) => media.audioDurations.get(path),
+    loadAudioDuration: (id, path) => media.loadAudioDuration(id, path),
+    audioFailed: (path) => media.audioFailed.has(path),
+    formatAudioTime: (sec) => media.formatAudioTime(sec),
+    getPdfPage: (id) => media.pdfPages.get(id) ?? 1,
+    loadPdfPage: (id, path) => media.loadPdfPage(id, path),
+    pdfFailed: (path) => media.pdfFailed.has(path),
     resetBoard: () => resetBoardToWelcome(),
     getBoardDir: () => boardDir,
     getPanelOrder: () => [...panelOrderList],
@@ -2029,7 +1917,9 @@ async function init(): Promise<void> {
   // and the core stops building them. The plugin system only
   // ever reads them through the shell, never from the core.
   registerShellElements({
-    toolbarToolsEl: document.getElementById("tools") as HTMLElement,
+    // toolbarToolsEl is registered by the toolbar plugin
+    // itself (core-toolbar), which builds the toolbar and
+    // its #tools segment.
     panelsEl: document.getElementById("plugin-panels") as HTMLElement,
     panelsToggleEl: document.getElementById("panels-toggle") as HTMLElement,
     pluginViewEl: document.getElementById("plugin-view") as HTMLElement,
@@ -2050,6 +1940,8 @@ async function init(): Promise<void> {
   });
   await initPlugins(pluginHost, api, [
     { manifest: coreSettings.manifest, module: coreSettings },
+    { manifest: coreCards.manifest, module: coreCards },
+    { manifest: coreToolbar.manifest, module: coreToolbar },
   ]);
   render();
   // Preload the context index now, in the background,

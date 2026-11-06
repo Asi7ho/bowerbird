@@ -21,7 +21,7 @@
 // v1 does not pretend otherwise.
 
 import type { Anchor, Board, Camera, Item, Kind, Pt, Size } from "./model";
-import { anchorPoint, centre, clippedEnds, rectCrossing, segmentIntersectsRect } from "./model";
+import { anchorPoint, centre, clippedEnds, domainOf, elide, escapeHtml, itemRotation, rectCrossing, renderMarkdownHtml, segmentIntersectsRect, tileColorFor, tint } from "./model";
 
 // ---------------------------------------------------------------- types
 
@@ -71,6 +71,29 @@ export interface PluginCardDef {
   // "slide" by convention, so library-style plugins can
   // exclude them from content lists, as Visual Library does.
   frame?: boolean;
+}
+
+// A renderer for a built-in card kind (Text, Image, Swatch,
+// UrlCard, PdfCard, Audio, Video, Shape). The built-in kinds
+// used to be rendered by core code; now they are rendered by
+// the core-cards plugin, through this same shape. `render`
+// receives the full item and the kind's payload (for Text,
+// `{ text, size, color, bg }`), and returns the complete
+// card HTML — outer div, position, size, selection ring and
+// all — exactly as the core's renderer did. `plain` is true
+// when the card is rendered for a slide, the library or an
+// export, where a live preview (PDF page, playing audio)
+// cannot survive as HTML, so the renderer stays a tile.
+// The core's card wrapper calls the registered renderer
+// for the kind, and falls back to a placeholder when no
+// plugin provides one.
+export interface PluginBuiltinCardDef {
+  kind: string;
+  title: string;
+  render: (item: Item, data: unknown, plain?: boolean) => string;
+  onDoubleClick?: (item: Item, data: unknown) => void;
+  onAction?: (action: string, item: Item, data: unknown) => void;
+  searchText?: (data: unknown) => string;
 }
 
 export interface PluginToolDef {
@@ -180,10 +203,22 @@ export interface PluginHost {
   render: () => void;
   switchBoard: (name: string, preserveUndo?: boolean) => Promise<boolean>;
   setTool: (tool: string) => void;
+  getTool: () => string;
   getPenColor: () => string;
   setPenColor: (hex: string) => boolean;
   getCamera: () => Camera;
   setCamera: (cam: Camera) => void;
+  // Zoom around the board centre, by a factor (1.2 in,
+  // 1/1.2 out). The core owns the camera math; a UI plugin
+  // just says "zoom in" or "zoom out".
+  zoomBy: (factor: number) => void;
+  // The shape table (kind, label, key, SVG icon) for the
+  // shape picker's flyout. Read-only UI data.
+  listShapes: () => Array<{ kind: string; label: string; key: string; svg: string }>;
+  // Set the background of the given text notes, in one
+  // save (one undo step). A board write. Only Text notes
+  // are affected; other kinds are ignored.
+  setNoteBackground: (ids: number[], hex: string) => void;
   centreOn: (id: number) => void;
   toast: (msg: string) => void;
   openSettings: () => void;
@@ -198,6 +233,15 @@ export interface PluginHost {
   deleteSelection: () => boolean;
   restoreBackup: (name: string) => Promise<boolean>;
   getBuildId: () => string;
+  // ---- media (for the cards that play or preview media) ----
+  getAudioState: () => { id: number | null; playing: boolean; currentTime: number; duration: number };
+  getAudioDuration: (path: string) => number | undefined;
+  loadAudioDuration: (id: number, path: string) => void;
+  audioFailed: (path: string) => boolean;
+  formatAudioTime: (sec: number) => string;
+  getPdfPage: (id: number) => number;
+  loadPdfPage: (id: number, path: string) => void;
+  pdfFailed: (path: string) => boolean;
   // Reset the board to a fresh welcome board (the settings
   // "Delete all board data" flow). A board write, and not
   // available to a trial plugin.
@@ -252,6 +296,11 @@ export interface PluginContext {
     // write (the settings UI's canvas options), so it needs
     // board:write.
     setCanvas: (patch: { bg?: string; grid?: Board["grid"] }) => void;
+    // Set the background of the given text notes, in one
+    // save (one undo step). The toolbar's note-colour
+    // flyout. A board write. Only Text notes are affected;
+    // other kinds are ignored.
+    setNoteBackground: (ids: number[], hex: string) => void;
     // Reset the board to a fresh welcome board. A board write,
     // and not available to a trial plugin.
     reset: () => Promise<boolean>;
@@ -293,10 +342,21 @@ export interface PluginContext {
   view: {
     getCamera: () => Camera;
     setCamera: (cam: Camera) => void;
+    // Zoom around the board centre, by a factor (1.2 in,
+    // 1/1.2 out). The toolbar's zoom buttons. The core owns
+    // the camera math; a UI plugin just says "zoom in" or
+    // "zoom out".
+    zoomBy: (factor: number) => void;
     centreOn: (id: number) => void;
     getView: () => string;
     setView: (id: string) => void;
     listViews: () => Array<{ id: string; title: string; plugin: string | null }>;
+  };
+  // The shape table (kind, label, key, SVG icon) for the
+  // shape picker's flyout. Read-only UI data, no permission
+  // needed. The toolbar plugin builds the flyout from this.
+  shapes: {
+    list: () => Array<{ kind: string; label: string; key: string; svg: string }>;
   };
   // The pen's colour: one shared state, not a board item.
   // The toolbar's pen swatches and Palette both read and
@@ -321,6 +381,16 @@ export interface PluginContext {
     listTools: () => Array<{ pluginId: string; pluginName: string; id: string; title: string }>;
     runCommand: (pluginId: string, commandId: string) => Promise<void>;
     setTool: (id: string) => void;
+    // The current tool id ("select", "pen", "connector", a
+    // shape kind, or a plugin tool's full id). The toolbar
+    // plugin highlights the active tool from this. Changing
+    // the tool fires a "tool" plugin event.
+    getTool: () => string;
+    // Hand the plugin system the toolbar's tool container
+    // (the #tools segment), so plugin tool buttons can be
+    // added to it. The toolbar plugin provides this; other
+    // plugins do not call it.
+    setToolbarToolsEl: (el: HTMLElement) => void;
     openSettings: () => void;
     closeSettings: () => void;
     isSettingsOpen: () => boolean;
@@ -355,6 +425,12 @@ export interface PluginContext {
   };
   cards: {
     register: (def: PluginCardDef) => void;
+    // Register a renderer for a built-in card kind (Text,
+    // Image, Swatch, UrlCard, PdfCard, Audio, Video, Shape).
+    // The core's card wrapper calls the registered renderer
+    // for the kind. This is how the core-cards plugin provides
+    // the built-in kinds; a user plugin could replace one.
+    registerBuiltin: (def: PluginBuiltinCardDef) => void;
   };
   files: {
     embedFile: (path: string) => Promise<string>;
@@ -419,6 +495,38 @@ export interface PluginContext {
     clippedEnds: (from: Anchor, to: Anchor) => [Pt, Pt] | null;
     segmentIntersectsRect: (a: Pt, b: Pt, rect: { x: number; y: number; w: number; h: number }) => boolean;
     rectsOverlap: (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) => boolean;
+    // An item's rotation in degrees (0 when it has none).
+    itemRotation: (item: Item) => number;
+  };
+  // Media state, for the cards that play or preview media
+  // (PdfCard, Audio). Read-only views of the core's media
+  // module, plus the triggers that load a PDF page or an
+  // audio duration on demand. No permission needed: these
+  // read and trigger loads for board files the plugin can
+  // already see. The raw audio element is never exposed;
+  // getAudioState returns the derived playback state.
+  media: {
+    audioFailed: (path: string) => boolean;
+    getAudioState: () => { id: number | null; playing: boolean; currentTime: number; duration: number };
+    getAudioDuration: (path: string) => number | undefined;
+    loadAudioDuration: (id: number, path: string) => void;
+    formatAudioTime: (sec: number) => string;
+    pdfFailed: (path: string) => boolean;
+    getPdfPage: (id: number) => number;
+    loadPdfPage: (id: number, path: string) => void;
+  };
+  // Pure text and colour helpers, from src/model.ts — no
+  // permission needed. A card renderer needs these to escape
+  // text, render markdown, and colour link tiles, the way
+  // the core's renderers did. One implementation, so a
+  // plugin's cards match the core's exactly.
+  text: {
+    escapeHtml: (s: string) => string;
+    renderMarkdownHtml: (text: string, baseSize: number) => string;
+    domainOf: (url: string) => string;
+    elide: (s: string, widthPx: number, textPx: number, bold: boolean) => string;
+    tileColorFor: (domain: string) => string;
+    tint: (hex: string, whiteMix: number) => string;
   };
 }
 
@@ -436,6 +544,7 @@ interface LoadedPlugin {
 // ---------------------------------------------------------------- state
 
 const cards = new Map<string, PluginCardDef & { pluginId: string }>();
+const builtinCards = new Map<string, PluginBuiltinCardDef & { pluginId: string }>();
 const tools = new Map<string, PluginToolDef & { pluginId: string; fullId: string }>();
 const panels = new Map<string, PluginPanelDef & { pluginId: string; el: HTMLElement; body: HTMLElement; tab: HTMLElement; hidden: boolean }>();
 const views = new Map<string, PluginViewDef & { pluginId: string }>();
@@ -670,10 +779,6 @@ function offEvent(event: string, handler: () => void): void {
 
 // ---------------------------------------------------------------- helpers
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
 function domId(pluginId: string, kind: string, id: string): string {
   return `${kind}-plugin-${pluginId}-${id}`.replace(/[^A-Za-z0-9_-]/g, "-");
 }
@@ -712,7 +817,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       // Capabilities in v1: every domain documented in PLUGIN_API.md.
       // A future core may add more; a plugin should check before
       // using a capability that was added after v1.
-      return ["board", "boards", "app", "backups", "view", "window", "ui", "cards", "files", "storage", "events", "tools", "panels", "commands", "views", "overlays", "settingsSections", "shortcuts", "library", "plugins", "pen"].includes(capability);
+      return ["board", "boards", "app", "backups", "view", "window", "ui", "cards", "files", "storage", "events", "tools", "panels", "commands", "views", "overlays", "settingsSections", "shortcuts", "library", "plugins", "pen", "media", "text", "geometry", "shapes"].includes(capability);
     },
     board: {
       get: () => {
@@ -816,6 +921,10 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         require("board:write");
         host!.setCanvas(patch);
       },
+      setNoteBackground: (ids: number[], hex: string) => {
+        require("board:write");
+        host!.setNoteBackground(ids, hex);
+      },
       reset: async () => {
         require("board:write");
         requireNotTrial("reset the board");
@@ -892,6 +1001,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
     view: {
       getCamera: () => ({ ...host!.getCamera() }),
       setCamera: (cam: Camera) => host!.setCamera(cam),
+      zoomBy: (factor: number) => host!.zoomBy(factor),
       centreOn: (id: number) => host!.centreOn(id),
       getView: () => activeView,
       setView: (id: string) => setActiveView(id),
@@ -900,6 +1010,9 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         for (const v of views.values()) out.push({ id: v.id, title: v.title, plugin: v.pluginId });
         return out;
       },
+    },
+    shapes: {
+      list: () => host!.listShapes(),
     },
     pen: {
       getColor: () => host!.getPenColor(),
@@ -919,6 +1032,10 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       listTools: () => Array.from(tools.values()).map((t) => ({ pluginId: t.pluginId, pluginName: loaded.get(t.pluginId)?.manifest.name ?? t.pluginId, id: t.fullId, title: t.title })),
       runCommand: (pid: string, cid: string) => runPluginCommand(pid, cid),
       setTool: (id: string) => host!.setTool(id),
+      getTool: () => host!.getTool(),
+      setToolbarToolsEl: (el: HTMLElement) => {
+        shell.toolbarToolsEl = el;
+      },
       openSettings: () => host!.openSettings(),
       closeSettings: () => host!.closeSettings(),
       isSettingsOpen: () => host!.isSettingsOpen(),
@@ -963,6 +1080,27 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       register: (def: PluginCardDef) => {
         cards.set(`${pluginId}:${def.kind}`, { ...def, pluginId });
       },
+      registerBuiltin: (def: PluginBuiltinCardDef) => {
+        registerBuiltinCard(pluginId, def);
+      },
+    },
+    media: {
+      audioFailed: (path: string) => host!.audioFailed(path),
+      getAudioState: () => host!.getAudioState(),
+      getAudioDuration: (path: string) => host!.getAudioDuration(path),
+      loadAudioDuration: (id: number, path: string) => host!.loadAudioDuration(id, path),
+      formatAudioTime: (sec: number) => host!.formatAudioTime(sec),
+      pdfFailed: (path: string) => host!.pdfFailed(path),
+      getPdfPage: (id: number) => host!.getPdfPage(id),
+      loadPdfPage: (id: number, path: string) => host!.loadPdfPage(id, path),
+    },
+    text: {
+      escapeHtml,
+      renderMarkdownHtml,
+      domainOf,
+      elide,
+      tileColorFor,
+      tint,
     },
     files: {
       embedFile: async (path: string) => {
@@ -1081,6 +1219,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       segmentIntersectsRect: (a: Pt, b: Pt, rect: { x: number; y: number; w: number; h: number }) => segmentIntersectsRect(a, b, rect),
       rectsOverlap: (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) =>
         a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y,
+      itemRotation: (item: Item) => itemRotation(item),
     },
   };
 }
@@ -1426,6 +1565,51 @@ export function getCardHtml(item: Item): string | null {
     return def.render(item, item.kind.Plugin.data);
   } catch (e) {
     return `<div style="padding:12px"><div class="title" style="font-size:14px">Plugin card failed to render</div><div class="sub" style="font-size:12px">${escapeHtml(String(e))}</div></div>`;
+  }
+}
+
+// ---------------------------------------------------------------- built-in card kinds
+
+// The built-in card kinds (Text, Image, Swatch, UrlCard,
+// PdfCard, Audio, Video, Shape). Strokes and connectors are
+// not cards — they are drawn on the canvas, not rendered
+// as card HTML — so they have no builtin renderer.
+export function builtinKindName(item: Item): string | null {
+  if (isPluginCard(item)) return null;
+  if ("Text" in item.kind) return "Text";
+  if ("Image" in item.kind) return "Image";
+  if ("Swatch" in item.kind) return "Swatch";
+  if ("UrlCard" in item.kind) return "UrlCard";
+  if ("PdfCard" in item.kind) return "PdfCard";
+  if ("Audio" in item.kind) return "Audio";
+  if ("Video" in item.kind) return "Video";
+  if ("Shape" in item.kind) return "Shape";
+  return null;
+}
+
+export function registerBuiltinCard(pluginId: string, def: PluginBuiltinCardDef): void {
+  builtinCards.set(def.kind, { ...def, pluginId });
+}
+
+export function getBuiltinCardRenderer(kind: string): (PluginBuiltinCardDef & { pluginId: string }) | null {
+  return builtinCards.get(kind) ?? null;
+}
+
+// Render a built-in card through the plugin that registered
+// a renderer for its kind, or null when no plugin provides
+// one (the core then falls back to its own renderer, during
+// migration, or a placeholder). The renderer returns the
+// complete card HTML — outer div, position, size, selection
+// ring and all — exactly as the core's renderer did.
+export function getBuiltinCardHtml(item: Item, plain = false): string | null {
+  const kindName = builtinKindName(item);
+  if (!kindName) return null;
+  const def = builtinCards.get(kindName);
+  if (!def) return null;
+  try {
+    return def.render(item, (item.kind as Record<string, unknown>)[kindName], plain);
+  } catch (e) {
+    return `<div style="padding:12px"><div class="title" style="font-size:14px">Card failed to render</div><div class="sub" style="font-size:12px">${escapeHtml(String(e))}</div></div>`;
   }
 }
 
