@@ -691,6 +691,9 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #search-box {
   position: relative;
   display: flex; align-items: center; gap: 6px; width: min(360px, 60vw);
+  /* Fixed height: the bar must not grow when the clear button or the
+     match count appear. 34px = 22px clear button + 6px padding each side. */
+  height: 34px;
   padding: 6px 8px 6px 12px;
   background: var(--bg-system); border: none; border-radius: 8px;
   -webkit-app-region: no-drag;
@@ -736,9 +739,10 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
      long indexing suffix is cut with an ellipsis; the match count, first,
      always stays visible. */
   width: 96px; text-align: right; overflow: hidden; text-overflow: ellipsis; }
-#search-clear {
+#search-box #search-clear {
   /* Always in the layout (hidden, not removed): toggling it in and out
-     resized the input on every keystroke. */
+     resized the input on every keystroke. Scoped to #search-box so this
+     beats #title-bar button, which would otherwise force it to 32px. */
   display: flex; visibility: hidden; border: none; background: var(--fill); width: 22px; height: 22px;
   border-radius: 50%; font-size: 15px; line-height: 1; cursor: pointer; color: var(--grey);
   flex: none; align-items: center; justify-content: center;
