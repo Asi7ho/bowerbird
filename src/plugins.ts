@@ -1,10 +1,13 @@
 // Bowerbird Plugin API v1 — renderer side (see PLUGIN_API.md).
 //
-// A plugin is a folder with a manifest.json and a single-file
-// main.js module. The main process discovers plugins and serves
-// their files through IPC; this module loads them, builds the
-// per-plugin API object, and owns the registries for cards, tools,
-// panels, views and commands. The core (src/main.ts) owns the board
+// A plugin is a folder with a manifest.json and a main.js
+// module. A plugin may be multiple files: main.js is loaded
+// as an ES module over the plugin: scheme, so its relative
+// imports resolve against its own folder, exactly like a
+// first-party plugin. The main process discovers plugins and
+// serves their files through IPC and the plugin: scheme; this
+// module loads them, builds the per-plugin API object, and owns
+// the registries for cards, tools, panels, views and commands. The core (src/main.ts) owns the board
 // state and the DOM; it passes a Host with closures over that state
 // into initPlugins, and calls back into this module at the points
 // where a plugin can contribute (card rendering, tool clicks,
@@ -1850,9 +1853,22 @@ async function activatePlugin(manifest: PluginManifest, source?: { mainCode: str
       }
     }
   }
-  const code = source ? source.mainCode : await bridge.readPluginFile(manifest.id, manifest.main);
-  const blob = new Blob([code], { type: "text/javascript" });
-  const url = URL.createObjectURL(blob);
+  // A user plugin loads as an ES module over the plugin:
+  // scheme, so its main.js has a real URL base and its
+  // relative imports resolve against its own folder — the
+  // same as a first-party plugin. A blob URL has no base,
+  // so a relative import cannot resolve at all; that is
+  // why user plugins were single-file until now. A trial
+  // plugin has no files on disk, so it still loads from a
+  // blob URL — a single-file plugin is the special case.
+  let url: string | null = null;
+  if (source) {
+    const blob = new Blob([source.mainCode], { type: "text/javascript" });
+    url = URL.createObjectURL(blob);
+  } else {
+    const mainPath = manifest.main.split('/').map((seg) => encodeURIComponent(seg)).join('/');
+    url = `plugin://${encodeURIComponent(manifest.id)}/${mainPath}`;
+  }
   try {
     const mod = (await import(/* @vite-ignore */ url)) as {
       activate?: (api: PluginContext) => void | Promise<void>;
@@ -1868,17 +1884,19 @@ async function activatePlugin(manifest: PluginManifest, source?: { mainCode: str
     lp.failed = false;
     lp.error = null;
   } finally {
-    URL.revokeObjectURL(url);
+    if (source && url) URL.revokeObjectURL(url);
   }
 }
 
 // First-party plugins: bundled UI plugins that ship with the
-// app. They are ES modules imported by the core, not single-file
-// main.js loaded from a blob URL — that is the only difference
-// from a user plugin. They get the same PluginContext, the same
-// permission checks, and the same manifest, and they appear in
-// the plugin list the same way. A first-party plugin has no back
-// door: if it needs something, that something is in the API.
+// app. They are ES modules imported by the core. A user plugin
+// is the same: an ES module loaded over the plugin: scheme, so
+// it can be multiple files with relative imports. The only
+// difference is loading (bundled import vs plugin: URL). They
+// get the same PluginContext, the same permission checks, and
+// the same manifest, and they appear in the plugin list the
+// same way. A first-party plugin has no back door: if it needs
+// something, that something is in the API.
 export async function activateFirstPartyPlugin(
   manifest: PluginManifest,
   mod: { activate?: (api: PluginContext) => void | Promise<void>; deactivate?: () => void | Promise<void> },

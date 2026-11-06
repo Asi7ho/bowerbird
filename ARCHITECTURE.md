@@ -28,8 +28,9 @@ built-in UI has no privileged path. It uses the same public
   of first-party plugins that ship with the app. They use the
   same `PluginContext` as user plugins. The only difference is
   loading: first-party plugins are ES modules bundled with the
-  app; user plugins are single-file `main.js` loaded from a blob
-  URL (v1 restriction, unchanged).
+  app; user plugins are ES modules loaded over the plugin:
+  scheme, so they can be multiple files with relative imports,
+  exactly like a first-party plugin.
 - **Board JSON is stable.** Moving a card kind or a UI piece
   into a plugin never changes the board format. Built-in kinds
   (`Text`, `Image`, `Swatch`, `UrlCard`, `PdfCard`, `Audio`,
@@ -153,9 +154,9 @@ core UI itself is fully plugin-built.
 ## Loading: first-party vs user plugins
 
 - **User plugins** (in `plugins/` or installed): unchanged.
-  Single-file `main.js`, loaded from a blob URL, `apiVersion`
-  checked, permissions enforced. This is the v1 contract and
-  it does not change.
+  Multi-file `main.js` (relative imports resolve over the
+  plugin: scheme), `apiVersion` checked, permissions enforced.
+  This is the v1 contract and it does not change.
 - **First-party plugins** (in `plugins/core-*/`): ES modules
   bundled with the app. The core loads them with a normal
   `import()` at boot, then calls `activate(api)` with the

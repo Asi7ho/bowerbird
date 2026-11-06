@@ -1362,6 +1362,19 @@ function registerIpc() {
 protocol.registerSchemesAsPrivileged([{
   scheme: 'app-file',
   privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
+}, {
+  // plugin: serves a user plugin's own files (main.js and
+  // the modules it imports) to the renderer, so a plugin
+  // can be multiple files with relative ES-module imports,
+  // like a first-party plugin. Without a real URL base, a
+  // blob URL cannot resolve a relative import at all. The
+  // scheme is standard + fetch/CORS so dynamic import()
+  // works and relative imports resolve against the
+  // plugin's own folder. Only the plugin's own folder is
+  // served (traversal is rejected), and only .js/.css/.json
+  // — the same allow-list as bowerbird:read-plugin-file.
+  scheme: 'plugin',
+  privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
 }]);
 
 app.whenReady().then(() => {
@@ -1377,6 +1390,39 @@ app.whenReady().then(() => {
     boardDir: () => boardDir(),
     assetsDir: () => assetsDir(),
   }));
+  // Plugin files reach the renderer through this scheme, so a
+  // plugin's main.js has a real URL base and its relative
+  // ES-module imports resolve against its own folder. The URL
+  // is plugin://<plugin-id>/<relative-path>. Only the plugin's
+  // own folder is served, and only .js/.css/.json — a path that
+  // escapes the folder, or an unknown plugin id, is a 404.
+  protocol.handle('plugin', (request) => {
+    try {
+      const u = new URL(request.url);
+      const pluginId = u.hostname;
+      const relativePath = u.pathname.split('/').filter(Boolean).map((seg) => {
+        try { return decodeURIComponent(seg); } catch { return seg; }
+      }).join('/');
+      if (!pluginId || !relativePath) return new Response('not found', { status: 404 });
+      let dir = pluginDirs.get(pluginId);
+      if (!dir) {
+        listPlugins();
+        dir = pluginDirs.get(pluginId);
+      }
+      if (!dir) return new Response('not found', { status: 404 });
+      const ext = path.extname(relativePath).toLowerCase();
+      if (!['.js', '.css', '.json'].includes(ext)) return new Response('not found', { status: 404 });
+      const resolved = path.resolve(dir, relativePath);
+      if (resolved !== dir && !resolved.startsWith(dir + path.sep)) {
+        return new Response('not found', { status: 404 });
+      }
+      const data = fs.readFileSync(resolved);
+      const type = ext === '.js' ? 'application/javascript' : ext === '.css' ? 'text/css' : 'application/json';
+      return new Response(data, { headers: { 'Content-Type': type } });
+    } catch {
+      return new Response('not found', { status: 404 });
+    }
+  });
   if (!DEMO) {
     loadAppSettings();
     // A board deleted outside the app must not leave the
