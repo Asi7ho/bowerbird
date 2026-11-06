@@ -1298,6 +1298,17 @@ function registerIpc() {
         // nothing. Say so plainly instead; JSON error bodies,
         // which actually name the problem, still come through.
         if (/^\s*</.test(text)) throw new Error(`provider error ${res.status}: the provider returned a web page, not an API response — check the provider address (it usually ends in /v1)`);
+        if (res.status === 401) {
+          // The handler knows whether a key was sent, so say
+          // which of the two it is instead of dumping the
+          // provider's JSON: a rejected key means the key is
+          // wrong or revoked; no key means none reached the
+          // provider at all.
+          const sent = typeof key === "string" && !!key;
+          throw new Error(sent
+            ? "provider error 401: unauthorized — the provider rejected the API key. Check it in Settings → Plugin settings → Plugin Builder, or generate a fresh one."
+            : "provider error 401: unauthorized — no API key was sent. Enter one in Settings → Plugin settings → Plugin Builder.");
+        }
         throw new Error(`provider error ${res.status}: ${text.slice(0, 500)}`);
       }
       let data;
