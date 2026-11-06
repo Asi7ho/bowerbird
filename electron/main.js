@@ -709,8 +709,10 @@ function saveSecureStorage(data) {
   fs.writeFileSync(tmp, JSON.stringify(data));
   fs.renameSync(tmp, file);
 }
-function secureStorageAvailable() {
-  try { return safeStorage.isEncryptionAvailable(); } catch { return false; }
+async function secureStorageAvailable() {
+  // The sync isEncryptionAvailable is deprecated in
+  // Electron 45; the async form is the same check.
+  try { return await safeStorage.isAsyncEncryptionAvailable(); } catch { return false; }
 }
 
 // ---------------------------------------------------------------- IPC
@@ -1289,7 +1291,15 @@ function registerIpc() {
         signal: controller.signal,
       });
       const text = await res.text();
-      if (!res.ok) throw new Error(`provider error ${res.status}: ${text.slice(0, 500)}`);
+      if (!res.ok) {
+        // A wrong provider address usually answers with a web
+        // page (a 404 HTML page), not an API error — dumping
+        // 500 characters of it into the chat tells the user
+        // nothing. Say so plainly instead; JSON error bodies,
+        // which actually name the problem, still come through.
+        if (/^\s*</.test(text)) throw new Error(`provider error ${res.status}: the provider returned a web page, not an API response — check the provider address (it usually ends in /v1)`);
+        throw new Error(`provider error ${res.status}: ${text.slice(0, 500)}`);
+      }
       let data;
       try { data = JSON.parse(text); } catch { throw new Error('provider did not return JSON'); }
       const content = data?.choices?.[0]?.message?.content;
@@ -1318,21 +1328,26 @@ function registerIpc() {
     }
   });
   ipcMain.handle('bowerbird:secure-storage-available', () => secureStorageAvailable());
-  ipcMain.handle('bowerbird:secure-storage-get', (_event, pluginId, key) => {
+  ipcMain.handle('bowerbird:secure-storage-get', async (_event, pluginId, key) => {
     const data = loadSecureStorage();
     const per = data[pluginId];
     if (!per || typeof per !== "object" || !per[key]) return null;
     const entry = per[key];
     if (entry.encrypted) {
-      try { return safeStorage.decryptString(Buffer.from(entry.value, "base64")); } catch { return null; }
+      try {
+        // decryptStringAsync resolves to { result, shouldReEncrypt },
+        // not a bare string like the old sync decryptString.
+        const out = await safeStorage.decryptStringAsync(Buffer.from(entry.value, "base64"));
+        return typeof out === "string" ? out : (out && typeof out.result === "string" ? out.result : null);
+      } catch { return null; }
     }
     return entry.value ?? null;
   });
-  ipcMain.handle('bowerbird:secure-storage-set', (_event, pluginId, key, value) => {
+  ipcMain.handle('bowerbird:secure-storage-set', async (_event, pluginId, key, value) => {
     const data = loadSecureStorage();
     if (!data[pluginId] || typeof data[pluginId] !== "object") data[pluginId] = {};
-    if (secureStorageAvailable()) {
-      data[pluginId][key] = { encrypted: true, value: safeStorage.encryptString(String(value)).toString("base64") };
+    if (await secureStorageAvailable()) {
+      data[pluginId][key] = { encrypted: true, value: (await safeStorage.encryptStringAsync(String(value))).toString("base64") };
     } else {
       data[pluginId][key] = { encrypted: false, value: String(value) };
     }
