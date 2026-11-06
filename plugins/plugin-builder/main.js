@@ -492,13 +492,14 @@ function renderSettings(container) {
     await loadSavedKey();
     let encrypted = true;
     try { encrypted = await apiRef.secureStorage.available(); } catch { /* assume encrypted */ }
-    // The status names which key is stored, by its first and
-    // last four characters — enough to tell two keys apart,
-    // not enough to use it. Without this, "Key saved" cannot
-    // tell a stale key from the one just tested elsewhere,
-    // and a last-four match alone cannot tell a key whose
-    // start was changed on the way through storage.
-    const print = (k) => (typeof k === "string" && k ? `, starting ${k.slice(0, 4)} and ending …${k.slice(-4)}` : "");
+    // The status names which key is stored, by its length and
+    // its first and last four characters — enough to tell two
+    // keys apart, not enough to use it. Without this, "Key
+    // saved" cannot tell a stale key from the one just tested
+    // elsewhere, and an ends-only match cannot tell a key
+    // whose start was changed on the way through storage,
+    // or one that was truncated or extended.
+    const print = (k) => (typeof k === "string" && k ? `, ${k.length} characters, starting ${k.slice(0, 4)} and ending …${k.slice(-4)}` : "");
     if (savedKey) {
       status.textContent = encrypted
         ? `Key saved${print(savedKey)}, encrypted by your system's keychain. You won't need to type it again.`
