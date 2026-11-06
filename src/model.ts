@@ -58,12 +58,32 @@ export function kindName(item: Item): string {
   return Object.keys(item.kind)[0];
 }
 
+// Id lookup is the hot path for hit-testing: every
+// connector hit-test used to call boardGet per endpoint,
+// which is a linear scan, so a connector-heavy board
+// paid O(items) per connector per hover frame. The index
+// is a WeakMap keyed by the board object, so a board
+// load drops the old index with the old board. It is
+// rebuilt when the items array is replaced (filter,
+// spread, restore) or its length changes (push, splice
+// add/remove); a splice move keeps the same items, so
+// the index stays valid across reorders.
+const indexByBoard = new WeakMap<Board, { items: Item[]; byId: Map<number, Item> }>();
+function indexFor(board: Board): Map<number, Item> {
+  const cached = indexByBoard.get(board);
+  if (cached && cached.items === board.items && cached.byId.size === board.items.length) return cached.byId;
+  const byId = new Map<number, Item>();
+  for (const it of board.items) byId.set(it.id, it);
+  indexByBoard.set(board, { items: board.items, byId });
+  return byId;
+}
+
 export function get(item: Item, board: Board): Item | undefined {
-  return board.items.find((i) => i.id === item.id);
+  return indexFor(board).get(item.id);
 }
 
 export function boardGet(board: Board, id: number): Item | undefined {
-  return board.items.find((i) => i.id === id);
+  return indexFor(board).get(id);
 }
 
 export function centre(item: Item): Pt {

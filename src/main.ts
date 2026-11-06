@@ -22,6 +22,7 @@ interface BowerbirdAPI {
   contextClassifyAudio(pcm: Float32Array): Promise<{ label: string; score: number }[]>;
   contextIndexLoad(): Promise<Record<string, unknown>>;
   contextIndexSave(index: Record<string, unknown>): Promise<boolean>;
+  contextIndexSaveSync(index: Record<string, unknown>): boolean;
   embedFile(path: string): Promise<string>;
   listLibrary(): Promise<{ path: string; items: Array<{ name: string; path: string; relativePath: string; ext: string; kind: string; category: string | null; size_bytes: number; mtime_ms: number }>; categories: Array<{ name: string; count: number }>; uncategorizedCount: number }>;
   addToLibrary(path: string): Promise<string>;
@@ -429,7 +430,7 @@ const gridEl = document.getElementById("grid") as HTMLDivElement;
 // Key of the card/stroke content currently built in the DOM. Camera
 // moves that leave this key unchanged must not rebuild anything:
 // panning then is one GPU transform, not a DOM rebuild per frame.
-let lastContentKey = "";
+let lastContentKey = 0;
 let cursorRaf = 0;
 let pendingCursor: Pt | null = null;
 const toastEl = document.getElementById("toast") as HTMLDivElement;
@@ -473,21 +474,70 @@ function zoomCentre(factor: number): void {
   zoomAt({ x: s.x / 2, y: s.y / 2 }, factor);
 }
 const DEMO = api.isDemo === true;
-function save(): void {
-  boardSearchVersion++;
-  // Undo capture runs before the demo return, so undo works in
-  // demo too, in memory, even though nothing is written to disk.
-  captureUndoStep();
+// What save() last saw, so a save that changed nothing
+// costs no disk write and no search re-index. These are
+// deliberately separate from lastSnapshotKey (the undo
+// stack's key): undo() and redo() set lastSnapshot to the
+// restored content without touching these, so an undo
+// still counts as a change here and still writes to disk.
+let lastSeenContentKey: string | null = null;
+let lastSeenCameraJson: string | null = null;
+// The content key for the current board, built from one
+// serialisation of the items: identical to contentKey()
+// of a snapshot (same fields, same order), without
+// stringifying the items a second time.
+function contentKeyFor(itemsJson: string): string {
+  return `{"items":${itemsJson},"next_id":${board.next_id},"next_group":${board.next_group},"bg":${JSON.stringify(board.bg)},"grid":${JSON.stringify(board.grid)}}`;
+}
+function save(): { itemsJson: string; contentKey: string } {
+  // One serialisation of the items, shared by the undo
+  // key, the undo snapshot and the change check below.
+  // The old save() serialised the board three times
+  // (snapshot, key, payload) and saveWithoutUndo added
+  // a fourth stringify plus a second deep copy.
+  const itemsJson = JSON.stringify(board.items);
+  const contentKey = contentKeyFor(itemsJson);
+  const cameraJson = JSON.stringify(board.camera);
+  const contentChanged = contentKey !== lastSeenContentKey;
+  const cameraChanged = cameraJson !== lastSeenCameraJson;
+  // Nothing changed since the last save: a plain click
+  // on an already-top card, a pan back to the same view,
+  // a save() call with no mutation behind it. No disk
+  // write, no search re-index, no board event — the file
+  // on disk already holds exactly this board.
+  if (!contentChanged && !cameraChanged) return { itemsJson, contentKey };
+  if (contentChanged) {
+    lastSeenContentKey = contentKey;
+    // Search only re-indexes when the searchable content
+    // actually changed: camera-only saves and no-op
+    // saves used to invalidate the whole index.
+    boardSearchVersion++;
+    // Undo capture runs before the demo return, so undo works in
+    // demo too, in memory, even though nothing is written to disk.
+    captureUndoStep(itemsJson, contentKey);
+  }
+  if (cameraChanged) lastSeenCameraJson = cameraJson;
   // The board event fires in demo too: plugins refresh
   // from it (library, slides, board list, tidy counts),
   // and in demo they otherwise go stale after the first
-  // change, since nothing else re-renders them.
-  emitPluginEvent("board");
+  // change, since nothing else re-renders them. A
+  // camera-only save does not emit: no plugin refreshes
+  // from a camera move, and emitting would make every
+  // pan pay a full-board copy in each listening plugin.
+  if (contentChanged) emitPluginEvent("board");
   // Demo mode saves nothing: not even an IPC call, so a main-process
   // guard failure alone could never write. The main process also
   // no-ops save-board in demo mode, as a second guard.
-  if (DEMO) return;
-  api.saveBoard(JSON.stringify(board)).catch((e) => toast(`Save failed: ${String(e)}`));
+  if (DEMO) return { itemsJson, contentKey };
+  api.saveBoard(JSON.stringify(board)).catch((e) => {
+    // A failed write must not be remembered as saved:
+    // clear the seen keys so the next save retries
+    // instead of skipping on "nothing changed".
+    lastSeenContentKey = null;
+    lastSeenCameraJson = null;
+    toast(`Save failed: ${String(e)}`);
+  });
+  return { itemsJson, contentKey };
 }
 
 // ---------------------------------------------------------------- undo / redo
@@ -565,11 +615,16 @@ function updateUndoButtons(): void {
   if (redoBtn) redoBtn.classList.toggle("dim", redoStack.length === 0);
 }
 
-function captureUndoStep(): void {
+function captureUndoStep(itemsJson?: string, key?: string): void {
   if (suppressUndoCapture) return;
-  const cur = contentSnapshot();
-  const curKey = contentKey(cur);
+  // Reuse save()'s serialisation when it is offered:
+  // otherwise a save paid for a deep copy and a key
+  // stringify here on top of the one in save().
+  const curKey = key ?? contentKeyFor(itemsJson ?? JSON.stringify(board.items));
   if (lastSnapshot !== null && lastSnapshotKey === curKey) return;
+  const cur: UndoState = itemsJson !== undefined
+    ? { items: JSON.parse(itemsJson) as Item[], next_id: board.next_id, next_group: board.next_group, bg: board.bg, grid: board.grid, selected: [...selected] }
+    : contentSnapshot();
   if (lastSnapshot !== null) {
     undoStack.push(lastSnapshot);
     if (undoStack.length > UNDO_LIMIT) undoStack.shift();
@@ -583,7 +638,10 @@ function captureUndoStep(): void {
 }
 
 function saveWithoutUndo(): void {
-  boardSearchVersion++;
+  // No search bump here: save() bumps only when the
+  // content actually changed. This used to bump on every
+  // call — including camera-only pans — and then save()
+  // bumped again.
   // For changes that should save but not become an undo step:
   // background changes the user did not make, like a link
   // preview filling in, and a click's stacking change. The
@@ -591,12 +649,18 @@ function saveWithoutUndo(): void {
   // lastSnapshot moves to the new content, so the next user
   // change is still one step from here.
   suppressUndoCapture = true;
+  let ser: { itemsJson: string; contentKey: string };
   try {
-    save();
+    ser = save();
   } finally {
     suppressUndoCapture = false;
   }
-  setLastSnapshot(contentSnapshot());
+  // Move lastSnapshot to the new content, reusing save()'s
+  // serialisation instead of snapshotting the board again.
+  if (ser.contentKey !== lastSnapshotKey) {
+    lastSnapshot = { items: JSON.parse(ser.itemsJson) as Item[], next_id: board.next_id, next_group: board.next_group, bg: board.bg, grid: board.grid, selected: [...selected] };
+    lastSnapshotKey = ser.contentKey;
+  }
   updateUndoButtons();
 }
 
@@ -891,11 +955,26 @@ function applyCamera(): void {
   updateResizeHandle();
 }
 
-function visibleKey(): string {
+// A numeric hash, not a joined string: this runs on
+// every wheel tick, and the old version allocated a
+// comma-joined string over all visible ids (plus the
+// selection) just to compare it with the last one.
+// FNV-1a over the visible ids in board order, then the
+// selection and editing state: a changed visible set
+// hashes differently, and the hash is only ever compared
+// with the previous hash, never persisted.
+function visibleKey(): number {
   const v = visibleRect();
-  const ids: number[] = [];
-  for (const item of board.items) if (isVisibleItem(item, v)) ids.push(item.id);
-  return `${ids.join(",")}|${selected.join(",")}|${editingId ?? ""}`;
+  let h = 2166136261;
+  const mix = (n: number): void => {
+    h ^= n & 0xffffffff;
+    h = Math.imul(h, 16777619);
+  };
+  for (const item of board.items) if (isVisibleItem(item, v)) mix(item.id);
+  mix(0x9e3779b9);
+  for (const id of selected) mix(id);
+  mix(editingId ?? -1);
+  return h;
 }
 
 // After a camera move, rebuild content only if the visible set
@@ -913,6 +992,28 @@ function renderSvgOnly(): void {
   renderStrokesAndConnectors();
 }
 
+// A stroke's SVG path string is rebuilt from its
+// points on every render — and renderSvgOnly runs on
+// every mousemove while dragging, so a few long strokes
+// meant rebuilding thousands of coordinates per frame
+// for strokes that had not moved. Cache it per item
+// object, like the markdown cache below: the key is the
+// point count plus the first and last points, which is
+// exactly what changes when a stroke is drawn (points
+// appended) or moved (all points translated). There is
+// no operation that rewrites middle points alone.
+const strokePathCache = new WeakMap<object, { key: string; d: string }>();
+function strokePath(item: Item, points: Pt[], color: string, width: number): string {
+  const first = points[0];
+  const last = points[points.length - 1];
+  const key = `${points.length}:${first.x},${first.y}:${last.x},${last.y}:${color}:${width}`;
+  const hit = strokePathCache.get(item);
+  if (hit && hit.key === key) return hit.d;
+  const d = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
+  strokePathCache.set(item, { key, d });
+  return d;
+}
+
 function renderStrokesAndConnectors(): void {
   const v = visibleRect();
   for (const item of board.items) {
@@ -924,7 +1025,7 @@ function renderStrokesAndConnectors(): void {
     if ("Stroke" in item.kind) {
       const { points, color, width, marker } = item.kind.Stroke;
       if (points.length < 2) continue;
-      const d = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
+      const d = strokePath(item, points, color, width);
       const sel = selected.includes(item.id);
       // Rotation is an SVG transform around the stroke's
       // bounding-box centre, in world coords: the points
@@ -1613,7 +1714,14 @@ function commitEditingIfAny(): void {
 function setTool(t: Tool): void {
   tool = t;
   drag = null;
-  render();
+  // Toolbar only, not a full render: nothing in the card
+  // DOM depends on the tool — the toolbar active state,
+  // the pen palette row and the plugin tool buttons are
+  // all updateToolbar covers, and the cursor follows on
+  // the next mousemove. The old render() here rebuilt
+  // every visible card (and re-ran search) on every
+  // tool switch, including every V/P/A keypress.
+  updateToolbar();
 }
 
 // Selection actions, shared by the keyboard shortcuts and by the
@@ -2466,10 +2574,21 @@ function saveContextIndex(): void {
   if (contextIndexSaveTimer) return;
   contextIndexSaveTimer = setTimeout(() => { contextIndexSaveTimer = undefined; doSaveContextIndex(); }, 1000);
 }
-function flushContextIndex(): void {
+function flushContextIndex(sync = false): void {
   if (!contextIndexSaveTimer) return;
   clearTimeout(contextIndexSaveTimer);
   contextIndexSaveTimer = undefined;
+  // On unload the async save may not complete before
+  // the window closes, losing a just-indexed batch:
+  // use the synchronous channel there. Every other
+  // flush stays async and non-blocking.
+  if (sync) {
+    const obj: Record<string, ContextEntry> = {};
+    for (const [k, v] of contextIndex.entries()) obj[k] = v;
+    for (const [q, embedding] of contextQueryCache.entries()) obj[`__query:${q}`] = { embedding };
+    try { api.contextIndexSaveSync(obj); } catch { /* the async save already ran, or the index is lost */ }
+    return;
+  }
   doSaveContextIndex();
 }
 function cancelContextIndexSave(): void {
@@ -2477,7 +2596,7 @@ function cancelContextIndexSave(): void {
   clearTimeout(contextIndexSaveTimer);
   contextIndexSaveTimer = undefined;
 }
-window.addEventListener("beforeunload", () => { flushContextIndex(); });
+window.addEventListener("beforeunload", () => { flushContextIndex(true); });
 async function getQueryEmbedding(query: string): Promise<number[] | null> {
   if (contextQueryEmbedding && contextQueryEmbedding.query === query) return contextQueryEmbedding.embedding;
   const cached = contextQueryCache.get(query);
@@ -2509,16 +2628,22 @@ async function decodeAudio16k(fileUrl: string): Promise<Float32Array | null> {
     try {
       const decoded = await ctx.decodeAudioData(buf);
       const targetRate = 16000;
-      const offline = new OfflineAudioContext(1, Math.ceil(decoded.duration * targetRate), targetRate);
+      // AST's input window is 10 seconds, so render only
+      // the first 10 seconds: the old code rendered the
+      // whole file at 16 kHz (an hour of audio is ~58M
+      // samples) and then threw all but the first 10 s
+      // away. Decoding still reads the whole file —
+      // slicing compressed bytes before decode is
+      // unreliable — but the render, the expensive part,
+      // is now capped.
+      const renderSeconds = Math.min(decoded.duration, 10);
+      const offline = new OfflineAudioContext(1, Math.ceil(renderSeconds * targetRate), targetRate);
       const src = offline.createBufferSource();
       src.buffer = decoded;
       src.connect(offline.destination);
       src.start();
       const rendered = await offline.startRendering();
       const data = rendered.getChannelData(0);
-      // AST's input window is 10 seconds: decoding more
-      // than that only costs time, IPC size and inference
-      // time, and the model never sees it.
       const maxSamples = targetRate * 10;
       return data.length > maxSamples ? data.slice(0, maxSamples) : data;
     } finally {
@@ -2661,9 +2786,28 @@ async function startContextIndexing(): Promise<void> {
   });
   await Promise.all(workers);
   contextIndexing = false;
+  indexingDonePromise = null;
   flushContextIndex();
   const input = document.getElementById("search-input") as HTMLInputElement | null;
   if (input && input.value.trim() !== "") updateSearch();
+}
+// One shared waiter for indexing finishing, instead of a
+// polling loop per search: updateSearch runs at the end of
+// every render while a query is active, and each call used
+// to spawn its own `while (contextIndexing) sleep(200)`
+// loop, so the loops accumulated for as long as indexing
+// ran. Every waiter still checks its own generation after
+// the shared wait, so a stale query still discards its
+// own context results.
+let indexingDonePromise: Promise<void> | null = null;
+function waitForIndexing(): Promise<void> {
+  if (!contextIndexing) return Promise.resolve();
+  if (!indexingDonePromise) {
+    indexingDonePromise = (async () => {
+      while (contextIndexing) await new Promise((r) => setTimeout(r, 200));
+    })();
+  }
+  return indexingDonePromise;
 }
 async function contextMatches(item: Item, query: string, words: string[]): Promise<boolean> {
   const k = item.kind;
@@ -3005,9 +3149,9 @@ function updateSearch(): void {
   void (async () => {
     // Wait for indexing to finish, then check context.
     // startContextIndexing is already running above; this
-    // waits for it by polling its flag, so a new search
+    // waits on the one shared waiter, so a new search
     // (new generation) supersedes this one cleanly.
-    while (contextIndexing) await new Promise((r) => setTimeout(r, 200));
+    await waitForIndexing();
     if (gen !== searchGeneration) return;
     const inputNow = document.getElementById("search-input") as HTMLInputElement | null;
     if (!inputNow || normaliseSearch(inputNow.value) !== query) return;

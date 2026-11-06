@@ -179,10 +179,18 @@ function attachPlaceInteractions(el) {
         ghost.style.top = `${me.clientY + 12}px`;
       }
     };
-    const onUp = (me) => {
+    // Same blur cleanup as Visual Library: a release
+    // outside the window never fires mouseup on it.
+    const cleanup = () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("blur", onBlur);
       if (ghost) ghost.remove();
+      ghost = null;
+    };
+    const onBlur = () => { cleanup(); moved = false; };
+    const onUp = (me) => {
+      cleanup();
       if (!moved) return;
       // A drop onto the visible board places the swatch.
       // A drop back onto any UI cancels.
@@ -193,6 +201,7 @@ function attachPlaceInteractions(el) {
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
+    window.addEventListener("blur", onBlur);
   });
 }
 

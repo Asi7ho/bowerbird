@@ -27,6 +27,13 @@ let panelEl = null;
 let listEl = null;
 let nameInput = null;
 let onBoardHandler = null;
+// The board whose delete button is armed, by name —
+// not a closure over the button, which refresh()
+// rebuilds on every board event. The old closure lost
+// the armed state on any board save mid-arm, so the
+// second click silently re-armed instead of deleting.
+let armedBoard = null;
+let armedTimer = null;
 
 function esc(s) {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -57,22 +64,28 @@ async function refresh() {
     if (b.name !== "Main") {
       const del = document.createElement("button");
       del.className = "bd-del";
-      del.textContent = "×";
+      if (armedBoard === b.name) {
+        del.textContent = "Confirm?";
+        del.classList.add("bd-armed");
+      } else {
+        del.textContent = "×";
+      }
       del.title = `Delete ${b.name}`;
       del.setAttribute("aria-label", `Delete ${b.name}`);
       // Two-click delete, like Delete all data in Settings:
       // the first click arms the button, the second deletes.
       // No native confirm dialog: the app never uses one.
-      let armed = false;
       del.addEventListener("click", async (e) => {
         e.stopPropagation();
-        if (!armed) {
-          armed = true;
-          del.textContent = "Confirm?";
-          del.classList.add("bd-armed");
-          setTimeout(() => { if (del.isConnected) { armed = false; del.textContent = "×"; del.classList.remove("bd-armed"); } }, 4000);
+        if (armedBoard !== b.name) {
+          armedBoard = b.name;
+          if (armedTimer !== null) clearTimeout(armedTimer);
+          armedTimer = setTimeout(() => { armedBoard = null; armedTimer = null; void refresh(); }, 4000);
+          void refresh();
           return;
         }
+        armedBoard = null;
+        if (armedTimer !== null) { clearTimeout(armedTimer); armedTimer = null; }
         try {
           // Deleting the board that is open would leave the
           // renderer on a deleted folder, and its next save

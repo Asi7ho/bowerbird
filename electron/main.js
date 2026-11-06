@@ -470,8 +470,19 @@ function makeBackup(dir, json) {
   pruneBackups(dir);
   return path.basename(dest);
 }
+// Newest-backup time per board folder, cached so the
+// per-save check does not readdir + stat the backups
+// folder on every save. The cache is only trusted while
+// a backup is recent (none due) and fresh (checked in
+// the last 10 minutes); otherwise the folder is
+// rescanned, so a backup made or removed by another
+// path (restore, reset) is picked up within 10 minutes.
+const backupNewestCache = new Map();
 function maybeBackup(dir, json) {
   if (DEMO || !json) return;
+  const now = Date.now();
+  const cached = backupNewestCache.get(dir);
+  if (cached && now - cached.checkedAt < 10 * 60 * 1000 && now - cached.newest < 60 * 60 * 1000) return;
   const backups = backupsDirFor(dir);
   let newest = 0;
   try {
@@ -481,8 +492,11 @@ function maybeBackup(dir, json) {
       if (m > newest) newest = m;
     }
   } catch { /* no backups yet */ }
-  if (Date.now() - newest < 60 * 60 * 1000) return;
-  try { makeBackup(dir, json); } catch { /* backups must never break a save */ }
+  backupNewestCache.set(dir, { newest, checkedAt: now });
+  if (now - newest < 60 * 60 * 1000) return;
+  try {
+    if (makeBackup(dir, json)) backupNewestCache.set(dir, { newest: now, checkedAt: now });
+  } catch { /* backups must never break a save */ }
 }
 function listBackups(dir) {
   // The Settings UI shows only the last backup, so
@@ -1176,7 +1190,7 @@ function registerIpc() {
       return JSON.parse(fs.readFileSync(file, 'utf8'));
     } catch { return {}; }
   });
-  ipcMain.handle('bowerbird:context-index-save', (_event, index) => {
+  function writeContextIndex(index) {
     try {
       const file = path.join(boardDir(), 'context-index.json');
       // Write to a temp file, then rename: a crash or
@@ -1188,6 +1202,16 @@ function registerIpc() {
       fs.renameSync(tmp, file);
       return true;
     } catch { return false; }
+  }
+  ipcMain.handle('bowerbird:context-index-save', (_event, index) => writeContextIndex(index));
+  // Synchronous twin of the save above, for the
+  // beforeunload flush: an async invoke may not
+  // complete before the window closes, so a batch
+  // indexed just before quitting could be lost.
+  // Only the unload flush uses this; ordinary saves
+  // stay async.
+  ipcMain.on('bowerbird:context-index-save-sync', (event, index) => {
+    event.returnValue = writeContextIndex(index);
   });
 
   ipcMain.handle('bowerbird:fetch-preview', async (_event, url) => {
@@ -1543,12 +1567,25 @@ app.whenReady().then(() => {
       // for audio served as an open-ended stream). Answer ranges
       // properly, and always send a length, so <audio> and <video>
       // work through this scheme just as <img> already did.
+      // ETag from size + mtime, so a replaced file is a
+      // different resource: render() recreates every <img>
+      // on every rebuild, and without any cache headers
+      // each one re-read the whole file through this
+      // handler. With an ETag the browser revalidates
+      // instead (304, no body, no file read), and a
+      // replaced asset is never served stale.
       let size;
+      let etag;
       try {
-        size = fs.statSync(servePath).size;
+        const st = fs.statSync(servePath);
+        size = st.size;
+        etag = `"${st.size}-${Math.floor(st.mtimeMs)}"`;
       } catch {
         console.error(`[app-file] not found on disk: ${servePath} (requested ${filePath})`);
         return new Response('not found', { status: 404 });
+      }
+      if (request.headers.get('if-none-match') === etag) {
+        return new Response(null, { status: 304, headers: { 'ETag': etag, 'Accept-Ranges': 'bytes' } });
       }
       // A bundle fallback that is itself empty is no better
       // than the missing board copy: fall through to 404 so
@@ -1559,7 +1596,7 @@ app.whenReady().then(() => {
       }
       const range = request.headers.get('range');
       if (request.method === 'HEAD') {
-        return new Response(null, { headers: { 'Content-Type': type, 'Content-Length': String(size), 'Accept-Ranges': 'bytes' } });
+        return new Response(null, { headers: { 'Content-Type': type, 'Content-Length': String(size), 'Accept-Ranges': 'bytes', 'ETag': etag } });
       }
       if (range) {
         const m = /^bytes=(\d*)-(\d*)$/.exec(range);
@@ -1581,14 +1618,14 @@ app.whenReady().then(() => {
           if (start < size && end >= start && end < size) {
             return new Response(Readable.toWeb(fs.createReadStream(servePath, { start, end })), {
               status: 206,
-              headers: { 'Content-Type': type, 'Content-Length': String(end - start + 1), 'Content-Range': `bytes ${start}-${end}/${size}`, 'Accept-Ranges': 'bytes' },
+              headers: { 'Content-Type': type, 'Content-Length': String(end - start + 1), 'Content-Range': `bytes ${start}-${end}/${size}`, 'Accept-Ranges': 'bytes', 'ETag': etag },
             });
           }
           return new Response('range not satisfiable', { status: 416, headers: { 'Content-Range': `bytes */${size}` } });
         }
       }
       return new Response(Readable.toWeb(fs.createReadStream(servePath)), {
-        headers: { 'Content-Type': type, 'Content-Length': String(size), 'Accept-Ranges': 'bytes' },
+        headers: { 'Content-Type': type, 'Content-Length': String(size), 'Accept-Ranges': 'bytes', 'ETag': etag },
       });
     } catch {
       return new Response('not found', { status: 404 });

@@ -152,11 +152,20 @@ function buildEntries() {
   return out;
 }
 
+// Only the first 50 matches are rendered or
+// navigable: the old code rebuilt a row per match on
+// every keystroke, so typing on a big board rebuilt
+// hundreds of rows per keystroke. Fifty is more than
+// a screenful; the count row below says how many more
+// there are, so the user types to narrow instead.
+const MAX_ROWS = 50;
 function renderList() {
   const q = input.value.trim().toLowerCase();
-  filtered = q === ""
-    ? entries.slice()
+  const matches = q === ""
+    ? entries
     : entries.filter((e) => (e.title + " " + e.hint).toLowerCase().includes(q));
+  filtered = matches.slice(0, MAX_ROWS);
+  const extra = matches.length - filtered.length;
   if (selectedIdx >= filtered.length) selectedIdx = Math.max(0, filtered.length - 1);
   if (filtered.length === 0) selectedIdx = -1;
   listEl.innerHTML = "";
@@ -192,6 +201,12 @@ function renderList() {
     row.addEventListener("click", () => runSelected());
     listEl.appendChild(row);
   });
+  if (extra > 0) {
+    const more = document.createElement("div");
+    more.className = "cmd-row cmd-empty";
+    more.textContent = `…and ${extra} more — keep typing to narrow`;
+    listEl.appendChild(more);
+  }
 }
 
 function moveSelection(delta) {

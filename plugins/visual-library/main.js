@@ -311,11 +311,25 @@ function isMediaTarget(target) {
   return Boolean(target.closest("video") || target.closest("input.audio-seek") || target.closest(".audio-tile"));
 }
 
+// Audio durations by path, for the session: every
+// library re-render used to spawn a throwaway Audio
+// element per audio card just to read its duration, so
+// a board with several audio cards re-fetched metadata
+// on every board change. A path's duration does not
+// change while the app runs.
+const libAudioDurations = new Map();
 function loadLibraryAudioDuration(wrap, item) {
   const dur = wrap.querySelector("[data-audio-dur]");
   if (!dur || dur.textContent !== "–:––") return;
-  const audio = new Audio(apiRef.files.fileUrl(item.kind.Audio.path));
+  const path = item.kind.Audio.path;
+  const cached = libAudioDurations.get(path);
+  if (cached !== undefined) {
+    dur.textContent = formatAudioTime(cached);
+    return;
+  }
+  const audio = new Audio(apiRef.files.fileUrl(path));
   audio.addEventListener("loadedmetadata", () => {
+    libAudioDurations.set(path, audio.duration);
     if (wrap.isConnected && dur.isConnected) dur.textContent = formatAudioTime(audio.duration);
   });
   audio.addEventListener("error", () => {});
@@ -390,10 +404,21 @@ function attachCardInteractions(wrap, item, mode) {
         ghost.style.top = `${me.clientY + 12}px`;
       }
     };
-    const onUp = (me) => {
+    // A release outside the window never fires mouseup
+    // on it, so without the blur cleanup the move/up
+    // listeners — and the ghost — would linger until the
+    // next mouse-up anywhere. Blur cancels the drag
+    // (no drop); mouseup drops.
+    const cleanup = () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("blur", onBlur);
       if (ghost) ghost.remove();
+      ghost = null;
+    };
+    const onBlur = () => { cleanup(); moved = false; };
+    const onUp = (me) => {
+      cleanup();
       if (!moved) return;
       if (mode === "panel") {
         // Panel mode: only a drop onto the visible board
@@ -415,6 +440,7 @@ function attachCardInteractions(wrap, item, mode) {
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
+    window.addEventListener("blur", onBlur);
   });
 }
 

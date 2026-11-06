@@ -736,11 +736,31 @@ function escHtml(s) {
   return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+// A media file too large to embed in the export,
+// by name and megabytes, for the toast after export.
+let oversizedExportFiles = [];
+// Oversized files by URL, so the embed step can swap
+// in the placeholder instead of a dead app-file URL.
+const oversizedByUrl = new Map();
+// Embedding is base64, so a file costs ~1.37x its size
+// in the output HTML and in memory while reading it: a
+// single large video could balloon the export into
+// hundreds of megabytes and hang it. Files over the cap
+// are skipped, not read, and the export says so instead
+// of shipping a dead app-file URL.
+const EXPORT_FILE_MB = 25;
 async function fetchDataUrl(url) {
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
     const blob = await res.blob();
+    if (blob.size > EXPORT_FILE_MB * 1024 * 1024) {
+      const name = decodeURIComponent(url.split("/").pop() || "media file");
+      const mb = Math.round(blob.size / 1024 / 1024);
+      oversizedExportFiles.push({ name, mb });
+      oversizedByUrl.set(url, oversizedPlaceholder(name, mb));
+      return null;
+    }
     return await new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(reader.result);
@@ -750,6 +770,14 @@ async function fetchDataUrl(url) {
   } catch {
     return null;
   }
+}
+// A placeholder image for media skipped as too large:
+// an inline SVG naming the file, so the slide shows
+// what is missing instead of a broken image.
+function oversizedPlaceholder(name, mb) {
+  const text = `${name} — too large to embed (${mb} MB)`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><rect width="100%" height="100%" fill="#f5f5f7"/><text x="16" y="90" font-family="sans-serif" font-size="13" fill="#86868b">${text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
 async function embedAppFiles(html) {
@@ -765,6 +793,7 @@ async function embedAppFiles(html) {
   let out = html;
   urls.forEach((url, i) => {
     if (dataUrls[i]) out = out.split(url).join(dataUrls[i]);
+    else if (oversizedByUrl.has(url)) out = out.split(url).join(oversizedByUrl.get(url));
   });
   return out;
 }
@@ -792,8 +821,15 @@ async function exportCardHtml(item, frame) {
     const path = item.kind.Audio.path;
     const name = path.split("/").pop() || "Audio";
     const dataUrl = await fetchDataUrl(apiRef.files.fileUrl(path));
-    const src = dataUrl || apiRef.files.fileUrl(path);
-    return `<div class="card" data-id="${item.id}" style="left:0px;top:0px;width:${item.size.w}px;height:${item.size.h}px"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px"><div class="title">${escHtml(name)}</div><audio controls src="${escHtml(src)}" style="width:100%"></audio></div></div>`;
+    if (!dataUrl) {
+      // Too large (or unreadable): a dead app-file URL
+      // would play nothing in a standalone file, so say
+      // so on the card instead.
+      const over = oversizedExportFiles.find((f) => f.name === name);
+      const note = over ? `${name} — too large to embed (${over.mb} MB)` : `${name} — could not be embedded`;
+      return `<div class="card" data-id="${item.id}" style="left:0px;top:0px;width:${item.size.w}px;height:${item.size.h}px"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px"><div class="title">${escHtml(note)}</div></div></div>`;
+    }
+    return `<div class="card" data-id="${item.id}" style="left:0px;top:0px;width:${item.size.w}px;height:${item.size.h}px"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px"><div class="title">${escHtml(name)}</div><audio controls src="${escHtml(dataUrl)}" style="width:100%"></audio></div></div>`;
   }
   let html = apiRef.board.renderCard(item.id);
   if (!html) return "";
@@ -820,6 +856,8 @@ async function exportCardHtml(item, frame) {
 
 async function exportSlides() {
   if (!apiRef || slides.length === 0) return;
+  oversizedExportFiles = [];
+  oversizedByUrl.clear();
   const btn = panelExportBtn;
   const originalHtml = btn ? btn.innerHTML : "";
   if (btn) {
@@ -955,7 +993,12 @@ ${sections}
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    apiRef.ui.toast("Downloading slides…");
+    if (oversizedExportFiles.length > 0) {
+      const names = oversizedExportFiles.map((f) => `${f.name} (${f.mb} MB)`).join(", ");
+      apiRef.ui.toast(`Downloading slides… ${names} too large to embed (over ${EXPORT_FILE_MB} MB) — shown as a placeholder instead.`);
+    } else {
+      apiRef.ui.toast("Downloading slides…");
+    }
   } catch (e) {
     if (apiRef) apiRef.ui.toast(`Export failed: ${String(e)}`);
   } finally {
@@ -1093,9 +1136,23 @@ function initOverlay(container) {
     drawPreview.style.width = `${Math.abs(x1 - x0)}px`;
     drawPreview.style.height = `${Math.abs(y1 - y0)}px`;
   };
-  const onUp = (me) => {
+  // Same blur cleanup as Visual Library: a release
+  // outside the window never fires mouseup on it, so
+  // without this the draw listeners would linger and
+  // the next mouse move would keep drawing a frame.
+  const cleanup = () => {
     window.removeEventListener("mousemove", onMove);
     window.removeEventListener("mouseup", onUp);
+    window.removeEventListener("blur", onBlur);
+  };
+  const onBlur = () => {
+    cleanup();
+    if (drawPreview) drawPreview.style.display = "none";
+    drawStart = null;
+    drawMoved = false;
+  };
+  const onUp = (me) => {
+    cleanup();
     if (!drawActive || !drawStart || !drawLayer) return;
     const layerRect = drawLayer.getBoundingClientRect();
     const x0 = drawStart.x;
@@ -1141,6 +1198,7 @@ function initOverlay(container) {
     drawMoved = false;
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);
+    window.addEventListener("blur", onBlur);
   });
 }
 

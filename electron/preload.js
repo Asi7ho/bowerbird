@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('bowerbird', {
   contextClassifyAudio: (pcm) => ipcRenderer.invoke('bowerbird:context-classify-audio', pcm),
   contextIndexLoad: () => ipcRenderer.invoke('bowerbird:context-index-load'),
   contextIndexSave: (index) => ipcRenderer.invoke('bowerbird:context-index-save', index),
+  contextIndexSaveSync: (index) => ipcRenderer.sendSync('bowerbird:context-index-save-sync', index),
   checkFile: (filePath) => ipcRenderer.invoke('bowerbird:check-file', filePath),
   embedFile: (filePath) => ipcRenderer.invoke('bowerbird:embed-file', filePath),
   readTextFile: (filePath) => ipcRenderer.invoke('bowerbird:read-text-file', filePath),

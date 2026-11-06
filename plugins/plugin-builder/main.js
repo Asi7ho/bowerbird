@@ -349,7 +349,15 @@ async function onChatSend() {
       ? [...lastMessages, { role: "user", content: text }]
       : [{ role: "system", content: SYSTEM_PROMPT }, { role: "user", content: text }];
     const { raw, parsed } = await runChat(messages, null, chatEls.send);
-    lastMessages = [...messages, { role: "assistant", content: raw }];
+    // Cap the provider conversation: every assistant
+    // reply carries the full generated plugin source, so
+    // without a cap each steer re-sends all previous
+    // generations and the request grows with every turn.
+    // Keep the system prompt and the last two turns —
+    // the latest code, and the steer that produced it.
+    const system = messages[0] && messages[0].role === "system" ? [messages[0]] : [];
+    const rest = [...messages, { role: "assistant", content: raw }].slice(system.length);
+    lastMessages = [...system, ...rest.slice(-4)];
     const g = {
       id: typeof parsed.id === "string" ? parsed.id : "",
       name: typeof parsed.name === "string" ? parsed.name : "",
