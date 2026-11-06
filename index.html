@@ -24,7 +24,7 @@
         </div>
       </div>
       <div id="search-box">
-        <input id="search-input" type="text" placeholder="Search text, color, image, audio, video…" title="Search: &quot;exact phrase&quot; -exclude .jpg" aria-label="Search board" autocomplete="off" spellcheck="false" />
+        <input id="search-input" type="text" placeholder="Search text, color, image, audio, video…" aria-label="Search board" autocomplete="off" spellcheck="false" />
         <span id="search-count" aria-live="polite"></span>
         <button id="search-clear" title="Clear search (Esc)" aria-label="Clear search">×</button>
         <div id="search-results" style="display:none"></div>
@@ -78,34 +78,29 @@
             <div id="settings-content">
               <div id="settings-section-general" class="settings-section">
                 <h3>Keyboard shortcuts</h3>
-                <p class="meta">Keys for working on the board.</p>
                 <table id="shortcuts-table"></table>
                 <h3>Canvas</h3>
-                <p class="meta">Background colour and grid.</p>
                 <div class="canvas-opt" id="bg-opts"></div>
                 <div class="canvas-opt" id="grid-opts"></div>
                 <h3>Data</h3>
-                <p class="meta">Deletes everything and starts again.</p>
                 <p class="meta" id="board-dir-meta"></p>
                 <p class="meta" id="build-meta"></p>
                 <button id="btn-reset">Delete all board data</button>
                 <div id="reset-confirm" style="display:none">
-                  <p class="meta">Delete everything on this board? You can undo it with Ctrl / Cmd + Z.</p>
+                  <p class="meta">You can undo it with Ctrl / Cmd + Z.</p>
                   <button id="btn-reset-confirm">Delete everything</button>
                 </div>
                 <h3>Backups</h3>
                 <div id="backups-list"></div>
                 <h3>Send feedback</h3>
-                <p class="meta">Found a bug, or want something? Write it here — it opens in your email app, addressed to <span class="email">wren7762@gmail.com</span>, with the app version included so I know what you're running.</p>
+                <p class="meta">Opens in your email app, addressed to <span class="email">wren7762@gmail.com</span>.</p>
                 <textarea id="feedback-text" rows="4" placeholder="What happened, or what would you like?"></textarea>
                 <button id="btn-feedback">Send feedback</button>
               </div>
               <div id="settings-section-plugins" class="settings-section" style="display:none">
-                <p class="meta">Turn plugins on or off. Drag a tab in the right panel to reorder the tabs.</p>
                 <div id="plugin-list"></div>
               </div>
               <div id="settings-section-plugin-settings" class="settings-section" style="display:none">
-                <p class="meta">Settings for plugins that are on. Each section can be turned off from its own header, and the Plugins tab has a Settings button for each plugin that has settings here.</p>
                 <div id="plugin-settings-sections"></div>
                 <p class="meta" id="plugin-settings-empty" style="display:none">No plugin settings</p>
               </div>

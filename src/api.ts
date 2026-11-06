@@ -52,7 +52,6 @@ export interface BowerbirdAPI {
   readPluginFile(pluginId: string, relativePath: string): Promise<string>;
   setPluginEnabled(pluginId: string, enabled: boolean): Promise<boolean>;
   installPlugin(plugin: { id: string; name: string; description: string; permissions: string[]; mainCode: string; styleCode: string }): Promise<PluginManifest>;
-  llmChat(req: { baseUrl: string; model: string; key: string; messages: Array<{ role: string; content: string }> }): Promise<string>;
   pluginStorageGet(pluginId: string, key: string): Promise<unknown>;
   pluginStorageSet(pluginId: string, key: string, value: unknown): Promise<void>;
   pluginStorageDelete(pluginId: string, key: string): Promise<void>;

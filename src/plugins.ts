@@ -133,7 +133,6 @@ export interface PluginBridge {
   readPluginFile(pluginId: string, relativePath: string): Promise<string>;
   setPluginEnabled(pluginId: string, enabled: boolean): Promise<boolean>;
   installPlugin(plugin: { id: string; name: string; description: string; permissions: string[]; mainCode: string; styleCode: string }): Promise<PluginManifest>;
-  llmChat(req: { baseUrl: string; model: string; key: string; messages: Array<{ role: string; content: string }> }): Promise<string>;
   pluginStorageGet(pluginId: string, key: string): Promise<unknown>;
   pluginStorageSet(pluginId: string, key: string, value: unknown): Promise<void>;
   pluginStorageDelete(pluginId: string, key: string): Promise<void>;
@@ -331,17 +330,12 @@ export interface PluginContext {
     set: (key: string, value: string) => Promise<boolean>;
     delete: (key: string) => Promise<void>;
   };
-  ai: {
-    chat: (req: { baseUrl: string; model: string; key: string; messages: Array<{ role: string; content: string }> }) => Promise<string>;
-  };
   plugins: {
     install: (plugin: { id: string; name: string; description: string; permissions: string[]; mainCode: string; styleCode: string }) => Promise<PluginManifest>;
     refresh: () => Promise<void>;
     // Try a plugin without installing it: it runs in memory only,
     // is never written to the plugins folder, and endTrial removes
-    // it completely. Used by the Plugin Builder, so a person who
-    // did not write the code can try it first and only keep it
-    // if it does what they wanted.
+    // it completely.
     try: (plugin: { id: string; name: string; description: string; permissions: string[]; mainCode: string; styleCode: string }) => Promise<PluginManifest>;
     endTrial: (id: string) => Promise<void>;
   };
@@ -595,7 +589,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       // Capabilities in v1: every domain documented in PLUGIN_API.md.
       // A future core may add more; a plugin should check before
       // using a capability that was added after v1.
-      return ["board", "boards", "view", "window", "ui", "cards", "files", "storage", "events", "tools", "panels", "commands", "views", "overlays", "settingsSections", "shortcuts", "library", "ai", "plugins", "pen"].includes(capability);
+      return ["board", "boards", "view", "window", "ui", "cards", "files", "storage", "events", "tools", "panels", "commands", "views", "overlays", "settingsSections", "shortcuts", "library", "plugins", "pen"].includes(capability);
     },
     board: {
       get: () => {
@@ -885,12 +879,6 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       delete: async (key: string) => {
         require("storage");
         return bridge!.secureStorageDelete(pluginId, key);
-      },
-    },
-    ai: {
-      chat: async (req) => {
-        require("ai");
-        return bridge!.llmChat(req);
       },
     },
     plugins: {

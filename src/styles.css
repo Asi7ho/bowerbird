@@ -583,18 +583,28 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   border-radius: 5px; padding: 1px 6px; font-family: inherit; font-size: 12px;
   box-shadow: var(--shadow-sm);
 }
-/* Canvas options as a macOS segmented control, not a row of web buttons. */
+/* Canvas options as a macOS segmented control, not a row of web buttons.
+   The options are previews, not text: a swatch of the colour itself,
+   or a tile showing the grid pattern. The name lives in the tooltip
+   and aria-label only. */
 #settings .canvas-opt {
   display: inline-flex; gap: 2px; background: var(--fill);
   border-radius: 9px; padding: 2px; margin: 4px 8px 4px 0;
 }
 #settings .canvas-opt button {
-  border: none; background: transparent; border-radius: 7px;
-  padding: 4px 12px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--ink);
+  width: 32px; height: 28px; border: 1px solid rgba(0, 0, 0, 0.1);
+  background: #fff; border-radius: 7px; padding: 0; cursor: pointer;
 }
 #settings .canvas-opt button.active {
-  background: #fff; color: var(--ink);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent);
+}
+#settings .canvas-opt button.grid-dots {
+  background-image: radial-gradient(circle, rgba(0, 0, 0, 0.28) 1px, transparent 1.3px);
+  background-size: 7px 7px; background-position: 3px 3px;
+}
+#settings .canvas-opt button.grid-lines {
+  background-image: linear-gradient(to right, rgba(0, 0, 0, 0.16) 0 1px, transparent 1px), linear-gradient(to bottom, rgba(0, 0, 0, 0.16) 0 1px, transparent 1px);
+  background-size: 7px 7px; background-position: 3px 3px;
 }
 #settings .meta { color: var(--grey); font-size: 12px; line-height: 1.5; word-break: break-all; margin: 0 0 12px; }
 /* An email address inside a .meta line keeps together: the

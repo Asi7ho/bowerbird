@@ -115,26 +115,16 @@ const SHORTCUTS: Array<[string, string]> = [
     if (!list) return;
     const plugins = listLoadedPlugins();
     if (plugins.length === 0) {
-      list.innerHTML = `<p class="meta">No plugins found. Drop a plugin folder into your plugins folder, then reopen Settings. See PLUGIN_API.md in the repo for the format.</p>`;
+      list.innerHTML = `<p class="meta">No plugins found.</p>`;
       return;
     }
-    const descriptions: Record<string, string> = {
-      hide: "Hides the board into a corner.",
-      "visual-library": "The board's cards, as a library.",
-      palette: "Colour palettes to place as swatches.",
-      presentation: "Slides on the board, played in order.",
-      "command-palette": "Every command, from one place.",
-      "plugin-builder": "Describe a plugin, and an AI writes it for you to try, then keep or discard.",
-    };
     let html = "";
     for (const lp of plugins) {
       const m = lp.manifest;
-      // A trial plugin is not installed yet: the Builder panel
-      // owns it, so it shows as Trying and gets no toggle.
+      // A trial plugin is not installed yet: it shows as
+      // Trying and gets no toggle.
       const state = lp.trial ? "Trying" : lp.failed ? "Failed" : lp.active ? "On" : "Off";
       html += `<div class="plugin-row"><div class="plugin-row-text"><div><strong>${escapeHtml(m.name)}</strong> <span class="meta">${state}</span></div>`;
-      const desc = descriptions[m.id];
-      if (desc) html += `<p class="meta">${desc}</p>`;
       if (lp.failed && lp.error) html += `<p class="meta"><strong>${escapeHtml(lp.error)}</strong></p>`;
       // No Run buttons: commands are run from the command
       // palette (Cmd/Ctrl+K), not from Settings, and the
@@ -234,7 +224,7 @@ const SHORTCUTS: Array<[string, string]> = [
     let list: Array<{ name: string; items: number; size: number }> = [];
     try { list = await api.listBackups(); } catch { list = []; }
     if (list.length === 0) {
-      el.innerHTML = `<p class="meta">No backups yet. The first one is made within an hour of working on this board.</p>`;
+      el.innerHTML = `<p class="meta">No backups yet.</p>`;
       return;
     }
     const fmtSize = (n: number): string => n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / (1024 * 1024)).toFixed(1)} MB`;
@@ -276,24 +266,36 @@ const SHORTCUTS: Array<[string, string]> = [
   }
 
   function renderBgOpts(): void {
+    // Previews, not text: each option is a swatch of the colour
+    // itself. The name lives in the tooltip and aria-label only.
     const opts: Array<[string, string]> = [["White", "#FFFFFF"], ["Paper", "#F7F5F0"], ["Sage", "#EAF3EC"], ["Sky", "#E8F0F7"], ["Ink", "#1C1C1E"]];
     const el = document.getElementById("bg-opts") as HTMLDivElement;
     el.innerHTML = "";
     for (const [label, hex] of opts) {
       const b = document.createElement("button");
-      b.textContent = label;
+      b.className = "bg-swatch";
+      b.style.background = hex;
+      b.title = label;
+      b.setAttribute("aria-label", label);
       if (ctx.getBoard().bg.toUpperCase() === hex) b.classList.add("active");
       b.addEventListener("click", () => { ctx.getBoard().bg = hex; ctx.save(); ctx.requestRender(); renderBgOpts(); });
       el.appendChild(b);
     }
   }
   function renderGridOpts(): void {
+    // Previews, not text: each option is a tile showing the
+    // pattern itself — dots, lines, or blank for Off. The name
+    // lives in the tooltip and aria-label only.
     const opts: Array<[string, Board["grid"]]> = [["Dots", "Dots"], ["Lines", "Lines"], ["Off", "Off"]];
     const el = document.getElementById("grid-opts") as HTMLDivElement;
     el.innerHTML = "";
     for (const [label, mode] of opts) {
       const b = document.createElement("button");
-      b.textContent = label;
+      b.className = "grid-tile";
+      if (mode === "Dots") b.classList.add("grid-dots");
+      if (mode === "Lines") b.classList.add("grid-lines");
+      b.title = label;
+      b.setAttribute("aria-label", label);
       if (ctx.getBoard().grid === mode) b.classList.add("active");
       b.addEventListener("click", () => { ctx.getBoard().grid = mode; ctx.save(); ctx.requestRender(); renderGridOpts(); });
       el.appendChild(b);

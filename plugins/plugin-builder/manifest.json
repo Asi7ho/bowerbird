@@ -1,1 +1,0 @@
-{"apiVersion":"1","contributions":{"panels":[{"id":"builder","title":"Plugin Builder"}]},"description":"Describe a plugin, and an AI writes it for you to check and install.","id":"plugin-builder","main":"main.js","name":"Plugin Builder","permissions":["storage","plugins:install","ai"],"styles":["style.css"],"version":"1.0.0"}

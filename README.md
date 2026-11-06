@@ -77,7 +77,7 @@ General holds the keyboard shortcuts, the canvas background and grid, and Data. 
 
 ## Plugins
 
-Bowerbird has plugins. The bundled ones are Hide, Visual Library, Palette, Presentation, Command Palette, Plugin Builder, which is a chat panel: describe a plugin, the AI builds it into a sandbox, and you Install Plugin or Clean Sandbox, Boards, for switching between boards, and Tidy Up, for aligning and distributing the selected cards. See `plugins/README.md` for what each one does, and `PLUGIN_API.md` if you want to write one.
+Bowerbird has plugins. The bundled ones are Hide, Visual Library, Palette, Presentation, Command Palette, Boards, for switching between boards, and Tidy Up, for aligning and distributing the selected cards. See `plugins/README.md` for what each one does, and `PLUGIN_API.md` if you want to write one.
 
 ## Icon
 

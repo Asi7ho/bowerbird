@@ -1217,8 +1217,8 @@ function registerIpc() {
     savePluginEnabled(map);
     return map[pluginId];
   });
-  // Install a plugin written by the Plugin Builder (or, in
-  // future, any plugin with the plugins:install permission).
+  // Install a plugin, from any plugin with the
+  // plugins:install permission.
   // Writes only to the user plugins folder, never to the
   // bundled folder, and never overwrites an existing plugin:
   // a clash is an error the caller shows, not a silent
@@ -1267,59 +1267,6 @@ function registerIpc() {
   // never stored here. Public bases must be https; a
   // localhost base may be http, for a local model server.
   // Other private addresses are refused, as with fetchPreview.
-  ipcMain.handle('bowerbird:llm-chat', async (_event, req) => {
-    if (!req || typeof req !== 'object') throw new Error('bad chat request');
-    const { baseUrl, model, key, messages } = req;
-    if (typeof baseUrl !== 'string' || typeof model !== 'string' || !model.trim()) throw new Error('a provider and model are required');
-    if (!Array.isArray(messages) || messages.length === 0 || messages.some((m) => !m || typeof m.role !== 'string' || typeof m.content !== 'string')) throw new Error('bad chat messages');
-    let url;
-    try { url = new URL(baseUrl); } catch { throw new Error('bad provider address'); }
-    const isLocal = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
-    if (!isLocal && (url.protocol !== 'https:' || isPrivateHost(url.hostname))) throw new Error('provider must be a public https address or localhost');
-    if (isLocal && url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('bad provider address');
-    const endpoint = new URL('chat/completions', url.href.endsWith('/') ? url.href : url.href + '/');
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 120000);
-    try {
-      const res = await fetch(endpoint.href, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(typeof key === 'string' && key ? { Authorization: `Bearer ${key}` } : {}),
-        },
-        body: JSON.stringify({ model: model.trim(), messages, temperature: 0.2, max_tokens: 4000 }),
-        signal: controller.signal,
-      });
-      const text = await res.text();
-      if (!res.ok) {
-        // A wrong provider address usually answers with a web
-        // page (a 404 HTML page), not an API error — dumping
-        // 500 characters of it into the chat tells the user
-        // nothing. Say so plainly instead; JSON error bodies,
-        // which actually name the problem, still come through.
-        if (/^\s*</.test(text)) throw new Error(`provider error ${res.status}: the provider returned a web page, not an API response — check the provider address (it usually ends in /v1)`);
-        if (res.status === 401) {
-          // The handler knows whether a key was sent, so say
-          // which of the two it is instead of dumping the
-          // provider's JSON: a rejected key means the key is
-          // wrong or revoked; no key means none reached the
-          // provider at all.
-          const sent = typeof key === "string" && !!key;
-          throw new Error(sent
-            ? "provider error 401: unauthorized — the provider rejected the API key. Check it in Settings → Plugin settings → Plugin Builder, or generate a fresh one."
-            : "provider error 401: unauthorized — no API key was sent. Enter one in Settings → Plugin settings → Plugin Builder.");
-        }
-        throw new Error(`provider error ${res.status}: ${text.slice(0, 500)}`);
-      }
-      let data;
-      try { data = JSON.parse(text); } catch { throw new Error('provider did not return JSON'); }
-      const content = data?.choices?.[0]?.message?.content;
-      if (typeof content !== 'string' || !content.trim()) throw new Error('provider returned no text');
-      return content;
-    } finally {
-      clearTimeout(timer);
-    }
-  });
   ipcMain.handle('bowerbird:plugin-storage-get', (_event, pluginId, key) => {
     const data = loadPluginStorage();
     const per = data[pluginId];
