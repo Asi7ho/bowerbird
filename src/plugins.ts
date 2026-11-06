@@ -181,6 +181,10 @@ export interface PluginBridge {
   collapse: () => Promise<void>;
   restore: () => Promise<void>;
   minimise: () => Promise<void>;
+  quit: () => Promise<void>;
+  fullscreen: () => Promise<boolean>;
+  maximise: () => Promise<boolean>;
+  windowState: () => Promise<{ maximised: boolean; fullscreen: boolean }>;
   moveWindow: (dx: number, dy: number) => void;
   getAppSettings: () => Promise<{ corner: string }>;
   setCorner: (corner: string) => Promise<string>;
@@ -219,6 +223,14 @@ export interface PluginHost {
   // save (one undo step). A board write. Only Text notes
   // are affected; other kinds are ignored.
   setNoteBackground: (ids: number[], hex: string) => void;
+  // Search: hand the engine the search box elements (built
+  // by the core-search plugin), re-run the search, clear it,
+  // or jump to a match. The engine owns the matching, the
+  // dimming and the results; these are its entry points.
+  setSearchElements: (els: { input: HTMLInputElement; count: HTMLElement; clear: HTMLButtonElement; results: HTMLElement }) => void;
+  updateSearch: () => void;
+  clearSearch: () => void;
+  jumpToSearchIndex: (idx: number) => void;
   centreOn: (id: number) => void;
   toast: (msg: string) => void;
   openSettings: () => void;
@@ -335,6 +347,20 @@ export interface PluginContext {
     hide: () => Promise<void>;
     show: () => Promise<void>;
     minimise: () => Promise<void>;
+    // Close the window. Close quits the app (the old
+    // Settings Quit button did exactly this: commit,
+    // save, then quit, which destroys the peek window
+    // too).
+    close: () => Promise<void>;
+    // Toggle full screen (macOS) / maximise (Windows and
+    // Linux), returning the new state. The title bar's
+    // window controls.
+    fullscreen: () => Promise<boolean>;
+    maximise: () => Promise<boolean>;
+    // Whether the window is maximised or full screen, so
+    // the title bar can show the right icon (enter/exit
+    // full screen, maximise/restore).
+    getWindowState: () => Promise<{ maximised: boolean; fullscreen: boolean }>;
     move: (dx: number, dy: number) => void;
     getCorner: () => Promise<string>;
     setCorner: (corner: string) => Promise<string>;
@@ -357,6 +383,24 @@ export interface PluginContext {
   // needed. The toolbar plugin builds the flyout from this.
   shapes: {
     list: () => Array<{ kind: string; label: string; key: string; svg: string }>;
+  };
+  // Search: the search engine (MiniSearch + local context
+  // search). The engine owns the matching, the dimming and
+  // the results; the core-search plugin builds the box and
+  // hands the engine its elements. No permission needed:
+  // searching is a read, and jumping only moves the camera
+  // and the selection.
+  search: {
+    // Hand the engine the search box elements, built by
+    // the core-search plugin. Attaches the input and
+    // keyboard listeners. Until this is called, the search
+    // engine has no box to operate on.
+    setElements: (els: { input: HTMLInputElement; count: HTMLElement; clear: HTMLButtonElement; results: HTMLElement }) => void;
+    // Re-run the search for the current input value, as
+    // after a board change.
+    update: () => void;
+    clear: () => void;
+    jumpTo: (idx: number) => void;
   };
   // The pen's colour: one shared state, not a board item.
   // The toolbar's pen swatches and Palette both read and
@@ -391,6 +435,12 @@ export interface PluginContext {
     // added to it. The toolbar plugin provides this; other
     // plugins do not call it.
     setToolbarToolsEl: (el: HTMLElement) => void;
+    // Hand the plugin system the panels toggle button, so
+    // the plugin system can hide it when no plugin panels
+    // exist and mark it active when a panel is open. The
+    // title bar plugin provides this; other plugins do
+    // not call it.
+    setPanelsToggleEl: (el: HTMLElement) => void;
     openSettings: () => void;
     closeSettings: () => void;
     isSettingsOpen: () => boolean;
@@ -419,6 +469,13 @@ export interface PluginContext {
     // is how a UI plugin provides a shell element through
     // the API, instead of the core passing DOM in.
     setSettingsSectionsContainer: (el: HTMLElement) => void;
+    // The search box container, built by the core-titlebar
+    // plugin. The core-search plugin mounts its input,
+    // count, clear button and results into it (read it
+    // with getSearchBoxEl). Null until the title bar
+    // plugin has activated.
+    setSearchBoxEl: (el: HTMLElement) => void;
+    getSearchBoxEl: () => HTMLElement | null;
     showPanel: (id: string) => void;
     hidePanel: (id: string) => void;
     getPanelElement: (id: string) => HTMLElement | null;
@@ -578,6 +635,10 @@ export interface ShellElements {
   viewSwitcherEl: HTMLElement;
   overlaysEl: HTMLElement;
   settingsSectionsEl: HTMLElement;
+  // The search box container, built by the core-titlebar
+  // plugin. The core-search plugin mounts its input,
+  // count, clear button and results into it.
+  searchBoxEl: HTMLElement;
 }
 const shell: Partial<ShellElements> = {};
 export function registerShellElements(els: Partial<ShellElements>): void {
@@ -985,6 +1046,22 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         require("window");
         return bridge!.minimise();
       },
+      close: async () => {
+        require("window");
+        return bridge!.quit();
+      },
+      fullscreen: async () => {
+        require("window");
+        return bridge!.fullscreen();
+      },
+      maximise: async () => {
+        require("window");
+        return bridge!.maximise();
+      },
+      getWindowState: async () => {
+        require("window");
+        return bridge!.windowState();
+      },
       move: (dx: number, dy: number) => {
         require("window");
         bridge!.moveWindow(dx, dy);
@@ -1014,6 +1091,14 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
     shapes: {
       list: () => host!.listShapes(),
     },
+    search: {
+      setElements: (els: { input: HTMLInputElement; count: HTMLElement; clear: HTMLButtonElement; results: HTMLElement }) => {
+        host!.setSearchElements(els);
+      },
+      update: () => host!.updateSearch(),
+      clear: () => host!.clearSearch(),
+      jumpTo: (idx: number) => host!.jumpToSearchIndex(idx),
+    },
     pen: {
       getColor: () => host!.getPenColor(),
       setColor: (hex: string) => host!.setPenColor(hex),
@@ -1036,6 +1121,9 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       setToolbarToolsEl: (el: HTMLElement) => {
         shell.toolbarToolsEl = el;
       },
+      setPanelsToggleEl: (el: HTMLElement) => {
+        registerShellElements({ panelsToggleEl: el });
+      },
       openSettings: () => host!.openSettings(),
       closeSettings: () => host!.closeSettings(),
       isSettingsOpen: () => host!.isSettingsOpen(),
@@ -1051,6 +1139,11 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       boardEl: host!.boardEl,
       registerSettingsUI: (ui: { open: () => void; close: () => void; isOpen: () => boolean; setTab: (tab: string) => void; refresh: () => void }) => registerSettingsUI(ui),
       setSettingsSectionsContainer: (el: HTMLElement) => registerShellElements({ settingsSectionsEl: el }),
+      // The search box container, built by the core-titlebar
+      // plugin. The core-search plugin mounts its input,
+      // count, clear button and results into it.
+      setSearchBoxEl: (el: HTMLElement) => registerShellElements({ searchBoxEl: el }),
+      getSearchBoxEl: () => shell.searchBoxEl ?? null,
       showPanel: (id: string) => {
         // Showing a panel activates its tab, so the user
         // actually sees it — a new tab in the background

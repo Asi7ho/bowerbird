@@ -130,6 +130,9 @@ Requires the `window` permission. These are main-process primitives a renderer p
 - `hide()` — hide the board window and show the peek icon at the stored corner. A no-op if the corner is `off`.
 - `show()` — destroy the peek icon and restore the board to its saved bounds, focused.
 - `minimise()` — minimise the window through the OS.
+- `close()` — close the window. Close quits the app (the old Settings Quit button did exactly this: commit, save, then quit, which destroys the peek window too).
+- `fullscreen()` — toggle full screen (macOS) and return the new state. `maximise()` — toggle maximise (Windows and Linux) and return the new state.
+- `getWindowState()` — `{ maximised, fullscreen }`, so a title bar can show the right icon (enter/exit full screen, maximise/restore).
 - `move(dx, dy)` — move the window by a screen-coordinate delta, fire-and-forget. The Hide plugin no longer uses this: the title bar is the window drag region now.
 - `getCorner()` / `setCorner(corner)` — read and write the stored corner: `bottom-left`, `bottom-right`, `top-left`, `top-right`, `off`. `setCorner` returns the stored value, validated by the main process. Use that, not the value you asked for. The corner lives in the app's settings file, not in plugin storage, because the peek icon needs it while the board window is hidden.
 
@@ -162,6 +165,8 @@ A view is a view of the board, not a separate app. Extra per-item data (depth, r
 - `setTool(id)` — activate a core or plugin tool, as if its toolbar button was clicked.
 - `getTool()` — the current tool id (`"select"`, `"pen"`, `"connector"`, a shape kind, or a plugin tool's full id). The toolbar plugin highlights the active tool from this. Changing the tool fires a `"tool"` plugin event.
 - `setToolbarToolsEl(el)` — hand the plugin system the toolbar's tool container (the `#tools` segment), so plugin tool buttons can be added to it. The toolbar plugin provides this; other plugins do not call it.
+- `setPanelsToggleEl(el)` — hand the plugin system the panels toggle button, so the plugin system can hide it when no plugin panels exist and mark it active when a panel is open. The title bar plugin provides this; other plugins do not call it.
+- `setSearchBoxEl(el)` / `getSearchBoxEl()` — hand the plugin system the search box container, and read it back. The title bar plugin provides the container; the search plugin mounts its input, count, clear button and results into it. `getSearchBoxEl()` returns `null` until the title bar plugin has activated.
 - `openSettings()`, `closeSettings()`, `isSettingsOpen()` — open, close, and check Settings.
 - `registerOverlay({ id, render })` — a full-board overlay layer that takes no clicks itself (pointer-events: none). Interactive elements inside it must set pointer-events: auto on themselves, so board clicks pass through everywhere except on your own controls. This is how a corner button can sit in a corner without blocking the board.
 - `registerSettingsSection({ id, title, render })` — a section in Settings → Plugin settings, rendered with its own heading when that tab is shown, and only for plugins that are on. Use it for app-level settings, like the Hide plugin's corner picker. Board-level controls belong in a panel, not here.
@@ -257,6 +262,16 @@ Adding this domain did not change `apiVersion`. It stays `"1"`, because additive
 - `rectCrossing(from, to, pos, w, h, entry)` — where a segment crosses a rectangle, entry (first) or exit (second), or `null` if it does not cross.
 - `clippedEnds(from, to)` — a connector's ends, clipped to the cards it joins, or `null` if an endpoint is gone.
 - `segmentIntersectsRect(a, b, rect)` — whether a segment enters a rectangle at all, however briefly.
+- `itemRotation(item)` — the item's rotation in radians, as used by the resize handle. A card renderer draws its content at this rotation.
+
+### Search — `api.search`
+
+The search engine (MiniSearch + local context search: CLIP for images and video, AST labels for audio). The engine owns the matching, the dimming and the results; the core-search plugin builds the box and hands the engine its elements. No permission needed: searching is a read, and jumping only moves the camera and the selection.
+
+- `setElements({ input, count, clear, results })` — hand the engine the search box elements, built by the search plugin. Attaches the input and keyboard listeners. Until this is called, the search engine has no box to operate on.
+- `update()` — re-run the search for the current input value, as after a board change.
+- `clear()` — clear the search.
+- `jumpTo(idx)` — jump to a match by index.
 - `rectsOverlap(a, b)` — strict rect overlap. Touching an edge, with no area inside, does not count.
 - `itemRotation(item)` — an item's rotation in degrees (0 when it has none).
 
@@ -302,7 +317,9 @@ The core is headless: it owns the board model, persistence, the plugin host and 
 
 - `core-settings/` — the Settings window (General, Plugins, Plugin settings). It builds its own DOM, registers itself as the settings UI (`api.ui.registerSettingsUI`), and hands the plugin system the container its settings sections render into (`api.ui.setSettingsSectionsContainer`). It uses `api.board` (canvas, reset, folder), `api.app`, `api.backups` and `api.plugins` (list, enable/disable). It is the reference implementation for a UI plugin: a plugin that replaces a piece of the built-in UI is built the same way.
 - `core-cards/` — the built-in card kinds (Text, Image, Swatch, UrlCard, PdfCard, Audio, Video, Shape). It registers a renderer for each kind through `api.cards.registerBuiltin`, using `api.board` (selection), `api.media` (PDF and audio state), `api.files` (file URLs) and `api.text` / `api.geometry` (the pure helpers). The core renders no card itself; it only wraps the plugin's HTML in the card chrome.
-- `core-toolbar/` — the toolbar (tools, pen palette, shape picker, note colours, zoom, delete, settings). It builds the toolbar DOM, hands the plugin system the `#tools` segment (`api.ui.setToolbarToolsEl`) so plugin tool buttons land beside the core tools, and follows the tool, the selection and the pen colour through the `"tool"`, `"selection"` and `"pen"` events. It uses `api.ui` (setTool, getTool, openSettings), `api.view` (zoomBy), `api.pen` (colour), `api.shapes` (the shape picker) and `api.board` (selection, setNoteBackground, deleteSelected). The tool behaviour itself (what a drag does) still lives in the core's input loop, which moves with core-board.
+- `core-toolbar/` — the toolbar (tools, pen palette, shape picker, note colours, zoom, delete, settings). It builds the toolbar DOM, hands the plugin system the `#tools` segment (`api.ui.setToolbarToolsEl`) so plugin tool buttons land beside the core tools, and follows the tool, the selection and the pen colour through the `"tool"`, `"selection"` and `"pen"` events. It uses `api.ui` (setTool, getTool, openSettings, closeSettings, isSettingsOpen), `api.view` (zoomBy), `api.pen` (colour), `api.shapes` (the shape picker) and `api.board` (selection, setNoteBackground, deleteSelected). The tool behaviour itself (what a drag does) still lives in the core's input loop, which moves with core-board.
+- `core-titlebar/` — the title bar (window controls, app name, undo/redo, panels toggle, search box). It builds the title bar DOM, inserts it immediately before the board element, hands the plugin system the panels toggle (`api.ui.setPanelsToggleEl`) and the search box container (`api.ui.setSearchBoxEl`), and wires the window controls through `api.window` (close, minimise, fullscreen, maximise, getWindowState) and undo/redo through `api.board`. The platform comes from `api.app.getPlatform`. It activates before core-search, so the search box container exists when the search plugin mounts into it.
+- `core-search/` — the board search box. It builds the search input, match count, clear button and results dropdown into the search box container the title bar provides (`api.ui.getSearchBoxEl`), and hands those elements to the search engine (`api.search.setElements`). The engine owns the matching, the dimming and the results; this plugin owns the box. The box is fixed at 360×34 in every state: the results dropdown is absolutely positioned below it, so it never changes the box's size.
 
 ## Frame cards
 

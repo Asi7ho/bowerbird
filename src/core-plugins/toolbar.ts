@@ -144,7 +144,9 @@ export function activate(api: PluginContext): void {
   settingsBtn.title = "Settings (?)";
   settingsBtn.setAttribute("aria-label", "Settings");
   settingsBtn.innerHTML = ICONS.settings;
-  settingsBtn.addEventListener("click", () => api.ui.openSettings());
+  settingsBtn.addEventListener("click", () => {
+    if (api.ui.isSettingsOpen()) api.ui.closeSettings(); else api.ui.openSettings();
+  });
   toolbar.appendChild(settingsBtn);
 
   // The toolbar lives in the board area, beside the cards

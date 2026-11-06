@@ -175,23 +175,41 @@ next step. The app must work identically after every step.
    `import()` a bundled plugin module and `activate()` it
    with a `PluginContext`, under a manifest. Add the API
    extensions the first UI slice needs. No UI moves yet.
+   **Done** (`f79162c`).
 2. **`core-settings`.** Move the settings window into a
    first-party plugin. It builds its own DOM and uses the
    API (board, backups, app info, feedback). The core no
    longer builds settings UI. Verify: open settings, every
    tab, change canvas colour/grid, restore a backup.
+   **Done** (`f79162c`).
 3. **`core-cards`.** Move the built-in card renderers into a
    first-party plugin via the extended `cards.register`.
    The core keeps only the card wrapper. Verify: the welcome
    board renders every kind; add each kind; old boards load.
+   **Done** (`d8db03a`, with step 4).
 4. **`core-toolbar`.** Move the toolbar and the core tools
    into a first-party plugin (tools registered via
    `ui.registerTool`). Verify: every tool, zoom, delete,
-   settings button.
+   settings button. **Done** (`d8db03a`, with step 3).
 5. **`core-titlebar` + `core-search`.** Move the title bar
    (window controls, undo/redo, panels toggle) and the search
    box + results into plugins. Verify: window controls, undo/
    redo buttons, search finds and jumps, count is stable.
+   **Done** (this commit). The title bar plugin builds the
+   title bar and inserts it before the board element; it
+   registers the panels toggle and the search box container
+   through the shell, and wires window controls through new
+   `api.window` methods (close, fullscreen, maximise,
+   getWindowState). The search plugin builds the box
+   contents into the title bar's container and hands the
+   elements to the engine through `api.search.setElements`;
+   the engine keeps the matching, dimming and results, and
+   no longer queries the search box by id. The search box
+   stays fixed at 360×34 in every state. The toolbar's
+   Settings button now toggles (open/close) instead of
+   opening only: the core's old toggle listener and the
+   plugin's open-only listener both fired on a click, so
+   the button could not close Settings.
 6. **`core-board`.** Move the board view (canvas, cards
    layer, input, pan/zoom, drag, resize/rotate, text edit)
    into a first-party plugin. This is the largest step and

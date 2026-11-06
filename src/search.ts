@@ -23,7 +23,26 @@ export interface SearchContext {
   onJumpTo(target: Item): void;
 }
 
+// The search box elements, built by the core-search plugin.
+// The engine operates on the elements the plugin provides —
+// it never queries the search box by id, so the box can be
+// built by any plugin. The engine keeps the search logic
+// (matching, dimming, results, keyboard), operating on
+// these elements; a future step can move the results
+// rendering into the plugin itself.
+export interface SearchElements {
+  input: HTMLInputElement;
+  count: HTMLElement;
+  clear: HTMLButtonElement;
+  results: HTMLElement;
+}
+
 export interface BoardSearch {
+  // Hand the engine the search box elements, built by the
+  // core-search plugin. Attaches the input and keyboard
+  // listeners. Until this is called, the search engine has
+  // no box to operate on.
+  setSearchElements(els: SearchElements): void;
   updateSearch(): void;
   clearSearch(): void;
   jumpToSearchIndex(idx: number): void;
@@ -42,6 +61,10 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
   // not yank the camera on every keystroke.
   let searchMatches: number[] = [];
   let searchIndex = -1;
+  // The search box elements, provided by the core-search
+  // plugin (see setSearchElements). The engine never queries
+  // the search box by id.
+  let ui: SearchElements | null = null;
   // ---------------------------------------------------------------- context search
   // Local ML index, keyed by media path, persisted next to
   // the board in context-index.json so a board that is
@@ -285,7 +308,7 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
     // running, so the status appears during the model
     // load itself, not only after the first item lands.
     {
-      const input = document.getElementById("search-input") as HTMLInputElement | null;
+      const input = ui?.input ?? null;
       if (input && input.value.trim() !== "") updateSearch();
     }
     contextIndexFailed = false;
@@ -313,7 +336,7 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
         const it = items[next++];
         try { await indexContextItem(it); } catch { contextIndexFailed = true; }
         contextIndexDone++;
-        const input = document.getElementById("search-input") as HTMLInputElement | null;
+        const input = ui?.input ?? null;
         if (input && input.value.trim() !== "") updateSearch();
       }
     });
@@ -321,7 +344,7 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
     contextIndexing = false;
     indexingDonePromise = null;
     flushContextIndex();
-    const input = document.getElementById("search-input") as HTMLInputElement | null;
+    const input = ui?.input ?? null;
     if (input && input.value.trim() !== "") updateSearch();
   }
   // One shared waiter for indexing finishing, instead of a
@@ -562,7 +585,7 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
   let searchRows: SearchRow[] = [];
   let searchResultsOpen = false;
   function renderSearchResults(): void {
-    const box = document.getElementById("search-results") as HTMLElement | null;
+    const box = ui?.results ?? null;
     if (!box) return;
     if (!searchResultsOpen || searchRows.length === 0) { box.style.display = "none"; box.innerHTML = ""; return; }
     box.style.display = "block";
@@ -606,9 +629,9 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
     countEl.textContent = text;
   }
   function updateSearch(): void {
-    const input = document.getElementById("search-input") as HTMLInputElement | null;
-    const countEl = document.getElementById("search-count") as HTMLSpanElement | null;
-    const clearEl = document.getElementById("search-clear") as HTMLButtonElement | null;
+    const input = ui?.input ?? null;
+    const countEl = ui?.count ?? null;
+    const clearEl = ui?.clear ?? null;
     if (!input || !countEl || !clearEl) return;
     const raw = input.value;
     const query = normaliseSearch(raw);
@@ -677,7 +700,7 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
       // (new generation) supersedes this one cleanly.
       await waitForIndexing();
       if (gen !== searchGeneration) return;
-      const inputNow = document.getElementById("search-input") as HTMLInputElement | null;
+      const inputNow = ui?.input ?? null;
       if (!inputNow || normaliseSearch(inputNow.value) !== query) return;
       const extra: number[] = [];
       const contextQuery = [...parsed.terms, ...parsed.phrases].join(" ");
@@ -703,13 +726,13 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
       // Always refresh the count, even with no extra matches:
       // otherwise the "Indexing context…" text stays stuck
       // after indexing finishes with nothing new to add.
-      const countNow = document.getElementById("search-count") as HTMLElement | null;
+      const countNow = ui?.count ?? null;
       if (countNow) applySearchMatches(countNow);
     })().catch(() => { contextIndexFailed = true; });
   }
 
   function clearSearch(): void {
-    const input = document.getElementById("search-input") as HTMLInputElement | null;
+    const input = ui?.input ?? null;
     if (input) input.value = "";
     searchMatches = [];
     searchRows = [];
@@ -726,72 +749,78 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
     ctx.onJumpTo(target);
   }
 
-  // Search input is debounced 150 ms: without it, every
-  // keystroke rebuilt the search documents and index.
-  // Enter flushes immediately, so it still opens the
-  // top result for the text just typed, not a stale one.
-  let searchInputTimer: ReturnType<typeof setTimeout> | undefined;
-  document.getElementById("search-input")?.addEventListener("input", () => {
-    // A new query selects the top-ranked result, like
-    // Omnisearch: Enter opens it, arrows move selection.
-    searchIndex = 0;
-    if (searchInputTimer) clearTimeout(searchInputTimer);
-    searchInputTimer = setTimeout(() => { searchInputTimer = undefined; updateSearch(); }, 150);
-  });
-  document.getElementById("search-input")?.addEventListener("keydown", (e: KeyboardEvent) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      // A debounced search may not have run yet for the
-      // text just typed: run it now, so Enter opens the
-      // top result for that text, not a stale list.
-      if (searchInputTimer) { clearTimeout(searchInputTimer); searchInputTimer = undefined; updateSearch(); }
-      if (searchResultsOpen) {
-        // List open: open the selected result, close list.
-        jumpToSearchIndex(e.shiftKey ? searchIndex - 1 : searchIndex);
-        closeSearchResults();
-        const countEl = document.getElementById("search-count") as HTMLElement | null;
-        if (countEl) applySearchMatches(countEl);
-      } else {
-        // List closed (after a jump): cycle, as before.
-        jumpToSearchIndex(searchIndex + (e.shiftKey ? -1 : 1));
-        const countEl = document.getElementById("search-count") as HTMLElement | null;
-        if (countEl) applySearchMatches(countEl);
+  // The search box elements, provided by the core-search
+  // plugin. Attaches the input and keyboard listeners to
+  // them. Called once, when the plugin builds the box.
+  function setSearchElements(els: SearchElements): void {
+    ui = els;
+    // Search input is debounced 150 ms: without it, every
+    // keystroke rebuilt the search documents and index.
+    // Enter flushes immediately, so it still opens the
+    // top result for the text just typed, not a stale one.
+    let searchInputTimer: ReturnType<typeof setTimeout> | undefined;
+    ui.input.addEventListener("input", () => {
+      // A new query selects the top-ranked result, like
+      // Omnisearch: Enter opens it, arrows move selection.
+      searchIndex = 0;
+      if (searchInputTimer) clearTimeout(searchInputTimer);
+      searchInputTimer = setTimeout(() => { searchInputTimer = undefined; updateSearch(); }, 150);
+    });
+    ui.input.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        // A debounced search may not have run yet for the
+        // text just typed: run it now, so Enter opens the
+        // top result for that text, not a stale list.
+        if (searchInputTimer) { clearTimeout(searchInputTimer); searchInputTimer = undefined; updateSearch(); }
+        if (searchResultsOpen) {
+          // List open: open the selected result, close list.
+          jumpToSearchIndex(e.shiftKey ? searchIndex - 1 : searchIndex);
+          closeSearchResults();
+          const countEl = ui?.count ?? null;
+          if (countEl) applySearchMatches(countEl);
+        } else {
+          // List closed (after a jump): cycle, as before.
+          jumpToSearchIndex(searchIndex + (e.shiftKey ? -1 : 1));
+          const countEl = ui?.count ?? null;
+          if (countEl) applySearchMatches(countEl);
+        }
+      } else if (e.key === "ArrowDown" || (e.ctrlKey && e.key === "j")) {
+        // Omnisearch supports Vim Ctrl+j/k as well as arrows.
+        e.preventDefault();
+        if (searchMatches.length === 0) return;
+        searchIndex = (searchIndex + 1) % searchMatches.length;
+        renderSearchResults();
+      } else if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "k")) {
+        e.preventDefault();
+        if (searchMatches.length === 0) return;
+        searchIndex = (searchIndex - 1 + searchMatches.length) % searchMatches.length;
+        renderSearchResults();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        clearSearch();
+        (e.target as HTMLInputElement).blur();
       }
-    } else if (e.key === "ArrowDown" || (e.ctrlKey && e.key === "j")) {
-      // Omnisearch supports Vim Ctrl+j/k as well as arrows.
+    });
+    ui.input.addEventListener("blur", () => {
+      // Delay so a mousedown on a result lands first.
+      setTimeout(() => closeSearchResults(), 150);
+    });
+    ui.results.addEventListener("mousedown", (e: MouseEvent) => {
+      const row = (e.target as HTMLElement).closest(".search-result") as HTMLElement | null;
+      if (!row) return;
       e.preventDefault();
-      if (searchMatches.length === 0) return;
-      searchIndex = (searchIndex + 1) % searchMatches.length;
-      renderSearchResults();
-    } else if (e.key === "ArrowUp" || (e.ctrlKey && e.key === "k")) {
-      e.preventDefault();
-      if (searchMatches.length === 0) return;
-      searchIndex = (searchIndex - 1 + searchMatches.length) % searchMatches.length;
-      renderSearchResults();
-    } else if (e.key === "Escape") {
-      e.preventDefault();
+      const idx = Number(row.dataset.index ?? "0");
+      jumpToSearchIndex(idx);
+      closeSearchResults();
+      const countEl = ui?.count ?? null;
+      if (countEl) applySearchMatches(countEl);
+    });
+    ui.clear.addEventListener("click", () => {
       clearSearch();
-      (e.target as HTMLInputElement).blur();
-    }
-  });
-  document.getElementById("search-input")?.addEventListener("blur", () => {
-    // Delay so a mousedown on a result lands first.
-    setTimeout(() => closeSearchResults(), 150);
-  });
-  document.getElementById("search-results")?.addEventListener("mousedown", (e: MouseEvent) => {
-    const row = (e.target as HTMLElement).closest(".search-result") as HTMLElement | null;
-    if (!row) return;
-    e.preventDefault();
-    const idx = Number(row.dataset.index ?? "0");
-    jumpToSearchIndex(idx);
-    closeSearchResults();
-    const countEl = document.getElementById("search-count") as HTMLElement | null;
-    if (countEl) applySearchMatches(countEl);
-  });
-  document.getElementById("search-clear")?.addEventListener("click", () => {
-    clearSearch();
-    document.getElementById("search-input")?.focus();
-  });
+      ui?.input.focus();
+    });
+  }
 
   function clearBoardCaches(): void {
     contextIndex.clear();
@@ -802,14 +831,16 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
   }
 
   // A board load resets the match state; the input itself
-  // is cleared by the core, which owns the title-bar DOM.
+  // is cleared by the search plugin, which owns the box.
   function reset(): void {
     searchMatches = [];
     searchRows = [];
     searchIndex = -1;
+    if (ui) ui.input.value = "";
   }
 
   return {
+    setSearchElements,
     updateSearch,
     clearSearch,
     jumpToSearchIndex,

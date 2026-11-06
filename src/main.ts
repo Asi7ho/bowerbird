@@ -5,7 +5,9 @@ import { createBoardSearch, type BoardSearch } from "./search";
 import { createUndoStore, type UndoStore } from "./undo";
 import { createDrops, type Drops } from "./drops";
 import * as coreCards from "./core-plugins/cards";
+import * as coreSearch from "./core-plugins/search";
 import * as coreSettings from "./core-plugins/settings";
+import * as coreTitlebar from "./core-plugins/titlebar";
 import * as coreToolbar from "./core-plugins/toolbar";
 import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
@@ -1549,90 +1551,16 @@ window.addEventListener("keyup", (e: KeyboardEvent) => {
   if (e.key === " ") spaceDown = false;
 });
 
-// The toolbar (tools, zoom, delete, settings) is the
-// core-toolbar plugin now; it wires its own buttons.
-// Undo/redo live in the title bar, so their wiring stays
-// here until the title bar moves into its own plugin.
-document.getElementById("btn-undo")?.addEventListener("click", () => { undoStore.undo(); });
-document.getElementById("btn-redo")?.addEventListener("click", () => { undoStore.redo(); });
-
-
-// Window controls: the window is frameless, so these
-// are the only window controls, and they are drawn the
-// way the OS the app is running on draws them — macOS
-// traffic lights on the left, Windows caption buttons
-// on the right, GNOME-style round buttons on the right
-// on Linux (see the per-platform CSS). The platform
-// comes from the preload bridge, with a user-agent
-// fallback for a renderer that predates it, and the
-// group is moved to the right-hand actions only on
-// non-macOS platforms; on macOS it stays where the
-// HTML puts it, at the far left. Close quits the app
-// (the old Settings Quit button did exactly this:
-// commit, save, then api.quit, which destroys the peek
-// window too), minimise minimises, full screen toggles
-// full screen on macOS, maximise toggles maximise on
-// Windows/Linux. The buttons opt out of the title
-// bar's drag region in CSS, so a click acts instead
-// of moving the window.
-const osPlatform = ((): "darwin" | "win32" | "linux" => {
-  const p = typeof api.platform === "string" ? api.platform : "";
-  if (p === "darwin" || p === "win32" || p === "linux") return p;
-  const ua = (navigator as unknown as { userAgentData?: { platform?: string } }).userAgentData?.platform ?? "";
-  if (ua === "macOS") return "darwin";
-  if (ua === "Windows") return "win32";
-  return "linux";
-})();
-document.body.classList.add(`platform-${osPlatform}`);
-if (osPlatform !== "darwin") {
-  const controls = document.getElementById("window-controls");
-  const actions = document.getElementById("title-bar-actions");
-  if (controls && actions) actions.appendChild(controls);
-}
-const syncWindowState = async () => {
-  try {
-    const state = await api.windowState();
-    document.getElementById("win-maximise")?.classList.toggle("is-maximised", state.maximised);
-    document.getElementById("win-fullscreen")?.classList.toggle("is-fullscreen", state.fullscreen);
-  } catch { /* icons keep their last state */ }
-};
-document.getElementById("win-close")?.addEventListener("click", async () => {
-  commitEditingIfAny();
-  if (!DEMO) { try { await api.saveBoard(JSON.stringify(board)); } catch { /* closing anyway */ } }
-  api.quit().catch(() => undefined);
-});
-document.getElementById("win-minimise")?.addEventListener("click", () => {
-  api.minimise().catch(() => undefined);
-});
-document.getElementById("win-fullscreen")?.addEventListener("click", async () => {
-  try {
-    const fullscreen = await api.fullscreen();
-    document.getElementById("win-fullscreen")?.classList.toggle("is-fullscreen", fullscreen);
-  } catch { /* state sync on resize will correct the icon */ }
-});
-document.getElementById("win-maximise")?.addEventListener("click", async () => {
-  try {
-    const maximised = await api.maximise();
-    document.getElementById("win-maximise")?.classList.toggle("is-maximised", maximised);
-  } catch { /* state sync on resize will correct the icon */ }
-});
-// A maximise or full screen done outside the buttons
-// (an OS shortcut, a snap) still has to flip the icon,
-// so re-read the real window state after resizes settle
-// and once at startup.
-let windowStateTimer: ReturnType<typeof setTimeout> | undefined;
-window.addEventListener("resize", () => {
-  if (windowStateTimer) clearTimeout(windowStateTimer);
-  windowStateTimer = setTimeout(() => { void syncWindowState(); }, 200);
-});
-void syncWindowState();
+// The title bar (window controls, undo/redo, panels
+// toggle, search box) is the core-titlebar plugin now;
+// it wires its own buttons. The search box is the
+// core-search plugin; it hands its elements to the search
+// engine. Nothing here wires title-bar DOM by id.
 // The settings window is a plugin (core-settings) and owns its
-// own buttons (reset, tabs, close, backdrop). The toolbar's
-// Settings button is still core wiring; it toggles the window
-// through the plugin system.
-document.getElementById("btn-settings")?.addEventListener("click", () => {
-  if (isSettingsUIOpen()) closeSettingsUI(); else openSettingsUI();
-});
+// own buttons (reset, tabs, close, backdrop). The toolbar
+// plugin wires its Settings button to toggle it through the
+// plugin system. Nothing here wires title-bar or toolbar
+// DOM by id.
 
 
 
@@ -1832,6 +1760,16 @@ async function init(): Promise<void> {
       }
       undoStore.save(); render();
     },
+    // Search: hand the engine the search box elements
+    // (built by the core-search plugin), re-run the search,
+    // clear it, or jump to a match. The engine owns the
+    // matching, the dimming and the results.
+    setSearchElements: (els: { input: HTMLInputElement; count: HTMLElement; clear: HTMLButtonElement; results: HTMLElement }) => {
+      search.setSearchElements(els);
+    },
+    updateSearch: () => { search.updateSearch(); },
+    clearSearch: () => { search.clearSearch(); },
+    jumpToSearchIndex: (idx: number) => { search.jumpToSearchIndex(idx); },
     getPenColor: () => penColor,
     setPenColor: (hex: string) => {
       if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return false;
@@ -1919,9 +1857,10 @@ async function init(): Promise<void> {
   registerShellElements({
     // toolbarToolsEl is registered by the toolbar plugin
     // itself (core-toolbar), which builds the toolbar and
-    // its #tools segment.
+    // its #tools segment. panelsToggleEl is registered by
+    // the title bar plugin itself (core-titlebar), which
+    // builds the title bar and its toggle button.
     panelsEl: document.getElementById("plugin-panels") as HTMLElement,
-    panelsToggleEl: document.getElementById("panels-toggle") as HTMLElement,
     pluginViewEl: document.getElementById("plugin-view") as HTMLElement,
     boardCanvasEls: [
       gridEl,
@@ -1942,6 +1881,10 @@ async function init(): Promise<void> {
     { manifest: coreSettings.manifest, module: coreSettings },
     { manifest: coreCards.manifest, module: coreCards },
     { manifest: coreToolbar.manifest, module: coreToolbar },
+    // Title bar before search: the search plugin mounts
+    // its box into the container the title bar builds.
+    { manifest: coreTitlebar.manifest, module: coreTitlebar },
+    { manifest: coreSearch.manifest, module: coreSearch },
   ]);
   render();
   // Preload the context index now, in the background,
