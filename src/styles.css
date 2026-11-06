@@ -583,28 +583,41 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   border-radius: 5px; padding: 1px 6px; font-family: inherit; font-size: 12px;
   box-shadow: var(--shadow-sm);
 }
-/* Canvas options as a macOS segmented control, not a row of web buttons.
-   The options are previews, not text: a swatch of the colour itself,
-   or a tile showing the grid pattern. The name lives in the tooltip
-   and aria-label only. */
+/* Canvas options are previews, not text: a swatch of the colour,
+   or a tile showing the grid pattern. The button is the control
+   and the preview sits inside it, so the active option uses the
+   app's usual selected treatment — a white pill with a soft
+   shadow, the same as a toolbar button — and the preview stays
+   visible. No accent ring. The name lives in the tooltip and
+   aria-label only. The two groups are spaced out, not crammed
+   into a segmented control. */
 #settings .canvas-opt {
-  display: inline-flex; gap: 2px; background: var(--fill);
-  border-radius: 9px; padding: 2px; margin: 4px 8px 4px 0;
+  display: inline-flex; gap: 8px; margin: 4px 20px 4px 0;
 }
 #settings .canvas-opt button {
-  width: 32px; height: 28px; border: 1px solid rgba(0, 0, 0, 0.1);
-  background: #fff; border-radius: 7px; padding: 0; cursor: pointer;
+  width: 36px; height: 36px; border: none; background: transparent;
+  border-radius: 9px; padding: 5px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
 }
 #settings .canvas-opt button.active {
-  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent);
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
 }
-#settings .canvas-opt button.grid-dots {
+#settings .canvas-opt .bg-swatch {
+  width: 26px; height: 26px; border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.12); flex: none;
+}
+#settings .canvas-opt .grid-tile {
+  width: 26px; height: 26px; border-radius: 5px; background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.12); flex: none;
+}
+#settings .canvas-opt .grid-tile.grid-dots {
   background-image: radial-gradient(circle, rgba(0, 0, 0, 0.28) 1px, transparent 1.3px);
-  background-size: 7px 7px; background-position: 3px 3px;
+  background-size: 6px 6px; background-position: 2px 2px;
 }
-#settings .canvas-opt button.grid-lines {
+#settings .canvas-opt .grid-tile.grid-lines {
   background-image: linear-gradient(to right, rgba(0, 0, 0, 0.16) 0 1px, transparent 1px), linear-gradient(to bottom, rgba(0, 0, 0, 0.16) 0 1px, transparent 1px);
-  background-size: 7px 7px; background-position: 3px 3px;
+  background-size: 6px 6px; background-position: 2px 2px;
 }
 #settings .meta { color: var(--grey); font-size: 12px; line-height: 1.5; word-break: break-all; margin: 0 0 12px; }
 /* An email address inside a .meta line keeps together: the

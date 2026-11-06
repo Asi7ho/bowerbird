@@ -267,16 +267,23 @@ const SHORTCUTS: Array<[string, string]> = [
 
   function renderBgOpts(): void {
     // Previews, not text: each option is a swatch of the colour
-    // itself. The name lives in the tooltip and aria-label only.
+    // itself, inside a button. The button is the control and the
+    // swatch sits inside it, so the active option can use the
+    // app's usual selected treatment — a white pill with a soft
+    // shadow — and the colour stays visible. The name lives in
+    // the tooltip and aria-label only. Colours are circles, the
+    // way the toolbar's pen swatches are.
     const opts: Array<[string, string]> = [["White", "#FFFFFF"], ["Paper", "#F7F5F0"], ["Sage", "#EAF3EC"], ["Sky", "#E8F0F7"], ["Ink", "#1C1C1E"]];
     const el = document.getElementById("bg-opts") as HTMLDivElement;
     el.innerHTML = "";
     for (const [label, hex] of opts) {
       const b = document.createElement("button");
-      b.className = "bg-swatch";
-      b.style.background = hex;
       b.title = label;
       b.setAttribute("aria-label", label);
+      const sw = document.createElement("span");
+      sw.className = "bg-swatch";
+      sw.style.background = hex;
+      b.appendChild(sw);
       if (ctx.getBoard().bg.toUpperCase() === hex) b.classList.add("active");
       b.addEventListener("click", () => { ctx.getBoard().bg = hex; ctx.save(); ctx.requestRender(); renderBgOpts(); });
       el.appendChild(b);
@@ -284,18 +291,21 @@ const SHORTCUTS: Array<[string, string]> = [
   }
   function renderGridOpts(): void {
     // Previews, not text: each option is a tile showing the
-    // pattern itself — dots, lines, or blank for Off. The name
+    // pattern itself — dots, lines, or blank for Off — inside a
+    // button, the same shape as the colour options. The name
     // lives in the tooltip and aria-label only.
     const opts: Array<[string, Board["grid"]]> = [["Dots", "Dots"], ["Lines", "Lines"], ["Off", "Off"]];
     const el = document.getElementById("grid-opts") as HTMLDivElement;
     el.innerHTML = "";
     for (const [label, mode] of opts) {
       const b = document.createElement("button");
-      b.className = "grid-tile";
-      if (mode === "Dots") b.classList.add("grid-dots");
-      if (mode === "Lines") b.classList.add("grid-lines");
       b.title = label;
       b.setAttribute("aria-label", label);
+      const tile = document.createElement("span");
+      tile.className = "grid-tile";
+      if (mode === "Dots") tile.classList.add("grid-dots");
+      if (mode === "Lines") tile.classList.add("grid-lines");
+      b.appendChild(tile);
       if (ctx.getBoard().grid === mode) b.classList.add("active");
       b.addEventListener("click", () => { ctx.getBoard().grid = mode; ctx.save(); ctx.requestRender(); renderGridOpts(); });
       el.appendChild(b);
