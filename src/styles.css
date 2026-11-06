@@ -598,6 +598,16 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 }
 #settings .meta { color: var(--grey); font-size: 12px; line-height: 1.5; word-break: break-all; margin: 0 0 12px; }
 #settings #reset-confirm { margin-top: 12px; }
+/* Feedback box: a plain textarea in the core style — white, hairline
+   border, the same radius as a card, system font. */
+#feedback-text {
+  display: block; width: 100%; box-sizing: border-box;
+  margin: 0 0 12px; padding: 8px 10px; resize: vertical;
+  font-family: inherit; font-size: 13px; line-height: 1.5; color: var(--ink);
+  background: #fff; border: 1px solid var(--separator); border-radius: 9px;
+  outline: none;
+}
+#feedback-text:focus { border-color: var(--accent); }
 #settings #btn-reset {
   border: 1px solid var(--separator); background: #fff; border-radius: 9px;
   padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 600;

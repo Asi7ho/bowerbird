@@ -39,6 +39,10 @@ let board: Board = {
   bg: "#FFFFFF", grid: "Dots",
 };
 let boardDir = "";
+// Build id for this run (git short hash in a packaged build,
+// "dev" from source). Set at board load; the feedback mail
+// carries it so a report can be matched to the exact build.
+let currentBuildId = "dev";
 // Board generation: bumped on every board load, so async
 // work started for one board (a PDF render, a search
 // index, an audio probe) can tell, after an await, that
@@ -179,6 +183,8 @@ const settings: SettingsPanel = createSettingsPanel({
   save: () => { undoStore.save(); },
   requestRender: () => render(),
   restoreBackup: (name) => restoreBoardBackup(name),
+  toast,
+  getBuildId: () => currentBuildId,
 });
 
 // Drops and link previews live in src/drops.ts.
@@ -1833,8 +1839,9 @@ async function init(): Promise<void> {
     if (Array.isArray(loaded.panelOrder)) panelOrderList = loaded.panelOrder.filter((x: unknown) => typeof x === "string");
     const boardDirEl = document.getElementById("board-dir-meta");
     if (boardDirEl) boardDirEl.textContent = `Board folder: ${boardDir}`;
+    currentBuildId = loaded.buildId ?? "dev";
     const buildEl = document.getElementById("build-meta");
-    if (buildEl) buildEl.textContent = `Build: ${loaded.buildId ?? "dev"}`;
+    if (buildEl) buildEl.textContent = `Build: ${currentBuildId}`;
     if (loaded.json) {
       const parsed = JSON.parse(loaded.json) as Board;
       board = parsed;

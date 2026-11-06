@@ -15,6 +15,21 @@ export interface SettingsContext {
   save(): void;
   requestRender(): void;
   restoreBackup(name: string): Promise<boolean>;
+  toast(msg: string): void;
+  getBuildId(): string;
+}
+
+// Feedback goes to the maker's inbox by email. There is no
+// server and no account in the app: the message opens in the
+// tester's own email app, addressed here, and they press Send
+// there. The build id and platform ride along in the body so
+// a report can be matched to the exact build that produced it.
+export const FEEDBACK_EMAIL = "wren7762@gmail.com";
+
+export function feedbackMailto(message: string, buildId: string, platform: string): string {
+  const subject = "Bowerbird feedback";
+  const body = `${message.trim()}\n\n—\nBowerbird ${buildId} on ${platform}`;
+  return `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
 export interface SettingsPanel {
@@ -68,6 +83,32 @@ const SHORTCUTS: Array<[string, string]> = [
 ];
 
   let settingsOpen = false;
+
+  // The feedback box and button are static HTML in the General
+  // tab, so this wires once at startup, not on every open — the
+  // draft survives closing Settings. Typing here never reaches
+  // board shortcuts: the core keydown handlers return early for
+  // a focused textarea.
+  function wireFeedback(): void {
+    const box = document.getElementById("feedback-text") as HTMLTextAreaElement | null;
+    const btn = document.getElementById("btn-feedback") as HTMLButtonElement | null;
+    if (!box || !btn) return;
+    btn.addEventListener("click", () => {
+      if (box.value.trim() === "") {
+        ctx.toast("Write a little first — the message is empty.");
+        box.focus();
+        return;
+      }
+      // openExternal shows its own toast if the mail app
+      // cannot be opened; on success the draft is in the
+      // mail app and the text stays here, so nothing is lost
+      // if the draft is closed unsent.
+      void api.openExternal(feedbackMailto(box.value, ctx.getBuildId(), api.platform))
+        .then(() => ctx.toast("Opened in your email app — press Send there to send it to me."))
+        .catch(() => ctx.toast("Could not open your email app."));
+    });
+  }
+  wireFeedback();
 
   function renderPluginSettings(): void {
     const list = document.getElementById("plugin-list") as HTMLDivElement | null;

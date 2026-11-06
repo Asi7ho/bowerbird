@@ -1148,6 +1148,14 @@ function registerIpc() {
   ipcMain.handle('bowerbird:open-external', (_event, target) => {
     if (typeof target !== 'string' || !target) throw new Error('nothing to open');
     if (/^https?:\/\//.test(target)) return shell.openExternal(target);
+    // Feedback: the Settings feedback box opens the tester's
+    // mail app with a prefilled message to the maker. Only
+    // this one address is allowed — the address must match
+    // FEEDBACK_EMAIL in src/settings.ts — so nothing else can
+    // use the channel to open a compose window. Opening a
+    // composer sends nothing by itself; the tester still
+    // presses Send in their mail app.
+    if (target.startsWith('mailto:wren7762@gmail.com?')) return shell.openExternal(target);
     // Local files: only board-local files (see isBoardLocal).
     // A file:// URL is unwrapped first, so file:///etc/passwd
     // does not slip past the check as a non-https string.
