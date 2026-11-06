@@ -612,7 +612,7 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
     if (!input || !countEl || !clearEl) return;
     const raw = input.value;
     const query = normaliseSearch(raw);
-    clearEl.style.display = query === "" ? "none" : "flex";
+    clearEl.style.visibility = query === "" ? "hidden" : "visible";
     if (query === "") {
       const hadMatches = searchMatches.length > 0;
       searchMatches = [];

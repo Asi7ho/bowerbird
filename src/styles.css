@@ -730,9 +730,16 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   font-size: 14px; color: var(--ink); outline: none;
 }
 #search-input::placeholder { color: var(--grey); }
-#search-count { font-size: 12px; color: var(--grey); white-space: nowrap; flex: none; }
+#search-count { font-size: 12px; color: var(--grey); white-space: nowrap; flex: none;
+  /* Fixed width, right-aligned: the count text ("No matches", "3 of 299", …)
+     changes length as you type, and the input must not resize with it. A
+     long indexing suffix is cut with an ellipsis; the match count, first,
+     always stays visible. */
+  width: 96px; text-align: right; overflow: hidden; text-overflow: ellipsis; }
 #search-clear {
-  display: none; border: none; background: var(--fill); width: 22px; height: 22px;
+  /* Always in the layout (hidden, not removed): toggling it in and out
+     resized the input on every keystroke. */
+  display: flex; visibility: hidden; border: none; background: var(--fill); width: 22px; height: 22px;
   border-radius: 50%; font-size: 15px; line-height: 1; cursor: pointer; color: var(--grey);
   flex: none; align-items: center; justify-content: center;
 }
