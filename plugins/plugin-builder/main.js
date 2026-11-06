@@ -492,12 +492,17 @@ function renderSettings(container) {
     await loadSavedKey();
     let encrypted = true;
     try { encrypted = await apiRef.secureStorage.available(); } catch { /* assume encrypted */ }
+    // The status names which key is stored, by its last four
+    // characters — enough to tell two keys apart, not enough
+    // to use it. Without this, "Key saved" cannot tell a
+    // stale key from the one just tested elsewhere.
+    const ending = (k) => (typeof k === "string" && k ? `, ending …${k.slice(-4)}` : "");
     if (savedKey) {
       status.textContent = encrypted
-        ? "Key saved, encrypted by your system's keychain. You won't need to type it again."
-        : "Key saved, but your system can't encrypt it — it is stored on this computer in plain text. Anyone with access to this computer could read it.";
+        ? `Key saved${ending(savedKey)}, encrypted by your system's keychain. You won't need to type it again.`
+        : `Key saved${ending(savedKey)}, but your system can't encrypt it — it is stored on this computer in plain text. Anyone with access to this computer could read it.`;
     } else if (sessionKey) {
-      status.textContent = "Key entered for this session only (it could not be saved).";
+      status.textContent = `Key entered for this session only${ending(sessionKey)} (it could not be saved).`;
     } else {
       status.textContent = "No key saved yet.";
     }
