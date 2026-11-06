@@ -495,7 +495,12 @@ function updatePanelDock(): void {
   }
   if (host.panelsToggleEl) {
     host.panelsToggleEl.classList.toggle("active", open);
-    host.panelsToggleEl.classList.toggle("dim", visible.length === 0);
+    // No plugin panels at all: the toggle has nothing to
+    // show, so it is hidden, not dimmed. A dimmed button
+    // that does nothing reads as broken; and the toggle
+    // stays visible whenever panels exist, even with the
+    // dock closed — that is how a closed dock comes back.
+    host.panelsToggleEl.style.display = visible.length === 0 ? "none" : "";
   }
 }
 
