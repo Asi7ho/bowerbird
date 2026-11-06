@@ -123,12 +123,15 @@ export interface PluginShortcutDef {
 // preload API. main.ts passes its `api` object here; it satisfies
 // this interface once preload exposes the plugin IPC methods.
 export interface PluginBridge {
+  isDemo: boolean;
+  platform: string;
   fileUrl(path: string): string;
   embedFile(path: string): Promise<string>;
   readTextFile(path: string): Promise<string>;
   fileSize(path: string): Promise<number>;
   fetchPreview(url: string): Promise<{ title: string | null; description: string | null; image: string | null; icon: string | null }>;
   openExternal(target: string): Promise<void>;
+  listBackups(): Promise<Array<{ name: string; items: number; size: number }>>;
   listPlugins(): Promise<PluginManifest[]>;
   readPluginFile(pluginId: string, relativePath: string): Promise<string>;
   setPluginEnabled(pluginId: string, enabled: boolean): Promise<boolean>;
@@ -193,16 +196,23 @@ export interface PluginHost {
   groupSelection: () => boolean;
   ungroupSelection: () => boolean;
   deleteSelection: () => boolean;
-  // DOM the plugin system is allowed to manage. The core passes
-  // these elements in; plugins never query core DOM themselves.
-  toolbarToolsEl: HTMLElement;
-  panelsEl: HTMLElement;
-  panelsToggleEl: HTMLElement;
-  pluginViewEl: HTMLElement;
-  boardCanvasEls: HTMLElement[];
-  viewSwitcherEl: HTMLElement;
-  overlaysEl: HTMLElement;
-  settingsSectionsEl: HTMLElement;
+  restoreBackup: (name: string) => Promise<boolean>;
+  getBuildId: () => string;
+  // Reset the board to a fresh welcome board (the settings
+  // "Delete all board data" flow). A board write, and not
+  // available to a trial plugin.
+  resetBoard: () => Promise<boolean>;
+  getBoardDir: () => string;
+  // Board canvas (background + grid): the settings UI writes
+  // these. A board-level write, so it needs board:write on
+  // the plugin side, like any board mutation.
+  setCanvas: (patch: { bg?: string; grid?: Board["grid"] }) => void;
+  // The board area element: the mount point for board
+  // overlays (the settings window, and later the board view
+  // itself). A UI plugin appends its overlay DOM here; it
+  // never queries core DOM by id. This is a mount point the
+  // API hands out, not a back door into core internals.
+  boardEl: HTMLElement;
   commitEditing: () => void;
   // Panel tab order: the core owns the persisted order, the
   // plugin system owns the tab DOM, so both sides go through
@@ -238,6 +248,16 @@ export interface PluginContext {
     redo: () => boolean;
     canUndo: () => boolean;
     canRedo: () => boolean;
+    // Board canvas: background colour and grid. A board-level
+    // write (the settings UI's canvas options), so it needs
+    // board:write.
+    setCanvas: (patch: { bg?: string; grid?: Board["grid"] }) => void;
+    // Reset the board to a fresh welcome board. A board write,
+    // and not available to a trial plugin.
+    reset: () => Promise<boolean>;
+    // The board's folder on disk, for display (the settings
+    // "Board folder" line). Read-only.
+    getDir: () => string;
   };
   boards: {
     list: () => Promise<Array<{ name: string; current: boolean; items: number }>>;
@@ -246,6 +266,21 @@ export interface PluginContext {
     switch: (name: string) => Promise<boolean>;
     rename: (oldName: string, newName: string) => Promise<{ name: string }>;
     delete: (name: string) => Promise<{ wasCurrent: boolean }>;
+  };
+  // The app itself: build id, platform and demo mode. Read-only;
+  // a plugin that shows a version or a demo notice uses these.
+  app: {
+    getBuildId: () => string;
+    getPlatform: () => string;
+    isDemo: () => boolean;
+  };
+  // Backups: list them (newest first) and restore one. A
+  // restore loads the backup's board into the app, like
+  // boards.switch, so it needs board:write and is not
+  // available to a trial plugin.
+  backups: {
+    list: () => Promise<Array<{ name: string; items: number; size: number }>>;
+    restore: (name: string) => Promise<boolean>;
   };
   window: {
     hide: () => Promise<void>;
@@ -292,7 +327,28 @@ export interface PluginContext {
     registerView: (def: PluginViewDef) => void;
     registerOverlay: (def: PluginOverlayDef) => void;
     registerSettingsSection: (def: PluginSettingsSectionDef) => void;
+    // Re-render every registered settings section into the
+    // settings container, so a settings UI can refresh after
+    // a plugin is enabled or disabled.
+    renderSettingsSections: () => void;
     registerShortcut: (def: PluginShortcutDef) => void;
+    // Every shortcut a plugin registered, with its plugin,
+    // so a settings UI can list them alongside the core's.
+    listShortcuts: () => Array<{ pluginId: string; pluginName: string; key: string; title: string }>;
+    // The board area element: the mount point for board
+    // overlays. A UI plugin appends its overlay DOM here.
+    boardEl: HTMLElement;
+    // The settings plugin registers itself as the settings
+    // UI here, so the core can open/close it without knowing
+    // which plugin provides it. This is how a UI plugin
+    // becomes the thing the core delegates to.
+    registerSettingsUI: (ui: { open: () => void; close: () => void; isOpen: () => boolean; setTab: (tab: string) => void; refresh: () => void }) => void;
+    // The settings plugin hands the plugin system the
+    // container its settings sections render into, so
+    // renderSettingsSections has somewhere to write. This
+    // is how a UI plugin provides a shell element through
+    // the API, instead of the core passing DOM in.
+    setSettingsSectionsContainer: (el: HTMLElement) => void;
     showPanel: (id: string) => void;
     hidePanel: (id: string) => void;
     getPanelElement: (id: string) => HTMLElement | null;
@@ -331,6 +387,14 @@ export interface PluginContext {
     delete: (key: string) => Promise<void>;
   };
   plugins: {
+    // List every loaded plugin with its state, so a settings
+    // UI can show them and toggle them. Read-only; no
+    // permission needed.
+    list: () => Array<{ id: string; name: string; version: string; description: string; active: boolean; failed: boolean; error: string | null; trial: boolean }>;
+    // Enable or disable a plugin. This is plugin management,
+    // so it needs the plugins:install permission, like
+    // install. A trial plugin cannot be toggled this way.
+    setEnabled: (id: string, enabled: boolean) => Promise<void>;
     install: (plugin: { id: string; name: string; description: string; permissions: string[]; mainCode: string; styleCode: string }) => Promise<PluginManifest>;
     refresh: () => Promise<void>;
     // Try a plugin without installing it: it runs in memory only,
@@ -387,6 +451,65 @@ let bridge: PluginBridge | null = null;
 let activeView = "board";
 let pluginsReady = false;
 
+// The shell: the DOM elements the plugin system manages
+// (panels dock, toolbar tools, plugin view, view switcher,
+// overlays, settings sections). These are built and owned by
+// the UI plugin, not by the core. The core used to pass them
+// in through PluginHost; now the UI plugin registers them
+// here, so the core never owns UI DOM. Until a UI plugin
+// registers them, the plugin system has nowhere to render
+// panels, views or tools — that is the visible proof the
+// core renders nothing on its own.
+export interface ShellElements {
+  toolbarToolsEl: HTMLElement;
+  panelsEl: HTMLElement;
+  panelsToggleEl: HTMLElement;
+  pluginViewEl: HTMLElement;
+  boardCanvasEls: HTMLElement[];
+  viewSwitcherEl: HTMLElement;
+  overlaysEl: HTMLElement;
+  settingsSectionsEl: HTMLElement;
+}
+const shell: Partial<ShellElements> = {};
+export function registerShellElements(els: Partial<ShellElements>): void {
+  Object.assign(shell, els);
+}
+
+// The settings UI: the settings window is a plugin (see
+// core-settings), so the core cannot open it directly. The
+// plugin registers its open/close/isOpen here, and the core
+// delegates through these functions. Until a settings plugin
+// is active, opening settings is a no-op.
+export interface SettingsUI {
+  open: () => void;
+  close: () => void;
+  isOpen: () => boolean;
+  setTab: (tab: string) => void;
+  // Re-render the canvas options (and meta) to match the
+  // current board, e.g. after an undo changed the board's
+  // background or grid.
+  refresh: () => void;
+}
+let settingsUI: SettingsUI | null = null;
+export function registerSettingsUI(ui: SettingsUI): void {
+  settingsUI = ui;
+}
+export function openSettingsUI(): void {
+  settingsUI?.open();
+}
+export function closeSettingsUI(): void {
+  settingsUI?.close();
+}
+export function isSettingsUIOpen(): boolean {
+  return settingsUI?.isOpen() ?? false;
+}
+export function setSettingsUITab(tab: string): void {
+  settingsUI?.setTab(tab);
+}
+export function refreshSettingsUI(): void {
+  settingsUI?.refresh();
+}
+
 // Panel tabs state: one panel shown at a time, switched by
 // its tab. `hidden` is the showPanel/hidePanel state (a
 // panel with no tab); `activePanelKey` is which shown panel
@@ -440,9 +563,9 @@ function wirePanelsToggle(): void {
   // Title-bar toggle, wired once: it lives outside the
   // dock, so it is still there when the dock is closed,
   // and is how a closed dock comes back.
-  if (!host || !host.panelsToggleEl || tabsToggleWired) return;
+  if (!host || !shell.panelsToggleEl || tabsToggleWired) return;
   tabsToggleWired = true;
-  host.panelsToggleEl.addEventListener("click", () => {
+  shell.panelsToggleEl.addEventListener("click", () => {
     if (Array.from(panels.values()).every((p) => p.hidden)) return;
     setDockVisible(!dockVisible);
     host?.render();
@@ -467,7 +590,7 @@ function ensureTabsBar(): void {
   });
   tabsEl.appendChild(tabsListEl);
   tabsEl.appendChild(close);
-  host.panelsEl.appendChild(tabsEl);
+  shell.panelsEl?.appendChild(tabsEl);
   wirePanelsToggle();
 }
 
@@ -479,7 +602,7 @@ function updatePanelDock(): void {
   if (!host) return;
   const visible = visiblePanels();
   const open = dockVisible && visible.length > 0;
-  host.panelsEl.style.width = open ? "290px" : "0px";
+  if (shell.panelsEl) shell.panelsEl.style.width = open ? "290px" : "0px";
   if (tabsEl) tabsEl.style.display = open ? "" : "none";
   for (const [key, p] of panels.entries()) {
     const active = !p.hidden && key === activePanelKey;
@@ -487,14 +610,14 @@ function updatePanelDock(): void {
     p.tab.classList.toggle("active", active);
     p.el.style.display = active ? "" : "none";
   }
-  if (host.panelsToggleEl) {
-    host.panelsToggleEl.classList.toggle("active", open);
+  if (shell.panelsToggleEl) {
+    shell.panelsToggleEl.classList.toggle("active", open);
     // No plugin panels at all: the toggle has nothing to
     // show, so it is hidden, not dimmed. A dimmed button
     // that does nothing reads as broken; and the toggle
     // stays visible whenever panels exist, even with the
     // dock closed — that is how a closed dock comes back.
-    host.panelsToggleEl.style.display = visible.length === 0 ? "none" : "";
+    shell.panelsToggleEl.style.display = visible.length === 0 ? "none" : "";
   }
 }
 
@@ -589,7 +712,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       // Capabilities in v1: every domain documented in PLUGIN_API.md.
       // A future core may add more; a plugin should check before
       // using a capability that was added after v1.
-      return ["board", "boards", "view", "window", "ui", "cards", "files", "storage", "events", "tools", "panels", "commands", "views", "overlays", "settingsSections", "shortcuts", "library", "plugins", "pen"].includes(capability);
+      return ["board", "boards", "app", "backups", "view", "window", "ui", "cards", "files", "storage", "events", "tools", "panels", "commands", "views", "overlays", "settingsSections", "shortcuts", "library", "plugins", "pen"].includes(capability);
     },
     board: {
       get: () => {
@@ -689,6 +812,16 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       },
       canUndo: () => host!.canUndo(),
       canRedo: () => host!.canRedo(),
+      setCanvas: (patch: { bg?: string; grid?: Board["grid"] }) => {
+        require("board:write");
+        host!.setCanvas(patch);
+      },
+      reset: async () => {
+        require("board:write");
+        requireNotTrial("reset the board");
+        return host!.resetBoard();
+      },
+      getDir: () => host!.getBoardDir(),
     },
     boards: {
       list: async () => bridge!.listBoards(),
@@ -715,6 +848,19 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         require("board:write");
         requireNotTrial("delete a board");
         return bridge!.deleteBoard(name);
+      },
+    },
+    app: {
+      getBuildId: () => host!.getBuildId(),
+      getPlatform: () => bridge!.platform,
+      isDemo: () => bridge!.isDemo,
+    },
+    backups: {
+      list: async () => bridge!.listBackups(),
+      restore: async (name: string) => {
+        require("board:write");
+        requireNotTrial("restore a backup");
+        return host!.restoreBackup(name);
       },
     },
     window: {
@@ -782,7 +928,12 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       },
       registerOverlay: (def: PluginOverlayDef) => registerOverlay(pluginId, def),
       registerSettingsSection: (def: PluginSettingsSectionDef) => registerSettingsSection(pluginId, def),
+      renderSettingsSections: () => renderSettingsSections(),
       registerShortcut: (def: PluginShortcutDef) => registerShortcut(pluginId, def),
+      listShortcuts: () => listPluginShortcuts(),
+      boardEl: host!.boardEl,
+      registerSettingsUI: (ui: { open: () => void; close: () => void; isOpen: () => boolean; setTab: (tab: string) => void; refresh: () => void }) => registerSettingsUI(ui),
+      setSettingsSectionsContainer: (el: HTMLElement) => registerShellElements({ settingsSectionsEl: el }),
       showPanel: (id: string) => {
         // Showing a panel activates its tab, so the user
         // actually sees it — a new tab in the background
@@ -882,6 +1033,21 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       },
     },
     plugins: {
+      list: () => Array.from(loaded.values()).map((lp) => ({
+        id: lp.manifest.id,
+        name: lp.manifest.name,
+        version: lp.manifest.version,
+        description: lp.manifest.description ?? "",
+        active: lp.active,
+        failed: lp.failed,
+        error: lp.error,
+        trial: !!lp.trial,
+      })),
+      setEnabled: async (id: string, enabled: boolean) => {
+        require("plugins:install");
+        requireNotTrial("enable or disable a plugin");
+        await setPluginEnabled(id, enabled);
+      },
       install: async (plugin) => {
         require("plugins:install");
         requireNotTrial("install a plugin");
@@ -936,7 +1102,7 @@ function registerTool(pluginId: string, def: PluginToolDef): void {
     btn.textContent = def.title.slice(0, 1).toUpperCase();
   }
   btn.addEventListener("click", () => host!.setTool(fullId));
-  host.toolbarToolsEl.appendChild(btn);
+  shell.toolbarToolsEl?.appendChild(btn);
 }
 
 function registerPanel(pluginId: string, def: PluginPanelDef): void {
@@ -952,7 +1118,7 @@ function registerPanel(pluginId: string, def: PluginPanelDef): void {
   const body = document.createElement("div");
   body.className = "plugin-panel-body";
   wrap.appendChild(body);
-  host.panelsEl.appendChild(wrap);
+  shell.panelsEl?.appendChild(wrap);
   const tab = document.createElement("button");
   tab.className = "plugin-tab";
   // Tabs are icons only: the title stays as the tooltip
@@ -1056,7 +1222,7 @@ function registerOverlay(pluginId: string, def: PluginOverlayDef): void {
   wrap.className = "plugin-overlay";
   wrap.dataset.plugin = pluginId;
   wrap.dataset.overlay = def.id;
-  host.overlaysEl.appendChild(wrap);
+  shell.overlaysEl?.appendChild(wrap);
   overlays.set(`${pluginId}:${def.id}`, { ...def, pluginId, el: wrap });
   try {
     def.render(wrap);
@@ -1075,7 +1241,8 @@ function registerSettingsSection(pluginId: string, def: PluginSettingsSectionDef
 
 export function renderSettingsSections(): void {
   if (!host) return;
-  const el = host.settingsSectionsEl;
+  const el = shell.settingsSectionsEl;
+  if (!el) return;
   el.innerHTML = "";
   for (const s of settingsSections.values()) {
     const wrap = document.createElement("div");
@@ -1160,7 +1327,8 @@ export function listViewsForUI(): Array<{ id: string; title: string; plugin: str
 
 function renderViewSwitcher(): void {
   if (!host) return;
-  const el = host.viewSwitcherEl;
+  const el = shell.viewSwitcherEl;
+  if (!el) return;
   el.innerHTML = "";
   if (views.size === 0) {
     el.style.display = "none";
@@ -1190,20 +1358,24 @@ export function setActiveView(id: string): void {
     }
   }
   activeView = id;
+  const viewEl = shell.pluginViewEl;
+  const canvasEls = shell.boardCanvasEls;
   if (id === "board") {
-    for (const el of host.boardCanvasEls) el.style.display = "";
-    host.pluginViewEl.style.display = "none";
-    host.pluginViewEl.innerHTML = "";
-  } else {
-    for (const el of host.boardCanvasEls) el.style.display = "none";
-    host.pluginViewEl.style.display = "";
+    for (const el of canvasEls ?? []) el.style.display = "";
+    if (viewEl) {
+      viewEl.style.display = "none";
+      viewEl.innerHTML = "";
+    }
+  } else if (viewEl) {
+    for (const el of canvasEls ?? []) el.style.display = "none";
+    viewEl.style.display = "";
     const v = views.get(id)!;
-    host.pluginViewEl.innerHTML = "";
-    host.pluginViewEl.dataset.plugin = v.pluginId;
+    viewEl.innerHTML = "";
+    viewEl.dataset.plugin = v.pluginId;
     try {
-      v.render(host.pluginViewEl, host.getBoard());
+      v.render(viewEl, host.getBoard());
     } catch (e) {
-      host.pluginViewEl.textContent = `View failed to render: ${String(e)}`;
+      viewEl.textContent = `View failed to render: ${String(e)}`;
     }
     if (v.onShow) {
       try {
@@ -1225,10 +1397,12 @@ export function refreshActiveView(): void {
     setActiveView("board");
     return;
   }
+  const viewEl = shell.pluginViewEl;
+  if (!viewEl) return;
   try {
-    v.render(host.pluginViewEl, host.getBoard());
+    v.render(viewEl, host.getBoard());
   } catch (e) {
-    host.pluginViewEl.textContent = `View failed to render: ${String(e)}`;
+    viewEl.textContent = `View failed to render: ${String(e)}`;
   }
 }
 
@@ -1421,6 +1595,43 @@ async function activatePlugin(manifest: PluginManifest, source?: { mainCode: str
   }
 }
 
+// First-party plugins: bundled UI plugins that ship with the
+// app. They are ES modules imported by the core, not single-file
+// main.js loaded from a blob URL — that is the only difference
+// from a user plugin. They get the same PluginContext, the same
+// permission checks, and the same manifest, and they appear in
+// the plugin list the same way. A first-party plugin has no back
+// door: if it needs something, that something is in the API.
+export async function activateFirstPartyPlugin(
+  manifest: PluginManifest,
+  mod: { activate?: (api: PluginContext) => void | Promise<void>; deactivate?: () => void | Promise<void> },
+): Promise<void> {
+  if (!bridge || !host) throw new Error("plugins are not ready yet");
+  if (loaded.has(manifest.id)) throw new Error(`a plugin called ${manifest.id} already exists`);
+  if (typeof mod.activate !== "function") {
+    throw new Error(`Plugin ${manifest.id} does not export activate(api)`);
+  }
+  loaded.set(manifest.id, { manifest, active: false, failed: false, error: null, module: null });
+  const lp = loaded.get(manifest.id)!;
+  try {
+    lp.module = mod;
+    const api = createContext(manifest, {});
+    await mod.activate(api);
+    lp.active = true;
+    lp.failed = false;
+    lp.error = null;
+  } catch (e) {
+    lp.failed = true;
+    lp.error = String(e);
+    lp.active = false;
+    lp.module = null;
+    unregisterPlugin(manifest.id);
+    throw e;
+  }
+  renderViewSwitcher();
+  updatePanelDock();
+}
+
 async function deactivatePlugin(manifest: PluginManifest): Promise<void> {
   const lp = loaded.get(manifest.id);
   if (!lp) return;
@@ -1489,10 +1700,25 @@ export async function endTrial(id: string): Promise<void> {
   host?.render();
 }
 
-export async function initPlugins(h: PluginHost, b: PluginBridge): Promise<void> {
+export async function initPlugins(
+  h: PluginHost,
+  b: PluginBridge,
+  firstParty: Array<{ manifest: PluginManifest; module: { activate?: (api: PluginContext) => void | Promise<void>; deactivate?: () => void | Promise<void> } }> = [],
+): Promise<void> {
   host = h;
   bridge = b;
   wirePanelsToggle();
+  // First-party UI plugins first, so the UI exists before user
+  // plugins register panels, views, tools and settings sections
+  // into it. A first-party plugin that fails to load is a
+  // broken app, so the failure is surfaced, not swallowed.
+  for (const fp of firstParty) {
+    try {
+      await activateFirstPartyPlugin(fp.manifest, fp.module);
+    } catch (e) {
+      h.toast(`Built-in plugin ${fp.manifest.name} failed to load: ${String(e)}`);
+    }
+  }
   let manifests: PluginManifest[] = [];
   try {
     manifests = await b.listPlugins();

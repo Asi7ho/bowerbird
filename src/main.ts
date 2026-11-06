@@ -3,8 +3,8 @@ import { createMedia, type Media } from "./media";
 import { createCardRenderer, SHAPES, type CardRenderer } from "./cards";
 import { createBoardSearch, type BoardSearch } from "./search";
 import { createUndoStore, type UndoStore } from "./undo";
-import { createSettingsPanel, type SettingsPanel } from "./settings";
 import { createDrops, type Drops } from "./drops";
+import * as coreSettings from "./core-plugins/settings";
 import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
   anchorPoint, boardGet, centre, clippedEnds, estimateTextHeight,
@@ -13,10 +13,11 @@ import {
 } from "./model";
 import { welcomeBoard } from "./welcome";
 import {
-  emitPluginEvent, getActiveView, getCardRenderer,
+  closeSettingsUI, emitPluginEvent, getActiveView, getCardRenderer,
   getPluginTool, handlePluginCardAction, handlePluginCardDoubleClick, handlePluginShortcut,
-  initPlugins,
-  refreshActiveView,
+  initPlugins, isSettingsUIOpen,
+  openSettingsUI,
+  refreshActiveView, refreshSettingsUI, registerShellElements,
   syncPluginToolButtons,
   type PluginHost,
 } from "./plugins";
@@ -170,22 +171,14 @@ const undoStore: UndoStore = createUndoStore({
   isDemo: () => DEMO,
   bumpSearchVersion: () => { boardSearchVersion++; },
   requestRender: () => render(),
-  refreshSettings: () => { settings.renderBgOpts(); settings.renderGridOpts(); },
+  refreshSettings: () => { refreshSettingsUI(); },
   toast,
 });
 
-// Settings panel lives in src/settings.ts; the core keeps
-// the board, so canvas changes and backup restores come
-// back through these callbacks.
-const settings: SettingsPanel = createSettingsPanel({
-  getBoard: () => board,
-  isDemo: () => DEMO,
-  save: () => { undoStore.save(); },
-  requestRender: () => render(),
-  restoreBackup: (name) => restoreBoardBackup(name),
-  toast,
-  getBuildId: () => currentBuildId,
-});
+// The settings window is a first-party plugin (core-settings).
+// The core does not build it; it delegates through the plugin
+// system (openSettingsUI / closeSettingsUI / isSettingsUIOpen),
+// and the plugin registers itself at boot. See ARCHITECTURE.md.
 
 // Drops and link previews live in src/drops.ts.
 const drops: Drops = createDrops({
@@ -284,8 +277,6 @@ async function loadBoardFromJson(json: string, dir: string, preserveUndo = false
   if (oldDir !== "" && oldDir === dir) search.flushContextIndex(); else search.cancelContextIndexSave();
   search.clearBoardCaches();
   media.clearBoardCaches();
-  const boardDirEl = document.getElementById("board-dir-meta");
-  if (boardDirEl) boardDirEl.textContent = `Board folder: ${boardDir}`;
   undoStore.restoreUndoForBoard(dir, sameBoard || preserveUndo);
   render();
   void search.loadContextIndex();
@@ -314,6 +305,35 @@ async function restoreBoardBackup(name: string): Promise<boolean> {
     return true;
   } catch (e) {
     toast(`Could not restore backup: ${String(e)}`);
+    return false;
+  }
+}
+// Reset the board to a fresh welcome board (the settings
+// "Delete all board data" flow). The settings plugin calls
+// this through the API; the core owns the reset itself.
+// Delete first, then build the fresh welcome board in memory
+// and save that — never save the old board after the wipe,
+// or it would come straight back. The corner setting is
+// untouched: reset-board only deletes board data, not app
+// settings.
+async function resetBoardToWelcome(): Promise<boolean> {
+  commitEditingIfAny();
+  if (wheelSaveTimer) { clearTimeout(wheelSaveTimer); wheelSaveTimer = null; }
+  media.stopAudio();
+  selected = [];
+  editingId = null;
+  try {
+    const showcase = await api.resetBoard();
+    board = welcomeBoard(boardDir, showcase.pdf_size_bytes, showcase.video_size_bytes);
+    board.camera = { x: 0, y: 0, zoom: 1 };
+    closeSettingsUI();
+    undoStore.save();
+    render();
+    void drops.refreshLinkPreviews();
+    toast(DEMO ? "Demo board reset — nothing was saved" : "Board data deleted — fresh welcome board restored");
+    return true;
+  } catch (e) {
+    toast(`Reset failed: ${String(e)}`);
     return false;
   }
 }
@@ -608,7 +628,7 @@ function updateResizeHandle(): void {
   // A plugin view owns the screen: the board's resize handle is
   // not part of that view, so it must never float over it — it
   // did, at the selected card's corner, while playing a slide.
-  if (getActiveView() !== "board" || selected.length !== 1 || settings.isOpen() || editingId !== null) {
+  if (getActiveView() !== "board" || selected.length !== 1 || isSettingsUIOpen() || editingId !== null) {
     el.style.display = "none";
     if (rotEl) rotEl.style.display = "none";
     return;
@@ -1133,7 +1153,7 @@ window.addEventListener("mousemove", (e: MouseEvent) => {
         cursorRaf = 0;
         const w = pendingCursor;
         if (!w) return;
-        if (settings.isOpen() || editingId !== null) {
+        if (isSettingsUIOpen() || editingId !== null) {
           boardEl.style.cursor = "default";
         } else if (tool === "pen" || tool === "connector" || tool === "rect" || tool === "ellipse") {
           boardEl.style.cursor = "crosshair";
@@ -1605,19 +1625,19 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   // switched tools, and +/- zoomed, all while the user thought
   // they were in Settings. Esc still closes the sheet (handled
   // below), and Tab keeps its normal focus job in the sheet.
-  if (settings.isOpen() && e.key !== "Escape" && e.key !== "Tab") return;
+  if (isSettingsUIOpen() && e.key !== "Escape" && e.key !== "Tab") return;
   // Tab cycles elements, unless Settings is open, where Tab keeps
   // its normal job of moving focus around the sheet.
-  if (e.key === "Tab" && !settings.isOpen()) {
+  if (e.key === "Tab" && !isSettingsUIOpen()) {
     e.preventDefault();
     navigateElements(e.shiftKey ? -1 : 1);
     return;
   }
   const ctrl = e.ctrlKey || e.metaKey;
   if (e.key === " " || e.key === " ") spaceDown = true;
-  if (e.key === "?") { settings.setSettings(true); return; }
+  if (e.key === "?") { openSettingsUI(); return; }
   if (e.key === "Escape") {
-    if (settings.isOpen()) { settings.setSettings(false); return; }
+    if (isSettingsUIOpen()) { closeSettingsUI(); return; }
     // An active search is cleared first; the next Esc clears the
     // selection, as before. Searching must not eat the selection
     // clear entirely, and clearing the selection must not eat a
@@ -1662,7 +1682,7 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   // Plugin shortcuts, last: core keys above win, so a plugin cannot
   // steal V, P, A, Ctrl+G/U, Delete, zoom or reset. The core guards
   // above (textarea, search box, Settings open) already applied.
-  else if (editingId === null && !settings.isOpen() && !ctrl && handlePluginShortcut(e.key)) { /* plugin handled it */ }
+  else if (editingId === null && !isSettingsUIOpen() && !ctrl && handlePluginShortcut(e.key)) { /* plugin handled it */ }
 });
 window.addEventListener("keyup", (e: KeyboardEvent) => {
   if (e.key === " ") spaceDown = false;
@@ -1756,46 +1776,12 @@ window.addEventListener("resize", () => {
   windowStateTimer = setTimeout(() => { void syncWindowState(); }, 200);
 });
 void syncWindowState();
-document.getElementById("btn-reset")?.addEventListener("click", () => {
-  const confirmEl = document.getElementById("reset-confirm") as HTMLDivElement;
-  const btn = document.getElementById("btn-reset") as HTMLButtonElement;
-  if (confirmEl) confirmEl.style.display = "block";
-  if (btn) btn.style.display = "none";
-});
-document.getElementById("btn-reset-confirm")?.addEventListener("click", async () => {
-  // Delete first, then build the fresh welcome board in memory and
-  // save that — never save the old board after the wipe, or it
-  // would come straight back. The corner setting is untouched:
-  // reset-board only deletes board data, not app settings.
-  commitEditingIfAny();
-  if (wheelSaveTimer) { clearTimeout(wheelSaveTimer); wheelSaveTimer = null; }
-  media.stopAudio();
-  selected = [];
-  editingId = null;
-  try {
-    const showcase = await api.resetBoard();
-    board = welcomeBoard(boardDir, showcase.pdf_size_bytes, showcase.video_size_bytes);
-    board.camera = { x: 0, y: 0, zoom: 1 };
-    settings.setSettings(false);
-    const confirmEl = document.getElementById("reset-confirm") as HTMLDivElement;
-    const btn = document.getElementById("btn-reset") as HTMLButtonElement;
-    if (confirmEl) confirmEl.style.display = "none";
-    if (btn) btn.style.display = "";
-    undoStore.save();
-    render();
-    void drops.refreshLinkPreviews();
-    toast(DEMO ? "Demo board reset — nothing was saved" : "Board data deleted — fresh welcome board restored");
-  } catch (e) {
-    toast(`Reset failed: ${String(e)}`);
-  }
-});
-document.getElementById("btn-settings")?.addEventListener("click", () => settings.setSettings(!settings.isOpen()));
-for (const btn of Array.from(document.querySelectorAll("[data-settings-tab]"))) {
-  (btn as HTMLElement).addEventListener("click", () => settings.setSettingsTab((btn as HTMLElement).dataset.settingsTab ?? "general"));
-}
-document.getElementById("settings-close")?.addEventListener("click", () => settings.setSettings(false));
-document.getElementById("settings-backdrop")?.addEventListener("click", (e) => {
-  if ((e.target as HTMLElement).id === "settings-backdrop") settings.setSettings(false);
+// The settings window is a plugin (core-settings) and owns its
+// own buttons (reset, tabs, close, backdrop). The toolbar's
+// Settings button is still core wiring; it toggles the window
+// through the plugin system.
+document.getElementById("btn-settings")?.addEventListener("click", () => {
+  if (isSettingsUIOpen()) closeSettingsUI(); else openSettingsUI();
 });
 
 
@@ -1846,11 +1832,7 @@ async function init(): Promise<void> {
     const loaded = await api.loadBoard();
     boardDir = loaded.board_dir;
     if (Array.isArray(loaded.panelOrder)) panelOrderList = loaded.panelOrder.filter((x: unknown) => typeof x === "string");
-    const boardDirEl = document.getElementById("board-dir-meta");
-    if (boardDirEl) boardDirEl.textContent = `Board folder: ${boardDir}`;
     currentBuildId = loaded.buildId ?? "dev";
-    const buildEl = document.getElementById("build-meta");
-    if (buildEl) buildEl.textContent = `Build: ${currentBuildId}`;
     if (loaded.json) {
       const parsed = JSON.parse(loaded.json) as Board;
       board = parsed;
@@ -2002,6 +1984,12 @@ async function init(): Promise<void> {
       board.camera = { x: cam.x, y: cam.y, zoom: Math.max(0.1, Math.min(8, cam.zoom)) };
       undoStore.save(); render();
     },
+    setCanvas: (patch) => {
+      if (patch.bg !== undefined) board.bg = patch.bg;
+      if (patch.grid !== undefined) board.grid = patch.grid;
+      undoStore.save(); render();
+    },
+    boardEl: document.getElementById("board") as HTMLElement,
     centreOn: (id) => {
       const it = boardGet(board, id);
       if (!it) return;
@@ -2014,9 +2002,9 @@ async function init(): Promise<void> {
     },
     toast: (msg: string) => toast(msg),
     commitEditing: () => commitEditingIfAny(),
-    openSettings: () => settings.setSettings(true),
-    closeSettings: () => settings.setSettings(false),
-    isSettingsOpen: () => settings.isOpen(),
+    openSettings: () => openSettingsUI(),
+    closeSettings: () => closeSettingsUI(),
+    isSettingsOpen: () => isSettingsUIOpen(),
     undo: () => undoStore.undo(),
     redo: () => undoStore.redo(),
     canUndo: () => undoStore.canUndo(),
@@ -2024,6 +2012,23 @@ async function init(): Promise<void> {
     groupSelection: () => groupSelected(),
     ungroupSelection: () => ungroupSelected(),
     deleteSelection: () => deleteSelected(),
+    restoreBackup: (name) => restoreBoardBackup(name),
+    getBuildId: () => currentBuildId,
+    resetBoard: () => resetBoardToWelcome(),
+    getBoardDir: () => boardDir,
+    getPanelOrder: () => [...panelOrderList],
+    setPanelOrder: (order: string[]) => {
+      panelOrderList = order.filter((x) => typeof x === "string");
+      void api.setPanelOrder(panelOrderList);
+    },
+  };
+  // The shell: the DOM the plugin system manages. The core
+  // still builds this shell today (index.html), so it
+  // registers the elements here; as each surface moves into
+  // a plugin, that plugin registers its own elements instead
+  // and the core stops building them. The plugin system only
+  // ever reads them through the shell, never from the core.
+  registerShellElements({
     toolbarToolsEl: document.getElementById("tools") as HTMLElement,
     panelsEl: document.getElementById("plugin-panels") as HTMLElement,
     panelsToggleEl: document.getElementById("panels-toggle") as HTMLElement,
@@ -2040,14 +2045,12 @@ async function init(): Promise<void> {
     ],
     viewSwitcherEl: document.getElementById("view-switcher") as HTMLElement,
     overlaysEl: document.getElementById("plugin-overlays") as HTMLElement,
-    settingsSectionsEl: document.getElementById("plugin-settings-sections") as HTMLElement,
-    getPanelOrder: () => [...panelOrderList],
-    setPanelOrder: (order: string[]) => {
-      panelOrderList = order.filter((x) => typeof x === "string");
-      void api.setPanelOrder(panelOrderList);
-    },
-  };
-  await initPlugins(pluginHost, api);
+    // settingsSectionsEl is registered by the settings plugin
+    // itself (core-settings), which builds that container.
+  });
+  await initPlugins(pluginHost, api, [
+    { manifest: coreSettings.manifest, module: coreSettings },
+  ]);
   render();
   // Preload the context index now, in the background,
   // so the first search does not pay the index-load

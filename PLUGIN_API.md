@@ -90,6 +90,9 @@ Enable and disable are per plugin, in Settings → Plugins. Disabling unregister
 - `moveItem(id, toIndex)` — move an item to a position in board order, which is also paint order and, for frames, slide order. Requires `board:write`. Returns false when the item does not exist. It saves like any board change, so it is undoable.
 - `save()` — save through the core's save path, including the demo-mode no-op. Most board methods save automatically. Call this after a batch of changes made without a method call. Requires `board:write`.
 - `render()` — re-render the board.
+- `setCanvas({ bg, grid })` — set the board's background colour and/or grid (`"Dots"`, `"Lines"` or `"Off"`). A board-level write, so it requires `board:write`. This is how the Settings plugin's canvas options work.
+- `reset()` — reset the board to a fresh welcome board, exactly as Settings → Data → Delete all board data does. Requires `board:write`. Not available to a trial plugin.
+- `getDir()` — the board's folder on disk, for display. Read-only, no permission needed.
 
 Board methods validate their input and throw on bad ids, bad positions, or a plugin trying to edit another plugin's card data. A plugin may read any card, but may only write its own plugin cards, plus core kinds for position, size and group.
 
@@ -105,6 +108,19 @@ Multi-board is a plugin, not core UI: the core owns one board at a time, and thi
 - `switch(name, preserveUndo?)` — switch to a board, returning true on success. `preserveUndo` is for a rename followed by a switch to the new name, where the board is the same board in a new folder, so its undo stack is kept instead of swapped. The current board name is stored in app settings, so the last board survives the Boards plugin being turned off.
 - `rename(oldName, newName)` — rename a board's folder and display name.
 - `delete(name)` — delete a board's folder, including its assets and backups, after the plugin's own confirmation. It refuses the current board: switch to another board first, then delete, or the renderer would be left on a deleted folder.
+
+### App — `api.app`
+
+Read-only information about the app itself. No permission needed.
+
+- `getBuildId()` — the build id for this run (a git short hash in a packaged build, `"dev"` from source). The feedback message carries it so a report can be matched to the exact build.
+- `getPlatform()` — the OS platform string (`"darwin"`, `"win32"`, `"linux"`).
+- `isDemo()` — whether the app is running in demo mode (a fresh welcome board, nothing saved).
+
+### Backups — `api.backups`
+
+- `list()` — the board's backups, newest first: `[{ name, items, size }]`. Read-only, no permission needed. In demo mode the list is empty.
+- `restore(name)` — restore a backup, loading its board into the app, like `boards.switch`. Requires `board:write`. Not available to a trial plugin. Returns true on success.
 
 ### Window — `api.window`
 
@@ -124,7 +140,7 @@ Requires the `window` permission. These are main-process primitives a renderer p
 - `setView(id)` — switch views. `"board"` always exists and is always the way back. A plugin view cannot remove it, and the core draws the view switcher itself, so the exit control is never inside plugin code.
 - `listViews()` — `[{ id, title, plugin }]`.
 
-A view is registered with `api.ui.registerView({ id, title, render, onShow, onHide })`. When the view is active, the core hides the 2D canvas layers and shows the view's container, which fills the board area. The toolbar, search and Settings stay core-owned and reachable. `render(container, board)` is called on activation and whenever the board changes while the view is active. Pause expensive work (WebGL, video) when `onHide` fires. The core does not do that for you.
+A view is registered with `api.ui.registerView({ id, title, render, onShow, onHide })`. When the view is active, the core hides the 2D canvas layers and shows the view's container, which fills the board area. The toolbar and search stay reachable. `render(container, board)` is called on activation and whenever the board changes while the view is active. Pause expensive work (WebGL, video) when `onHide` fires. The core does not do that for you.
 
 A view is a view of the board, not a separate app. Extra per-item data (depth, rotation) lives in that plugin's namespace, never overwriting the 2D position and size. Switching back to `"board"` must restore the 2D layout exactly. A view that needs its own separate scene should store that scene as a plugin card's data, not as a replacement for the board.
 
@@ -141,6 +157,11 @@ A view is a view of the board, not a separate app. Extra per-item data (depth, r
 - `openSettings()`, `closeSettings()`, `isSettingsOpen()` — open, close, and check Settings.
 - `registerOverlay({ id, render })` — a full-board overlay layer that takes no clicks itself (pointer-events: none). Interactive elements inside it must set pointer-events: auto on themselves, so board clicks pass through everywhere except on your own controls. This is how a corner button can sit in a corner without blocking the board.
 - `registerSettingsSection({ id, title, render })` — a section in Settings → Plugin settings, rendered with its own heading when that tab is shown, and only for plugins that are on. Use it for app-level settings, like the Hide plugin's corner picker. Board-level controls belong in a panel, not here.
+- `renderSettingsSections()` — re-render every registered settings section into the settings container. A settings UI calls this after a plugin is enabled or disabled, so the sections match the plugins that are on.
+- `boardEl` — the board area element: the mount point for board overlays. A UI plugin appends its overlay DOM here (the Settings window is one). A plugin never queries core DOM by id; the API hands it this mount point instead.
+- `setSettingsSectionsContainer(el)` — hand the plugin system the container that plugin settings sections render into. The Settings plugin provides this; other plugins do not call it.
+- `registerSettingsUI({ open, close, isOpen, setTab, refresh })` — register a plugin as the settings UI, so the core can open, close and refresh it without knowing which plugin provides it. Only the Settings plugin calls this. `refresh()` re-renders the settings window's canvas options and meta to match the current board (after an undo, for example).
+- `listShortcuts()` — every shortcut a plugin registered: `[{ pluginId, pluginName, key, title }]`, so a settings UI can list them alongside the core's.
 - `registerShortcut({ key, title, run })` — a single-key shortcut, no modifiers, listed in Settings' shortcuts table with the plugin's name. Core keys win: the core checks its own shortcuts first, and a plugin shortcut is only tried for keys the core did not handle, with Ctrl/Cmd held keys excluded, so a plugin cannot steal Ctrl+G. Shortcuts do not fire in a textarea, in the search box, while editing, or while Settings is open. A plugin that needs a modifier shortcut listens for it itself, in the capture phase, as the Command Palette does for Cmd/Ctrl+K, and must remove that listener in `deactivate`.
 - `registerView({ id, title, render, onShow, onHide })` — see View above. Requires `view:replace`.
 
@@ -181,6 +202,8 @@ For secrets, which survive restarts like storage but are not plain text on disk.
 
 Adding this domain did not change `apiVersion`. It stays `"1"`, because additive additions do not break existing plugins.
 
+- `list()` — every loaded plugin with its state: `[{ id, name, version, description, active, failed, error, trial }]`. Read-only, no permission needed. This is how a settings UI shows the plugin list.
+- `setEnabled(id, enabled)` — enable or disable a plugin. Requires the `plugins:install` permission, like install. A trial plugin cannot be toggled this way.
 - `plugins.install({ id, name, description, permissions, mainCode, styleCode })` — write a plugin to the user plugins folder, never the bundled folder, and never over an existing plugin with the same id. Requires the `plugins:install` permission. Blocked in demo mode. The manifest is built by the core, with `apiVersion "1"` and `version "1.0.0"`.
 - `plugins.refresh()` — re-scan for plugins installed since startup, and activate any new ones that are enabled, with no restart. Requires the `plugins:install` permission.
 - `plugins.try({ id, name, description, permissions, mainCode, styleCode })` — activate a plugin in memory only, without writing anything to disk, so it can be tried before it is installed. Requires the `plugins:install` permission. A trial plugin runs with the same permission checks as an installed plugin, but it cannot install other plugins, and it cannot create, rename, switch or delete boards — those calls throw while it is being tried. Board writes it does make are undoable, like any board write. Its own storage writes, if it has the `storage` permission, are scoped by its id and inert once the trial ends, because no plugin with that id exists to read them again.
@@ -242,6 +265,12 @@ Plugins in `plugins/` ship inside the app, are listed in Settings as "Built in",
 - `command-palette/` — Cmd or Ctrl + K opens one place to run anything: plugin commands, jumping to a board card, switching views, picking a tool, and core actions like zoom, group, ungroup, delete, Settings, minimise and hide. Type to search, Arrow keys to move, Enter to run, Esc to close. Needs `board:write` and `window`.
 - `boards/` — multiple boards, as a panel: click a board to open it, click the current board's name to rename it inline, × to delete it (with confirmation), and a name field plus New board to create one and open it at once. Needs `board:write`.
 - `tidy-up/` — align and distribute the selected cards, from a panel: six align actions (to an edge or the centre of the selection) and two distribute actions (even spacing, first and last cards fixed). Needs 2 or more selected cards to align, 3 or more to distribute. Cards only. Needs `board:write`.
+
+## First-party plugins (the core UI is plugins too)
+
+The core is headless: it owns the board model, persistence, the plugin host and this API, and it renders nothing. Every visible thing is a plugin built on this API — including the built-in UI. The built-in UI plugins live in `src/core-plugins/`, are ES modules bundled with the app, and are loaded with `activateFirstPartyPlugin` at boot, before user plugins. They get the same `PluginContext`, the same permission checks and the same manifest as a user plugin. The only difference is loading: a user plugin is a single-file `main.js` loaded from a blob URL; a first-party plugin is an ES module imported by the core. A first-party plugin has no back door: if it needs something, that something is in this API. See `ARCHITECTURE.md` for the full design and the migration order.
+
+- `core-settings/` — the Settings window (General, Plugins, Plugin settings). It builds its own DOM, registers itself as the settings UI (`api.ui.registerSettingsUI`), and hands the plugin system the container its settings sections render into (`api.ui.setSettingsSectionsContainer`). It uses `api.board` (canvas, reset, folder), `api.app`, `api.backups` and `api.plugins` (list, enable/disable). It is the reference implementation for a UI plugin: a plugin that replaces a piece of the built-in UI is built the same way.
 
 ## Frame cards
 

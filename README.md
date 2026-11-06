@@ -98,9 +98,12 @@ electron/   main process: window, board file, asset embedding,
             link previews, IPC
   main.js, preload.js, peek.html, dev.js
 src/        renderer
-  main.ts     board UI: tools, rendering, interactions, settings
+  main.ts     board UI: tools, rendering, interactions (the core
+              renders the board; the Settings window is a plugin)
   model.ts    board data, geometry, hit-testing, grouping, markdown
   plugins.ts  plugin API: discovery, panels, views, tools, cards
+  core-plugins/  first-party UI plugins (Settings), built on the
+              same plugin API as user plugins — see ARCHITECTURE.md
   welcome.ts  the welcome board
   styles.css  board styling
 plugins/    bundled plugins: hide, visual-library, palette,

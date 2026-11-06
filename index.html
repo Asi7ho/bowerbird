@@ -63,51 +63,6 @@
           <button id="btn-settings" title="Settings (?)" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h9M17 8h3M4 16h3M11 16h9" /><circle cx="15" cy="8" r="2.2" /><circle cx="9" cy="16" r="2.2" /></svg></button>
         </div>
       </div>
-      <div id="settings-backdrop">
-        <div id="settings">
-          <div id="settings-header">
-            <h2>Settings</h2>
-            <button class="close" id="settings-close" title="Close (Esc)">×</button>
-          </div>
-          <div id="settings-layout">
-            <div id="settings-tabs">
-              <button data-settings-tab="general" class="active">General</button>
-              <button data-settings-tab="plugins">Plugins</button>
-              <button data-settings-tab="plugin-settings">Plugin settings</button>
-            </div>
-            <div id="settings-content">
-              <div id="settings-section-general" class="settings-section">
-                <h3>Keyboard shortcuts</h3>
-                <table id="shortcuts-table"></table>
-                <h3>Canvas</h3>
-                <div class="canvas-opt" id="bg-opts"></div>
-                <div class="canvas-opt" id="grid-opts"></div>
-                <h3>Data</h3>
-                <p class="meta" id="board-dir-meta"></p>
-                <p class="meta" id="build-meta"></p>
-                <button id="btn-reset">Delete all board data</button>
-                <div id="reset-confirm" style="display:none">
-                  <p class="meta">You can undo it with Ctrl / Cmd + Z.</p>
-                  <button id="btn-reset-confirm">Delete everything</button>
-                </div>
-                <h3>Backups</h3>
-                <div id="backups-list"></div>
-                <h3>Send feedback</h3>
-                <p class="meta">Opens in your email app, addressed to <span class="email">wren7762@gmail.com</span>.</p>
-                <textarea id="feedback-text" rows="4" placeholder="What happened, or what would you like?"></textarea>
-                <button id="btn-feedback">Send feedback</button>
-              </div>
-              <div id="settings-section-plugins" class="settings-section" style="display:none">
-                <div id="plugin-list"></div>
-              </div>
-              <div id="settings-section-plugin-settings" class="settings-section" style="display:none">
-                <div id="plugin-settings-sections"></div>
-                <p class="meta" id="plugin-settings-empty" style="display:none">No plugin settings</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
       <div id="toast"></div>
     </div>
     </div>

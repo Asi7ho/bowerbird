@@ -1155,7 +1155,7 @@ function registerIpc() {
     // Feedback: the Settings feedback box opens the tester's
     // mail app with a prefilled message to the maker. Only
     // this one address is allowed — the address must match
-    // FEEDBACK_EMAIL in src/settings.ts — so nothing else can
+    // FEEDBACK_EMAIL in src/core-plugins/settings.ts — so nothing else can
     // use the channel to open a compose window. Opening a
     // composer sends nothing by itself; the tester still
     // presses Send in their mail app.
