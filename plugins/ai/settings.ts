@@ -59,6 +59,8 @@ export function renderSettings(api: PluginContext, container: HTMLElement): void
   container.appendChild(intro);
 
   // Provider.
+  const providerField = document.createElement("div");
+  providerField.className = "ai-field";
   const providerLabel = document.createElement("label");
   providerLabel.textContent = "Provider";
   const providerSelect = document.createElement("select");
@@ -68,30 +70,38 @@ export function renderSettings(api: PluginContext, container: HTMLElement): void
     opt.textContent = p.label;
     providerSelect.appendChild(opt);
   }
-  providerLabel.appendChild(providerSelect);
-  container.appendChild(providerLabel);
+  providerField.appendChild(providerLabel);
+  providerField.appendChild(providerSelect);
+  container.appendChild(providerField);
 
   // API key.
+  const keyField = document.createElement("div");
+  keyField.className = "ai-field";
   const keyLabel = document.createElement("label");
   keyLabel.textContent = "API key";
   const keyInput = document.createElement("input");
   keyInput.type = "password";
   keyInput.placeholder = "Paste your API key";
   keyInput.autocomplete = "off";
-  keyLabel.appendChild(keyInput);
-  container.appendChild(keyLabel);
+  keyField.appendChild(keyLabel);
+  keyField.appendChild(keyInput);
+  container.appendChild(keyField);
 
   const keyState = document.createElement("p");
+  keyState.className = "ai-key-state";
   container.appendChild(keyState);
 
   // Model.
+  const modelField = document.createElement("div");
+  modelField.className = "ai-field";
   const modelLabel = document.createElement("label");
   modelLabel.textContent = "Model";
   const modelInput = document.createElement("input");
   modelInput.type = "text";
   modelInput.autocomplete = "off";
-  modelLabel.appendChild(modelInput);
-  container.appendChild(modelLabel);
+  modelField.appendChild(modelLabel);
+  modelField.appendChild(modelInput);
+  container.appendChild(modelField);
 
   const saveBtn = document.createElement("button");
   saveBtn.type = "button";

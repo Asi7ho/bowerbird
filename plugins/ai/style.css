@@ -1,3 +1,37 @@
+/* Settings: one field per line, label above the input. */
+.plugin-panel-body .ai-field,
+.plugin-settings-section .ai-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.plugin-settings-section .ai-field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.plugin-settings-section .ai-field select,
+.plugin-settings-section .ai-field input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+}
+
+.plugin-settings-section .ai-key-state {
+  color: var(--grey);
+  font-size: 12px;
+  margin: 0 0 12px;
+}
+
 /* AI chat. Uses the app's own tokens, not a custom look:
    card radius and shadow for messages, the title-bar search
    field for the input, the panel button for send. */
