@@ -62,7 +62,6 @@ const SHORTCUTS: Array<[string, string]> = [
   ["Ctrl / Cmd + scroll", "Zoom at the cursor"],
   ["Scroll", "Pan the canvas"],
   ["Space + drag", "Pan the canvas"],
-  ["?", "Open settings"],
   ["Ctrl / Cmd + ,", "Open settings"],
   ["Esc", "Close settings, commit a note, or clear the selection"],
   ["Tab", "Go to the next element"],

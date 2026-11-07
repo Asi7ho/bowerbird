@@ -1520,10 +1520,9 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   }
   const ctrl = e.ctrlKey || e.metaKey;
   if (e.key === " " || e.key === " ") spaceDown = true;
-  if (e.key === "?") { openSettingsUI(); return; }
   // Ctrl/Cmd+, is the standard preferences shortcut on the
-  // Mac (and in many apps elsewhere). Same job as ?, and
-  // guarded the same way: Settings being open already
+  // Mac (and in many apps elsewhere). Guarded the same way
+  // as the other board keys: Settings being open already
   // returns above, and textareas and the search box return
   // before this, so typing a comma never opens the sheet.
   if (ctrl && e.key === ",") { openSettingsUI(); return; }
