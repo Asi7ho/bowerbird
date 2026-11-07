@@ -17,6 +17,16 @@ export interface Provider {
 export const PROVIDERS: Provider[] = [
   { id: "openai", label: "OpenAI", base: "https://api.openai.com/v1", defaultModel: "gpt-4o-mini" },
   { id: "ollama", label: "Ollama Cloud", base: "https://ollama.com/v1", defaultModel: "gpt-oss:120b" },
+  // The rest all speak OpenAI-compatible chat completions with a
+  // Bearer key, so they are just a base URL and a default model —
+  // no new request shape. Anthropic (Claude) is the exception:
+  // its API is a different shape (/v1/messages, x-api-key), so it
+  // would need its own path in the main process, not a list entry.
+  { id: "gemini", label: "Google Gemini", base: "https://generativelanguage.googleapis.com/v1beta/openai/", defaultModel: "gemini-2.5-flash" },
+  { id: "grok", label: "xAI Grok", base: "https://api.x.ai/v1", defaultModel: "grok-4" },
+  { id: "deepseek", label: "DeepSeek", base: "https://api.deepseek.com/v1", defaultModel: "deepseek-chat" },
+  { id: "mistral", label: "Mistral", base: "https://api.mistral.ai/v1", defaultModel: "mistral-small-latest" },
+  { id: "openrouter", label: "OpenRouter", base: "https://openrouter.ai/api/v1", defaultModel: "openai/gpt-4o-mini" },
 ];
 
 export function providerById(id: string): Provider {
