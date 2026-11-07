@@ -1,0 +1,26 @@
+{
+  "id": "ai",
+  "name": "AI",
+  "version": "1.0.0",
+  "apiVersion": "2",
+  "description": "Chat with an AI to build a plugin. Describe what you want, it writes the plugin, you install it.",
+  "permissions": [
+    "board:read",
+    "board:write",
+    "storage",
+    "plugins:install",
+    "ai"
+  ],
+  "main": "main.ts",
+  "contributions": {
+    "panels": [
+      {
+        "id": "ai-chat",
+        "title": "AI"
+      }
+    ]
+  },
+  "styles": [
+    "style.css"
+  ]
+}

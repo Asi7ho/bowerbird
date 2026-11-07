@@ -146,6 +146,12 @@ is the `PluginContext` type in `src/plugins.ts`. The domains:
   can.
 - `plugins` — list, enable / disable, reset, install, try in
   memory, end a trial. Needs `plugins:install`.
+- `ai` — chat completions (`chat({ base, key, model, messages })`),
+  run in the main process, not the renderer. Only the
+  chat-completions path of the given base is called, with the
+  caller's own key, which is never stored by the main process.
+  Public bases must be https; a localhost base may be http, for
+  a local model server. Needs `ai`.
 - `events` — `on` / `off` for `selection`, `board`, `view`, `pen`,
   `tool`. Do not write to the board synchronously inside a `board`
   handler in a way that loops.

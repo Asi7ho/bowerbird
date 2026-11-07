@@ -29,6 +29,7 @@ contextBridge.exposeInMainWorld("bowerbird", {
   readTextFile: (filePath: string) => ipcRenderer.invoke("bowerbird:read-text-file", filePath),
   fileSize: (filePath: string) => ipcRenderer.invoke("bowerbird:file-size", filePath),
   fetchPreview: (url: string) => ipcRenderer.invoke("bowerbird:fetch-preview", url),
+  aiChat: (opts: { base: string; key: string; model: string; messages: Array<{ role: string; content: string }> }) => ipcRenderer.invoke("bowerbird:ai-chat", opts),
   openExternal: (target: string) => ipcRenderer.invoke("bowerbird:open-external", target),
   getAppSettings: () => ipcRenderer.invoke("bowerbird:get-app-settings"),
   setCorner: (corner: string) => ipcRenderer.invoke("bowerbird:set-corner", corner),

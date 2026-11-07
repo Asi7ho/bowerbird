@@ -164,6 +164,7 @@ export interface PluginBridge {
   readTextFile(path: string): Promise<string>;
   fileSize(path: string): Promise<number>;
   fetchPreview(url: string): Promise<{ title: string | null; description: string | null; image: string | null; icon: string | null }>;
+  aiChat(opts: { base: string; key: string; model: string; messages: Array<{ role: string; content: string }> }): Promise<string>;
   openExternal(target: string): Promise<void>;
   listBackups(): Promise<Array<{ name: string; items: number; size: number }>>;
   listPlugins(): Promise<PluginManifest[]>;
@@ -531,6 +532,15 @@ export interface PluginContext {
     fileSize: (path: string) => Promise<number>;
     openExternal: (target: string) => Promise<void>;
     fetchPreview: (url: string) => Promise<{ title: string | null; description: string | null; image: string | null; icon: string | null }>;
+  };
+  // AI chat completions, run in the main process (not the
+  // renderer): a browser fetch from the renderer is subject
+  // to the provider's CORS policy, and a local model server
+  // is http, not https. The caller's own key is passed
+  // per call and never stored by the main process. Needs
+  // the "ai" permission.
+  ai: {
+    chat: (opts: { base: string; key: string; model: string; messages: Array<{ role: string; content: string }> }) => Promise<string>;
   };
   storage: {
     get: (key: string) => Promise<unknown>;
@@ -1318,6 +1328,12 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       fetchPreview: async (url: string) => {
         require("files:read");
         return bridge!.fetchPreview(url);
+      },
+    },
+    ai: {
+      chat: async (opts: { base: string; key: string; model: string; messages: Array<{ role: string; content: string }> }) => {
+        require("ai");
+        return bridge!.aiChat(opts);
       },
     },
     storage: {

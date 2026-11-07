@@ -1251,19 +1251,19 @@ function registerIpc(): void {
     if (fs.existsSync(folder)) throw new Error(`a plugin called ${id} already exists`);
     const styles = typeof styleCode === "string" && styleCode.trim() ? ["style.css"] : [];
     const manifest = {
-      apiVersion: "1",
+      apiVersion: "2",
       id,
       name: name.trim(),
       description: typeof description === "string" ? description : "",
       version: "1.0.0",
-      main: "main.js",
+      main: "main.ts",
       styles,
       permissions,
     };
     fs.mkdirSync(folder, { recursive: true });
     try {
       fs.writeFileSync(path.join(folder, "manifest.json"), JSON.stringify(manifest, null, 2));
-      fs.writeFileSync(path.join(folder, "main.js"), mainCode);
+      fs.writeFileSync(path.join(folder, "main.ts"), mainCode);
       if (styles.length) fs.writeFileSync(path.join(folder, "style.css"), styleCode as string);
     } catch (e) {
       fs.rmSync(folder, { recursive: true, force: true });
@@ -1280,6 +1280,52 @@ function registerIpc(): void {
   // never stored here. Public bases must be https; a
   // localhost base may be http, for a local model server.
   // Other private addresses are refused, as with fetchPreview.
+  ipcMain.handle("bowerbird:ai-chat", async (_event, opts: Record<string, unknown>) => {
+    const base = typeof opts?.base === "string" ? opts.base : "";
+    const key = typeof opts?.key === "string" ? opts.key : "";
+    const model = typeof opts?.model === "string" ? opts.model : "";
+    const messages = Array.isArray(opts?.messages) ? opts.messages : [];
+    if (!base || !key || !model || messages.length === 0) {
+      throw new Error("ai chat needs a base URL, an API key, a model and at least one message");
+    }
+    if (!messages.every((m: unknown) => typeof m === "object" && m !== null && typeof (m as { role?: unknown }).role === "string" && typeof (m as { content?: unknown }).content === "string")) {
+      throw new Error("ai messages must be { role, content } objects");
+    }
+    let parsed: URL;
+    try {
+      parsed = new URL(base);
+    } catch {
+      throw new Error("ai base URL is not a valid URL");
+    }
+    const isLocalhost = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "::1";
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("ai base URL must be http or https");
+    if (parsed.protocol === "http:" && !isLocalhost) throw new Error("ai base URL must be https");
+    if (!isLocalhost && isPrivateHost(parsed.hostname)) throw new Error("ai base URL is not a public web address");
+    const url = new URL("chat/completions", base.endsWith("/") ? base : base + "/").href;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+      body: JSON.stringify({ model, messages }),
+      signal: AbortSignal.timeout(120000),
+    });
+    if (!res.ok) {
+      let detail = "";
+      try {
+        const body = await res.text();
+        try {
+          const parsedBody = JSON.parse(body) as { error?: { message?: string } };
+          detail = parsedBody?.error?.message || body.slice(0, 200);
+        } catch {
+          detail = body.slice(0, 200);
+        }
+      } catch { /* no body: status alone */ }
+      throw new Error(`ai request failed (${res.status})${detail ? ": " + detail : ""}`);
+    }
+    const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const content = data?.choices?.[0]?.message?.content;
+    if (typeof content !== "string") throw new Error("ai response had no message");
+    return content;
+  });
   ipcMain.handle("bowerbird:plugin-storage-get", (_event, pluginId: string, key: string) => {
     const data = loadPluginStorage();
     const per = data[pluginId];

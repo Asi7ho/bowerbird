@@ -33,6 +33,7 @@ export interface BowerbirdAPI {
   readTextFile(path: string): Promise<string>;
   fileSize(path: string): Promise<number>;
   fetchPreview(url: string): Promise<{ title: string | null; description: string | null; image: string | null; icon: string | null }>;
+  aiChat(opts: { base: string; key: string; model: string; messages: Array<{ role: string; content: string }> }): Promise<string>;
   openExternal(target: string): Promise<void>;
   getAppSettings(): Promise<{ corner: string; panelOrder?: string[] }>;
   setCorner(corner: string): Promise<string>;

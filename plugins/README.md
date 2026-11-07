@@ -35,6 +35,11 @@ JavaScript never depends on the core's source at runtime.
   views, picking a tool, and core actions.
 - `tidy-up/` — align and distribute the selected cards, from a
   panel. Cards only, 2 or more to align, 3 or more to distribute.
+- `ai/` — chat with an AI to build a plugin. Describe what you
+  want in the chat panel; the AI writes the plugin; install it
+  from the reply. Paste your API key in Settings → Plugin
+  settings → AI (OpenAI or Ollama Cloud). The key lives in
+  secure storage; the chat call runs in the main process.
 
 Packaging: `scripts/package-mac.sh` copies this folder into the
 app bundle (`Contents/Resources/app/plugins/`). Running from
