@@ -1,1 +1,22 @@
-{"apiVersion":"2","contributions":{"panels":[{"id":"boards","title":"Boards"}]},"description":"Multiple boards: switch between boards, create a new one, rename or delete a board. The default board is Main; other boards live in their own folders, each with its own files and backups. This is a bundled plugin: it ships inside the app and is off by default.","id":"boards","main":"main.js","name":"Boards","permissions":["board:write"],"styles":["style.css"],"version":"1.0.0"}
+{
+  "apiVersion": "2",
+  "contributions": {
+    "panels": [
+      {
+        "id": "boards",
+        "title": "Boards"
+      }
+    ]
+  },
+  "description": "Multiple boards: switch between boards, create a new one, rename or delete a board. The default board is Main; other boards live in their own folders, each with its own files and backups. This is a bundled plugin: it ships inside the app and is off by default.",
+  "id": "boards",
+  "main": "main.ts",
+  "name": "Boards",
+  "permissions": [
+    "board:write"
+  ],
+  "styles": [
+    "style.css"
+  ],
+  "version": "1.0.0"
+}

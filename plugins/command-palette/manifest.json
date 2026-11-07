@@ -1,1 +1,29 @@
-{"apiVersion":"2","contributions":{"commands":[{"id":"open","title":"Open command palette"}],"overlays":[{"id":"palette","title":"Command palette"}]},"description":"Every command, from one place. Press Cmd or Ctrl + K, type to search, Enter to run.","id":"command-palette","main":"main.js","name":"Command Palette","permissions":["board:write","window"],"styles":["style.css"],"version":"1.0.0"}
+{
+  "apiVersion": "2",
+  "contributions": {
+    "commands": [
+      {
+        "id": "open",
+        "title": "Open command palette"
+      }
+    ],
+    "overlays": [
+      {
+        "id": "palette",
+        "title": "Command palette"
+      }
+    ]
+  },
+  "description": "Every command, from one place. Press Cmd or Ctrl + K, type to search, Enter to run.",
+  "id": "command-palette",
+  "main": "main.ts",
+  "name": "Command Palette",
+  "permissions": [
+    "board:write",
+    "window"
+  ],
+  "styles": [
+    "style.css"
+  ],
+  "version": "1.0.0"
+}

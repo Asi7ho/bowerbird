@@ -8,7 +8,7 @@
     "window",
     "board:write"
   ],
-  "main": "main.js",
+  "main": "main.ts",
   "styles": [
     "style.css"
   ],

@@ -19,6 +19,12 @@ import * as path from "node:path";
 import { createBackups } from "./backups";
 import { handleAppFileRequest, MIME } from "./appFile";
 import * as context from "./context";
+// The plugin TypeScript transpiler, bundled into electron-dist at
+// build time (scripts/bundle-sucrase.mjs). The packaged app ships
+// no node_modules, so the transpiler is a file inside electron-dist.
+// Types come from electron/sucrase.d.cts; the .cjs itself is never
+// type-checked.
+import { transform as sucraseTransform } from "./sucrase.cjs";
 
 let win: BaseWindow | null = null;
 let boardView: WebContentsView | null = null;
@@ -1411,11 +1417,31 @@ app.whenReady().then(() => {
     boardDir: () => boardDir(),
     assetsDir: () => assetsDir(),
   }));
+  // Plugin TypeScript is compiled in the app, not at build time.
+  // The plugin: scheme serves a .ts file by transpiling it to
+  // JavaScript (Sucrase, bundled into electron-dist/sucrase.cjs),
+  // and a .js request falls back to the .ts of the same name when
+  // no .js exists on disk — so a plugin's main.ts can import
+  // ./helper.js and get the transpiled helper.ts. The result is
+  // cached by file path + mtime, so editing a .ts file while the
+  // app runs is picked up on the next request, with no restart
+  // and no rebuild. A plugin is just files in a folder; adding
+  // one is dropping it in, not building the app.
+  const tsCache = new Map<string, { mtimeMs: number; js: string }>();
+  function transpilePluginTs(filePath: string): string {
+    const stat = fs.statSync(filePath);
+    const hit = tsCache.get(filePath);
+    if (hit && hit.mtimeMs === stat.mtimeMs) return hit.js;
+    const src = fs.readFileSync(filePath, "utf8");
+    const js = sucraseTransform(src, { transforms: ["typescript"] }).code;
+    tsCache.set(filePath, { mtimeMs: stat.mtimeMs, js });
+    return js;
+  }
   // Plugin files reach the renderer through this scheme, so a
   // plugin's main.js has a real URL base and its relative
   // ES-module imports resolve against its own folder. The URL
   // is plugin://<plugin-id>/<relative-path>. Only the plugin's
-  // own folder is served, and only .js/.css/.json — a path that
+  // own folder is served, and only .js/.ts/.css/.json — a path that
   // escapes the folder, or an unknown plugin id, is a 404.
   protocol.handle("plugin", (request) => {
     try {
@@ -1432,10 +1458,19 @@ app.whenReady().then(() => {
       }
       if (!dir) return new Response("not found", { status: 404 });
       const ext = path.extname(relativePath).toLowerCase();
-      if (![".js", ".css", ".json"].includes(ext)) return new Response("not found", { status: 404 });
+      if (![".js", ".ts", ".css", ".json"].includes(ext)) return new Response("not found", { status: 404 });
       const resolved = path.resolve(dir, relativePath);
       if (resolved !== dir && !resolved.startsWith(dir + path.sep)) {
         return new Response("not found", { status: 404 });
+      }
+      if (ext === ".ts") {
+        return new Response(transpilePluginTs(resolved), { headers: { "Content-Type": "application/javascript" } });
+      }
+      if (ext === ".js" && !fs.existsSync(resolved)) {
+        const tsPath = resolved.slice(0, -3) + ".ts";
+        if (fs.existsSync(tsPath)) {
+          return new Response(transpilePluginTs(tsPath), { headers: { "Content-Type": "application/javascript" } });
+        }
       }
       const data = fs.readFileSync(resolved);
       const type = ext === ".js" ? "application/javascript" : ext === ".css" ? "text/css" : "application/json";

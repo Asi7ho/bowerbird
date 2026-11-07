@@ -10,7 +10,7 @@
   },
   "description": "A colour wheel: pick a colour and five palettes are made from it, following colour theory. Click or drag a colour to place it as a swatch.",
   "id": "palette",
-  "main": "main.js",
+  "main": "main.ts",
   "name": "Palette",
   "permissions": [
     "board:write",

@@ -1,15 +1,41 @@
 # Bundled plugins
 
-Plugins in this folder ship inside the app. They are listed in Settings → Plugins as "Built in" and update with the app. They use exactly the same Plugin API as user plugins, no backdoors, so a bundled plugin is also proof that the API can build that feature. See `PLUGIN_API.md` in the repo root for the API.
+Plugins in this folder ship inside the app. They are listed in
+Settings → Plugins as "Built in" and update with the app. They
+use exactly the same Plugin API as user plugins, no backdoors,
+so a bundled plugin is also proof that the API can build that
+feature. See `PLUGIN_API.md` in the repo root for the API.
 
-They are written in TypeScript, like the core plugins: each one is a `main.ts` entry point plus its own modules, compiled to `.js` in place by `scripts/build-plugins.mjs` (type-checked by `tsc -p tsconfig.plugins.json`, both wired into `npm run build` and `npm run dev`). The `.js` is a build artifact and is gitignored; the `.ts` is the source. A plugin's modules import the API types only (`import type { PluginContext } from "../../src/plugins"`), so the compiled JavaScript never depends on the core's source at runtime.
+They are written in TypeScript: each one is a `main.ts` entry
+point plus its own modules. The app compiles them when it loads
+— there is no build step, and the `.ts` is the source. A
+plugin's modules import the API types only (`import type {
+PluginContext } from "../../src/plugins"`), so the compiled
+JavaScript never depends on the core's source at runtime.
+`npm run typecheck:plugins` type-checks them.
 
-- `hide/` — the corner button that hides Bowerbird into a corner, the corner picker in Settings, and H to minimise. The main process still owns what a renderer plugin cannot do: hiding the window, showing the peek icon, and remembering the corner.
-- `visual-library/` — the library is the board. Every board card except strokes and connectors, in board order, under a single Uncategorized section. Click a card to focus its original on the board, centred and selected. Drag to duplicate at the drop point. A view shows the same cards as a masonry board. There is no library folder.
-- `palette/` — a colour wheel panel. Pick a colour on the wheel (hue round the wheel, saturation from centre to edge, lightness on the slider) or with the eyedropper beside the preview, which samples a colour straight from the screen, and five palettes are made from it live: Monochromatic, Analogous, Complementary, Split complementary, Triadic, five colours each. Picking a colour also sets the pen to it, so the next pen stroke is that colour, and the toolbar's pen swatches show it; picking a toolbar swatch updates Palette back. Click a colour, or the preview swatch, to place a 120x120 swatch at the camera centre. Drag to place it at the drop point. Placed swatches are ordinary board Swatch items, so they survive disabling the plugin. The picked colour is saved in plugin storage, so it survives restarts and re-enabling. Needs `board:write` and `storage`.
-- `presentation/` — slides are frames on the board. Draw a rectangle around cards to make a slide, then play it. A slide shows only its dashed border on the board, with a "Slide N" label, so the cards inside stay visible and editable. Move a card into a frame and it joins that slide. The panel lists slides in board order, with Play and Draw a slide at the top, per-slide Move up, Move down, Play and Delete, and Export pinned to the very bottom, below a scrolling slide list. Each row shows a small thumbnail of its slide's layout — its cards as rectangles in frame-relative positions, swatches in their colour — and the slide playing now is highlighted. A new slide goes last; the up and down buttons move its frame in board order, which renumbers the slides and changes play and export order, and is undoable. Double-clicking a frame on the board plays from that slide. Its slide geometry uses `api.geometry` from the core, not a local copy. Export downloads all slides, in order, as a single HTML file that shows one slide at a time, with arrows and a counter, images, audio and video embedded, links as real links, and print CSS for one slide per page, so it can be opened anywhere and printed to PDF from a browser. Playing shows a frame's area, scaled to fit, cropped to the frame: every card that overlaps it, every pen stroke and connector segment that enters it, drawing under cards. Video and audio play in place, a link opens outside, other clicks do nothing. Needs `board:write`, `view:replace` and `files:read`.
-- `boards/` — multiple boards, as a panel: click a board to open it, click the current board's name to rename it, × to delete it (with confirmation), and a name field plus New board to create a board and open it at once. Main is the default board and cannot be renamed or deleted. Needs `board:write`.
-- `command-palette/` — press Cmd or Ctrl + K for one place to run anything: plugin commands, jumping to a board card, switching views, picking a tool, and core actions like zoom, undo, redo, group, ungroup, delete, Settings, minimise and hide. Type to search, Arrow keys to move, Enter to run, Esc to close. Needs `board:write` and `window`.
-- `tidy-up/` — align and distribute the selected cards: align to an edge or the centre of the selection, or space them evenly with the first and last cards fixed. Needs 2 or more selected cards to align, 3 or more to distribute. Cards only — strokes and connectors stay where they are. One tidy action is one undo step, through the core's batch `updateItems`. Needs `board:write`.
+- `hide/` — the corner button that hides Bowerbird into a
+  corner, the corner picker in Settings, and H to minimise.
+- `visual-library/` — the library is the board: every board
+  card except strokes and connectors, in board order, under a
+  single Uncategorized section. Click to focus the original,
+  drag to duplicate.
+- `palette/` — a colour wheel panel. Pick a colour and five
+  palettes are made from it live. Click or drag to place a
+  120×120 swatch. Placed swatches are ordinary board Swatch
+  items, so they survive disabling the plugin.
+- `presentation/` — slides are frames on the board. Draw a
+  rectangle around cards to make a slide, then play it. Export
+  downloads all slides as a single HTML file.
+- `boards/` — multiple boards, as a panel: click a board to
+  open it, click the current board's name to rename it, × to
+  delete it, New board to create one.
+- `command-palette/` — Cmd or Ctrl + K for one place to run
+  anything: plugin commands, jumping to a board card, switching
+  views, picking a tool, and core actions.
+- `tidy-up/` — align and distribute the selected cards, from a
+  panel. Cards only, 2 or more to align, 3 or more to distribute.
 
-Packaging: `scripts/package-mac.sh` copies this folder into the app bundle (`Contents/Resources/app/plugins/`), and `scripts/package-demo.sh` copies the normal app, so the demo includes bundled plugins too. Running from source finds this folder via the current working directory.
+Packaging: `scripts/package-mac.sh` copies this folder into the
+app bundle (`Contents/Resources/app/plugins/`). Running from
+source finds this folder via the current working directory.
