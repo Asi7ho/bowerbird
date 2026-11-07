@@ -16,6 +16,9 @@ interface Message {
 
 export function renderPanel(api: PluginContext, container: HTMLElement): void {
   container.textContent = "";
+  // A column that fills the panel, so the message list expands
+  // and the input stays pinned to the bottom.
+  container.classList.add("ai-panel");
 
   const list = document.createElement("div");
   list.className = "ai-messages";
@@ -130,8 +133,6 @@ export function renderPanel(api: PluginContext, container: HTMLElement): void {
     }
   });
 
-  const welcome = document.createElement("div");
-  welcome.className = "ai-message ai-assistant";
-  welcome.textContent = "Ask me anything — or describe a plugin and I'll build it.";
-  list.appendChild(welcome);
+  // No welcome text: the app shows no descriptive or help text.
+  // The input's placeholder is the only prompt.
 }

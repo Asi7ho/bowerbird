@@ -1,4 +1,13 @@
-/* AI chat panel. Quiet, same tokens as the core. */
+/* AI chat. Uses the app's own tokens, not a custom look:
+   card radius and shadow for messages, the title-bar search
+   field for the input, the panel button for send. */
+.plugin-panel-body.ai-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  box-sizing: border-box;
+}
+
 .ai-messages {
   display: flex;
   flex-direction: column;
@@ -10,7 +19,7 @@
 
 .ai-message {
   padding: 8px 10px;
-  border-radius: 9px;
+  border-radius: 12px;
   font-size: 13px;
   line-height: 1.5;
   white-space: pre-wrap;
@@ -25,7 +34,8 @@
 
 .ai-assistant {
   background: #fff;
-  border: 1px solid var(--hairline);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-sm);
   align-self: flex-start;
   max-width: 95%;
 }
@@ -37,17 +47,17 @@
   min-height: 16px;
 }
 
-/* The input: one quiet grey pill, like the title-bar search,
-   with a small round send button inside it. No big text box,
-   no separate Send button. */
+/* The input: a field like the title-bar search (quiet grey,
+   8px radius), with a small send button in the panel-button
+   style (white, separator border, 9px radius). */
 .plugin-panel-body .ai-form {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-top: 8px;
-  padding: 3px 3px 3px 12px;
-  background: var(--fill);
-  border-radius: 19px;
+  padding: 3px 3px 3px 10px;
+  background: var(--bg-system);
+  border-radius: 8px;
 }
 
 .plugin-panel-body .ai-form input {
@@ -64,15 +74,16 @@
 
 .plugin-panel-body .ai-form button.ai-send {
   flex: none;
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   margin: 0;
   padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: var(--ink);
-  color: #fff;
-  font-size: 15px;
+  border: 1px solid var(--separator);
+  border-radius: 9px;
+  background: #fff;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
   line-height: 1;
   display: flex;
   align-items: center;
@@ -80,9 +91,13 @@
   cursor: pointer;
 }
 
+.plugin-panel-body .ai-form button.ai-send:hover {
+  background: var(--fill);
+}
+
 .plugin-panel-body .ai-form button.ai-send:disabled {
-  background: var(--grey);
-  opacity: 0.45;
+  color: var(--grey);
+  opacity: 0.5;
   cursor: default;
 }
 
@@ -92,7 +107,8 @@
   gap: 8px;
   padding: 8px 10px;
   background: #fff;
-  border: 1px solid var(--hairline);
-  border-radius: 9px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
   font-size: 13px;
 }
