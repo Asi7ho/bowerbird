@@ -37,21 +37,53 @@
   min-height: 16px;
 }
 
-.ai-form {
+/* The input: one quiet grey pill, like the title-bar search,
+   with a small round send button inside it. No big text box,
+   no separate Send button. */
+.plugin-panel-body .ai-form {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 8px;
   margin-top: 8px;
+  padding: 3px 3px 3px 12px;
+  background: var(--fill);
+  border-radius: 19px;
 }
 
-.ai-form textarea {
-  resize: vertical;
-  min-height: 64px;
+.plugin-panel-body .ai-form input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
   font: inherit;
-  padding: 8px;
-  border: 1px solid var(--hairline);
-  border-radius: 9px;
-  background: #fff;
+  font-size: 13px;
+  padding: 7px 0;
+  color: var(--ink);
+}
+
+.plugin-panel-body .ai-form button.ai-send {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--ink);
+  color: #fff;
+  font-size: 15px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.plugin-panel-body .ai-form button.ai-send:disabled {
+  background: var(--grey);
+  opacity: 0.45;
+  cursor: default;
 }
 
 .ai-install {

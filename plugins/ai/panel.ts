@@ -27,12 +27,16 @@ export function renderPanel(api: PluginContext, container: HTMLElement): void {
 
   const form = document.createElement("div");
   form.className = "ai-form";
-  const input = document.createElement("textarea");
+  const input = document.createElement("input");
+  input.type = "text";
   input.placeholder = "Ask anything…";
-  input.rows = 3;
+  input.setAttribute("aria-label", "Message");
   const sendBtn = document.createElement("button");
   sendBtn.type = "button";
-  sendBtn.textContent = "Send";
+  sendBtn.className = "ai-send";
+  sendBtn.textContent = "↑";
+  sendBtn.setAttribute("aria-label", "Send");
+  sendBtn.disabled = true;
   form.appendChild(input);
   form.appendChild(sendBtn);
   container.appendChild(form);
@@ -110,14 +114,17 @@ export function renderPanel(api: PluginContext, container: HTMLElement): void {
       status.textContent = e instanceof Error ? e.message : String(e);
     } finally {
       busy = false;
-      sendBtn.disabled = false;
+      sendBtn.disabled = input.value.trim().length === 0;
       input.focus();
     }
   };
 
   sendBtn.addEventListener("click", () => void send());
+  input.addEventListener("input", () => {
+    sendBtn.disabled = busy || input.value.trim().length === 0;
+  });
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter") {
       e.preventDefault();
       void send();
     }
