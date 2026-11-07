@@ -559,6 +559,11 @@ export interface PluginContext {
     // so it needs the plugins:install permission, like
     // install. A trial plugin cannot be toggled this way.
     setEnabled: (id: string, enabled: boolean) => Promise<void>;
+    // Reset every plugin to its factory state: core plugins
+    // on, extras off. A trial plugin is untouched (it is not
+    // installed). This is plugin management, so it needs the
+    // plugins:install permission.
+    reset: () => Promise<void>;
     install: (plugin: { id: string; name: string; description: string; permissions: string[]; mainCode: string; styleCode: string }) => Promise<PluginManifest>;
     refresh: () => Promise<void>;
     // Try a plugin without installing it: it runs in memory only,
@@ -1362,6 +1367,18 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         requireNotTrial("enable or disable a plugin");
         await setPluginEnabled(id, enabled);
       },
+      reset: async () => {
+        require("plugins:install");
+        requireNotTrial("reset plugins");
+        // Factory state: core plugins on, extras off. A
+        // required plugin is on by definition, so it is never
+        // turned off here. Trial plugins are not installed, so
+        // they are untouched.
+        for (const lp of Array.from(loaded.values())) {
+          if (lp.trial) continue;
+          await setPluginEnabled(lp.manifest.id, !!lp.firstParty);
+        }
+      },
       install: async (plugin) => {
         require("plugins:install");
         requireNotTrial("install a plugin");
@@ -2124,7 +2141,17 @@ export async function initPlugins(
     // (from before the plugin became required, or from a
     // hand edit) must not lock the app out of its own
     // board or its Settings window.
-    if (enabledMap[fp.manifest.id] === false && !fp.manifest.required) continue;
+    if (enabledMap[fp.manifest.id] === false && !fp.manifest.required) {
+      // Still register it as loaded-but-inactive, so it
+      // shows in Settings and can be re-enabled there. A
+      // plugin skipped here never entered the loaded map,
+      // so it vanished from the list entirely and the only
+      // way back was editing plugins.json by hand. Its
+      // bundled module is retained, so re-enabling it
+      // re-activates the same module.
+      loaded.set(fp.manifest.id, { manifest: fp.manifest, firstParty: true, firstPartyModule: fp.module, active: false, failed: false, error: null, module: null });
+      continue;
+    }
     try {
       await activateFirstPartyPlugin(fp.manifest, fp.module);
     } catch (e) {

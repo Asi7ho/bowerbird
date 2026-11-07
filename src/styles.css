@@ -900,10 +900,6 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #settings .plugin-row:last-child { border-bottom: none; }
 #settings .plugin-row-text { flex: 1 1 auto; min-width: 0; }
 #settings .plugin-row-text .meta { margin: 4px 0 0; }
-/* The state word, next to the name: full-strength ink when
-   the plugin is on, grey when it is off — active and
-   inactive are told apart at a glance, without a badge. */
-#settings .plugin-row .plugin-state-on { color: var(--ink); }
 /* The state dot, before the name: filled ink when the plugin
    is on, a hollow grey ring when it is off. The whole row
    dims with it, so the state is visible without reading. */
@@ -915,6 +911,15 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   background: transparent; border: 1.5px solid var(--grey);
 }
 #settings .plugin-row-off .plugin-row-text strong { color: var(--grey); }
+/* Reset plugins: back to the factory state (core on, extras
+   off). The same quiet button as the feedback Send button,
+   spaced below the list. */
+#settings #plugins-reset {
+  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
+  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
+  color: var(--ink); box-shadow: var(--shadow-sm); margin-top: 16px;
+}
+#settings #plugins-reset:hover { background: var(--fill); }
 #settings .plugin-row button {
   border: 1px solid var(--separator); background: #fff; border-radius: 9px;
   padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;

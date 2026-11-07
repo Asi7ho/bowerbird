@@ -571,6 +571,15 @@ function isVisibleItem(item: Item, v: { x0: number; y0: number; x1: number; y1: 
 }
 
 function render(): void {
+  // The board DOM is built by the core-board plugin, and the
+  // core reads its elements from the shell only after the
+  // plugins have activated — so a render requested during
+  // plugin activation (a panel registering, a view switching)
+  // finds no board yet. There is nothing to draw, and init()
+  // renders once the elements exist; skip, do not throw.
+  // Without this, the first panel plugin to activate at boot
+  // failed with "Cannot read properties of null".
+  if (!boardEl) return;
   boardEl.style.background = board.bg;
   // A playing (or paused mid-way) video used to restart from 0 on
   // every render, because render() rebuilds the card DOM and the

@@ -255,12 +255,11 @@ function renderPluginSettings(): void {
   // glance, without reading. Failed and trial rows stay
   // full-strength, so their error and status stay readable.
   const renderRow = (lp: (typeof plugins)[number]): string => {
-    // A trial plugin is not installed yet: it shows as
-    // Trying and gets no toggle.
-    const state = lp.trial ? "Trying" : lp.failed ? "Failed" : lp.active ? "On" : "Off";
-    const stateClass = lp.active ? "plugin-state-on" : "meta";
-    const off = !lp.active && !lp.failed && !lp.trial;
-    let row = `<div class="plugin-row${off ? " plugin-row-off" : ""}"><span class="plugin-dot" aria-hidden="true"></span><div class="plugin-row-text"><div><strong>${escapeHtml(lp.name)}</strong> <span class="${stateClass}">${state}</span></div>`;
+    // No state word: the dot and the dimming carry it. A
+    // trial plugin is not installed yet, so it gets no
+    // toggle; a failed plugin shows its error underneath.
+    const off = !lp.active;
+    let row = `<div class="plugin-row${off ? " plugin-row-off" : ""}"><span class="plugin-dot" aria-hidden="true"></span><div class="plugin-row-text"><div><strong>${escapeHtml(lp.name)}</strong></div>`;
     if (lp.failed && lp.error) row += `<p class="meta"><strong>${escapeHtml(lp.error)}</strong></p>`;
     // A Settings button, when the plugin has a settings
     // section: it jumps to the Plugin settings tab and
@@ -283,7 +282,18 @@ function renderPluginSettings(): void {
   let html = "";
   if (core.length > 0) html += `<h3>Core</h3>` + core.map(renderRow).join("");
   if (extra.length > 0) html += `<h3>Extra</h3>` + extra.map(renderRow).join("");
+  // Reset: back to the factory state — core plugins on,
+  // extras off. One button under the list; it is reversible
+  // by toggling plugins back on.
+  html += `<button id="plugins-reset">Reset plugins</button>`;
   list.innerHTML = html;
+  el("plugins-reset")?.addEventListener("click", async () => {
+    await api!.plugins.reset();
+    renderShortcutsTable();
+    renderPluginSettingsSections();
+    renderPluginSettings();
+    api!.board.render();
+  });
   for (const btn of Array.from(list.querySelectorAll("[data-plugin-settings]"))) {
     btn.addEventListener("click", () => {
       const id = (btn as HTMLElement).dataset.pluginSettings ?? "";
