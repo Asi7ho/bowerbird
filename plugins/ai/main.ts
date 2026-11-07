@@ -1,5 +1,5 @@
-// AI — chat with an AI to build a plugin. Describe what you
-// want in the chat panel; the AI writes the plugin; install it
+// AI — a general AI chat in Bowerbird. Ask anything; when the
+// user asks for a plugin, the AI writes it and it can be installed
 // from the reply. The API key lives in secure storage (see
 // settings.ts) and the chat call runs in the main process
 // (api.ai.chat), not the renderer.

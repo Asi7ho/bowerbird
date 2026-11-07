@@ -3,7 +3,7 @@
   "name": "AI",
   "version": "1.0.0",
   "apiVersion": "2",
-  "description": "Chat with an AI to build a plugin. Describe what you want, it writes the plugin, you install it.",
+  "description": "Chat with an AI. Ask anything, or describe a plugin and it will build it.",
   "permissions": [
     "board:read",
     "board:write",

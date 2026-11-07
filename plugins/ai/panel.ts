@@ -28,7 +28,7 @@ export function renderPanel(api: PluginContext, container: HTMLElement): void {
   const form = document.createElement("div");
   form.className = "ai-form";
   const input = document.createElement("textarea");
-  input.placeholder = "Describe a plugin…";
+  input.placeholder = "Ask anything…";
   input.rows = 3;
   const sendBtn = document.createElement("button");
   sendBtn.type = "button";
@@ -125,6 +125,6 @@ export function renderPanel(api: PluginContext, container: HTMLElement): void {
 
   const welcome = document.createElement("div");
   welcome.className = "ai-message ai-assistant";
-  welcome.textContent = "Describe a plugin and I'll build it. For example: “a panel that lists every note on the board”.";
+  welcome.textContent = "Ask me anything — or describe a plugin and I'll build it.";
   list.appendChild(welcome);
 }

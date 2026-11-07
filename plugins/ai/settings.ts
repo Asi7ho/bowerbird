@@ -55,7 +55,7 @@ export function renderSettings(api: PluginContext, container: HTMLElement): void
   container.textContent = "";
 
   const intro = document.createElement("p");
-  intro.textContent = "Chat with an AI to build a plugin. Paste your API key and it just works.";
+  intro.textContent = "Chat with an AI. Paste your API key and it just works.";
   container.appendChild(intro);
 
   // Provider.
