@@ -26,6 +26,19 @@
   color: var(--ink);
 }
 
+/* The provider dropdown is the app's only <select>. The native
+   chevron sits cramped against the right edge, so hide it and
+   draw one 12px from the edge instead. */
+.plugin-settings-section .ai-field select {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231d1d1f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px 12px;
+}
+
 .plugin-settings-section .ai-key-state {
   color: var(--grey);
   font-size: 12px;
