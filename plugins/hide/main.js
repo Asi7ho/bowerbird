@@ -63,7 +63,7 @@ function renderSettings(container) {
   desc.textContent = "The corner the board hides into.";
   container.appendChild(desc);
   const opts = document.createElement("div");
-  opts.className = "canvas-opt";
+  opts.className = "hide-opt";
   for (const [label, value] of OPTIONS) {
     const b = document.createElement("button");
     b.textContent = label;
