@@ -10,7 +10,7 @@
 // in a half-switched state, and creating a board never
 // wipes another board's undo.
 //
-// Layout (see electron/main.js): Main is the default board
+// Layout (see electron/main.ts): Main is the default board
 // at the base folder's board.json; every other board is a
 // folder under boards/, with its own board.json, assets and
 // backups. Deleting a board deletes its folder, so it also

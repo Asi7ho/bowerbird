@@ -2,7 +2,7 @@
 // local-ML context index (CLIP embeddings for images and video
 // frames, AST labels for audio) that lets a query match media
 // by what is in it, not only its filename. No cloud, no API key:
-// the models run in the main process (see electron/context.js).
+// the models run in the main process (see electron/context.ts).
 // The module owns the match state and the debounced input
 // listeners; the core supplies the board, the cards layer, and
 // the jump behaviour (select + centre + save + render) through

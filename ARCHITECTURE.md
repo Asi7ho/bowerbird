@@ -43,10 +43,14 @@ built-in UI has no privileged path. It uses the same public
 
 ## Current state (2026-11-06, before this refactor)
 
-- `electron/main.js` + `electron/preload.js`: main process and
+- `electron/main.ts` + `electron/preload.ts`: main process and
   the `window.bowerbird` bridge (board load/save, files, window
   controls, plugin IPC). This stays: it is the privileged layer,
-  not UI.
+  not UI. The main process is TypeScript, compiled to
+  `electron-dist/` by `tsc -p tsconfig.main.json` as part of
+  `npm run build` / `npm run dev`; `peek.html` is copied there
+  by the same scripts, since the peek window loads it from the
+  compiled folder.
 - `src/main.ts` (~2,000 lines): the app. It builds and owns the
   whole UI (title bar, search, toolbar, board rendering, input,
   drag/pan/zoom, text editing, undo wiring) and passes a

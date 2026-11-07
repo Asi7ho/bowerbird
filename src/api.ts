@@ -1,4 +1,4 @@
-// Electron preload API (see electron/preload.js). The renderer never
+// Electron preload API (see electron/preload.ts). The renderer never
 // touches Node or Electron directly; every privileged call goes through
 // this bridge, which the main process exposes with context isolation on.
 import type { PluginManifest } from "./plugins";

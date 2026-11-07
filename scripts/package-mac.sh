@@ -63,10 +63,12 @@ mv "$OUT/tmp-electron/Electron.app" "$APP"
 rm -rf "$OUT/tmp-electron"
 mv "$APP/Contents/MacOS/Electron" "$APP/Contents/MacOS/Bowerbird"
 
-# App files: dist, electron, and the showcase assets the first-run
-# board copies from (assetsDir() looks for sample.pdf in assets/).
+# App files: dist, electron-dist (the compiled main process,
+# including peek.html, copied there by the build), and the
+# showcase assets the first-run board copies from
+# (assetsDir() looks for sample.pdf in assets/).
 mkdir -p "$APP/Contents/Resources/app"
-cp -r dist electron "$APP/Contents/Resources/app/"
+cp -r dist electron-dist "$APP/Contents/Resources/app/"
 # Bundled plugins (see plugins/README.md): same API as user plugins,
 # shipped inside the app. Copy only if the folder exists, so a
 # checkout without bundled plugins still packages cleanly.
@@ -82,7 +84,7 @@ cat > "$APP/Contents/Resources/app/package.json" <<EOF
   "name": "bowerbird",
   "version": "$VERSION",
   "private": true,
-  "main": "electron/main.js"
+  "main": "electron-dist/main.js"
 }
 EOF
 

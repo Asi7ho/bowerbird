@@ -10,7 +10,7 @@
 # How the demo is built in, with no environment variable for the
 # installer to set: the demo app is the normal app plus one extra
 # file, Contents/Resources/app/demo-mode, and main.js treats that
-# file as demo mode (see the DEMO check in electron/main.js).
+# file as demo mode (see the DEMO check in electron/main.ts).
 # The normal app does not contain that file, so it is unaffected.
 # The demo bundle also gets its own name and bundle identifier
 # (Bowerbird Demo / works.wren.bowerbird.demo), so it installs

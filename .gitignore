@@ -1,6 +1,7 @@
 /target
 node_modules/
 dist/
+electron-dist/
 out/
 *.tmp
 dist-mac/

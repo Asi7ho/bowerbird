@@ -11,15 +11,17 @@
 // The board file format is unchanged from the GPUI board, so existing
 // boards load as-is (an old embed:true flag is simply ignored).
 
-const { app, BaseWindow, WebContentsView, ipcMain, shell, protocol, screen, safeStorage } = require('electron');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { createBackups } = require('./backups');
-const { handleAppFileRequest, MIME } = require('./appFile');
+import { app, BaseWindow, BrowserWindow, WebContentsView, ipcMain, shell, protocol, screen, safeStorage } from "electron";
+import type { Rectangle } from "electron";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { createBackups } from "./backups";
+import { handleAppFileRequest, MIME } from "./appFile";
+import * as context from "./context";
 
-let win = null;
-let boardView = null;
+let win: BaseWindow | null = null;
+let boardView: WebContentsView | null = null;
 
 // ---------------------------------------------------------------- demo mode
 
@@ -56,8 +58,8 @@ if (DEMO) {
     // in the normal userData folder.
   }
 }
-function demoShowcaseSizes() {
-  const sizeOf = (file) => { try { return fs.statSync(file).size; } catch { return 0; } };
+function demoShowcaseSizes(): { pdf_size_bytes: number; video_size_bytes: number } {
+  const sizeOf = (file: string): number => { try { return fs.statSync(file).size; } catch { return 0; } };
   const dir = assetsDir();
   return {
     pdf_size_bytes: sizeOf(path.join(dir, "sample.pdf")),
@@ -78,22 +80,22 @@ let cornerReveal = "bottom-left";
 // board survives even if the Boards plugin is turned off —
 // the plugin is only the UI for switching, not the owner
 // of which board is open.
-let currentBoard = null;
+let currentBoard: string | null = null;
 // Panel tab order, as the user dragged it: an array of
 // "pluginId:panelId" keys, in tab-bar order. Panels not in
 // the list (new plugins, or a first run) go at the end, in
 // registration order, so an old list never hides a panel.
-let panelOrder = [];
+let panelOrder: string[] = [];
 
-function appSettingsPath() {
+function appSettingsPath(): string {
   return path.join(app.getPath("userData"), "settings.json");
 }
 
-function loadAppSettings() {
+function loadAppSettings(): void {
   try {
     const parsed = JSON.parse(fs.readFileSync(appSettingsPath(), "utf8"));
     if (parsed && CORNERS.includes(parsed.corner)) cornerReveal = parsed.corner;
-    if (parsed && Array.isArray(parsed.panelOrder)) panelOrder = parsed.panelOrder.filter((x) => typeof x === "string");
+    if (parsed && Array.isArray(parsed.panelOrder)) panelOrder = parsed.panelOrder.filter((x: unknown) => typeof x === "string");
     if (parsed && typeof parsed.currentBoard === "string" && parsed.currentBoard && parsed.currentBoard !== "Main") {
       currentBoard = parsed.currentBoard.slice(0, 64);
     }
@@ -102,7 +104,7 @@ function loadAppSettings() {
   }
 }
 
-function saveAppSettings() {
+function saveAppSettings(): void {
   try {
     const file = appSettingsPath();
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -130,11 +132,11 @@ function saveAppSettings() {
 // from the screen edges and room to grow slightly on hover.
 const PEEK_W = 80;
 const PEEK_H = 80;
-let peekWin = null;
-let savedBounds = null;
+let peekWin: BrowserWindow | null = null;
+let savedBounds: Rectangle | null = null;
 let isCollapsed = false;
 
-function cornerOrigin(w, h) {
+function cornerOrigin(w: number, h: number): { x: number; y: number } | null {
   const display = screen.getPrimaryDisplay();
   const b = display.bounds;
   if (cornerReveal === "bottom-left") return { x: b.x, y: b.y + b.height - h };
@@ -144,46 +146,45 @@ function cornerOrigin(w, h) {
   return null;
 }
 
-function peekBounds() {
+function peekBounds(): Rectangle | null {
   const origin = cornerOrigin(PEEK_W, PEEK_H);
   return origin ? { ...origin, width: PEEK_W, height: PEEK_H } : null;
 }
 
-async function collapseBoard() {
+async function collapseBoard(): Promise<void> {
   if (!win || isCollapsed || !boardView) return;
   const bounds = peekBounds();
   if (!bounds) return; // Corner is Off: the button is hidden, so this should not happen.
   savedBounds = win.getBounds();
-  const { BrowserWindow } = require('electron');
   peekWin = new BrowserWindow({
     width: PEEK_W,
     height: PEEK_H,
     frame: false,
     transparent: true,
-    backgroundColor: '#00000000',
+    backgroundColor: "#00000000",
     alwaysOnTop: true,
     skipTaskbar: true,
     resizable: false,
     minimizable: false,
     maximizable: false,
-    title: DEMO ? 'Bowerbird \u2014 Demo' : 'Bowerbird',
+    title: DEMO ? "Bowerbird \u2014 Demo" : "Bowerbird",
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
     },
   });
-  try { peekWin.setAlwaysOnTop(true, 'screen-saver'); } catch { /* level is macOS-only */ }
+  try { peekWin.setAlwaysOnTop(true, "screen-saver"); } catch { /* level is macOS-only */ }
   peekWin.setBounds(bounds);
   // The corner tells the icon which way its expand arrow points:
   // away from the corner, into the screen.
-  peekWin.loadFile(path.join(__dirname, 'peek.html'), { query: { corner: cornerReveal } });
-  peekWin.on('closed', () => { peekWin = null; });
+  peekWin.loadFile(path.join(__dirname, "peek.html"), { query: { corner: cornerReveal } });
+  peekWin.on("closed", () => { peekWin = null; });
   win.hide();
   isCollapsed = true;
 }
 
-function restoreBoard() {
+function restoreBoard(): void {
   if (!win) return;
   if (peekWin) { peekWin.destroy(); peekWin = null; }
   isCollapsed = false;
@@ -195,30 +196,30 @@ function restoreBoard() {
 
 // ---------------------------------------------------------------- board file
 
-function defaultBaseDir() {
+function defaultBaseDir(): string {
   const base = process.env.XDG_DATA_HOME
     ? process.env.XDG_DATA_HOME
-    : path.join(process.env.HOME || '.', '.local', 'share');
-  const next = path.join(base, 'bowerbird');
-  const old = path.join(base, 'quickboard');
-  if (fs.existsSync(path.join(next, 'board.json'))) return next;
-  if (fs.existsSync(path.join(old, 'board.json'))) return old;
+    : path.join(process.env.HOME || ".", ".local", "share");
+  const next = path.join(base, "bowerbird");
+  const old = path.join(base, "quickboard");
+  if (fs.existsSync(path.join(next, "board.json"))) return next;
+  if (fs.existsSync(path.join(old, "board.json"))) return old;
   return next;
 }
-function defaultBoardPath() {
-  return path.join(defaultBaseDir(), 'board.json');
+function defaultBoardPath(): string {
+  return path.join(defaultBaseDir(), "board.json");
 }
-function boardPathFor(name) {
+function boardPathFor(name: string | null): string {
   if (!name || name === "Main") return defaultBoardPath();
-  return path.join(defaultBaseDir(), 'boards', sanitise(name), 'board.json');
+  return path.join(defaultBaseDir(), "boards", sanitise(name), "board.json");
 }
-function boardPath() {
+function boardPath(): string {
   if (process.env.BOWERBIRD_BOARD_PATH) return process.env.BOWERBIRD_BOARD_PATH;
   if (process.env.QB_BOARD_PATH) return process.env.QB_BOARD_PATH;
   return boardPathFor(currentBoard);
 }
 
-function boardDir() {
+function boardDir(): string {
   return path.dirname(boardPath());
 }
 
@@ -226,42 +227,42 @@ function boardDir() {
 // they are actually running (Settings → General → Data).
 // package-mac.sh writes dist/build-id.txt with the git short
 // hash at packaging time; source runs without it read "dev".
-function buildId() {
+function buildId(): string {
   for (const candidate of [
-    path.join(__dirname, '..', 'dist', 'build-id.txt'),
-    path.join(app.getAppPath(), 'dist', 'build-id.txt'),
+    path.join(__dirname, "..", "dist", "build-id.txt"),
+    path.join(app.getAppPath(), "dist", "build-id.txt"),
   ]) {
     try {
-      const id = fs.readFileSync(candidate, 'utf8').trim();
+      const id = fs.readFileSync(candidate, "utf8").trim();
       if (id) return id;
     } catch { /* no build id in this run */ }
   }
-  return 'dev';
+  return "dev";
 }
 
-function assetsDir() {
+function assetsDir(): string {
   const candidates = [
-    path.join(__dirname, '..', 'assets'),
-    path.join(process.cwd(), 'assets'),
-    path.join(app.getAppPath(), 'assets'),
+    path.join(__dirname, "..", "assets"),
+    path.join(process.cwd(), "assets"),
+    path.join(app.getAppPath(), "assets"),
     // Packaged Mac app, via resourcesPath, in case __dirname
     // or getAppPath ever resolve differently (translocation,
     // a renamed bundle): Resources/app/assets is where the
     // packaging script puts the showcase files, full stop.
-    path.join(process.resourcesPath || '', 'app', 'assets'),
+    path.join(process.resourcesPath || "", "app", "assets"),
   ];
   for (const dir of candidates) {
-    if (dir && fs.existsSync(path.join(dir, 'sample.pdf'))) return dir;
+    if (dir && fs.existsSync(path.join(dir, "sample.pdf"))) return dir;
   }
   return candidates[0];
 }
 
-function installShowcaseAssets(dir, force = false) {
+function installShowcaseAssets(dir: string, force = false): { pdf_size_bytes: number; video_size_bytes: number; copied: string[]; missing: string[]; srcDir: string; destDir: string } {
   fs.mkdirSync(dir, { recursive: true });
   const src = assetsDir();
-  const sizeOf = (file) => { try { return fs.statSync(file).size; } catch { return 0; } };
-  const copied = [];
-  const missing = [];
+  const sizeOf = (file: string): number => { try { return fs.statSync(file).size; } catch { return 0; } };
+  const copied: string[] = [];
+  const missing: string[] = [];
   // Real photographs for the welcome board (Wikimedia Commons).
   // Normally only fills in what is missing, so a reset that
   // deletes the board dir gets a full fresh set, while an
@@ -271,18 +272,18 @@ function installShowcaseAssets(dir, force = false) {
   // file, and the old missing-only check left it broken
   // forever. So copy when missing, when forced (the Restore
   // button), or when the size does not match the bundle.
-  for (const name of ['welcome-bower.jpg', 'welcome-birdsong.mp3', 'welcome-video.mp4', 'sample.pdf']) {
+  for (const name of ["welcome-bower.jpg", "welcome-birdsong.mp3", "welcome-video.mp4", "sample.pdf"]) {
     const srcFile = path.join(src, name);
     const dest = path.join(dir, name);
     if (!fs.existsSync(srcFile)) { missing.push(name); continue; }
     if (force || !fs.existsSync(dest) || sizeOf(dest) !== sizeOf(srcFile)) {
-      try { fs.copyFileSync(srcFile, dest); copied.push(name); } catch (e) { missing.push(`${name} (${e.message})`); }
+      try { fs.copyFileSync(srcFile, dest); copied.push(name); } catch (e) { missing.push(`${name} (${(e as Error).message})`); }
     }
   }
-  const pdf = path.join(dir, 'sample.pdf');
+  const pdf = path.join(dir, "sample.pdf");
   return {
     pdf_size_bytes: sizeOf(pdf),
-    video_size_bytes: sizeOf(path.join(dir, 'welcome-video.mp4')),
+    video_size_bytes: sizeOf(path.join(dir, "welcome-video.mp4")),
     copied,
     missing,
     srcDir: src,
@@ -290,10 +291,10 @@ function installShowcaseAssets(dir, force = false) {
   };
 }
 
-function sanitise(name) {
-  let out = name.replace(/[^A-Za-z0-9._-]/g, '_').replace(/^\.+/, '');
+function sanitise(name: string): string {
+  let out = name.replace(/[^A-Za-z0-9._-]/g, "_").replace(/^\.+/, "");
   if (out.length > 64) out = out.slice(0, 64);
-  return out || 'file';
+  return out || "file";
 }
 
 // ---------------------------------------------------------------- boards
@@ -311,138 +312,138 @@ function sanitise(name) {
 // The current board is in app settings (see currentBoard),
 // so it survives the Boards plugin being turned off.
 
-function boardsDir() {
-  return path.join(defaultBaseDir(), 'boards');
+function boardsDir(): string {
+  return path.join(defaultBaseDir(), "boards");
 }
-function boardDisplayName(folder) {
+function boardDisplayName(folder: string): string {
   try {
-    const name = fs.readFileSync(path.join(folder, 'display-name.txt'), 'utf8').trim();
+    const name = fs.readFileSync(path.join(folder, "display-name.txt"), "utf8").trim();
     if (name) return name;
   } catch { /* no display-name file: fall back to the folder */ }
   return path.basename(folder);
 }
-function boardItemCount(file) {
+function boardItemCount(file: string): number {
   try {
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
     return Array.isArray(parsed.items) ? parsed.items.length : 0;
   } catch { return 0; }
 }
-function listBoards() {
-  const out = [];
+function listBoards(): Array<{ name: string; current: boolean; items: number }> {
+  const out: Array<{ name: string; current: boolean; items: number }> = [];
   const mainFile = defaultBoardPath();
-  out.push({ name: 'Main', current: !currentBoard || currentBoard === 'Main', items: boardItemCount(mainFile) });
+  out.push({ name: "Main", current: !currentBoard || currentBoard === "Main", items: boardItemCount(mainFile) });
   const dir = boardsDir();
-  let entries = [];
+  let entries: string[] = [];
   try { entries = fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort(); } catch { entries = []; }
   for (const folder of entries) {
     const folderPath = path.join(dir, folder);
     const name = boardDisplayName(folderPath);
-    out.push({ name, current: currentBoard === name, items: boardItemCount(path.join(folderPath, 'board.json')) });
+    out.push({ name, current: currentBoard === name, items: boardItemCount(path.join(folderPath, "board.json")) });
   }
   return out;
 }
-function emptyBoardJson() {
-  return JSON.stringify({ items: [], camera: { x: 0, y: 0, zoom: 1 }, next_id: 1, next_group: 1, bg: '#FFFFFF', grid: 'Dots' });
+function emptyBoardJson(): string {
+  return JSON.stringify({ items: [], camera: { x: 0, y: 0, zoom: 1 }, next_id: 1, next_group: 1, bg: "#FFFFFF", grid: "Dots" });
 }
-function guardBoards() {
-  if (DEMO) throw new Error('cannot switch boards in demo mode');
-  if (process.env.BOWERBIRD_BOARD_PATH || process.env.QB_BOARD_PATH) throw new Error('board switching is disabled when a board path is set');
+function guardBoards(): void {
+  if (DEMO) throw new Error("cannot switch boards in demo mode");
+  if (process.env.BOWERBIRD_BOARD_PATH || process.env.QB_BOARD_PATH) throw new Error("board switching is disabled when a board path is set");
 }
-function createBoard(name) {
+function createBoard(name: unknown): { name: string } {
   guardBoards();
-  const clean = typeof name === 'string' ? name.trim() : '';
-  if (!clean || clean.length > 64) throw new Error('board name must be 1 to 64 characters');
-  if (clean === 'Main') throw new Error('Main already exists');
+  const clean = typeof name === "string" ? name.trim() : "";
+  if (!clean || clean.length > 64) throw new Error("board name must be 1 to 64 characters");
+  if (clean === "Main") throw new Error("Main already exists");
   const existing = listBoards().map((b) => b.name.toLowerCase());
-  if (existing.includes(clean.toLowerCase())) throw new Error('a board with that name already exists');
+  if (existing.includes(clean.toLowerCase())) throw new Error("a board with that name already exists");
   const folder = path.join(boardsDir(), sanitise(clean));
-  if (fs.existsSync(folder)) throw new Error('a board with that name already exists');
+  if (fs.existsSync(folder)) throw new Error("a board with that name already exists");
   fs.mkdirSync(folder, { recursive: true });
-  fs.writeFileSync(path.join(folder, 'board.json'), emptyBoardJson());
-  fs.writeFileSync(path.join(folder, 'display-name.txt'), clean);
+  fs.writeFileSync(path.join(folder, "board.json"), emptyBoardJson());
+  fs.writeFileSync(path.join(folder, "display-name.txt"), clean);
   return { name: clean };
 }
-function switchBoard(name) {
+function switchBoard(name: unknown): { json: string; board_path: string; board_dir: string } {
   guardBoards();
-  const target = name === 'Main' ? null : name;
+  const target = name === "Main" ? null : (name as string | null);
   if (target !== null) {
     const found = listBoards().some((b) => b.name === target);
-    if (!found) throw new Error('no such board');
+    if (!found) throw new Error("no such board");
   }
   currentBoard = target;
   saveAppSettings();
   const file = boardPath();
   const dir = path.dirname(file);
   fs.mkdirSync(dir, { recursive: true });
-  let json = null;
-  try { json = fs.readFileSync(file, 'utf8'); } catch { /* new board */ }
+  let json: string | null = null;
+  try { json = fs.readFileSync(file, "utf8"); } catch { /* new board */ }
   if (json === null) {
     json = emptyBoardJson();
     fs.writeFileSync(file, json);
   }
   return { json, board_path: file, board_dir: dir };
 }
-function renameBoard(oldName, newName) {
+function renameBoard(oldName: unknown, newName: unknown): { name: string } {
   guardBoards();
-  if (oldName === 'Main') throw new Error('Main cannot be renamed');
-  const clean = typeof newName === 'string' ? newName.trim() : '';
-  if (!clean || clean.length > 64 || clean === 'Main') throw new Error('board name must be 1 to 64 characters and not Main');
+  if (oldName === "Main") throw new Error("Main cannot be renamed");
+  const clean = typeof newName === "string" ? newName.trim() : "";
+  if (!clean || clean.length > 64 || clean === "Main") throw new Error("board name must be 1 to 64 characters and not Main");
   const existing = listBoards().map((b) => b.name.toLowerCase());
-  if (existing.includes(clean.toLowerCase())) throw new Error('a board with that name already exists');
-  const oldFolder = path.join(boardsDir(), sanitise(oldName));
-  if (!fs.existsSync(oldFolder)) throw new Error('no such board');
+  if (existing.includes(clean.toLowerCase())) throw new Error("a board with that name already exists");
+  const oldFolder = path.join(boardsDir(), sanitise(oldName as string));
+  if (!fs.existsSync(oldFolder)) throw new Error("no such board");
   const newFolder = path.join(boardsDir(), sanitise(clean));
   fs.renameSync(oldFolder, newFolder);
-  fs.writeFileSync(path.join(newFolder, 'display-name.txt'), clean);
+  fs.writeFileSync(path.join(newFolder, "display-name.txt"), clean);
   if (currentBoard === oldName) { currentBoard = clean; saveAppSettings(); }
   return { name: clean };
 }
-function deleteBoard(name) {
+function deleteBoard(name: unknown): { wasCurrent: boolean } {
   guardBoards();
-  if (name === 'Main') throw new Error('Main cannot be deleted');
-  if (currentBoard === name) throw new Error('cannot delete the current board — switch to another board first');
-  const folder = path.join(boardsDir(), sanitise(name));
-  if (!fs.existsSync(folder)) throw new Error('no such board');
+  if (name === "Main") throw new Error("Main cannot be deleted");
+  if (currentBoard === name) throw new Error("cannot delete the current board — switch to another board first");
+  const folder = path.join(boardsDir(), sanitise(name as string));
+  if (!fs.existsSync(folder)) throw new Error("no such board");
   fs.rmSync(folder, { recursive: true, force: true });
   return { wasCurrent: false };
 }
 
 
-// Backups live in electron/backups.js. The factory reads the
+// Backups live in electron/backups.ts. The factory reads the
 // demo flag and the current board path through these, so a
 // restore always writes the board the app is on now.
 const { maybeBackup, listBackups, restoreBackup, makeBackup } = createBackups({
   isDemo: DEMO,
   boardPath: () => boardPath(),
-  boardItemCount: (file) => boardItemCount(file),
+  boardItemCount: (file: string) => boardItemCount(file),
 });
 
 // ---------------------------------------------------------------- link preview
 
-function decodeEntities(s) {
+function decodeEntities(s: string): string {
   let out = s
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    .replace(/&nbsp;/g, ' ');
+    .replace(/&nbsp;/g, " ");
   out = out.replace(/&#(x[0-9a-fA-F]+|\d+);/g, (_m, num) => {
-    const code = num.startsWith('x') ? parseInt(num.slice(1), 16) : parseInt(num, 10);
+    const code = num.startsWith("x") ? parseInt(num.slice(1), 16) : parseInt(num, 10);
     return Number.isNaN(code) ? _m : String.fromCodePoint(code);
   });
   return out;
 }
 
-function metaContent(html, property) {
+function metaContent(html: string, property: string): string | null {
   const re = /<meta[^>]*>/gi;
-  let m;
+  let m: RegExpExecArray | null;
   while ((m = re.exec(html)) !== null) {
     const tag = m[0];
     if (tag.includes(`property="${property}"`) || tag.includes(`property='${property}'`) || tag.includes(`name="${property}"`)) {
       const cm = /content=(?:"([^"]*)"|'([^']*)')/.exec(tag);
       if (cm) {
-        const value = decodeEntities((cm[1] ?? cm[2] ?? '').trim());
+        const value = decodeEntities((cm[1] ?? cm[2] ?? "").trim());
         if (value) return value;
       }
     }
@@ -450,8 +451,8 @@ function metaContent(html, property) {
   return null;
 }
 
-function tagContent(html, tag) {
-  const m = new RegExp(`<${tag}>([^<]*)</${tag}>`, 'i').exec(html);
+function tagContent(html: string, tag: string): string | null {
+  const m = new RegExp(`<${tag}>([^<]*)</${tag}>`, "i").exec(html);
   if (!m) return null;
   const value = decodeEntities(m[1].trim());
   return value || null;
@@ -459,16 +460,16 @@ function tagContent(html, tag) {
 
 // Href of the first <link> whose rel matches one of the wanted kinds
 // (e.g. "icon", "apple-touch-icon"), or null.
-function linkHref(html, kinds) {
+function linkHref(html: string, kinds: string[]): string | null {
   const re = /<link[^>]*>/gi;
-  let m;
+  let m: RegExpExecArray | null;
   while ((m = re.exec(html)) !== null) {
     const tag = m[0];
     const rel = /rel=(?:"([^"]*)"|'([^']*)')/i.exec(tag);
     const href = /href=(?:"([^"]*)"|'([^']*)')/i.exec(tag);
     if (!rel || !href) continue;
-    const relLower = (rel[1] ?? rel[2] ?? '').toLowerCase();
-    const hrefValue = decodeEntities((href[1] ?? href[2] ?? '').trim());
+    const relLower = (rel[1] ?? rel[2] ?? "").toLowerCase();
+    const hrefValue = decodeEntities((href[1] ?? href[2] ?? "").trim());
     if (hrefValue && kinds.some((k) => relLower.includes(k))) return hrefValue;
   }
   return null;
@@ -477,12 +478,12 @@ function linkHref(html, kinds) {
 
 // ---------------------------------------------------------------- window
 
-function iconPath() {
-  const file = path.join(__dirname, '..', 'assets', 'icon.png');
+function iconPath(): string | null {
+  const file = path.join(__dirname, "..", "assets", "icon.png");
   return fs.existsSync(file) ? file : null;
 }
 
-function createWindow() {
+function createWindow(): void {
   // Default size: 1280x850, centred in the work area (so it never
   // sits under the menu bar or the Dock). 1100x720 is also the
   // minimum size: the window cannot be resized smaller than this.
@@ -508,13 +509,13 @@ function createWindow() {
     minWidth: 1100,
     minHeight: 720,
     frame: false,
-    title: DEMO ? 'Bowerbird \u2014 Demo' : 'Bowerbird',
-    backgroundColor: '#ffffff',
-    ...(iconPath() ? { icon: iconPath() } : {}),
+    title: DEMO ? "Bowerbird \u2014 Demo" : "Bowerbird",
+    backgroundColor: "#ffffff",
+    ...(iconPath() ? { icon: iconPath() as string } : {}),
   });
   boardView = new WebContentsView({
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -525,9 +526,9 @@ function createWindow() {
   if (process.env.ELECTRON_RENDERER_URL) {
     boardView.webContents.loadURL(process.env.ELECTRON_RENDERER_URL);
   } else {
-    boardView.webContents.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+    boardView.webContents.loadFile(path.join(__dirname, "..", "dist", "index.html"));
   }
-  win.on('resize', () => {
+  win.on("resize", () => {
     if (!win || !boardView) return;
     const b = win.getContentBounds();
     // Enforce the minimum in code, not just via minWidth/minHeight:
@@ -541,7 +542,7 @@ function createWindow() {
     }
     boardView.setBounds({ x: 0, y: 0, width: b.width, height: b.height });
   });
-  win.on('closed', () => {
+  win.on("closed", () => {
     win = null;
     boardView = null;
   });
@@ -563,10 +564,10 @@ function createWindow() {
 //      next to the repo root when running from source)
 // A plugin is a subfolder with a manifest.json. Invalid manifests
 // are skipped, never fatal: one bad plugin must not break the list.
-const pluginDirs = new Map(); // id -> folder, refreshed by listPlugins
+const pluginDirs = new Map<string, string>(); // id -> folder, refreshed by listPlugins
 
-function pluginCandidates() {
-  const out = [];
+function pluginCandidates(): Array<{ dir: string; source: "user" | "bundled" }> {
+  const out: Array<{ dir: string; source: "user" | "bundled" }> = [];
   if (process.env.BOWERBIRD_PLUGINS_DIR) {
     out.push({ dir: process.env.BOWERBIRD_PLUGINS_DIR, source: "user" });
   }
@@ -584,11 +585,11 @@ function pluginCandidates() {
   return out;
 }
 
-function pluginEnabledPath() {
+function pluginEnabledPath(): string {
   return path.join(app.getPath("userData"), "plugins.json");
 }
 
-function loadPluginEnabled() {
+function loadPluginEnabled(): Record<string, boolean> {
   try {
     const parsed = JSON.parse(fs.readFileSync(pluginEnabledPath(), "utf8"));
     if (parsed && typeof parsed.enabled === "object" && parsed.enabled !== null) {
@@ -602,7 +603,7 @@ function loadPluginEnabled() {
   return {};
 }
 
-function savePluginEnabled(enabled) {
+function savePluginEnabled(enabled: Record<string, boolean>): void {
   try {
     const file = pluginEnabledPath();
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -614,13 +615,13 @@ function savePluginEnabled(enabled) {
   }
 }
 
-function listPlugins() {
+function listPlugins(): Array<Record<string, unknown>> {
   const enabled = loadPluginEnabled();
-  const seen = new Set();
-  const out = [];
+  const seen = new Set<string>();
+  const out: Array<Record<string, unknown>> = [];
   pluginDirs.clear();
   for (const { dir, source } of pluginCandidates()) {
-    let entries;
+    let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
     } catch {
@@ -630,7 +631,7 @@ function listPlugins() {
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const folder = path.join(dir, entry.name);
-      let manifest;
+      let manifest: Record<string, unknown>;
       try {
         manifest = JSON.parse(fs.readFileSync(path.join(folder, "manifest.json"), "utf8"));
       } catch {
@@ -660,11 +661,11 @@ function listPlugins() {
   return out;
 }
 
-function pluginStoragePath() {
+function pluginStoragePath(): string {
   return path.join(app.getPath("userData"), "plugin-storage.json");
 }
 
-function loadPluginStorage() {
+function loadPluginStorage(): Record<string, Record<string, unknown>> {
   try {
     const parsed = JSON.parse(fs.readFileSync(pluginStoragePath(), "utf8"));
     if (parsed && typeof parsed === "object") return parsed;
@@ -674,7 +675,7 @@ function loadPluginStorage() {
   return {};
 }
 
-function savePluginStorage(data) {
+function savePluginStorage(data: Record<string, Record<string, unknown>>): void {
   const file = pluginStoragePath();
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = file + ".tmp";
@@ -690,10 +691,15 @@ function savePluginStorage(data) {
 // the plugin UI says so plainly instead of pretending it
 // is encrypted. Secure values live in their own file, so a
 // plain storage read can never return a secret by accident.
-function secureStoragePath() {
+interface SecureEntry {
+  encrypted: boolean;
+  value: string;
+}
+type SecureStore = Record<string, Record<string, SecureEntry>>;
+function secureStoragePath(): string {
   return path.join(app.getPath("userData"), "secure-storage.json");
 }
-function loadSecureStorage() {
+function loadSecureStorage(): SecureStore {
   try {
     const parsed = JSON.parse(fs.readFileSync(secureStoragePath(), "utf8"));
     if (parsed && typeof parsed === "object") return parsed;
@@ -702,18 +708,19 @@ function loadSecureStorage() {
   }
   return {};
 }
-function saveSecureStorage(data) {
+function saveSecureStorage(data: SecureStore): void {
   const file = secureStoragePath();
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = file + ".tmp";
   fs.writeFileSync(tmp, JSON.stringify(data));
   fs.renameSync(tmp, file);
 }
-async function secureStorageAvailable() {
+async function secureStorageAvailable(): Promise<boolean> {
   // The sync isEncryptionAvailable is deprecated in
   // Electron 45; the async form is the same check.
   try { return await safeStorage.isAsyncEncryptionAvailable(); } catch { return false; }
 }
+
 
 // ---------------------------------------------------------------- IPC
 
@@ -739,7 +746,7 @@ async function secureStorageAvailable() {
 //    and localhost names; a DNS name that resolves to a
 //    private address after this check (DNS rebinding) is
 //    still out of scope, and is noted in PLUGIN_API.md.
-function isBoardLocal(filePath) {
+function isBoardLocal(filePath: string): boolean {
   try {
     const resolved = path.resolve(filePath);
     for (const root of [boardDir(), assetsDir()]) {
@@ -749,7 +756,7 @@ function isBoardLocal(filePath) {
   } catch { /* not a path: not board-local */ }
   return false;
 }
-function isPrivateHost(host) {
+function isPrivateHost(host: string): boolean {
   const h = String(host || "").toLowerCase().replace(/\.$/, "");
   if (!h || h === "localhost" || h.endsWith(".local") || h === "0.0.0.0") return true;
   const v4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(h);
@@ -765,10 +772,10 @@ function isPrivateHost(host) {
   return false;
 }
 
-function registerIpc() {
-  ipcMain.handle('bowerbird:load-board', () => {
+function registerIpc(): void {
+  ipcMain.handle("bowerbird:load-board", () => {
     if (DEMO) {
-      return { json: null, board_path: '', board_dir: assetsDir(), buildId: buildId(), ...demoShowcaseSizes() };
+      return { json: null, board_path: "", board_dir: assetsDir(), buildId: buildId(), ...demoShowcaseSizes() };
     }
     const file = boardPath();
     const dir = path.dirname(file);
@@ -779,10 +786,10 @@ function registerIpc() {
     // video play nothing, and nothing ever repairs it.
     // installShowcaseAssets only fills what is missing, so
     // this never overwrites a user's own files.
-    let showcase = installShowcaseAssets(dir);
-    let json = null;
+    const showcase = installShowcaseAssets(dir);
+    let json: string | null = null;
     try {
-      json = fs.readFileSync(file, 'utf8');
+      json = fs.readFileSync(file, "utf8");
     } catch {
       json = null;
     }
@@ -791,13 +798,13 @@ function registerIpc() {
     // An existing board pointing at the old file gets the new
     // file installed and its reference rewritten, so it plays in
     // the board without the user having to reset their board.
-    if (json && json.includes('welcome-video.ogv')) {
-      const src = path.join(assetsDir(), 'welcome-video.mp4');
-      const dest = path.join(dir, 'welcome-video.mp4');
+    if (json && json.includes("welcome-video.ogv")) {
+      const src = path.join(assetsDir(), "welcome-video.mp4");
+      const dest = path.join(dir, "welcome-video.mp4");
       try {
         if (fs.existsSync(src) && !fs.existsSync(dest)) fs.copyFileSync(src, dest);
         if (fs.existsSync(dest)) {
-          json = json.split('welcome-video.ogv').join('welcome-video.mp4');
+          json = json.split("welcome-video.ogv").join("welcome-video.mp4");
           fs.writeFileSync(file, json);
         }
       } catch { /* old reference stays, video still opens outside */ }
@@ -805,11 +812,11 @@ function registerIpc() {
     return { json, board_path: file, board_dir: dir, panelOrder: [...panelOrder], buildId: buildId(), ...showcase };
   });
 
-  ipcMain.handle('bowerbird:save-board', (_event, json) => {
+  ipcMain.handle("bowerbird:save-board", (_event, json: string) => {
     if (DEMO) return;
     const file = boardPath();
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    const tmp = file + '.tmp';
+    const tmp = file + ".tmp";
     fs.writeFileSync(tmp, json);
     fs.renameSync(tmp, file);
     maybeBackup(path.dirname(file), json);
@@ -821,13 +828,13 @@ function registerIpc() {
   // showcase assets so a fresh welcome board can be built.
   // App settings (e.g. the corner) are NOT touched: they are not
   // board data. Returns the PDF size for the fresh welcome board.
-  ipcMain.handle('bowerbird:reset-board', () => {
+  ipcMain.handle("bowerbird:reset-board", () => {
     if (DEMO) return demoShowcaseSizes();
     const file = boardPath();
     const dir = path.dirname(file);
-    try { makeBackup(dir, fs.readFileSync(file, 'utf8')); } catch { /* reset still proceeds */ }
+    try { makeBackup(dir, fs.readFileSync(file, "utf8")); } catch { /* reset still proceeds */ }
     try { fs.rmSync(file, { force: true }); } catch { /* already gone */ }
-    try { fs.rmSync(path.join(dir, 'assets'), { recursive: true, force: true }); } catch { /* already gone */ }
+    try { fs.rmSync(path.join(dir, "assets"), { recursive: true, force: true }); } catch { /* already gone */ }
     return installShowcaseAssets(dir);
   });
 
@@ -836,8 +843,8 @@ function registerIpc() {
   // the bundle copy exists and its size, and both paths —
   // so a user can report exactly which link in the chain
   // fails on their machine, instead of "File missing".
-  ipcMain.handle('bowerbird:check-file', (_event, filePath) => {
-    const sizeOf = (file) => { try { return fs.statSync(file).size; } catch { return -1; } };
+  ipcMain.handle("bowerbird:check-file", (_event, filePath: string) => {
+    const sizeOf = (file: string): number => { try { return fs.statSync(file).size; } catch { return -1; } };
     const bundle = path.join(assetsDir(), path.basename(String(filePath)));
     return {
       path: String(filePath),
@@ -854,13 +861,13 @@ function registerIpc() {
   // audio or video shows "File missing". Returns what was
   // copied and what could not be found, so the user can
   // report the exact failure instead of a blank card.
-  ipcMain.handle('bowerbird:restore-showcase', () => {
-    if (DEMO) return { copied: [], missing: ['demo mode'], srcDir: assetsDir(), destDir: '' };
+  ipcMain.handle("bowerbird:restore-showcase", () => {
+    if (DEMO) return { copied: [], missing: ["demo mode"], srcDir: assetsDir(), destDir: "" };
     const dir = path.dirname(boardPath());
     try {
       return installShowcaseAssets(dir, true);
     } catch (e) {
-      return { copied: [], missing: [String(e.message)], srcDir: assetsDir(), destDir: dir };
+      return { copied: [], missing: [String((e as Error).message)], srcDir: assetsDir(), destDir: dir };
     }
   });
 
@@ -870,28 +877,28 @@ function registerIpc() {
   // or writes the real library. Listing and copying are scoped to
   // this one folder only: a plugin never gets an arbitrary path
   // to list or an arbitrary destination to copy to.
-  function libraryDir() {
-    if (DEMO) return path.join(app.getPath('userData'), 'library');
-    return path.join(boardDir(), 'library');
+  function libraryDir(): string {
+    if (DEMO) return path.join(app.getPath("userData"), "library");
+    return path.join(boardDir(), "library");
   }
-  const LIBRARY_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf']);
-  ipcMain.handle('bowerbird:list-library', () => {
+  const LIBRARY_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf"]);
+  ipcMain.handle("bowerbird:list-library", () => {
     const dir = libraryDir();
-    const items = [];
-    const folderCounts = new Map();
-    const folders = [];
+    const items: Array<{ name: string; path: string; relativePath: string; ext: string; kind: string; category: string | null; size_bytes: number; mtime_ms: number }> = [];
+    const folderCounts = new Map<string, number>();
+    const folders: string[] = [];
     // Recursive walk, sorted, capped at 1000 items. A category is
     // an immediate subfolder of the library: a file's category is
     // the first segment of its path under the library, or null
     // for files in the library root (shown as Uncategorized).
     // Empty folders still appear as categories, so a category a
     // user just created is visible before anything is put in it.
-    const walk = (current, relBase) => {
-      let entries = [];
+    const walk = (current: string, relBase: string): void => {
+      let entries: fs.Dirent[] = [];
       try { entries = fs.readdirSync(current, { withFileTypes: true }); } catch { return; }
       entries.sort((a, b) => a.name.localeCompare(b.name));
       for (const ent of entries) {
-        if (ent.name.startsWith('.')) continue;
+        if (ent.name.startsWith(".")) continue;
         const full = path.join(current, ent.name);
         const rel = relBase ? path.join(relBase, ent.name) : ent.name;
         if (ent.isDirectory()) {
@@ -901,16 +908,16 @@ function registerIpc() {
           const ext = path.extname(ent.name).toLowerCase();
           if (!LIBRARY_EXTS.has(ext)) continue;
           if (items.length >= 1000) return;
-          let st;
+          let st: fs.Stats;
           try { st = fs.statSync(full); } catch { continue; }
           const category = relBase ? relBase.split(path.sep)[0] : null;
           if (category) folderCounts.set(category, (folderCounts.get(category) || 0) + 1);
           items.push({
             name: ent.name,
             path: full,
-            relativePath: rel.split(path.sep).join('/'),
+            relativePath: rel.split(path.sep).join("/"),
             ext,
-            kind: ext === '.pdf' ? 'pdf' : 'image',
+            kind: ext === ".pdf" ? "pdf" : "image",
             category,
             size_bytes: st.size,
             mtime_ms: st.mtimeMs,
@@ -918,59 +925,59 @@ function registerIpc() {
         }
       }
     };
-    walk(dir, '');
+    walk(dir, "");
     folders.sort();
     const categories = folders.map((name) => ({ name, count: folderCounts.get(name) || 0 }));
     const uncategorizedCount = items.filter((it) => it.category === null).length;
     return { path: dir, items, categories, uncategorizedCount };
   });
-  ipcMain.handle('bowerbird:create-library-category', (_event, name) => {
-    if (typeof name !== 'string') throw new Error('category name must be a string');
+  ipcMain.handle("bowerbird:create-library-category", (_event, name: unknown) => {
+    if (typeof name !== "string") throw new Error("category name must be a string");
     const clean = name.trim();
-    if (!clean || clean.length > 100) throw new Error('category name is empty or too long');
-    if (clean.includes('/') || clean.includes('\\') || clean.includes('..') || clean.startsWith('.')) {
-      throw new Error('category name must be a single folder name');
+    if (!clean || clean.length > 100) throw new Error("category name is empty or too long");
+    if (clean.includes("/") || clean.includes("\\") || clean.includes("..") || clean.startsWith(".")) {
+      throw new Error("category name must be a single folder name");
     }
-    if (clean.toLowerCase() === 'all' || clean.toLowerCase() === 'uncategorized') {
-      throw new Error('All and Uncategorized are reserved');
+    if (clean.toLowerCase() === "all" || clean.toLowerCase() === "uncategorized") {
+      throw new Error("All and Uncategorized are reserved");
     }
     const dir = path.join(libraryDir(), clean);
     fs.mkdirSync(dir, { recursive: true });
     return dir;
   });
 
-  ipcMain.handle('bowerbird:move-library-item', (_event, relativePath, category) => {
+  ipcMain.handle("bowerbird:move-library-item", (_event, relativePath: unknown, category: unknown) => {
     // Move a library file to another category (a subfolder), or to
     // the library root when category is null (Uncategorized).
     // Scoped: the source must already be inside the library, the
     // destination stays inside it, and only library extensions move.
-    if (typeof relativePath !== 'string' || !relativePath || relativePath.startsWith('/') || relativePath.includes('..')) {
-      throw new Error('invalid library path');
+    if (typeof relativePath !== "string" || !relativePath || relativePath.startsWith("/") || relativePath.includes("..")) {
+      throw new Error("invalid library path");
     }
     const lib = libraryDir();
     const src = path.join(lib, relativePath);
-    if (!src.startsWith(lib + path.sep)) throw new Error('source is outside the library');
+    if (!src.startsWith(lib + path.sep)) throw new Error("source is outside the library");
     const ext = path.extname(src).toLowerCase();
-    if (!LIBRARY_EXTS.has(ext)) throw new Error('not a library file');
-    let st;
-    try { st = fs.statSync(src); } catch { throw new Error('library file not found'); }
-    if (!st.isFile()) throw new Error('not a file');
+    if (!LIBRARY_EXTS.has(ext)) throw new Error("not a library file");
+    let st: fs.Stats;
+    try { st = fs.statSync(src); } catch { throw new Error("library file not found"); }
+    if (!st.isFile()) throw new Error("not a file");
     let destDir = lib;
     if (category !== null && category !== undefined) {
-      if (typeof category !== 'string') throw new Error('category must be a string or null');
+      if (typeof category !== "string") throw new Error("category must be a string or null");
       const clean = category.trim();
-      if (!clean || clean.length > 100 || clean.includes('/') || clean.includes('\\') || clean.includes('..') || clean.startsWith('.')) {
-        throw new Error('category name must be a single folder name');
+      if (!clean || clean.length > 100 || clean.includes("/") || clean.includes("\\") || clean.includes("..") || clean.startsWith(".")) {
+        throw new Error("category name must be a single folder name");
       }
-      if (clean.toLowerCase() === 'all' || clean.toLowerCase() === 'uncategorized') {
-        throw new Error('All and Uncategorized are reserved');
+      if (clean.toLowerCase() === "all" || clean.toLowerCase() === "uncategorized") {
+        throw new Error("All and Uncategorized are reserved");
       }
       destDir = path.join(lib, clean);
       fs.mkdirSync(destDir, { recursive: true });
     }
     const base = path.basename(src);
     let dest = path.join(destDir, base);
-    if (dest === src) return relativePath.split(path.sep).join('/');
+    if (dest === src) return relativePath.split(path.sep).join("/");
     // Deduplicate like embedFile/addToLibrary: stem-1, stem-2, …
     if (fs.existsSync(dest)) {
       const stem = path.basename(base, ext);
@@ -978,10 +985,10 @@ function registerIpc() {
       do { dest = path.join(destDir, `${stem}-${n}${ext}`); n += 1; } while (fs.existsSync(dest));
     }
     fs.renameSync(src, dest);
-    return path.relative(lib, dest).split(path.sep).join('/');
+    return path.relative(lib, dest).split(path.sep).join("/");
   });
 
-  ipcMain.handle('bowerbird:add-to-library', (_event, filePath) => {
+  ipcMain.handle("bowerbird:add-to-library", (_event, filePath: string) => {
     const dir = libraryDir();
     fs.mkdirSync(dir, { recursive: true });
     const resolved = path.resolve(filePath);
@@ -1000,9 +1007,9 @@ function registerIpc() {
     return dest;
   });
 
-  ipcMain.handle('bowerbird:embed-file', (_event, filePath) => {
+  ipcMain.handle("bowerbird:embed-file", (_event, filePath: string) => {
     if (DEMO) return filePath;
-    const assets = path.join(boardDir(), 'assets');
+    const assets = path.join(boardDir(), "assets");
     fs.mkdirSync(assets, { recursive: true });
     const resolved = path.resolve(filePath);
     const resolvedAssets = path.resolve(assets);
@@ -1020,7 +1027,7 @@ function registerIpc() {
     return dest;
   });
 
-  ipcMain.handle('bowerbird:read-text-file', (_event, filePath) => fs.readFileSync(filePath, 'utf8'));
+  ipcMain.handle("bowerbird:read-text-file", (_event, filePath: string) => fs.readFileSync(filePath, "utf8"));
   // Data-URL fallback for media: if the app-file scheme
   // fails to serve a file in a given run (the Mac dev-run
   // failure, where files exist and open in Preview but
@@ -1029,51 +1036,50 @@ function registerIpc() {
   // URL instead. Same board-local check as app-file, and
   // a 50 MB cap so a huge video does not blow up the
   // renderer with a base64 string.
-  ipcMain.handle('bowerbird:read-file-base64', (_event, filePath) => {
-    if (!isBoardLocal(filePath)) throw new Error('not a board-local file');
+  ipcMain.handle("bowerbird:read-file-base64", (_event, filePath: string) => {
+    if (!isBoardLocal(filePath)) throw new Error("not a board-local file");
     const size = fs.statSync(filePath).size;
-    if (size > 50 * 1024 * 1024) throw new Error('file too large for inline loading');
+    if (size > 50 * 1024 * 1024) throw new Error("file too large for inline loading");
     const ext = path.extname(filePath).toLowerCase();
-    const mime = MIME[ext] || 'application/octet-stream';
-    return { mime, base64: fs.readFileSync(filePath).toString('base64') };
+    const mime = MIME[ext] || "application/octet-stream";
+    return { mime, base64: fs.readFileSync(filePath).toString("base64") };
   });
-  ipcMain.handle('bowerbird:file-size', (_event, filePath) => fs.statSync(filePath).size);
-  // Context search (local ML, see electron/context.js).
+  ipcMain.handle("bowerbird:file-size", (_event, filePath: string) => fs.statSync(filePath).size);
+  // Context search (local ML, see electron/context.ts).
   // Image and video-frame embeddings and audio labels are
   // computed here, in the main process, where the models
   // run. The renderer only sends board-local paths, frame
   // data URLs, or decoded audio samples, and gets back
   // embeddings and labels — never the other way round.
-  const context = require('./context.js');
-  ipcMain.handle('bowerbird:context-embed-image', async (_event, filePath) => {
-    if (!isBoardLocal(filePath)) throw new Error('not a board-local file');
+  ipcMain.handle("bowerbird:context-embed-image", async (_event, filePath: string) => {
+    if (!isBoardLocal(filePath)) throw new Error("not a board-local file");
     return context.embedImageFile(app, filePath);
   });
-  ipcMain.handle('bowerbird:context-embed-frame', async (_event, dataUrl) => {
-    if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) throw new Error('not an image data URL');
+  ipcMain.handle("bowerbird:context-embed-frame", async (_event, dataUrl: string) => {
+    if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:image/")) throw new Error("not an image data URL");
     return context.embedImageDataUrl(app, dataUrl);
   });
-  ipcMain.handle('bowerbird:context-embed-text', async (_event, text) => {
-    if (typeof text !== 'string' || text.length > 500) throw new Error('text too long');
+  ipcMain.handle("bowerbird:context-embed-text", async (_event, text: string) => {
+    if (typeof text !== "string" || text.length > 500) throw new Error("text too long");
     return context.embedText(app, text);
   });
-  ipcMain.handle('bowerbird:context-classify-audio', async (_event, pcm) => {
-    if (!pcm || pcm.length > 16000 * 60) throw new Error('audio too long for classification');
+  ipcMain.handle("bowerbird:context-classify-audio", async (_event, pcm: Float32Array | number[]) => {
+    if (!pcm || pcm.length > 16000 * 60) throw new Error("audio too long for classification");
     return context.classifyAudio(app, pcm);
   });
   // Context index persistence: one JSON file next to the
   // board, keyed by media path, so a board that is already
   // indexed does not re-run the models on every launch.
-  ipcMain.handle('bowerbird:context-index-load', () => {
+  ipcMain.handle("bowerbird:context-index-load", () => {
     try {
-      const file = path.join(boardDir(), 'context-index.json');
+      const file = path.join(boardDir(), "context-index.json");
       if (!fs.existsSync(file)) return {};
-      return JSON.parse(fs.readFileSync(file, 'utf8'));
+      return JSON.parse(fs.readFileSync(file, "utf8"));
     } catch { return {}; }
   });
-  function writeContextIndex(index) {
+  function writeContextIndex(index: unknown): boolean {
     try {
-      const file = path.join(boardDir(), 'context-index.json');
+      const file = path.join(boardDir(), "context-index.json");
       // Write to a temp file, then rename: a crash or
       // full disk during a direct write leaves a
       // truncated index, which forces a full reindex
@@ -1084,56 +1090,56 @@ function registerIpc() {
       return true;
     } catch { return false; }
   }
-  ipcMain.handle('bowerbird:context-index-save', (_event, index) => writeContextIndex(index));
+  ipcMain.handle("bowerbird:context-index-save", (_event, index: unknown) => writeContextIndex(index));
   // Synchronous twin of the save above, for the
   // beforeunload flush: an async invoke may not
   // complete before the window closes, so a batch
   // indexed just before quitting could be lost.
   // Only the unload flush uses this; ordinary saves
   // stay async.
-  ipcMain.on('bowerbird:context-index-save-sync', (event, index) => {
+  ipcMain.on("bowerbird:context-index-save-sync", (event, index: unknown) => {
     event.returnValue = writeContextIndex(index);
   });
 
-  ipcMain.handle('bowerbird:fetch-preview', async (_event, url) => {
-    let parsed;
+  ipcMain.handle("bowerbird:fetch-preview", async (_event, url: string) => {
+    let parsed: URL;
     try {
       parsed = new URL(url);
     } catch {
-      throw new Error('preview URL is not a valid URL');
+      throw new Error("preview URL is not a valid URL");
     }
-    if ((parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || isPrivateHost(parsed.hostname)) {
-      throw new Error('preview URL is not a public web address');
+    if ((parsed.protocol !== "http:" && parsed.protocol !== "https:") || isPrivateHost(parsed.hostname)) {
+      throw new Error("preview URL is not a public web address");
     }
     const res = await fetch(url, {
-      headers: { 'User-Agent': 'Bowerbird/0.1' },
+      headers: { "User-Agent": "Bowerbird/0.1" },
       signal: AbortSignal.timeout(6000),
     });
     // fetch follows redirects, so a public URL could redirect
     // to a private one; check where it actually landed too.
     try {
       if (res.url && isPrivateHost(new URL(res.url).hostname)) {
-        throw new Error('preview URL redirected to a private address');
+        throw new Error("preview URL redirected to a private address");
       }
     } catch (e) {
-      if (e.message && e.message.includes('private address')) throw e;
+      if (e instanceof Error && e.message.includes("private address")) throw e;
     }
     const text = (await res.text()).slice(0, 300000);
     // Resolve a possibly-relative image/icon URL against the page URL,
     // and only ever hand the renderer an http(s) URL.
-    const resolveHttp = (href) => {
+    const resolveHttp = (href: string | null): string | null => {
       if (!href) return null;
       try {
         const u = new URL(href, url);
-        return u.protocol === 'http:' || u.protocol === 'https:' ? u.href : null;
+        return u.protocol === "http:" || u.protocol === "https:" ? u.href : null;
       } catch {
         return null;
       }
     };
     const image = resolveHttp(
-      metaContent(text, 'og:image') || metaContent(text, 'twitter:image') || metaContent(text, 'og:image:secure_url')
+      metaContent(text, "og:image") || metaContent(text, "twitter:image") || metaContent(text, "og:image:secure_url")
     );
-    let icon = resolveHttp(linkHref(text, ['icon', 'apple-touch-icon']));
+    let icon = resolveHttp(linkHref(text, ["icon", "apple-touch-icon"]));
     if (!icon) {
       try {
         icon = `https://${new URL(url).hostname}/favicon.ico`;
@@ -1142,15 +1148,15 @@ function registerIpc() {
       }
     }
     return {
-      title: metaContent(text, 'og:title') || metaContent(text, 'twitter:title') || tagContent(text, 'title'),
-      description: metaContent(text, 'og:description') || metaContent(text, 'twitter:description') || metaContent(text, 'description'),
+      title: metaContent(text, "og:title") || metaContent(text, "twitter:title") || tagContent(text, "title"),
+      description: metaContent(text, "og:description") || metaContent(text, "twitter:description") || metaContent(text, "description"),
       image,
       icon,
     };
   });
 
-  ipcMain.handle('bowerbird:open-external', (_event, target) => {
-    if (typeof target !== 'string' || !target) throw new Error('nothing to open');
+  ipcMain.handle("bowerbird:open-external", (_event, target: string) => {
+    if (typeof target !== "string" || !target) throw new Error("nothing to open");
     if (/^https?:\/\//.test(target)) return shell.openExternal(target);
     // Feedback: the Settings feedback box opens the tester's
     // mail app with a prefilled message to the maker. Only
@@ -1159,39 +1165,39 @@ function registerIpc() {
     // use the channel to open a compose window. Opening a
     // composer sends nothing by itself; the tester still
     // presses Send in their mail app.
-    if (target.startsWith('mailto:wren7762@gmail.com?')) return shell.openExternal(target);
+    if (target.startsWith("mailto:wren7762@gmail.com?")) return shell.openExternal(target);
     // Local files: only board-local files (see isBoardLocal).
     // A file:// URL is unwrapped first, so file:///etc/passwd
     // does not slip past the check as a non-https string.
     let local = target;
-    if (target.startsWith('file://')) {
-      try { local = decodeURIComponent(new URL(target).pathname); } catch { throw new Error('not a board-local file'); }
+    if (target.startsWith("file://")) {
+      try { local = decodeURIComponent(new URL(target).pathname); } catch { throw new Error("not a board-local file"); }
     }
     if (isBoardLocal(local)) return shell.openPath(local);
-    throw new Error('not a public web address or a board-local file');
+    throw new Error("not a public web address or a board-local file");
   });
-  ipcMain.handle('bowerbird:get-app-settings', () => ({ corner: cornerReveal, panelOrder: [...panelOrder] }));
-  ipcMain.handle('bowerbird:list-boards', () => {
-    if (DEMO) return [{ name: 'Main', current: true, items: 0 }];
+  ipcMain.handle("bowerbird:get-app-settings", () => ({ corner: cornerReveal, panelOrder: [...panelOrder] }));
+  ipcMain.handle("bowerbird:list-boards", () => {
+    if (DEMO) return [{ name: "Main", current: true, items: 0 }];
     return listBoards();
   });
-  ipcMain.handle('bowerbird:create-board', (_event, name) => createBoard(name));
-  ipcMain.handle('bowerbird:switch-board', (_event, name) => switchBoard(name));
-  ipcMain.handle('bowerbird:rename-board', (_event, oldName, newName) => renameBoard(oldName, newName));
-  ipcMain.handle('bowerbird:delete-board', (_event, name) => deleteBoard(name));
-  ipcMain.handle('bowerbird:list-backups', () => {
+  ipcMain.handle("bowerbird:create-board", (_event, name: unknown) => createBoard(name));
+  ipcMain.handle("bowerbird:switch-board", (_event, name: unknown) => switchBoard(name));
+  ipcMain.handle("bowerbird:rename-board", (_event, oldName: unknown, newName: unknown) => renameBoard(oldName, newName));
+  ipcMain.handle("bowerbird:delete-board", (_event, name: unknown) => deleteBoard(name));
+  ipcMain.handle("bowerbird:list-backups", () => {
     if (DEMO) return [];
     return listBackups(boardDir());
   });
-  ipcMain.handle('bowerbird:restore-backup', (_event, name) => restoreBackup(boardDir(), name));
-  ipcMain.handle('bowerbird:set-panel-order', (_event, order) => {
+  ipcMain.handle("bowerbird:restore-backup", (_event, name: string) => restoreBackup(boardDir(), name));
+  ipcMain.handle("bowerbird:set-panel-order", (_event, order: unknown) => {
     if (!Array.isArray(order)) return panelOrder;
-    panelOrder = order.filter((x) => typeof x === "string").slice(0, 100);
+    panelOrder = order.filter((x: unknown) => typeof x === "string").slice(0, 100);
     if (!DEMO) saveAppSettings();
     return panelOrder;
   });
-  ipcMain.handle('bowerbird:list-plugins', () => listPlugins());
-  ipcMain.handle('bowerbird:read-plugin-file', (_event, pluginId, relativePath) => {
+  ipcMain.handle("bowerbird:list-plugins", () => listPlugins());
+  ipcMain.handle("bowerbird:read-plugin-file", (_event, pluginId: string, relativePath: string) => {
     if (typeof pluginId !== "string" || typeof relativePath !== "string") {
       throw new Error("bad plugin file request");
     }
@@ -1211,8 +1217,8 @@ function registerIpc() {
     }
     return fs.readFileSync(resolved, "utf8");
   });
-  ipcMain.handle('bowerbird:get-plugin-enabled', () => loadPluginEnabled());
-  ipcMain.handle('bowerbird:set-plugin-enabled', (_event, pluginId, enabled) => {
+  ipcMain.handle("bowerbird:get-plugin-enabled", () => loadPluginEnabled());
+  ipcMain.handle("bowerbird:set-plugin-enabled", (_event, pluginId: string, enabled: boolean) => {
     const map = loadPluginEnabled();
     map[pluginId] = enabled === true;
     savePluginEnabled(map);
@@ -1224,35 +1230,35 @@ function registerIpc() {
   // bundled folder, and never overwrites an existing plugin:
   // a clash is an error the caller shows, not a silent
   // replacement. Blocked in demo mode, which saves nothing.
-  ipcMain.handle('bowerbird:install-plugin', (_event, plugin) => {
-    if (DEMO) throw new Error('cannot install a plugin in demo mode');
-    if (!plugin || typeof plugin !== 'object') throw new Error('bad plugin');
+  ipcMain.handle("bowerbird:install-plugin", (_event, plugin: Record<string, unknown>) => {
+    if (DEMO) throw new Error("cannot install a plugin in demo mode");
+    if (!plugin || typeof plugin !== "object") throw new Error("bad plugin");
     const { id, name, description, permissions, mainCode, styleCode } = plugin;
-    if (typeof id !== 'string' || !/^[a-z0-9-]+$/.test(id)) throw new Error('plugin id must be lowercase letters, digits and hyphens');
-    if (typeof name !== 'string' || !name.trim() || typeof mainCode !== 'string' || !mainCode.trim()) throw new Error('plugin name and code are required');
-    if (mainCode.length > 200000 || (typeof styleCode === 'string' && styleCode.length > 200000)) throw new Error('plugin code is too large');
-    if (!Array.isArray(permissions) || permissions.some((p) => typeof p !== 'string')) throw new Error('plugin permissions must be strings');
+    if (typeof id !== "string" || !/^[a-z0-9-]+$/.test(id)) throw new Error("plugin id must be lowercase letters, digits and hyphens");
+    if (typeof name !== "string" || !name.trim() || typeof mainCode !== "string" || !mainCode.trim()) throw new Error("plugin name and code are required");
+    if (mainCode.length > 200000 || (typeof styleCode === "string" && styleCode.length > 200000)) throw new Error("plugin code is too large");
+    if (!Array.isArray(permissions) || permissions.some((p: unknown) => typeof p !== "string")) throw new Error("plugin permissions must be strings");
     const base = process.env.XDG_DATA_HOME
       ? process.env.XDG_DATA_HOME
-      : path.join(process.env.HOME || '.', '.local', 'share');
-    const folder = path.join(base, 'bowerbird', 'plugins', id);
+      : path.join(process.env.HOME || ".", ".local", "share");
+    const folder = path.join(base, "bowerbird", "plugins", id);
     if (fs.existsSync(folder)) throw new Error(`a plugin called ${id} already exists`);
-    const styles = typeof styleCode === 'string' && styleCode.trim() ? ['style.css'] : [];
+    const styles = typeof styleCode === "string" && styleCode.trim() ? ["style.css"] : [];
     const manifest = {
-      apiVersion: '1',
+      apiVersion: "1",
       id,
       name: name.trim(),
-      description: typeof description === 'string' ? description : '',
-      version: '1.0.0',
-      main: 'main.js',
+      description: typeof description === "string" ? description : "",
+      version: "1.0.0",
+      main: "main.js",
       styles,
       permissions,
     };
     fs.mkdirSync(folder, { recursive: true });
     try {
-      fs.writeFileSync(path.join(folder, 'manifest.json'), JSON.stringify(manifest, null, 2));
-      fs.writeFileSync(path.join(folder, 'main.js'), mainCode);
-      if (styles.length) fs.writeFileSync(path.join(folder, 'style.css'), styleCode);
+      fs.writeFileSync(path.join(folder, "manifest.json"), JSON.stringify(manifest, null, 2));
+      fs.writeFileSync(path.join(folder, "main.js"), mainCode);
+      if (styles.length) fs.writeFileSync(path.join(folder, "style.css"), styleCode as string);
     } catch (e) {
       fs.rmSync(folder, { recursive: true, force: true });
       throw e;
@@ -1268,26 +1274,28 @@ function registerIpc() {
   // never stored here. Public bases must be https; a
   // localhost base may be http, for a local model server.
   // Other private addresses are refused, as with fetchPreview.
-  ipcMain.handle('bowerbird:plugin-storage-get', (_event, pluginId, key) => {
+  ipcMain.handle("bowerbird:plugin-storage-get", (_event, pluginId: string, key: string) => {
     const data = loadPluginStorage();
     const per = data[pluginId];
     return per && typeof per === "object" ? (per[key] ?? null) : null;
   });
-  ipcMain.handle('bowerbird:plugin-storage-set', (_event, pluginId, key, value) => {
+  ipcMain.handle("bowerbird:plugin-storage-set", (_event, pluginId: string, key: string, value: unknown) => {
     const data = loadPluginStorage();
-    if (!data[pluginId] || typeof data[pluginId] !== "object") data[pluginId] = {};
-    data[pluginId][key] = value;
+    let per = data[pluginId];
+    if (!per || typeof per !== "object") { per = {}; data[pluginId] = per; }
+    per[key] = value;
     savePluginStorage(data);
   });
-  ipcMain.handle('bowerbird:plugin-storage-delete', (_event, pluginId, key) => {
+  ipcMain.handle("bowerbird:plugin-storage-delete", (_event, pluginId: string, key: string) => {
     const data = loadPluginStorage();
-    if (data[pluginId] && typeof data[pluginId] === "object") {
-      delete data[pluginId][key];
+    const per = data[pluginId];
+    if (per && typeof per === "object") {
+      delete per[key];
       savePluginStorage(data);
     }
   });
-  ipcMain.handle('bowerbird:secure-storage-available', () => secureStorageAvailable());
-  ipcMain.handle('bowerbird:secure-storage-get', async (_event, pluginId, key) => {
+  ipcMain.handle("bowerbird:secure-storage-available", () => secureStorageAvailable());
+  ipcMain.handle("bowerbird:secure-storage-get", async (_event, pluginId: string, key: string) => {
     const data = loadSecureStorage();
     const per = data[pluginId];
     if (!per || typeof per !== "object" || !per[key]) return null;
@@ -1296,31 +1304,40 @@ function registerIpc() {
       try {
         // decryptStringAsync resolves to { result, shouldReEncrypt },
         // not a bare string like the old sync decryptString.
-        const out = await safeStorage.decryptStringAsync(Buffer.from(entry.value, "base64"));
-        return typeof out === "string" ? out : (out && typeof out.result === "string" ? out.result : null);
+        // The defensive string branch stays: an older Electron
+        // returned the bare string, and a secret must not be
+        // dropped silently if the shape ever differs again.
+        const out: unknown = await safeStorage.decryptStringAsync(Buffer.from(entry.value, "base64"));
+        if (typeof out === "string") return out;
+        if (out && typeof out === "object" && typeof (out as { result: unknown }).result === "string") {
+          return (out as { result: string }).result;
+        }
+        return null;
       } catch { return null; }
     }
     return entry.value ?? null;
   });
-  ipcMain.handle('bowerbird:secure-storage-set', async (_event, pluginId, key, value) => {
+  ipcMain.handle("bowerbird:secure-storage-set", async (_event, pluginId: string, key: string, value: string) => {
     const data = loadSecureStorage();
-    if (!data[pluginId] || typeof data[pluginId] !== "object") data[pluginId] = {};
+    let per = data[pluginId];
+    if (!per || typeof per !== "object") { per = {}; data[pluginId] = per; }
     if (await secureStorageAvailable()) {
-      data[pluginId][key] = { encrypted: true, value: (await safeStorage.encryptStringAsync(String(value))).toString("base64") };
+      per[key] = { encrypted: true, value: (await safeStorage.encryptStringAsync(String(value))).toString("base64") };
     } else {
-      data[pluginId][key] = { encrypted: false, value: String(value) };
+      per[key] = { encrypted: false, value: String(value) };
     }
     saveSecureStorage(data);
     return secureStorageAvailable();
   });
-  ipcMain.handle('bowerbird:secure-storage-delete', (_event, pluginId, key) => {
+  ipcMain.handle("bowerbird:secure-storage-delete", (_event, pluginId: string, key: string) => {
     const data = loadSecureStorage();
-    if (data[pluginId] && typeof data[pluginId] === "object") {
-      delete data[pluginId][key];
+    const per = data[pluginId];
+    if (per && typeof per === "object") {
+      delete per[key];
       saveSecureStorage(data);
     }
   });
-  ipcMain.handle('bowerbird:set-corner', (_event, corner) => {
+  ipcMain.handle("bowerbird:set-corner", (_event, corner: string) => {
     if (!CORNERS.includes(corner)) return cornerReveal;
     cornerReveal = corner;
     if (!DEMO) saveAppSettings();
@@ -1330,38 +1347,38 @@ function registerIpc() {
       const bounds = peekBounds();
       if (bounds) {
         peekWin.setBounds(bounds);
-        peekWin.loadFile(path.join(__dirname, 'peek.html'), { query: { corner: cornerReveal } });
+        peekWin.loadFile(path.join(__dirname, "peek.html"), { query: { corner: cornerReveal } });
       }
     }
     return cornerReveal;
   });
-  ipcMain.handle('bowerbird:collapse', () => collapseBoard());
-  ipcMain.on('bowerbird:move-window', (_event, dx, dy) => {
+  ipcMain.handle("bowerbird:collapse", () => collapseBoard());
+  ipcMain.on("bowerbird:move-window", (_event, dx: number, dy: number) => {
     if (!win || isCollapsed) return;
     const b = win.getBounds();
     win.setBounds({ x: Math.round(b.x + dx), y: Math.round(b.y + dy), width: b.width, height: b.height });
   });
-  ipcMain.handle('bowerbird:restore', () => { restoreBoard(); });
+  ipcMain.handle("bowerbird:restore", () => { restoreBoard(); });
 
-  ipcMain.handle('bowerbird:minimise', () => { if (win) win.minimize(); });
-  ipcMain.handle('bowerbird:close-window', () => { if (win) win.close(); });
+  ipcMain.handle("bowerbird:minimise", () => { if (win) win.minimize(); });
+  ipcMain.handle("bowerbird:close-window", () => { if (win) win.close(); });
   // Quit must quit the app, not just close the window: on macOS
   // closing the only window does not by itself end the app, and
   // BaseWindow.close() alone did not end the process in testing.
-  ipcMain.handle('bowerbird:quit', () => { if (peekWin) peekWin.destroy(); if (win) win.destroy(); app.quit(); });
-  ipcMain.handle('bowerbird:fullscreen', () => { if (win) win.setFullScreen(!win.isFullScreen()); return win ? win.isFullScreen() : false; });
-  ipcMain.handle('bowerbird:maximise', () => {
+  ipcMain.handle("bowerbird:quit", () => { if (peekWin) peekWin.destroy(); if (win) win.destroy(); app.quit(); });
+  ipcMain.handle("bowerbird:fullscreen", () => { if (win) win.setFullScreen(!win.isFullScreen()); return win ? win.isFullScreen() : false; });
+  ipcMain.handle("bowerbird:maximise", () => {
     if (!win) return false;
     if (win.isMaximized()) win.unmaximize(); else win.maximize();
     return win.isMaximized();
   });
-  ipcMain.handle('bowerbird:window-state', () => ({ maximised: win ? win.isMaximized() : false, fullscreen: win ? win.isFullScreen() : false }));
+  ipcMain.handle("bowerbird:window-state", () => ({ maximised: win ? win.isMaximized() : false, fullscreen: win ? win.isFullScreen() : false }));
 }
 
 // ---------------------------------------------------------------- app
 
 protocol.registerSchemesAsPrivileged([{
-  scheme: 'app-file',
+  scheme: "app-file",
   privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
 }, {
   // plugin: serves a user plugin's own files (main.js and
@@ -1374,20 +1391,23 @@ protocol.registerSchemesAsPrivileged([{
   // plugin's own folder. Only the plugin's own folder is
   // served (traversal is rejected), and only .js/.css/.json
   // — the same allow-list as bowerbird:read-plugin-file.
-  scheme: 'plugin',
+  scheme: "plugin",
   privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true },
 }]);
 
 app.whenReady().then(() => {
-  if (process.platform === 'darwin' && iconPath()) {
-    try { app.dock.setIcon(iconPath()); } catch { /* Dock icon is cosmetic */ }
+  if (process.platform === "darwin") {
+    const icon = iconPath();
+    if (icon) {
+      try { app.dock?.setIcon(icon); } catch { /* Dock icon is cosmetic */ }
+    }
   }
   // Local board files (images, audio, PDFs) reach the renderer through
   // this scheme, in dev and in a packaged build alike. The renderer
   // never gets a raw filesystem path it can use outside this scheme.
-  // The handler itself lives in electron/appFile.js.
-  protocol.handle('app-file', (request) => handleAppFileRequest(request, {
-    isBoardLocal: (p) => isBoardLocal(p),
+  // The handler itself lives in electron/appFile.ts.
+  protocol.handle("app-file", (request) => handleAppFileRequest(request, {
+    isBoardLocal: (p: string) => isBoardLocal(p),
     boardDir: () => boardDir(),
     assetsDir: () => assetsDir(),
   }));
@@ -1397,31 +1417,31 @@ app.whenReady().then(() => {
   // is plugin://<plugin-id>/<relative-path>. Only the plugin's
   // own folder is served, and only .js/.css/.json — a path that
   // escapes the folder, or an unknown plugin id, is a 404.
-  protocol.handle('plugin', (request) => {
+  protocol.handle("plugin", (request) => {
     try {
       const u = new URL(request.url);
       const pluginId = u.hostname;
-      const relativePath = u.pathname.split('/').filter(Boolean).map((seg) => {
+      const relativePath = u.pathname.split("/").filter(Boolean).map((seg) => {
         try { return decodeURIComponent(seg); } catch { return seg; }
-      }).join('/');
-      if (!pluginId || !relativePath) return new Response('not found', { status: 404 });
+      }).join("/");
+      if (!pluginId || !relativePath) return new Response("not found", { status: 404 });
       let dir = pluginDirs.get(pluginId);
       if (!dir) {
         listPlugins();
         dir = pluginDirs.get(pluginId);
       }
-      if (!dir) return new Response('not found', { status: 404 });
+      if (!dir) return new Response("not found", { status: 404 });
       const ext = path.extname(relativePath).toLowerCase();
-      if (!['.js', '.css', '.json'].includes(ext)) return new Response('not found', { status: 404 });
+      if (![".js", ".css", ".json"].includes(ext)) return new Response("not found", { status: 404 });
       const resolved = path.resolve(dir, relativePath);
       if (resolved !== dir && !resolved.startsWith(dir + path.sep)) {
-        return new Response('not found', { status: 404 });
+        return new Response("not found", { status: 404 });
       }
       const data = fs.readFileSync(resolved);
-      const type = ext === '.js' ? 'application/javascript' : ext === '.css' ? 'text/css' : 'application/json';
-      return new Response(data, { headers: { 'Content-Type': type } });
+      const type = ext === ".js" ? "application/javascript" : ext === ".css" ? "text/css" : "application/json";
+      return new Response(data, { headers: { "Content-Type": type } });
     } catch {
-      return new Response('not found', { status: 404 });
+      return new Response("not found", { status: 404 });
     }
   });
   if (!DEMO) {
@@ -1437,6 +1457,6 @@ app.whenReady().then(() => {
   createWindow();
 });
 
-app.on('window-all-closed', () => {
+app.on("window-all-closed", () => {
   app.quit();
 });

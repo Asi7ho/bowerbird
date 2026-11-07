@@ -6,22 +6,28 @@
 // /etc/passwd, a private key, another app's data — is a
 // 404, not a file, even though the renderer asked for it
 // by full path.
-const fs = require('node:fs');
-const path = require('node:path');
-const { Readable } = require('node:stream');
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { Readable } from "node:stream";
 
-const MIME = {
-  '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
-  '.pdf': 'application/pdf', '.mp3': 'audio/mpeg', '.wav': 'audio/wav',
-  '.ogg': 'audio/ogg', '.ogv': 'video/ogg', '.m4a': 'audio/mp4', '.mp4': 'video/mp4',
-  '.mov': 'video/quicktime', '.webm': 'video/webm', '.txt': 'text/plain',
-  '.md': 'text/markdown',
+export const MIME: Record<string, string> = {
+  ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+  ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml",
+  ".pdf": "application/pdf", ".mp3": "audio/mpeg", ".wav": "audio/wav",
+  ".ogg": "audio/ogg", ".ogv": "video/ogg", ".m4a": "audio/mp4", ".mp4": "video/mp4",
+  ".mov": "video/quicktime", ".webm": "video/webm", ".txt": "text/plain",
+  ".md": "text/markdown",
 };
+
+export interface AppFileDeps {
+  isBoardLocal: (filePath: string) => boolean;
+  boardDir: () => string;
+  assetsDir: () => string;
+}
 
 // deps: isBoardLocal(path) (the board-local check),
 // boardDir() and assetsDir() (current board folder / bundle assets).
-function handleAppFileRequest(request, deps) {
+export function handleAppFileRequest(request: Request, deps: AppFileDeps): Response {
   try {
     const u = new URL(request.url);
     // fileUrl() puts a literal localhost host in front of
@@ -33,21 +39,21 @@ function handleAppFileRequest(request, deps) {
     // is why the legacy form broke Mac paths starting
     // with /Users — it arrived as /users and failed the
     // board-local check.
-    const raw = (u.hostname === 'localhost' || !u.hostname) ? u.pathname : `/${u.hostname}${u.pathname}`;
-    const filePath = raw.split('/').map((seg) => {
+    const raw = (u.hostname === "localhost" || !u.hostname) ? u.pathname : `/${u.hostname}${u.pathname}`;
+    const filePath = raw.split("/").map((seg) => {
       try {
         return decodeURIComponent(seg);
       } catch {
         return seg;
       }
-    }).join('/');
+    }).join("/");
     // Only board-local files are served (see isBoardLocal
     // above). Any other path — /etc/passwd, a private key,
     // another app's data — is a 404, not a file, even
     // though the renderer asked for it by full path.
     if (!deps.isBoardLocal(filePath)) {
       console.error(`[app-file] rejected (not board-local): ${filePath} (boardDir=${deps.boardDir()}, assetsDir=${deps.assetsDir()})`);
-      return new Response('not found', { status: 404 });
+      return new Response("not found", { status: 404 });
     }
     // Welcome-media fallback: a board item that points at
     // a welcome file in the board folder must still play
@@ -60,7 +66,7 @@ function handleAppFileRequest(request, deps) {
     // copy is never overridden: if the user replaced a
     // welcome file with their own image of the same name,
     // that file is the one served.
-    const WELCOME = ['welcome-bower.jpg', 'welcome-birdsong.mp3', 'welcome-video.mp4', 'sample.pdf'];
+    const WELCOME = ["welcome-bower.jpg", "welcome-birdsong.mp3", "welcome-video.mp4", "sample.pdf"];
     let servePath = filePath;
     if (WELCOME.includes(path.basename(filePath))) {
       let boardSize = -1;
@@ -71,7 +77,7 @@ function handleAppFileRequest(request, deps) {
       }
     }
     const ext = path.extname(servePath).toLowerCase();
-    const type = MIME[ext] || 'application/octet-stream';
+    const type = MIME[ext] || "application/octet-stream";
     // Chromium's media player asks for byte ranges and refuses a
     // source it cannot seek in ("no supported source was found"
     // for audio served as an open-ended stream). Answer ranges
@@ -84,29 +90,29 @@ function handleAppFileRequest(request, deps) {
     // handler. With an ETag the browser revalidates
     // instead (304, no body, no file read), and a
     // replaced asset is never served stale.
-    let size;
-    let etag;
+    let size: number;
+    let etag: string;
     try {
       const st = fs.statSync(servePath);
       size = st.size;
       etag = `"${st.size}-${Math.floor(st.mtimeMs)}"`;
     } catch {
       console.error(`[app-file] not found on disk: ${servePath} (requested ${filePath})`);
-      return new Response('not found', { status: 404 });
+      return new Response("not found", { status: 404 });
     }
-    if (request.headers.get('if-none-match') === etag) {
-      return new Response(null, { status: 304, headers: { 'ETag': etag, 'Accept-Ranges': 'bytes' } });
+    if (request.headers.get("if-none-match") === etag) {
+      return new Response(null, { status: 304, headers: { "ETag": etag, "Accept-Ranges": "bytes" } });
     }
     // A bundle fallback that is itself empty is no better
     // than the missing board copy: fall through to 404 so
     // the renderer shows "File missing" instead of a blank
     // card that looks like a different bug.
     if (size <= 0 && servePath !== filePath) {
-      return new Response('not found', { status: 404 });
+      return new Response("not found", { status: 404 });
     }
-    const range = request.headers.get('range');
-    if (request.method === 'HEAD') {
-      return new Response(null, { headers: { 'Content-Type': type, 'Content-Length': String(size), 'Accept-Ranges': 'bytes', 'ETag': etag } });
+    const range = request.headers.get("range");
+    if (request.method === "HEAD") {
+      return new Response(null, { headers: { "Content-Type": type, "Content-Length": String(size), "Accept-Ranges": "bytes", "ETag": etag } });
     }
     if (range) {
       const m = /^bytes=(\d*)-(\d*)$/.exec(range);
@@ -115,8 +121,8 @@ function handleAppFileRequest(request, deps) {
         // 500 bytes, not the first: RFC 9110. The old
         // code read an empty start as 0, so a player
         // seeking to the tail of a file got its head.
-        let start;
-        let end;
+        let start: number;
+        let end: number;
         if (!m[1] && m[2]) {
           const suffix = parseInt(m[2], 10);
           start = Math.max(0, size - suffix);
@@ -128,18 +134,16 @@ function handleAppFileRequest(request, deps) {
         if (start < size && end >= start && end < size) {
           return new Response(Readable.toWeb(fs.createReadStream(servePath, { start, end })), {
             status: 206,
-            headers: { 'Content-Type': type, 'Content-Length': String(end - start + 1), 'Content-Range': `bytes ${start}-${end}/${size}`, 'Accept-Ranges': 'bytes', 'ETag': etag },
+            headers: { "Content-Type": type, "Content-Length": String(end - start + 1), "Content-Range": `bytes ${start}-${end}/${size}`, "Accept-Ranges": "bytes", "ETag": etag },
           });
         }
-        return new Response('range not satisfiable', { status: 416, headers: { 'Content-Range': `bytes */${size}` } });
+        return new Response("range not satisfiable", { status: 416, headers: { "Content-Range": `bytes */${size}` } });
       }
     }
     return new Response(Readable.toWeb(fs.createReadStream(servePath)), {
-      headers: { 'Content-Type': type, 'Content-Length': String(size), 'Accept-Ranges': 'bytes', 'ETag': etag },
+      headers: { "Content-Type": type, "Content-Length": String(size), "Accept-Ranges": "bytes", "ETag": etag },
     });
   } catch {
-    return new Response('not found', { status: 404 });
+    return new Response("not found", { status: 404 });
   }
 }
-
-module.exports = { handleAppFileRequest, MIME };

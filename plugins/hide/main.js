@@ -6,7 +6,7 @@
 //
 // What stays in the core, because a renderer plugin cannot do it:
 // hiding the window, showing the peek icon, and remembering the
-// corner for the peek (electron/main.js, collapse/restore/peek,
+// corner for the peek (electron/main.ts, collapse/restore/peek,
 // and the corner setting file). Everything the user sees — the
 // button, the corner picker, the H shortcut — lives in this file
 // and talks to the core only through api.window, api.board and

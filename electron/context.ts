@@ -28,27 +28,42 @@
 // one-token text, and text-only calls use a dummy black
 // image. The returned embedding for the wanted side is
 // unaffected by the dummy side.
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import type { App } from "electron";
+import type { CLIPModel, PreTrainedTokenizer, Processor, RawImage } from "@xenova/transformers";
 
-let transformers = null;
-let clip = null; // { tokenizer, processor, model }
-let ast = null; // pipeline
-let clipLoading = null;
-let astLoading = null;
+type TransformersModule = typeof import("@xenova/transformers");
 
-function modelsDir(app) {
+interface ClipBundle {
+  tokenizer: PreTrainedTokenizer;
+  processor: Processor;
+  model: CLIPModel;
+  RawImage: typeof RawImage;
+}
+
+// The audio pipeline, typed by the one way it is called:
+// an array of samples in, the top labels out.
+type AudioPipeline = (input: Float32Array, options: { topk: number }) => Promise<Array<{ label: string; score: number }>>;
+
+let transformers: TransformersModule | null = null;
+let clip: ClipBundle | null = null; // { tokenizer, processor, model }
+let ast: AudioPipeline | null = null; // pipeline
+let clipLoading: Promise<ClipBundle> | null = null;
+let astLoading: Promise<AudioPipeline> | null = null;
+
+function modelsDir(app: App): string {
   try {
-    return path.join(app.getPath('userData'), 'models');
+    return path.join(app.getPath("userData"), "models");
   } catch {
-    return path.join(os.tmpdir(), 'bowerbird-models');
+    return path.join(os.tmpdir(), "bowerbird-models");
   }
 }
 
-async function loadTransformers(app) {
+async function loadTransformers(app: App): Promise<TransformersModule> {
   if (!transformers) {
-    transformers = require('@xenova/transformers');
+    transformers = await import("@xenova/transformers");
     transformers.env.cacheDir = modelsDir(app);
     // OnnxRuntime in Electron's main process runs on CPU;
     // no GPU / WASM backends are needed or wanted here.
@@ -60,54 +75,54 @@ async function loadTransformers(app) {
   return transformers;
 }
 
-async function loadClip(app) {
+async function loadClip(app: App): Promise<ClipBundle> {
   if (clip) return clip;
   if (!clipLoading) {
     clipLoading = (async () => {
       const t = await loadTransformers(app);
-      const tokenizer = await t.AutoTokenizer.from_pretrained('Xenova/clip-vit-base-patch32');
-      const processor = await t.AutoProcessor.from_pretrained('Xenova/clip-vit-base-patch32');
-      const model = await t.CLIPModel.from_pretrained('Xenova/clip-vit-base-patch32');
+      const tokenizer = await t.AutoTokenizer.from_pretrained("Xenova/clip-vit-base-patch32");
+      const processor = await t.AutoProcessor.from_pretrained("Xenova/clip-vit-base-patch32");
+      const model = await t.CLIPModel.from_pretrained("Xenova/clip-vit-base-patch32");
       clip = { tokenizer, processor, model, RawImage: t.RawImage };
       return clip;
-    })().catch((e) => { clipLoading = null; throw e; });
+    })().catch((e: unknown) => { clipLoading = null; throw e; });
   }
   return clipLoading;
 }
 
-async function loadAst(app) {
+async function loadAst(app: App): Promise<AudioPipeline> {
   if (ast) return ast;
   if (!astLoading) {
     astLoading = (async () => {
       const t = await loadTransformers(app);
-      ast = await t.pipeline('audio-classification', 'Xenova/ast-finetuned-audioset-10-10-0.4593');
+      ast = await t.pipeline("audio-classification", "Xenova/ast-finetuned-audioset-10-10-0.4593") as AudioPipeline;
       return ast;
-    })().catch((e) => { astLoading = null; throw e; });
+    })().catch((e: unknown) => { astLoading = null; throw e; });
   }
   return astLoading;
 }
 
-function toArray(tensor) {
+function toArray(tensor: { data: ArrayLike<number> }): number[] {
   return Array.from(tensor.data);
 }
 
-async function embedImageFile(app, filePath) {
+export async function embedImageFile(app: App, filePath: string): Promise<number[]> {
   const c = await loadClip(app);
   const image = await c.RawImage.read(filePath);
   const imgInputs = await c.processor(image);
-  const txtInputs = c.tokenizer(['a'], { padding: true });
+  const txtInputs = c.tokenizer(["a"], { padding: true });
   const out = await c.model({ ...imgInputs, ...txtInputs });
   return toArray(out.image_embeds);
 }
 
-async function embedImageDataUrl(app, dataUrl) {
+export async function embedImageDataUrl(app: App, dataUrl: string): Promise<number[]> {
   // RawImage cannot read a data URL in Node, so go via
   // a temp file in userData, deleted afterwards.
-  const c = await loadClip(app);
+  // embedImageFile loads the model; no need to load it here too.
   const match = /^data:image\/(\w+);base64,(.+)$/.exec(dataUrl);
-  if (!match) throw new Error('not an image data URL');
+  if (!match) throw new Error("not an image data URL");
   const tmp = path.join(os.tmpdir(), `bowerbird-frame-${Date.now()}.${match[1]}`);
-  fs.writeFileSync(tmp, Buffer.from(match[2], 'base64'));
+  fs.writeFileSync(tmp, Buffer.from(match[2], "base64"));
   try {
     return await embedImageFile(app, tmp);
   } finally {
@@ -115,7 +130,7 @@ async function embedImageDataUrl(app, dataUrl) {
   }
 }
 
-async function embedText(app, text) {
+export async function embedText(app: App, text: string): Promise<number[]> {
   const c = await loadClip(app);
   const black = new c.RawImage(new Uint8Array(224 * 224 * 3), 224, 224, 3);
   const imgInputs = await c.processor(black);
@@ -124,14 +139,14 @@ async function embedText(app, text) {
   return toArray(out.text_embeds);
 }
 
-async function classifyAudio(app, pcm) {
+export async function classifyAudio(app: App, pcm: Float32Array | number[]): Promise<Array<{ label: string; score: number }>> {
   const pipe = await loadAst(app);
   const arr = pcm instanceof Float32Array ? pcm : Float32Array.from(pcm);
   const out = await pipe(arr, { topk: 8 });
   return out.map((o) => ({ label: o.label, score: o.score }));
 }
 
-function cosine(a, b) {
+export function cosine(a: number[], b: number[]): number {
   let dot = 0, na = 0, nb = 0;
   const n = Math.min(a.length, b.length);
   for (let i = 0; i < n; i++) {
@@ -142,11 +157,3 @@ function cosine(a, b) {
   if (na === 0 || nb === 0) return 0;
   return dot / (Math.sqrt(na) * Math.sqrt(nb));
 }
-
-module.exports = {
-  embedImageFile,
-  embedImageDataUrl,
-  embedText,
-  classifyAudio,
-  cosine,
-};
