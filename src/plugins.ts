@@ -546,7 +546,7 @@ export interface PluginContext {
     // List every loaded plugin with its state, so a settings
     // UI can show them and toggle them. Read-only; no
     // permission needed.
-    list: () => Array<{ id: string; name: string; version: string; description: string; active: boolean; failed: boolean; error: string | null; trial: boolean }>;
+    list: () => Array<{ id: string; name: string; version: string; description: string; core: boolean; active: boolean; failed: boolean; error: string | null; trial: boolean }>;
     // Enable or disable a plugin. This is plugin management,
     // so it needs the plugins:install permission, like
     // install. A trial plugin cannot be toggled this way.
@@ -612,6 +612,11 @@ export interface PluginContext {
 
 interface LoadedPlugin {
   manifest: PluginManifest;
+  // First-party (core) plugins are bundled with the app and
+  // build the app's own UI; the rest are user plugins. The
+  // flag is exposed in plugins.list() so Settings can group
+  // them, and so a plugin can tell core UI apart from extras.
+  firstParty?: boolean;
   // Trial plugins run in memory only (see tryPlugin): they are
   // never written to disk, and endTrial removes them entirely.
   trial?: boolean;
@@ -1331,6 +1336,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         name: lp.manifest.name,
         version: lp.manifest.version,
         description: lp.manifest.description ?? "",
+        core: !!lp.firstParty,
         active: lp.active,
         failed: lp.failed,
         error: lp.error,
@@ -1965,7 +1971,7 @@ export async function activateFirstPartyPlugin(
   if (typeof mod.activate !== "function") {
     throw new Error(`Plugin ${manifest.id} does not export activate(api)`);
   }
-  loaded.set(manifest.id, { manifest, active: false, failed: false, error: null, module: null });
+  loaded.set(manifest.id, { manifest, firstParty: true, active: false, failed: false, error: null, module: null });
   const lp = loaded.get(manifest.id)!;
   try {
     lp.module = mod;

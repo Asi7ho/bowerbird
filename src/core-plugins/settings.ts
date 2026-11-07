@@ -243,25 +243,38 @@ function renderPluginSettings(): void {
     list.innerHTML = `<p class="meta">No plugins found.</p>`;
     return;
   }
-  let html = "";
-  for (const lp of plugins) {
+  // Two groups, core first: the core plugins build the app's
+  // own UI (board, title bar, search, toolbar, cards,
+  // settings); the extras are the bundled and installed
+  // plugins. A heading per group, so the two are never
+  // confused. The state is the first thing after the name,
+  // in ink when the plugin is on and grey when it is off,
+  // so active and inactive are told apart at a glance.
+  const renderRow = (lp: (typeof plugins)[number]): string => {
     // A trial plugin is not installed yet: it shows as
     // Trying and gets no toggle.
     const state = lp.trial ? "Trying" : lp.failed ? "Failed" : lp.active ? "On" : "Off";
-    html += `<div class="plugin-row"><div class="plugin-row-text"><div><strong>${escapeHtml(lp.name)}</strong> <span class="meta">${state}</span></div>`;
-    if (lp.failed && lp.error) html += `<p class="meta"><strong>${escapeHtml(lp.error)}</strong></p>`;
+    const stateClass = lp.active ? "plugin-state-on" : "meta";
+    let row = `<div class="plugin-row"><div class="plugin-row-text"><div><strong>${escapeHtml(lp.name)}</strong> <span class="${stateClass}">${state}</span></div>`;
+    if (lp.failed && lp.error) row += `<p class="meta"><strong>${escapeHtml(lp.error)}</strong></p>`;
     // A Settings button, when the plugin has a settings
     // section: it jumps to the Plugin settings tab and
     // scrolls to that plugin's section, so settings are
     // reachable from the plugin list, not only by tab.
     const sections = el("plugin-settings-sections");
     const hasSettings = sections?.querySelector(`[data-plugin="${lp.id}"]`) !== null;
-    html += `</div><span style="display:flex;gap:8px;flex:none">`;
-    if (lp.active && hasSettings) html += `<button data-plugin-settings="${lp.id}">Settings</button>`;
-    if (!lp.trial) html += `<button data-plugin-toggle="${lp.id}">${lp.active ? "Disable" : "Enable"}</button></span>`;
-    else html += `</span>`;
-    html += `</div>`;
-  }
+    row += `</div><span style="display:flex;gap:8px;flex:none">`;
+    if (lp.active && hasSettings) row += `<button data-plugin-settings="${lp.id}">Settings</button>`;
+    if (!lp.trial) row += `<button data-plugin-toggle="${lp.id}">${lp.active ? "Disable" : "Enable"}</button></span>`;
+    else row += `</span>`;
+    row += `</div>`;
+    return row;
+  };
+  const core = plugins.filter((lp) => lp.core);
+  const extra = plugins.filter((lp) => !lp.core);
+  let html = "";
+  if (core.length > 0) html += `<h3>Core</h3>` + core.map(renderRow).join("");
+  if (extra.length > 0) html += `<h3>Extra</h3>` + extra.map(renderRow).join("");
   list.innerHTML = html;
   for (const btn of Array.from(list.querySelectorAll("[data-plugin-settings]"))) {
     btn.addEventListener("click", () => {

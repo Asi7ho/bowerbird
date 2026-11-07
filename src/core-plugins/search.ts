@@ -30,7 +30,7 @@ export function activate(api: PluginContext): void {
   box = api.ui.getSearchBoxEl();
   if (!box) return;
   box.innerHTML = `
-    <input id="search-input" type="text" placeholder="Search text, color, image, audio, video…" aria-label="Search board" autocomplete="off" spellcheck="false" />
+    <input id="search-input" type="text" placeholder="Search board" aria-label="Search board" autocomplete="off" spellcheck="false" />
     <span id="search-count" aria-live="polite"></span>
     <button id="search-clear" title="Clear search (Esc)" aria-label="Clear search">×</button>
     <div id="search-results" style="display:none"></div>`;

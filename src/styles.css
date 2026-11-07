@@ -892,7 +892,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 /* Plugin rows as a list, not bordered cards: name and
    description on the left, the toggle on the right, rows
    separated by a hairline. */
-#settings .plugin-row {
+#settings .plugin-row { 
   display: flex; align-items: center; gap: 12px;
   border-bottom: 1px solid var(--separator);
   padding: 12px 0; margin: 0;
@@ -900,6 +900,10 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #settings .plugin-row:last-child { border-bottom: none; }
 #settings .plugin-row-text { flex: 1 1 auto; min-width: 0; }
 #settings .plugin-row-text .meta { margin: 4px 0 0; }
+/* The state word, next to the name: full-strength ink when
+   the plugin is on, grey when it is off — active and
+   inactive are told apart at a glance, without a badge. */
+#settings .plugin-row .plugin-state-on { color: var(--ink); }
 #settings .plugin-row button {
   border: 1px solid var(--separator); background: #fff; border-radius: 9px;
   padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
