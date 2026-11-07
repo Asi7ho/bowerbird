@@ -17,10 +17,6 @@ export function refreshPanel(api: PluginContext): void {
 
 export function renderPanel(api: PluginContext, container: HTMLElement): void {
   container.innerHTML = "";
-  const intro = document.createElement("p");
-  intro.className = "bd-meta";
-  intro.textContent = "Click a board to open it. Click the current board's name to rename it.";
-  container.appendChild(intro);
   const form = document.createElement("div");
   form.className = "bd-form";
   nameInput = document.createElement("input");

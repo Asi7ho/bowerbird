@@ -62,7 +62,6 @@ export function hexToHsl(hex: string): { h: number; s: number; l: number } {
 
 export interface PaletteDef {
   name: string;
-  desc: string;
   colors: string[];
 }
 
@@ -74,10 +73,10 @@ export function palettesFor(h: number, s: number, l: number): PaletteDef[] {
   const shift = lo < 5 ? 5 - lo : hi > 95 ? 95 - hi : 0;
   const mono = steps.map((v) => hslToHex(h, s, v + shift));
   return [
-    { name: "Monochromatic", desc: "Same colour, different lightness.", colors: mono },
-    { name: "Analogous", desc: "Colours next to each other on the wheel.", colors: [-30, -15, 0, 15, 30].map((dh) => col(dh, 0)) },
-    { name: "Complementary", desc: "Opposite colours.", colors: [col(0, 0), col(180, 0), col(0, 15), col(180, 15), col(0, -15)] },
-    { name: "Split complementary", desc: "Opposite, split in two.", colors: [col(0, 0), col(150, 0), col(210, 0), col(0, 15), col(150, 15)] },
-    { name: "Triadic", desc: "Three colours, evenly spaced.", colors: [col(0, 0), col(120, 0), col(240, 0), col(0, 15), col(120, 15)] },
+    { name: "Monochromatic", colors: mono },
+    { name: "Analogous", colors: [-30, -15, 0, 15, 30].map((dh) => col(dh, 0)) },
+    { name: "Complementary", colors: [col(0, 0), col(180, 0), col(0, 15), col(180, 15), col(0, -15)] },
+    { name: "Split complementary", colors: [col(0, 0), col(150, 0), col(210, 0), col(0, 15), col(150, 15)] },
+    { name: "Triadic", colors: [col(0, 0), col(120, 0), col(240, 0), col(0, 15), col(120, 15)] },
   ];
 }

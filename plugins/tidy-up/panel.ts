@@ -24,9 +24,7 @@ function selectedCards(api: PluginContext): Item[] {
 export function refresh(api: PluginContext): void {
   if (!panelEl || !metaEl) return;
   const cards = selectedCards(api);
-  metaEl.textContent = cards.length === 0
-    ? "Select 2 or more cards to tidy. Strokes and connectors stay where they are."
-    : `${cards.length} card${cards.length === 1 ? "" : "s"} selected.`;
+  metaEl.textContent = `${cards.length} card${cards.length === 1 ? "" : "s"} selected.`;
   const alignOk = cards.length >= 2;
   for (const b of Object.values(alignBtns)) b.disabled = !alignOk;
   const distOk = cards.length >= 3;

@@ -66,9 +66,6 @@
   text-align: center; color: var(--grey);
   font-size: 13px; line-height: 1.5;
 }
-#plugin-view[data-plugin="presentation"] .pres-empty-sub {
-  font-size: 12px; margin-top: 4px;
-}
 /* Controls sit above the view switcher, which floats at
    the bottom centre of the board: 56px of bottom margin
    keeps the counter and hint clear of it, so they are
@@ -151,8 +148,7 @@
   display: flex; flex-direction: column;
   flex: 1 1 auto; min-height: 0;
 }
-.plugin-panel[data-plugin="presentation"] .pres-panel-actions,
-.plugin-panel[data-plugin="presentation"] .pres-panel-hint {
+.plugin-panel[data-plugin="presentation"] .pres-panel-actions {
   flex: none;
 }
 .plugin-panel-body .pres-panel-export {
@@ -174,10 +170,6 @@
 }
 .plugin-panel-body .pres-panel-export svg {
   flex: none; display: block;
-}
-.plugin-panel-body .pres-panel-hint {
-  color: var(--grey); font-size: 12px; line-height: 1.5;
-  margin-bottom: 12px;
 }
 .plugin-panel-body .pres-panel-list {
   display: flex; flex-direction: column;

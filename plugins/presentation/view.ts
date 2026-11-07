@@ -92,10 +92,7 @@ export function renderSlide(): void {
     empty.className = "pres-empty";
     const head = document.createElement("div");
     head.textContent = "No slides yet";
-    const sub = document.createElement("div");
-    sub.className = "pres-empty-sub";
-    sub.textContent = "Draw a slide on the board, then play.";
-    empty.append(head, sub);
+    empty.append(head);
     stage.appendChild(empty);
   } else {
     const slide = state.slides[state.index];
@@ -119,10 +116,7 @@ export function renderSlide(): void {
       empty.className = "pres-empty";
       const head = document.createElement("div");
       head.textContent = "This slide is empty";
-      const sub = document.createElement("div");
-      sub.className = "pres-empty-sub";
-      sub.textContent = "Move a card into the frame on the board, then play again.";
-      empty.append(head, sub);
+      empty.append(head);
       wrap.appendChild(empty);
     } else {
       // Drawing first, under the cards, as on the board,

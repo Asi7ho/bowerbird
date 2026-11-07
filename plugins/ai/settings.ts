@@ -54,10 +54,6 @@ export async function hasKey(api: PluginContext): Promise<boolean> {
 export function renderSettings(api: PluginContext, container: HTMLElement): void {
   container.textContent = "";
 
-  const intro = document.createElement("p");
-  intro.textContent = "Chat with an AI. Paste your API key and it just works.";
-  container.appendChild(intro);
-
   // Provider.
   const providerField = document.createElement("div");
   providerField.className = "ai-field";

@@ -9,10 +9,6 @@ import { positionButton } from "./button.js";
 
 export function renderSettings(api: PluginContext, container: HTMLElement): void {
   container.innerHTML = "";
-  const desc = document.createElement("p");
-  desc.className = "meta";
-  desc.textContent = "The corner the board hides into.";
-  container.appendChild(desc);
   const opts = document.createElement("div");
   opts.className = "hide-opt";
   for (const [label, value] of OPTIONS) {

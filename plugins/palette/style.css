@@ -116,8 +116,7 @@
   padding-right: 15px;
 }
 .pal-palette { margin-bottom: 16px; }
-.pal-head { font-weight: 600; padding: 6px 4px 0; text-align: left; }
-.pal-desc { color: var(--grey); font-size: 12px; padding: 0 4px 8px; text-align: left; }
+.pal-head { font-weight: 600; padding: 6px 4px 8px; text-align: left; }
 /* Tile gap 8px, like the toolbar palette's 6px gap for small
    swatches — not the masonry 16px gap for large cards. */
 .pal-row { display: flex; gap: 8px; }

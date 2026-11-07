@@ -287,10 +287,6 @@ export function renderPanel(container: HTMLElement): void {
     head.className = "pal-head";
     head.textContent = palette.name;
     wrap.appendChild(head);
-    const desc = document.createElement("div");
-    desc.className = "pal-desc";
-    desc.textContent = palette.desc;
-    wrap.appendChild(desc);
     const row = document.createElement("div");
     row.className = "pal-row";
     for (let i = 0; i < 5; i++) {

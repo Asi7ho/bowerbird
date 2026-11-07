@@ -23,7 +23,7 @@ export function updatePanel(): void {
   if (state.slides.length === 0) {
     const empty = document.createElement("div");
     empty.className = "pres-panel-empty";
-    empty.textContent = "No slides yet. Draw one on the board.";
+    empty.textContent = "No slides yet.";
     panelList.appendChild(empty);
     return;
   }
@@ -150,10 +150,6 @@ export function initPanel(body: HTMLElement): void {
   draw.addEventListener("click", () => startDrawMode());
   actions.appendChild(draw);
   body.appendChild(actions);
-  const hint = document.createElement("div");
-  hint.className = "pres-panel-hint";
-  hint.textContent = "Draw a rectangle around cards to make a slide.";
-  body.appendChild(hint);
   const panelList = document.createElement("div");
   panelList.className = "pres-panel-list";
   state.panelList = panelList;
