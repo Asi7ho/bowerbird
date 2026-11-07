@@ -92,6 +92,12 @@ let currentBoard: string | null = null;
 // the list (new plugins, or a first run) go at the end, in
 // registration order, so an old list never hides a panel.
 let panelOrder: string[] = [];
+let panelWidth = 290;
+
+function clampPanelWidth(w: unknown): number {
+  const n = typeof w === "number" && Number.isFinite(w) ? Math.round(w) : 290;
+  return Math.min(600, Math.max(200, n));
+}
 
 function appSettingsPath(): string {
   return path.join(app.getPath("userData"), "settings.json");
@@ -102,6 +108,7 @@ function loadAppSettings(): void {
     const parsed = JSON.parse(fs.readFileSync(appSettingsPath(), "utf8"));
     if (parsed && CORNERS.includes(parsed.corner)) cornerReveal = parsed.corner;
     if (parsed && Array.isArray(parsed.panelOrder)) panelOrder = parsed.panelOrder.filter((x: unknown) => typeof x === "string");
+    if (parsed && typeof parsed.panelWidth === "number") panelWidth = clampPanelWidth(parsed.panelWidth);
     if (parsed && typeof parsed.currentBoard === "string" && parsed.currentBoard && parsed.currentBoard !== "Main") {
       currentBoard = parsed.currentBoard.slice(0, 64);
     }
@@ -115,7 +122,7 @@ function saveAppSettings(): void {
     const file = appSettingsPath();
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const tmp = file + ".tmp";
-    fs.writeFileSync(tmp, JSON.stringify({ corner: cornerReveal, panelOrder, currentBoard }));
+    fs.writeFileSync(tmp, JSON.stringify({ corner: cornerReveal, panelOrder, panelWidth, currentBoard }));
     fs.renameSync(tmp, file);
   } catch {
     // Settings are a convenience, not board data: never fail the app
@@ -1182,7 +1189,7 @@ function registerIpc(): void {
     if (isBoardLocal(local)) return shell.openPath(local);
     throw new Error("not a public web address or a board-local file");
   });
-  ipcMain.handle("bowerbird:get-app-settings", () => ({ corner: cornerReveal, panelOrder: [...panelOrder] }));
+  ipcMain.handle("bowerbird:get-app-settings", () => ({ corner: cornerReveal, panelOrder: [...panelOrder], panelWidth }));
   ipcMain.handle("bowerbird:list-boards", () => {
     if (DEMO) return [{ name: "Main", current: true, items: 0 }];
     return listBoards();
@@ -1201,6 +1208,11 @@ function registerIpc(): void {
     panelOrder = order.filter((x: unknown) => typeof x === "string").slice(0, 100);
     if (!DEMO) saveAppSettings();
     return panelOrder;
+  });
+  ipcMain.handle("bowerbird:set-panel-width", (_event, width: unknown) => {
+    panelWidth = clampPanelWidth(width);
+    if (!DEMO) saveAppSettings();
+    return panelWidth;
   });
   ipcMain.handle("bowerbird:list-plugins", () => listPlugins());
   ipcMain.handle("bowerbird:read-plugin-file", (_event, pluginId: string, relativePath: string) => {

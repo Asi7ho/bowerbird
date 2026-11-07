@@ -199,7 +199,8 @@ export interface PluginBridge {
   maximise: () => Promise<boolean>;
   windowState: () => Promise<{ maximised: boolean; fullscreen: boolean }>;
   moveWindow: (dx: number, dy: number) => void;
-  getAppSettings: () => Promise<{ corner: string }>;
+  getAppSettings: () => Promise<{ corner: string; panelOrder?: string[]; panelWidth?: number }>;
+  setPanelWidth: (width: number) => Promise<number>;
   setCorner: (corner: string) => Promise<string>;
 }
 
@@ -769,6 +770,7 @@ export function refreshSettingsUI(): void {
 // tabs and active panel intact.
 let activePanelKey: string | null = null;
 let dockVisible = true;
+let panelWidth = 290;
 let tabsEl: HTMLElement | null = null;
 let tabsListEl: HTMLElement | null = null;
 let tabsToggleWired = false;
@@ -822,6 +824,39 @@ function wirePanelsToggle(): void {
   });
 }
 
+// The dock is resizable: a thin handle on its left edge. Drag
+// left to widen, right to narrow; the width is clamped to
+// 200–600px and saved when the drag ends, so it survives a
+// restart. The handle lives inside the dock, so the board's
+// own mousedown never sees it.
+function ensureResizeHandle(): void {
+  if (!host || !shell.panelsEl || shell.panelsEl.querySelector(".panel-resize-handle")) return;
+  const handle = document.createElement("div");
+  handle.className = "panel-resize-handle";
+  handle.title = "Drag to resize panels";
+  handle.setAttribute("aria-label", "Resize panels");
+  handle.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startWidth = panelWidth;
+    const onMove = (ev: MouseEvent) => {
+      // The dock is on the right edge: dragging left widens it.
+      const next = Math.min(600, Math.max(200, startWidth - (ev.clientX - startX)));
+      panelWidth = next;
+      if (shell.panelsEl) shell.panelsEl.style.width = `${next}px`;
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+      void bridge?.setPanelWidth(panelWidth);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  });
+  shell.panelsEl.appendChild(handle);
+}
+
 function ensureTabsBar(): void {
   if (!host || tabsEl) return;
   tabsEl = document.createElement("div");
@@ -852,7 +887,7 @@ function updatePanelDock(): void {
   if (!host) return;
   const visible = visiblePanels();
   const open = dockVisible && visible.length > 0;
-  if (shell.panelsEl) shell.panelsEl.style.width = open ? "290px" : "0px";
+  if (shell.panelsEl) shell.panelsEl.style.width = open ? `${panelWidth}px` : "0px";
   if (tabsEl) tabsEl.style.display = open ? "" : "none";
   for (const [key, p] of panels.entries()) {
     const active = !p.hidden && key === activePanelKey;
@@ -2126,6 +2161,15 @@ export async function initPlugins(
   host = h;
   bridge = b;
   wirePanelsToggle();
+  ensureResizeHandle();
+  try {
+    const settings = await b.getAppSettings();
+    if (typeof settings.panelWidth === "number") {
+      panelWidth = Math.min(600, Math.max(200, Math.round(settings.panelWidth)));
+    }
+  } catch {
+    // No saved width: keep the default.
+  }
   // First-party UI plugins first, so the UI exists before user
   // plugins register panels, views, tools and settings sections
   // into it. A first-party plugin that fails to load is a

@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld("bowerbird", {
   aiChat: (opts: { base: string; key: string; model: string; messages: Array<{ role: string; content: string }> }) => ipcRenderer.invoke("bowerbird:ai-chat", opts),
   openExternal: (target: string) => ipcRenderer.invoke("bowerbird:open-external", target),
   getAppSettings: () => ipcRenderer.invoke("bowerbird:get-app-settings"),
+  setPanelWidth: (width: number) => ipcRenderer.invoke("bowerbird:set-panel-width", width),
   setCorner: (corner: string) => ipcRenderer.invoke("bowerbird:set-corner", corner),
   setPanelOrder: (order: string[]) => ipcRenderer.invoke("bowerbird:set-panel-order", order),
   collapse: () => ipcRenderer.invoke("bowerbird:collapse"),

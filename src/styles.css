@@ -774,11 +774,23 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
      not by :has: a tabbed panel can be shown but inactive,
      or hidden, and the dock can be closed while panels are
      still shown — three states :has cannot tell apart. */
-  flex: none; align-self: stretch;
+  flex: none; align-self: stretch; position: relative;
   display: flex; flex-direction: column; gap: 0; width: 0;
   overflow: hidden; pointer-events: none; z-index: 10;
 }
 #plugin-panels::-webkit-scrollbar { display: none; }
+/* The dock resize handle: a thin strip on the dock's left edge,
+   invisible until hovered, so the dock still reads as a flush
+   sidebar. Dragging it resizes the dock (200–600px); the width
+   is saved on release. */
+.panel-resize-handle {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 6px;
+  cursor: ew-resize; z-index: 20; pointer-events: auto;
+  background: transparent;
+}
+.panel-resize-handle:hover {
+  background: var(--hairline);
+}
 /* Mini tabs, as a Settings segmented control: a fill-grey
    pill with icon tabs, active tab white with the
    segmented active shadow. Tabs are icons only — the

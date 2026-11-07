@@ -35,7 +35,8 @@ export interface BowerbirdAPI {
   fetchPreview(url: string): Promise<{ title: string | null; description: string | null; image: string | null; icon: string | null }>;
   aiChat(opts: { base: string; key: string; model: string; messages: Array<{ role: string; content: string }> }): Promise<string>;
   openExternal(target: string): Promise<void>;
-  getAppSettings(): Promise<{ corner: string; panelOrder?: string[] }>;
+  getAppSettings(): Promise<{ corner: string; panelOrder?: string[]; panelWidth?: number }>;
+  setPanelWidth(width: number): Promise<number>;
   setCorner(corner: string): Promise<string>;
   setPanelOrder(order: string[]): Promise<string[]>;
   collapse(): Promise<void>;
