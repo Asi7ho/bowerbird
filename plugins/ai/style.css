@@ -32,6 +32,19 @@
   margin: 0 0 12px;
 }
 
+/* The Save button, in the app's settings-button style (white,
+   separator border, 9px radius, semibold) — not a browser-
+   default button. */
+.plugin-settings-section button.ai-save {
+  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
+  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
+  color: var(--ink);
+}
+
+.plugin-settings-section button.ai-save:hover {
+  background: var(--fill);
+}
+
 /* AI chat. Uses the app's own tokens, not a custom look:
    card radius and shadow for messages, the title-bar search
    field for the input, the panel button for send. */

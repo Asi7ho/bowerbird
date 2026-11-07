@@ -105,6 +105,7 @@ export function renderSettings(api: PluginContext, container: HTMLElement): void
 
   const saveBtn = document.createElement("button");
   saveBtn.type = "button";
+  saveBtn.className = "ai-save";
   saveBtn.textContent = "Save";
   container.appendChild(saveBtn);
 
