@@ -912,14 +912,15 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 }
 #settings .plugin-row-off .plugin-row-text strong { color: var(--grey); }
 /* Reset plugins: back to the factory state (core on, extras
-   off). The same quiet button as the feedback Send button,
-   spaced below the list. */
+   off). Red, like the board-data reset: it undoes work the
+   user may have done (turning plugins back off), so it reads
+   as a destructive action, not a neutral one. */
 #settings #plugins-reset {
   border: 1px solid var(--separator); background: #fff; border-radius: 9px;
   padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
-  color: var(--ink); box-shadow: var(--shadow-sm); margin-top: 16px;
+  color: #e63946; box-shadow: var(--shadow-sm); margin-top: 16px;
 }
-#settings #plugins-reset:hover { background: var(--fill); }
+#settings #plugins-reset:hover { background: rgba(230, 57, 70, 0.06); }
 #settings .plugin-row button {
   border: 1px solid var(--separator); background: #fff; border-radius: 9px;
   padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
