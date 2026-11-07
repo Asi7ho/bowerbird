@@ -247,6 +247,23 @@ next step. The app must work identically after every step.
    renders no DOM of its own, but it still owns the board
    controller. That is the known boundary of this step.
 
+   **Required plugins (2026-11-07).** The board and Settings are
+   `required: true` in their manifests and cannot be disabled:
+   disabling the board removed the toolbar and the Settings
+   window with it (both lived inside the board element), so
+   the app soft-locked with no way back. A required plugin is
+   always enabled, whatever the enabled map says, so a stale
+   `false` in plugins.json self-heals on the next boot, and
+   `setPluginEnabled` refuses to disable one. The Settings
+   backdrop now lives on `document.body`, not inside the board,
+   so Settings survives any board change. The other core
+   plugins (toolbar, title bar, search, cards) stay
+   disableable — that is how a replacement UI plugin takes
+   over — and a first-party plugin's bundled module is retained
+   across deactivation, so re-enabling it re-activates the
+   same module instead of fetching a `plugin:` URL that does
+   not exist.
+
 ## What "done" looks like
 
 - The app boots with zero UI plugins enabled and shows an

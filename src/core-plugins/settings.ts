@@ -22,6 +22,7 @@ export const manifest: PluginManifest = {
   description: "The Settings window: shortcuts, canvas, data, backups, feedback, plugins.",
   main: "settings.js",
   permissions: ["board:read", "board:write", "plugins:install"],
+  required: true,
 };
 
 function escapeHtml(s: string): string {
@@ -265,7 +266,10 @@ function renderPluginSettings(): void {
     const hasSettings = sections?.querySelector(`[data-plugin="${lp.id}"]`) !== null;
     row += `</div><span style="display:flex;gap:8px;flex:none">`;
     if (lp.active && hasSettings) row += `<button data-plugin-settings="${lp.id}">Settings</button>`;
-    if (!lp.trial) row += `<button data-plugin-toggle="${lp.id}">${lp.active ? "Disable" : "Enable"}</button></span>`;
+    // A required plugin has no toggle: it is the foundation
+    // (board, Settings) and cannot be disabled, so there is
+    // nothing to toggle. Every other plugin gets one.
+    if (!lp.trial && !lp.required) row += `<button data-plugin-toggle="${lp.id}">${lp.active ? "Disable" : "Enable"}</button></span>`;
     else row += `</span>`;
     row += `</div>`;
     return row;
@@ -382,7 +386,12 @@ export function activate(context: PluginContext): void {
         </div>
       </div>
     </div>`;
-  context.ui.boardEl.appendChild(backdrop);
+  // The backdrop lives on the document body, not inside the
+  // board element: Settings is a modal over the app, and it
+  // must survive the board being rebuilt or a board plugin
+  // being replaced. Appending it to the board meant removing
+  // the board took Settings down with it — the soft lock.
+  document.body.appendChild(backdrop);
 
   // The plugin system renders plugin settings sections into
   // this container; the settings plugin provides it.

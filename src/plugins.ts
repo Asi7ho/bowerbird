@@ -39,6 +39,14 @@ export interface PluginManifest {
   styles?: string[];
   source?: string;
   enabled?: boolean;
+  // Required plugins cannot be disabled: they are the
+  // foundation the rest of the app stands on (the board
+  // itself, and the Settings window that manages plugins).
+  // Disabling one would remove the only way to re-enable
+  // it — a soft lock. A required plugin is always enabled,
+  // whatever the enabled map says, so a stale "false" in
+  // plugins.json cannot lock the app out either.
+  required?: boolean;
   contributions?: {
     cards?: Array<{ kind: string; title: string }>;
     tools?: Array<{ id: string; title: string }>;
@@ -546,7 +554,7 @@ export interface PluginContext {
     // List every loaded plugin with its state, so a settings
     // UI can show them and toggle them. Read-only; no
     // permission needed.
-    list: () => Array<{ id: string; name: string; version: string; description: string; core: boolean; active: boolean; failed: boolean; error: string | null; trial: boolean }>;
+    list: () => Array<{ id: string; name: string; version: string; description: string; core: boolean; required: boolean; active: boolean; failed: boolean; error: string | null; trial: boolean }>;
     // Enable or disable a plugin. This is plugin management,
     // so it needs the plugins:install permission, like
     // install. A trial plugin cannot be toggled this way.
@@ -617,6 +625,12 @@ interface LoadedPlugin {
   // flag is exposed in plugins.list() so Settings can group
   // them, and so a plugin can tell core UI apart from extras.
   firstParty?: boolean;
+  // A first-party plugin's module is a bundled import, not
+  // a file on disk, so it cannot be re-loaded from the
+  // plugin: scheme. It is kept here across deactivation so
+  // re-enabling the plugin re-activates the same module
+  // instead of fetching a URL that does not exist.
+  firstPartyModule?: { activate?: (api: PluginContext) => void | Promise<void>; deactivate?: () => void | Promise<void> } | null;
   // Trial plugins run in memory only (see tryPlugin): they are
   // never written to disk, and endTrial removes them entirely.
   trial?: boolean;
@@ -1337,6 +1351,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         version: lp.manifest.version,
         description: lp.manifest.description ?? "",
         core: !!lp.firstParty,
+        required: !!lp.manifest.required,
         active: lp.active,
         failed: lp.failed,
         error: lp.error,
@@ -1894,6 +1909,26 @@ function unregisterPlugin(pluginId: string): void {
 async function activatePlugin(manifest: PluginManifest, source?: { mainCode: string; styleCode: string }): Promise<void> {
   const lp = loaded.get(manifest.id);
   if (!lp || !bridge) return;
+  // A first-party plugin's module is a bundled import, not a
+  // file on disk: re-activate the retained module instead of
+  // fetching plugin://<id>/main.js, which does not exist.
+  // This is what makes disabling and re-enabling a core
+  // plugin (toolbar, title bar, search, cards) work at
+  // runtime; without it the re-enable 404s and the plugin
+  // is left failed.
+  if (lp.firstPartyModule) {
+    const mod = lp.firstPartyModule;
+    if (typeof mod.activate !== "function") {
+      throw new Error(`Plugin ${manifest.id} does not export activate(api)`);
+    }
+    lp.module = mod;
+    const api = createContext(manifest, { trial: !!lp.trial });
+    await mod.activate(api);
+    lp.active = true;
+    lp.failed = false;
+    lp.error = null;
+    return;
+  }
   // Styles first, so the plugin's first render already looks right.
   // A trial plugin has no files on disk, so its stylesheet comes
   // from the supplied code instead of the bridge.
@@ -1971,7 +2006,7 @@ export async function activateFirstPartyPlugin(
   if (typeof mod.activate !== "function") {
     throw new Error(`Plugin ${manifest.id} does not export activate(api)`);
   }
-  loaded.set(manifest.id, { manifest, firstParty: true, active: false, failed: false, error: null, module: null });
+  loaded.set(manifest.id, { manifest, firstParty: true, firstPartyModule: mod, active: false, failed: false, error: null, module: null });
   const lp = loaded.get(manifest.id)!;
   try {
     lp.module = mod;
@@ -2084,7 +2119,12 @@ export async function initPlugins(
     // No map yet: everything is enabled.
   }
   for (const fp of firstParty) {
-    if (enabledMap[fp.manifest.id] === false) continue;
+    // A required plugin is always enabled, whatever the
+    // enabled map says: a stale "false" in plugins.json
+    // (from before the plugin became required, or from a
+    // hand edit) must not lock the app out of its own
+    // board or its Settings window.
+    if (enabledMap[fp.manifest.id] === false && !fp.manifest.required) continue;
     try {
       await activateFirstPartyPlugin(fp.manifest, fp.module);
     } catch (e) {
@@ -2130,6 +2170,10 @@ export async function setPluginEnabled(id: string, enabled: boolean): Promise<vo
   if (!bridge || !host) return;
   const lp = loaded.get(id);
   if (!lp) return;
+  // A required plugin cannot be disabled: it is the
+  // foundation (board, Settings) whose absence would
+  // remove the only way to re-enable it.
+  if (!enabled && lp.manifest.required) throw new Error(`${lp.manifest.name} is required and cannot be disabled`);
   // A trial plugin is owned by the Builder panel (Install/Clean),
   // not by the Settings toggle, so a toggle must not desync it
   // or write a persisted enabled state for a plugin that is

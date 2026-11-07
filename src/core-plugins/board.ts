@@ -24,6 +24,7 @@ export const manifest: PluginManifest = {
   apiVersion: "2",
   main: "board.js",
   permissions: ["board:read"],
+  required: true,
 };
 
 let boardEl: HTMLElement | null = null;
