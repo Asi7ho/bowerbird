@@ -50,6 +50,7 @@ export interface BowerbirdAPI {
   fileUrl(path: string): string;
   listPlugins(): Promise<PluginManifest[]>;
   readPluginFile(pluginId: string, relativePath: string): Promise<string>;
+  getPluginEnabled(): Promise<Record<string, boolean>>;
   setPluginEnabled(pluginId: string, enabled: boolean): Promise<boolean>;
   installPlugin(plugin: { id: string; name: string; description: string; permissions: string[]; mainCode: string; styleCode: string }): Promise<PluginManifest>;
   pluginStorageGet(pluginId: string, key: string): Promise<unknown>;

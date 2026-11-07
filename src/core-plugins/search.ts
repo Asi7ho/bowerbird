@@ -19,7 +19,7 @@ export const manifest: PluginManifest = {
   name: "Search",
   description: "Board search: text, colour, image, audio and video.",
   version: "1.0.0",
-  apiVersion: "1",
+  apiVersion: "2",
   main: "search.js",
   permissions: ["board:read"],
 };

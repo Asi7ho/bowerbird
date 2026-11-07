@@ -18,7 +18,7 @@
 import type { PluginContext, PluginManifest } from "../plugins";
 
 export const manifest: PluginManifest = {
-  apiVersion: "1",
+  apiVersion: "2",
   id: "core-toolbar",
   name: "Toolbar",
   version: "1.0.0",
@@ -295,7 +295,8 @@ export function activate(api: PluginContext): void {
 }
 
 export function deactivate(): void {
-  // The toolbar DOM is built by this plugin; a future
-  // version will pass the API object to deactivate for
-  // cleanup (see PLUGIN_API.md).
+  // The toolbar DOM is built by this plugin; removing it
+  // restores the board without a toolbar (the core renders
+  // nothing on its own).
+  document.getElementById("toolbar-wrap")?.remove();
 }

@@ -235,6 +235,17 @@ next step. The app must work identically after every step.
 7. **Bare shell.** `index.html` becomes the mount point only.
    The core renders nothing on its own. Bump the plugin
    `apiVersion` to `"2"` and document it in `PLUGIN_API.md`.
+   **Done** (this commit). `index.html` is only the mount
+   point (`#main-column` + `#plugin-panels`); every visible
+   surface is built by a first-party plugin. `apiVersion` is
+   `"2"` in the core, in every first-party plugin manifest
+   and in every bundled user plugin manifest; a plugin
+   written for API 1 does not load. `PLUGIN_API.md` documents
+   the full UI-plugin API, including a minimal
+   toolbar-replacement example. The render loop and the input
+   loop still live in the core (see step 6) — the core
+   renders no DOM of its own, but it still owns the board
+   controller. That is the known boundary of this step.
 
 ## What "done" looks like
 

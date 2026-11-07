@@ -1211,6 +1211,7 @@ function registerIpc() {
     }
     return fs.readFileSync(resolved, "utf8");
   });
+  ipcMain.handle('bowerbird:get-plugin-enabled', () => loadPluginEnabled());
   ipcMain.handle('bowerbird:set-plugin-enabled', (_event, pluginId, enabled) => {
     const map = loadPluginEnabled();
     map[pluginId] = enabled === true;

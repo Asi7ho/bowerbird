@@ -160,6 +160,7 @@ export interface PluginBridge {
   listBackups(): Promise<Array<{ name: string; items: number; size: number }>>;
   listPlugins(): Promise<PluginManifest[]>;
   readPluginFile(pluginId: string, relativePath: string): Promise<string>;
+  getPluginEnabled(): Promise<Record<string, boolean>>;
   setPluginEnabled(pluginId: string, enabled: boolean): Promise<boolean>;
   installPlugin(plugin: { id: string; name: string; description: string; permissions: string[]; mainCode: string; styleCode: string }): Promise<PluginManifest>;
   pluginStorageGet(pluginId: string, key: string): Promise<unknown>;
@@ -917,7 +918,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
     if (trial) throw new Error(`a plugin being tried cannot ${what}`);
   };
   return {
-    version: "1",
+    version: "2",
     plugin: { id: manifest.id, name: manifest.name, version: manifest.version },
     has: (capability: string) => {
       // Capabilities in v1: every domain documented in PLUGIN_API.md.
@@ -2024,7 +2025,7 @@ export async function tryPlugin(plugin: { id: string; name: string; description:
   if (!Array.isArray(plugin.permissions) || plugin.permissions.some((p) => typeof p !== "string")) throw new Error("plugin permissions must be strings");
   if (loaded.has(plugin.id)) throw new Error(`a plugin called ${plugin.id} already exists`);
   const manifest: PluginManifest = {
-    apiVersion: "1",
+    apiVersion: "2",
     id: plugin.id,
     name: plugin.name.trim(),
     description: typeof plugin.description === "string" ? plugin.description : "",
@@ -2065,7 +2066,19 @@ export async function initPlugins(
   // plugins register panels, views, tools and settings sections
   // into it. A first-party plugin that fails to load is a
   // broken app, so the failure is surfaced, not swallowed.
+  // A first-party plugin is enabled unless the user explicitly
+  // disabled it in Settings → Plugins: the same enabled map
+  // that gates user plugins gates these too, so the core
+  // plugins and user plugins behave the same. (Absent from the
+  // map means enabled — the built-in UI is on by default.)
+  let enabledMap: Record<string, boolean> = {};
+  try {
+    enabledMap = await b.getPluginEnabled();
+  } catch {
+    // No map yet: everything is enabled.
+  }
   for (const fp of firstParty) {
+    if (enabledMap[fp.manifest.id] === false) continue;
     try {
       await activateFirstPartyPlugin(fp.manifest, fp.module);
     } catch (e) {
@@ -2085,10 +2098,10 @@ export async function initPlugins(
   }
   for (const m of manifests) {
     if (m.enabled === false) continue;
-    if (m.apiVersion !== "1") {
+    if (m.apiVersion !== "2") {
       const lp = loaded.get(m.id)!;
       lp.failed = true;
-      lp.error = `Requires plugin API ${m.apiVersion}, this app provides 1`;
+      lp.error = `Requires plugin API ${m.apiVersion}, this app provides 2`;
       continue;
     }
     try {
@@ -2166,10 +2179,10 @@ export async function refreshPlugins(): Promise<void> {
     if (loaded.has(m.id)) continue;
     loaded.set(m.id, { manifest: m, active: false, failed: false, error: null, module: null });
     if (m.enabled === false) continue;
-    if (m.apiVersion !== "1") {
+    if (m.apiVersion !== "2") {
       const lp = loaded.get(m.id)!;
       lp.failed = true;
-      lp.error = `Requires plugin API ${m.apiVersion}, this app provides 1`;
+      lp.error = `Requires plugin API ${m.apiVersion}, this app provides 2`;
       continue;
     }
     try {

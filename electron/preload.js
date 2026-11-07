@@ -56,6 +56,7 @@ contextBridge.exposeInMainWorld('bowerbird', {
   // never reads plugin folders directly.
   listPlugins: () => ipcRenderer.invoke('bowerbird:list-plugins'),
   readPluginFile: (pluginId, relativePath) => ipcRenderer.invoke('bowerbird:read-plugin-file', pluginId, relativePath),
+  getPluginEnabled: () => ipcRenderer.invoke('bowerbird:get-plugin-enabled'),
   setPluginEnabled: (pluginId, enabled) => ipcRenderer.invoke('bowerbird:set-plugin-enabled', pluginId, enabled),
   installPlugin: (plugin) => ipcRenderer.invoke('bowerbird:install-plugin', plugin),
   pluginStorageGet: (pluginId, key) => ipcRenderer.invoke('bowerbird:plugin-storage-get', pluginId, key),

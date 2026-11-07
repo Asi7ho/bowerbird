@@ -15,7 +15,7 @@
 import type { PluginContext, PluginManifest } from "../plugins";
 
 export const manifest: PluginManifest = {
-  apiVersion: "1",
+  apiVersion: "2",
   id: "core-settings",
   name: "Settings",
   version: "1.0.0",

@@ -21,7 +21,7 @@ export const manifest: PluginManifest = {
   name: "Board",
   description: "The board view: canvas, grid, cards layer, handles and toast.",
   version: "1.0.0",
-  apiVersion: "1",
+  apiVersion: "2",
   main: "board.js",
   permissions: ["board:read"],
 };

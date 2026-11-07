@@ -30,7 +30,7 @@ export const manifest: PluginManifest = {
   name: "Title bar",
   description: "Window controls, app name, undo/redo, panels toggle and the search box.",
   version: "1.0.0",
-  apiVersion: "1",
+  apiVersion: "2",
   main: "titlebar.js",
   permissions: ["board:read", "board:write", "window"],
 };

@@ -22,7 +22,7 @@ my-plugin/
   "id": "hello-card",
   "name": "Hello Card",
   "version": "0.1.0",
-  "apiVersion": "1",
+  "apiVersion": "2",
   "description": "A sample card, tool, panel, command and view.",
   "permissions": ["board:write", "files:embed", "storage", "view:replace"],
   "main": "main.js",
@@ -38,7 +38,7 @@ my-plugin/
 ```
 
 - `id` is unique, lowercase, letters, digits and `-` only. It names the plugin in board JSON, in storage and in the UI.
-- `apiVersion` is `"1"`. A plugin that needs a newer API is listed as incompatible and is not loaded.
+- `apiVersion` is `"2"`. A plugin that needs a newer API is listed as incompatible and is not loaded. Version 2 is the plugin-built core: the settings window, cards, toolbar, title bar, search box and board DOM are all first-party plugins on this API, and a user plugin can be multiple files with relative imports (loaded over the `plugin:` scheme). A plugin written for API 1 does not load on API 2; update its `apiVersion` and re-test.
 - `permissions` gates the API object. A method that needs a permission the manifest did not declare throws. `board:read` is always allowed. Everything else must be declared.
 - `contributions` is a summary for Settings. The code in `main.js` is what actually registers each contribution. If the two disagree, the registered contributions win.
 
@@ -73,7 +73,7 @@ Enable and disable are per plugin, in Settings → Plugins. Disabling unregister
 
 ## The API object
 
-`activate(api)` receives one object, per plugin, filtered to the manifest's permissions. `api.version` is `"1"`. `api.has(cap)` reports whether a capability exists in this core version, so a plugin can degrade gracefully on an older core.
+`activate(api)` receives one object, per plugin, filtered to the manifest's permissions. `api.version` is `"2"`. `api.has(cap)` reports whether a capability exists in this core version, so a plugin can degrade gracefully on an older core.
 
 ### Board — `api.board`
 
@@ -217,11 +217,11 @@ For secrets, which survive restarts like storage but are not plain text on disk.
 
 ### Installing plugins — `api.plugins`
 
-Adding this domain did not change `apiVersion`. It stays `"1"`, because additive additions do not break existing plugins.
+Adding this domain did not change `apiVersion` at the time: additive additions do not break existing plugins. The API is `"2"` now, because the core UI itself became plugins (see above).
 
 - `list()` — every loaded plugin with its state: `[{ id, name, version, description, active, failed, error, trial }]`. Read-only, no permission needed. This is how a settings UI shows the plugin list.
 - `setEnabled(id, enabled)` — enable or disable a plugin. Requires the `plugins:install` permission, like install. A trial plugin cannot be toggled this way.
-- `plugins.install({ id, name, description, permissions, mainCode, styleCode })` — write a plugin to the user plugins folder, never the bundled folder, and never over an existing plugin with the same id. Requires the `plugins:install` permission. Blocked in demo mode. The manifest is built by the core, with `apiVersion "1"` and `version "1.0.0"`.
+- `plugins.install({ id, name, description, permissions, mainCode, styleCode })` — write a plugin to the user plugins folder, never the bundled folder, and never over an existing plugin with the same id. Requires the `plugins:install` permission. Blocked in demo mode. The manifest is built by the core, with `apiVersion "2"` and `version "1.0.0"`.
 - `plugins.refresh()` — re-scan for plugins installed since startup, and activate any new ones that are enabled, with no restart. Requires the `plugins:install` permission.
 - `plugins.try({ id, name, description, permissions, mainCode, styleCode })` — activate a plugin in memory only, without writing anything to disk, so it can be tried before it is installed. Requires the `plugins:install` permission. A trial plugin runs with the same permission checks as an installed plugin, but it cannot install other plugins, and it cannot create, rename, switch or delete boards — those calls throw while it is being tried. Board writes it does make are undoable, like any board write. Its own storage writes, if it has the `storage` permission, are scoped by its id and inert once the trial ends, because no plugin with that id exists to read them again.
 - `plugins.endTrial(id)` — deactivate a trial plugin and remove it completely. Requires the `plugins:install` permission. Ending a trial (or quitting the app) leaves nothing behind: a trial plugin is never on disk, so there is nothing to uninstall. A trial is a reversibility trial, not a code sandbox: the plugin still runs in the renderer, like any plugin, so this must not be presented to a user as a security sandbox. Settings shows a trial plugin as "Trying", with no toggle.
@@ -257,7 +257,7 @@ Pure text and colour helpers, from `src/model.ts`. No permission needed. A card 
 
 Pure geometry, from the core's `src/model.ts`. No permission is needed, because these read nothing and write nothing. They take points and rectangles and return points and booleans. Use them instead of copying the math into a plugin.
 
-Adding this domain did not change `apiVersion`. It stays `"1"`, because additive additions do not break existing plugins.
+Adding this domain did not change `apiVersion` at the time: additive additions do not break existing plugins. The API is `"2"` now, because the core UI itself became plugins (see above).
 
 - `centre(item)` — the centre of a card's rect.
 - `anchorPoint(anchor)` — a connector endpoint: a raw point, or the centre of the item it points to, or `null` if that item is gone.
@@ -353,3 +353,56 @@ These are enforced in the main process, not in the renderer, because renderer co
 ## Sample plugin
 
 `examples/plugins/hello-card/` is the smallest plugin that uses the card, tool, panel, command and view surfaces. Copy that folder into your plugins folder to try it, or copy it as the starting point for a new plugin. It is an example, not a bundled plugin, and it is not copied into packaged apps.
+
+## Replacing a built-in UI piece
+
+A built-in UI piece is a first-party plugin, so a user plugin can replace it by providing the same surface and disabling the built-in one in Settings → Plugins. The core never builds that surface itself; whichever plugin provides it wins. This is the minimal toolbar replacement: it builds its own toolbar with one tool (a pen) and a zoom-out button, using only the API the built-in toolbar uses. Disable `core-toolbar` first, or both toolbars will show.
+
+`manifest.json`:
+
+```json
+{
+  "id": "my-toolbar",
+  "name": "My toolbar",
+  "version": "1.0.0",
+  "apiVersion": "2",
+  "description": "A minimal toolbar: pen tool and zoom out.",
+  "main": "main.js",
+  "permissions": ["board:read", "board:write", "pen"]
+}
+```
+
+`main.js`:
+
+```js
+// A minimal toolbar replacement. It builds its own toolbar DOM
+// and appends it to the board, registers a pen tool through
+// api.ui.registerTool, and zooms out through api.view.zoomBy.
+// The built-in toolbar (core-toolbar) is disabled in Settings,
+// so this is the only toolbar. The core's input loop runs the
+// pen tool's drag behaviour; this plugin only provides the
+// button and the tool registration.
+export function activate(api) {
+  const bar = document.createElement("div");
+  bar.id = "my-toolbar";
+  bar.innerHTML = `
+    <button id="my-pen" title="Pen">Pen</button>
+    <button id="my-zoom-out" title="Zoom out">−</button>`;
+  api.ui.boardEl.appendChild(bar);
+  api.ui.registerTool({
+    id: "pen",
+    title: "Pen",
+    icon: "<svg viewBox=\"0 0 24 24\"><path d=\"M4 20l1-4L16 5l3 3L8 19l-4 1z\" /></svg>",
+    onMouseDown: () => {},
+    onMouseUp: () => {},
+  });
+  bar.querySelector("#my-pen").addEventListener("click", () => api.ui.setTool("pen"));
+  bar.querySelector("#my-zoom-out").addEventListener("click", () => api.view.zoomBy(1 / 1.2));
+}
+
+export function deactivate() {
+  document.getElementById("my-toolbar")?.remove();
+}
+```
+
+The same pattern replaces any built-in piece: build the DOM, register it through the shell (`api.ui.setToolbarToolsEl`, `setSearchBoxEl`, `setBoardElements`, `registerSettingsUI`), and drive it through the API. The built-in plugin's source in `src/core-plugins/` is the reference implementation.

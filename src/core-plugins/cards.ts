@@ -27,7 +27,7 @@ import type { PluginContext, PluginManifest } from "../plugins";
 import type { Item } from "../model";
 
 export const manifest: PluginManifest = {
-  apiVersion: "1",
+  apiVersion: "2",
   id: "core-cards",
   name: "Cards",
   version: "1.0.0",
