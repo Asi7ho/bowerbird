@@ -540,13 +540,6 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #settings h2 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
 #settings h3 { margin: 24px 0 8px; font-size: 13px; font-weight: 600; color: var(--ink); }
 #plugin-settings-sections .plugin-settings-section:first-child h3 { margin-top: 0; }
-.plugin-settings-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.plugin-settings-head h3 { flex: 1 1 auto; }
-.plugin-settings-toggle {
-  flex: none; border: 1px solid var(--hairline); background: #fff; border-radius: 8px;
-  padding: 4px 10px; font-size: 13px; cursor: pointer; color: var(--ink);
-}
-.plugin-settings-toggle:hover { background: var(--fill); }
 .settings-section > h3:first-child { margin-top: 0; }
 #settings-layout { display: flex; flex: 1 1 auto; min-height: 0; }
 #settings-content {

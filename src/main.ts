@@ -1127,9 +1127,14 @@ window.addEventListener("mousemove", (e: MouseEvent) => {
     renderSvgOnly();
     updateResizeHandle();
   } else if (drag.kind === "resize") {
+    const it = boardGet(board, drag.id);
     resizeItem(board, drag.id, drag.origW + (world.x - drag.startWorld.x), drag.origH + (world.y - drag.startWorld.y));
     if (Math.hypot(world.x - drag.startWorld.x, world.y - drag.startWorld.y) > 2) drag.moved = true;
     updateDraggedCards([drag.id]);
+    // Strokes have no card element to resize live, so rebuild
+    // the SVG layer instead: the stroke visibly follows the
+    // handle, like a card does. Same as the rotate drag below.
+    if (it && "Stroke" in it.kind) renderSvgOnly();
     updateResizeHandle();
   } else if (drag.kind === "stroke") {
     const last = drag.points[drag.points.length - 1];

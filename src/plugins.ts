@@ -1580,25 +1580,15 @@ export function renderSettingsSections(): void {
     const wrap = document.createElement("div");
     wrap.className = "plugin-settings-section";
     wrap.dataset.plugin = s.pluginId;
-    // Header row: title plus a Disable button, so a plugin can
-    // be turned off from its own settings without switching
-    // back to the Plugins tab to find its row.
-    const headRow = document.createElement("div");
-    headRow.className = "plugin-settings-head";
+    // The section title is just a heading now: the Disable
+    // button used to sit beside it, so a plugin could be
+    // turned off from its own settings, but it duplicated
+    // the Plugins tab's toggle and cluttered the section.
+    // Enabling and disabling lives in the Plugins tab only.
     const head = document.createElement("h3");
     head.textContent = s.title;
-    const toggle = document.createElement("button");
-    toggle.className = "plugin-settings-toggle";
-    toggle.textContent = "Disable";
-    toggle.title = `Disable ${s.title}`;
-    toggle.addEventListener("click", () => {
-      void setPluginEnabled(s.pluginId, false);
-      host?.render();
-    });
-    headRow.appendChild(head);
-    headRow.appendChild(toggle);
     const body = document.createElement("div");
-    wrap.appendChild(headRow);
+    wrap.appendChild(head);
     wrap.appendChild(body);
     el.appendChild(wrap);
     try {
