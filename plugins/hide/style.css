@@ -24,24 +24,29 @@
 .hide-button.corner-top-left svg { transform: rotate(180deg); }
 .hide-button.corner-top-right svg { transform: rotate(270deg); }
 
-/* Corner picker in Settings: text buttons, not swatches.
-   It used to reuse .canvas-opt, which sizes every button to a
-   fixed 36x36px box for the 26px colour swatches — five text
-   labels crammed into those boxes, overflowing and unreadable.
-   These are proper text buttons, on the same pattern as the
-   backup row in Settings: white, hairline border, comfortable
-   padding, one row with gaps that wraps. The active one uses
-   the app's selected treatment — a white pill with a soft
-   shadow — the same as a toolbar button. */
+/* Corner picker in Settings: a segmented control, not
+   swatches. It used to reuse .canvas-opt, which sizes every
+   button to a fixed 36x36px box for the 26px colour swatches
+   — five text labels crammed into those boxes. The first
+   rewrite made them proper text buttons, but white on the
+   white sheet, so the active one was invisible — the same
+   white-on-white flaw the view-switcher had. This is the
+   view-switcher's own fix, as a segmented control: a grey
+   track, dimmed labels for the unselected corners, and the
+   active corner a white pill with a soft shadow and
+   full-strength text. Which corner is active is obvious
+   at a glance. */
 .hide-opt {
-  display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0;
+  display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 3px;
+  background: var(--fill); border-radius: 10px; margin: 4px 0;
 }
 .hide-opt button {
-  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
-  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
-  color: var(--ink);
+  border: none; background: transparent; border-radius: 8px;
+  padding: 5px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
+  color: var(--grey);
 }
-.hide-opt button:hover { background: var(--fill); }
+.hide-opt button:hover { color: var(--ink); }
 .hide-opt button.active {
+  background: #fff; color: var(--ink);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
 }
