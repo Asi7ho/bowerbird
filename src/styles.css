@@ -904,6 +904,17 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    the plugin is on, grey when it is off — active and
    inactive are told apart at a glance, without a badge. */
 #settings .plugin-row .plugin-state-on { color: var(--ink); }
+/* The state dot, before the name: filled ink when the plugin
+   is on, a hollow grey ring when it is off. The whole row
+   dims with it, so the state is visible without reading. */
+#settings .plugin-row .plugin-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex: none;
+  background: var(--ink);
+}
+#settings .plugin-row-off .plugin-dot {
+  background: transparent; border: 1.5px solid var(--grey);
+}
+#settings .plugin-row-off .plugin-row-text strong { color: var(--grey); }
 #settings .plugin-row button {
   border: 1px solid var(--separator); background: #fff; border-radius: 9px;
   padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;

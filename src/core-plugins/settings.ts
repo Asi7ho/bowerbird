@@ -248,15 +248,19 @@ function renderPluginSettings(): void {
   // own UI (board, title bar, search, toolbar, cards,
   // settings); the extras are the bundled and installed
   // plugins. A heading per group, so the two are never
-  // confused. The state is the first thing after the name,
-  // in ink when the plugin is on and grey when it is off,
-  // so active and inactive are told apart at a glance.
+  // confused. The state is carried by the whole row, not by
+  // one word: an active plugin has a filled dot and
+  // full-strength text, an inactive one a hollow dot and
+  // dimmed text, so active and inactive are told apart at a
+  // glance, without reading. Failed and trial rows stay
+  // full-strength, so their error and status stay readable.
   const renderRow = (lp: (typeof plugins)[number]): string => {
     // A trial plugin is not installed yet: it shows as
     // Trying and gets no toggle.
     const state = lp.trial ? "Trying" : lp.failed ? "Failed" : lp.active ? "On" : "Off";
     const stateClass = lp.active ? "plugin-state-on" : "meta";
-    let row = `<div class="plugin-row"><div class="plugin-row-text"><div><strong>${escapeHtml(lp.name)}</strong> <span class="${stateClass}">${state}</span></div>`;
+    const off = !lp.active && !lp.failed && !lp.trial;
+    let row = `<div class="plugin-row${off ? " plugin-row-off" : ""}"><span class="plugin-dot" aria-hidden="true"></span><div class="plugin-row-text"><div><strong>${escapeHtml(lp.name)}</strong> <span class="${stateClass}">${state}</span></div>`;
     if (lp.failed && lp.error) row += `<p class="meta"><strong>${escapeHtml(lp.error)}</strong></p>`;
     // A Settings button, when the plugin has a settings
     // section: it jumps to the Plugin settings tab and
