@@ -218,6 +218,20 @@ next step. The app must work identically after every step.
    and the API has proven itself. Verify: full cold playtest
    — pan, zoom, add/edit/move/delete every card kind,
    undo/redo, plugins still work.
+   **Partly done** (this commit): the board DOM is built by
+   the core-board plugin (it creates #board and its layers
+   and hands them to the shell via `api.ui.setBoardElements`),
+   `index.html` is a bare mount point, and the core reads the
+   board elements from the shell after the plugin activates.
+   The render loop and the input loop (pan, zoom, drag,
+   resize/rotate, text edit) still live in the core
+   (`src/main.ts`), which owns the board model, the undo
+   store and the search engine. Moving them into the plugin
+   — the remaining deep work — needs the drag state machine
+   rewritten against `api.board` (hitTest, updateItems) and
+   the render loop against `api.board.getItems()` /
+   `api.board.renderCard()`; it is not attempted here, to
+   avoid regressing the board's core interactions.
 7. **Bare shell.** `index.html` becomes the mount point only.
    The core renders nothing on its own. Bump the plugin
    `apiVersion` to `"2"` and document it in `PLUGIN_API.md`.

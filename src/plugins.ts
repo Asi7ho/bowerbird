@@ -206,6 +206,9 @@ export interface PluginHost {
   moveItem: (id: number, toIndex: number) => boolean;
   removeItem: (id: number) => boolean;
   renderBoardCard: (id: number) => string | null;
+  // Hit-test: the top item id at a world point, or null.
+  // Frames lose to the cards inside them (see hitTest).
+  hitTest: (world: Pt) => number | null;
   save: () => void;
   render: () => void;
   switchBoard: (name: string, preserveUndo?: boolean) => Promise<boolean>;
@@ -289,6 +292,14 @@ export interface PluginContext {
     getItems: () => Item[];
     getItem: (id: number) => Item | undefined;
     renderCard: (id: number) => string | null;
+    // Hit-test: the top item id at a world point, or null.
+    // A frame is a container, not content: a card inside a
+    // frame wins over the frame itself, so cards inside a
+    // slide can be grabbed, moved and edited once framed.
+    // Only if nothing else covers the point does the frame
+    // itself win. The board view uses this for clicks,
+    // drags and cursor hints.
+    hitTest: (world: Pt) => number | null;
     getSelected: () => number[];
     setSelected: (ids: number[]) => void;
     addItem: (kind: Kind, pos: Pt, size: Size) => number;
@@ -438,6 +449,14 @@ export interface PluginContext {
     // added to it. The toolbar plugin provides this; other
     // plugins do not call it.
     setToolbarToolsEl: (el: HTMLElement) => void;
+    // Hand the plugin system the board DOM elements, built
+    // by the core-board plugin: the board element itself,
+    // the canvas layers (grid, SVG, cards, resize/rotate
+    // handles), the plugin view, overlays, view switcher
+    // and toast. The core reads them back through the
+    // shell; it does not query them by id. The board plugin
+    // provides these; other plugins do not call it.
+    setBoardElements: (els: { board: HTMLElement; canvas: HTMLElement[]; pluginView: HTMLElement; overlays: HTMLElement; viewSwitcher: HTMLElement; toast: HTMLElement }) => void;
     // Hand the plugin system the panels toggle button, so
     // the plugin system can hide it when no plugin panels
     // exist and mark it active when a panel is open. The
@@ -630,6 +649,10 @@ let pluginsReady = false;
 // panels, views or tools — that is the visible proof the
 // core renders nothing on its own.
 export interface ShellElements {
+  // The board element (#board), built by the core-board
+  // plugin. The core reads it back through the shell; it
+  // does not query it by id.
+  boardEl: HTMLElement;
   toolbarToolsEl: HTMLElement;
   panelsEl: HTMLElement;
   panelsToggleEl: HTMLElement;
@@ -638,6 +661,9 @@ export interface ShellElements {
   viewSwitcherEl: HTMLElement;
   overlaysEl: HTMLElement;
   settingsSectionsEl: HTMLElement;
+  // The toast element, built by the core-board plugin.
+  // The core's toast() writes into it.
+  toastEl: HTMLElement;
   // The search box container, built by the core-titlebar
   // plugin. The core-search plugin mounts its input,
   // count, clear button and results into it.
@@ -646,6 +672,22 @@ export interface ShellElements {
 const shell: Partial<ShellElements> = {};
 export function registerShellElements(els: Partial<ShellElements>): void {
   Object.assign(shell, els);
+}
+
+// Read the board DOM elements the core-board plugin built
+// (the board element, the canvas layers, the plugin view,
+// overlays, view switcher and toast). The core reads them
+// after the board plugin activates; before that they are
+// undefined. The core never queries them by id.
+export function getBoardElements(): { board?: HTMLElement; canvas?: HTMLElement[]; pluginView?: HTMLElement; overlays?: HTMLElement; viewSwitcher?: HTMLElement; toast?: HTMLElement } {
+  return {
+    board: shell.boardEl,
+    canvas: shell.boardCanvasEls,
+    pluginView: shell.pluginViewEl,
+    overlays: shell.overlaysEl,
+    viewSwitcher: shell.viewSwitcherEl,
+    toast: shell.toastEl,
+  };
 }
 
 // The settings UI: the settings window is a plugin (see
@@ -899,6 +941,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       // can already read the item via getItems, so this needs no
       // extra permission; strokes and connectors render as null.
       renderCard: (id: number) => host!.renderBoardCard(id),
+      hitTest: (world: Pt) => host!.hitTest(world),
       getSelected: () => host!.getSelected(),
       setSelected: (ids: number[]) => host!.setSelected(ids),
       addItem: (kind: Kind, pos: Pt, size: Size) => {
@@ -1124,6 +1167,16 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       setToolbarToolsEl: (el: HTMLElement) => {
         shell.toolbarToolsEl = el;
       },
+      setBoardElements: (els: { board: HTMLElement; canvas: HTMLElement[]; pluginView: HTMLElement; overlays: HTMLElement; viewSwitcher: HTMLElement; toast: HTMLElement }) => {
+        registerShellElements({
+          boardEl: els.board,
+          boardCanvasEls: els.canvas,
+          pluginViewEl: els.pluginView,
+          overlaysEl: els.overlays,
+          viewSwitcherEl: els.viewSwitcher,
+          toastEl: els.toast,
+        });
+      },
       setPanelsToggleEl: (el: HTMLElement) => {
         registerShellElements({ panelsToggleEl: el });
       },
@@ -1139,7 +1192,12 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       renderSettingsSections: () => renderSettingsSections(),
       registerShortcut: (def: PluginShortcutDef) => registerShortcut(pluginId, def),
       listShortcuts: () => listPluginShortcuts(),
-      boardEl: host!.boardEl,
+      // The board element, built by the core-board plugin.
+      // Read from the shell (set by the board plugin when it
+      // activates) so a plugin activating after the board
+      // plugin — the title bar, which inserts before it —
+      // sees it even before the core has read it back.
+      boardEl: (shell.boardEl ?? host!.boardEl) as HTMLElement,
       registerSettingsUI: (ui: { open: () => void; close: () => void; isOpen: () => boolean; setTab: (tab: string) => void; refresh: () => void }) => registerSettingsUI(ui),
       setSettingsSectionsContainer: (el: HTMLElement) => registerShellElements({ settingsSectionsEl: el }),
       // The search box container, built by the core-titlebar

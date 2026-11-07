@@ -15,7 +15,10 @@ export interface MediaContext {
   bumpSearchVersion(): void;
   requestSearchUpdate(): void;
   requestRender(): void;
-  cardsEl: HTMLDivElement;
+  // The cards layer, read lazily: the board DOM is built by
+  // the core-board plugin, so the cards element does not
+  // exist when the media module is created at module load.
+  getCardsEl: () => HTMLDivElement;
   toast(msg: string): void;
 }
 
@@ -143,11 +146,11 @@ export function createMedia(host: MediaContext): Media {
     if (!audioEl || audioId === null) return;
     const dur = audioEl.duration;
     const cur = audioEl.currentTime;
-    const timeEl = host.cardsEl.querySelector(`[data-audio-time="${audioId}"]`);
+    const timeEl = host.getCardsEl().querySelector(`[data-audio-time="${audioId}"]`);
     if (timeEl) timeEl.textContent = formatAudioTime(cur);
-    const durEl = host.cardsEl.querySelector(`[data-audio-dur="${audioId}"]`);
+    const durEl = host.getCardsEl().querySelector(`[data-audio-dur="${audioId}"]`);
     if (durEl && isFinite(dur)) durEl.textContent = formatAudioTime(dur);
-    const seekEl = host.cardsEl.querySelector(`[data-audio-seek="${audioId}"]`) as HTMLInputElement | null;
+    const seekEl = host.getCardsEl().querySelector(`[data-audio-seek="${audioId}"]`) as HTMLInputElement | null;
     if (seekEl && isFinite(dur) && dur > 0) {
       seekEl.style.setProperty("--seek-pct", `${Math.round((cur / dur) * 100)}%`);
       if (document.activeElement !== seekEl) seekEl.value = String(Math.round((cur / dur) * 1000));
@@ -179,7 +182,7 @@ export function createMedia(host: MediaContext): Media {
           if (!it || !("Audio" in it.kind) || it.kind.Audio.path !== path) return;
           if (isFinite(retry.duration)) {
             audioDurations.set(path, retry.duration);
-            const durEl = host.cardsEl.querySelector(`[data-audio-dur="${id}"]`);
+            const durEl = host.getCardsEl().querySelector(`[data-audio-dur="${id}"]`);
             if (durEl) durEl.textContent = formatAudioTime(retry.duration);
           }
         };
@@ -202,7 +205,7 @@ export function createMedia(host: MediaContext): Media {
       if (!it || !("Audio" in it.kind) || it.kind.Audio.path !== path) return;
       if (isFinite(probe.duration)) {
         audioDurations.set(path, probe.duration);
-        const durEl = host.cardsEl.querySelector(`[data-audio-dur="${id}"]`);
+        const durEl = host.getCardsEl().querySelector(`[data-audio-dur="${id}"]`);
         if (durEl) durEl.textContent = formatAudioTime(probe.duration);
       }
     };
@@ -233,7 +236,7 @@ export function createMedia(host: MediaContext): Media {
         return it && "PdfCard" in it.kind && it.kind.PdfCard.path === path;
       };
       if (!stillPdf()) return;
-      canvas = host.cardsEl.querySelector(`[data-pdf-canvas="${id}"]`) as HTMLCanvasElement | null;
+      canvas = host.getCardsEl().querySelector(`[data-pdf-canvas="${id}"]`) as HTMLCanvasElement | null;
       if (!canvas) return;
       const pageNum = pdfPages.get(id) ?? 1;
       renderedPage = pageNum;
@@ -248,10 +251,10 @@ export function createMedia(host: MediaContext): Media {
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       await page.render({ canvas, viewport }).promise;
-      const countEl = host.cardsEl.querySelector(`[data-pdf-count="${id}"]`);
+      const countEl = host.getCardsEl().querySelector(`[data-pdf-count="${id}"]`);
       if (countEl) countEl.textContent = `${pageNum} / ${doc.numPages}`;
-      const prev = host.cardsEl.querySelector(`[data-action="pdf-prev"][data-id="${id}"]`) as HTMLButtonElement | null;
-      const next = host.cardsEl.querySelector(`[data-action="pdf-next"][data-id="${id}"]`) as HTMLButtonElement | null;
+      const prev = host.getCardsEl().querySelector(`[data-action="pdf-prev"][data-id="${id}"]`) as HTMLButtonElement | null;
+      const next = host.getCardsEl().querySelector(`[data-action="pdf-next"][data-id="${id}"]`) as HTMLButtonElement | null;
       if (prev) prev.disabled = pageNum <= 1;
       if (next) next.disabled = pageNum >= doc.numPages;
     } catch {
@@ -261,7 +264,7 @@ export function createMedia(host: MediaContext): Media {
       const it = boardGet(host.getBoard(), id);
       if (!it || !("PdfCard" in it.kind) || it.kind.PdfCard.path !== path) return;
       pdfFailed.add(path);
-      const wrap = host.cardsEl.querySelector(`[data-pdf-wrap="${id}"]`);
+      const wrap = host.getCardsEl().querySelector(`[data-pdf-wrap="${id}"]`);
       if (wrap) wrap.textContent = "Could not render this PDF. Double-click to open it.";
     } finally {
       pdfRendering.delete(id);
@@ -272,7 +275,7 @@ export function createMedia(host: MediaContext): Media {
       // Never re-render after a board switch, for the same
       // reason as above.
       const it = boardGet(host.getBoard(), id);
-      const current = host.cardsEl.querySelector(`[data-pdf-canvas="${id}"]`) as HTMLCanvasElement | null;
+      const current = host.getCardsEl().querySelector(`[data-pdf-canvas="${id}"]`) as HTMLCanvasElement | null;
       const stale = renderedPage !== 0 && (pdfPages.get(id) ?? 1) !== renderedPage;
       if (it && "PdfCard" in it.kind && it.kind.PdfCard.path === path && current && (current !== canvas || stale) && !pdfFailed.has(path)) void renderPdfPage(id, path);
     }

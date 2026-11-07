@@ -4,6 +4,7 @@ import { createCardRenderer, SHAPES, type CardRenderer } from "./cards";
 import { createBoardSearch, type BoardSearch } from "./search";
 import { createUndoStore, type UndoStore } from "./undo";
 import { createDrops, type Drops } from "./drops";
+import * as coreBoard from "./core-plugins/board";
 import * as coreCards from "./core-plugins/cards";
 import * as coreSearch from "./core-plugins/search";
 import * as coreSettings from "./core-plugins/settings";
@@ -17,7 +18,7 @@ import {
 } from "./model";
 import { welcomeBoard } from "./welcome";
 import {
-  closeSettingsUI, emitPluginEvent, getActiveView, getCardRenderer,
+  closeSettingsUI, emitPluginEvent, getActiveView, getBoardElements, getCardRenderer,
   getPluginTool, handlePluginCardAction, handlePluginCardDoubleClick, handlePluginShortcut,
   initPlugins, isSettingsUIOpen,
   openSettingsUI,
@@ -85,17 +86,21 @@ let zoomSettleTimer: ReturnType<typeof setTimeout> | null = null;
 let lastZoomRefreshZoom = 1;
 let lastZoomRefreshTime = 0;
 
-const boardEl = document.getElementById("board") as HTMLDivElement;
-const worldEl = document.getElementById("world") as unknown as SVGGElement;
-const cardsEl = document.getElementById("cards") as HTMLDivElement;
-const gridEl = document.getElementById("grid") as HTMLDivElement;
+// The board DOM is built by the core-board plugin, so these
+// start unassigned and are read from the shell after the
+// plugin activates in init(). Before that they must not be
+// used: the board does not exist yet.
+let boardEl: HTMLDivElement = null as unknown as HTMLDivElement;
+let worldEl: SVGGElement = null as unknown as SVGGElement;
+let cardsEl: HTMLDivElement = null as unknown as HTMLDivElement;
+let gridEl: HTMLDivElement = null as unknown as HTMLDivElement;
 // Key of the card/stroke content currently built in the DOM. Camera
 // moves that leave this key unchanged must not rebuild anything:
 // panning then is one GPU transform, not a DOM rebuild per frame.
 let lastContentKey = 0;
 let cursorRaf = 0;
 let pendingCursor: Pt | null = null;
-const toastEl = document.getElementById("toast") as HTMLDivElement;
+let toastEl: HTMLDivElement = null as unknown as HTMLDivElement;
 
 // ---------------------------------------------------------------- helpers
 
@@ -115,7 +120,7 @@ const media: Media = createMedia({
   bumpSearchVersion: () => { boardSearchVersion++; },
   requestSearchUpdate: () => search.updateSearch(),
   requestRender: () => render(),
-  cardsEl,
+  getCardsEl: () => cardsEl,
   toast,
 });
 
@@ -127,7 +132,7 @@ const search: BoardSearch = createBoardSearch({
   getBoardGeneration: () => boardGeneration,
   getBoardSearchVersion: () => boardSearchVersion,
   media,
-  cardsEl,
+  getCardsEl: () => cardsEl,
   onJumpTo: (target) => {
     selected = select(board, [], target.id, false);
     let c: Pt;
@@ -867,8 +872,12 @@ function rotateSelected(delta: number): boolean {
   return true;
 }
 
-// ---------------------------------------------------------------- mouse
-
+// The board DOM is built by the core-board plugin, so the
+// board listeners attach here, called from init() after
+// the board elements are read from the shell. Attaching
+// them at module load would throw: the board does not
+// exist yet.
+function attachBoardListeners(): void {
 boardEl.addEventListener("mousedown", (e: MouseEvent) => {
   const target = e.target as HTMLElement;
   if (target.closest("#toolbar, #settings-backdrop, #toast, #plugin-overlays, #search-box, #title-bar, video, input")) return;
@@ -968,6 +977,64 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
   if (!e.shiftKey) selected = [];
   drag = { kind: "marquee", start: world, current: world };
 });
+
+cardsEl.addEventListener("click", (e: MouseEvent) => {
+  const target = e.target as HTMLElement;
+  const link = target.closest("a[data-url]") as HTMLElement | null;
+  if (link) { e.preventDefault(); openExternal(link.dataset.url ?? ""); return; }
+  const pbtn = target.closest("[data-plugin-action]") as HTMLElement | null;
+  if (pbtn) {
+    const pid = Number(pbtn.dataset.id);
+    const pit = boardGet(board, pid);
+    if (pit && handlePluginCardAction(pbtn.dataset.pluginAction ?? "", pit)) return;
+  }
+  const btn = target.closest("[data-action]") as HTMLElement | null;
+  if (!btn) return;
+  const id = Number(btn.dataset.id);
+  const action = btn.dataset.action;
+  const it = boardGet(board, id);
+  if (!it) return;
+  if (action === "open-link" && "UrlCard" in it.kind) openExternal(it.kind.UrlCard.url);
+  if (action === "play-audio" && "Audio" in it.kind) media.toggleAudio(id, it.kind.Audio.path);
+  if ((action === "pdf-prev" || action === "pdf-next") && "PdfCard" in it.kind) {
+    const pdfPath = it.kind.PdfCard.path;
+    const docPromise = media.getCachedPdfDoc(pdfPath);
+    if (!docPromise) return;
+    void docPromise.then((doc) => {
+      const cur = media.pdfPages.get(id) ?? 1;
+      const nextPage = action === "pdf-prev" ? cur - 1 : cur + 1;
+      if (nextPage < 1 || nextPage > doc.numPages) return;
+      media.pdfPages.set(id, nextPage);
+      void media.renderPdfPage(id, pdfPath);
+    });
+  }
+
+  if (action === "play-video" && "Video" in it.kind) openExternal(it.kind.Video.source);
+});
+
+cardsEl.addEventListener("input", (e: Event) => {
+  const seek = (e.target as HTMLElement).closest("[data-audio-seek]") as HTMLInputElement | null;
+  if (!seek) return;
+  const id = Number(seek.dataset.audioSeek);
+  const audio = media.getAudioState();
+  if (!audio.el || audio.id !== id || !isFinite(audio.el.duration) || audio.el.duration <= 0) return;
+  audio.el.currentTime = (Number(seek.value) / 1000) * audio.el.duration;
+  media.updateAudioProgress();
+});
+
+
+// ---------------------------------------------------------------- keyboard
+
+// Find elements one by one on an infinite board: Tab steps through
+// the board's elements in board order, selecting each in turn and
+// centring the camera on it, so an element far from the current
+// view is found without hunting. Shift+Tab steps backwards, and
+// the cycle wraps. Pen strokes and connectors are skipped: they
+// are drawings and lines, not elements to find. A grouped item
+// selects its whole group and centres on the group's bounds.
+}
+
+// ---------------------------------------------------------------- mouse
 
 // Fast-path drag previews: a single SVG node updated in place,
 // instead of rebuilding every card and stroke on every mousemove.
@@ -1379,62 +1446,8 @@ window.addEventListener("error", (e: Event) => {
 
 // Card button / link clicks (delegated; cards are pointer-events:none
 // except these controls, so clicks here never start a board drag).
-cardsEl.addEventListener("click", (e: MouseEvent) => {
-  const target = e.target as HTMLElement;
-  const link = target.closest("a[data-url]") as HTMLElement | null;
-  if (link) { e.preventDefault(); openExternal(link.dataset.url ?? ""); return; }
-  const pbtn = target.closest("[data-plugin-action]") as HTMLElement | null;
-  if (pbtn) {
-    const pid = Number(pbtn.dataset.id);
-    const pit = boardGet(board, pid);
-    if (pit && handlePluginCardAction(pbtn.dataset.pluginAction ?? "", pit)) return;
-  }
-  const btn = target.closest("[data-action]") as HTMLElement | null;
-  if (!btn) return;
-  const id = Number(btn.dataset.id);
-  const action = btn.dataset.action;
-  const it = boardGet(board, id);
-  if (!it) return;
-  if (action === "open-link" && "UrlCard" in it.kind) openExternal(it.kind.UrlCard.url);
-  if (action === "play-audio" && "Audio" in it.kind) media.toggleAudio(id, it.kind.Audio.path);
-  if ((action === "pdf-prev" || action === "pdf-next") && "PdfCard" in it.kind) {
-    const pdfPath = it.kind.PdfCard.path;
-    const docPromise = media.getCachedPdfDoc(pdfPath);
-    if (!docPromise) return;
-    void docPromise.then((doc) => {
-      const cur = media.pdfPages.get(id) ?? 1;
-      const nextPage = action === "pdf-prev" ? cur - 1 : cur + 1;
-      if (nextPage < 1 || nextPage > doc.numPages) return;
-      media.pdfPages.set(id, nextPage);
-      void media.renderPdfPage(id, pdfPath);
-    });
-  }
-
-  if (action === "play-video" && "Video" in it.kind) openExternal(it.kind.Video.source);
-});
-
 // Audio seek slider (delegated; the slider lives in the card DOM,
 // which render() rebuilds, so a direct listener would be lost).
-cardsEl.addEventListener("input", (e: Event) => {
-  const seek = (e.target as HTMLElement).closest("[data-audio-seek]") as HTMLInputElement | null;
-  if (!seek) return;
-  const id = Number(seek.dataset.audioSeek);
-  const audio = media.getAudioState();
-  if (!audio.el || audio.id !== id || !isFinite(audio.el.duration) || audio.el.duration <= 0) return;
-  audio.el.currentTime = (Number(seek.value) / 1000) * audio.el.duration;
-  media.updateAudioProgress();
-});
-
-
-// ---------------------------------------------------------------- keyboard
-
-// Find elements one by one on an infinite board: Tab steps through
-// the board's elements in board order, selecting each in turn and
-// centring the camera on it, so an element far from the current
-// view is found without hunting. Shift+Tab steps backwards, and
-// the cycle wraps. Pen strokes and connectors are skipped: they
-// are drawings and lines, not elements to find. A grouped item
-// selects its whole group and centres on the group's bounds.
 function navigateElements(dir: 1 | -1): void {
   const navigable = board.items.filter((it) => !("Stroke" in it.kind) && !("Connector" in it.kind));
   if (navigable.length === 0) return;
@@ -1739,6 +1752,7 @@ async function init(): Promise<void> {
       const html = cards.cardHtml({ ...it, pos: { x: 0, y: 0 } }, true);
       return html === "" ? null : html;
     },
+    hitTest: (world: Pt) => hitTestWithFrames(board, world),
     save: () => undoStore.save(),
     render: () => render(),
     switchBoard: (name: string, preserveUndo = false) => switchToBoard(name, preserveUndo),
@@ -1793,7 +1807,12 @@ async function init(): Promise<void> {
       if (patch.grid !== undefined) board.grid = patch.grid;
       undoStore.save(); render();
     },
-    boardEl: document.getElementById("board") as HTMLElement,
+    get boardEl(): HTMLElement {
+      // The board DOM is built by the core-board plugin, so
+      // this reads the module-level boardEl, which is
+      // assigned from the shell after the plugin activates.
+      return boardEl;
+    },
     centreOn: (id) => {
       const it = boardGet(board, id);
       if (!it) return;
@@ -1859,25 +1878,19 @@ async function init(): Promise<void> {
     // itself (core-toolbar), which builds the toolbar and
     // its #tools segment. panelsToggleEl is registered by
     // the title bar plugin itself (core-titlebar), which
-    // builds the title bar and its toggle button.
+    // builds the title bar and its toggle button. The board
+    // elements (board, canvas layers, plugin view, overlays,
+    // view switcher, toast) are registered by the board
+    // plugin itself (core-board), which builds the board DOM.
     panelsEl: document.getElementById("plugin-panels") as HTMLElement,
-    pluginViewEl: document.getElementById("plugin-view") as HTMLElement,
-    boardCanvasEls: [
-      gridEl,
-      document.getElementById("canvas-svg") as HTMLElement,
-      cardsEl,
-      // The resize handle is board chrome, not view chrome: a view
-      // must hide it, and returning to the board restores its
-      // CSS default (hidden until updateResizeHandle shows it).
-      document.getElementById("resize-handle") as HTMLElement,
-      document.getElementById("rotate-handle") as HTMLElement,
-    ],
-    viewSwitcherEl: document.getElementById("view-switcher") as HTMLElement,
-    overlaysEl: document.getElementById("plugin-overlays") as HTMLElement,
     // settingsSectionsEl is registered by the settings plugin
     // itself (core-settings), which builds that container.
   });
   await initPlugins(pluginHost, api, [
+    // Board first: the toolbar appends to it, the title bar
+    // inserts before it, and the core reads its elements
+    // from the shell after this call.
+    { manifest: coreBoard.manifest, module: coreBoard },
     { manifest: coreSettings.manifest, module: coreSettings },
     { manifest: coreCards.manifest, module: coreCards },
     { manifest: coreToolbar.manifest, module: coreToolbar },
@@ -1886,6 +1899,25 @@ async function init(): Promise<void> {
     { manifest: coreTitlebar.manifest, module: coreTitlebar },
     { manifest: coreSearch.manifest, module: coreSearch },
   ]);
+  // The board DOM is built by the core-board plugin, so the
+  // core reads its elements from the shell now, after the
+  // plugin has activated. Before this they are undefined.
+  {
+    const els = getBoardElements();
+    if (els.board) boardEl = els.board as HTMLDivElement;
+    if (els.canvas) {
+      const [g, svg, c] = els.canvas;
+      if (g) gridEl = g as HTMLDivElement;
+      if (svg) {
+        const w = svg.querySelector("#world") as unknown as SVGGElement | null;
+        if (w) worldEl = w;
+      }
+      if (c) cardsEl = c as HTMLDivElement;
+    }
+    if (els.toast) toastEl = els.toast as HTMLDivElement;
+  }
+  // The board listeners attach now, once the board DOM exists.
+  attachBoardListeners();
   render();
   // Preload the context index now, in the background,
   // so the first search does not pay the index-load

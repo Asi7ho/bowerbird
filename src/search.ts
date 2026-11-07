@@ -19,7 +19,12 @@ export interface SearchContext {
   getBoardGeneration(): number;
   getBoardSearchVersion(): number;
   media: Media;
-  cardsEl: HTMLDivElement;
+  // The cards layer, read lazily: the board DOM is built by
+  // the core-board plugin, so the cards element does not
+  // exist when the search engine is created at module load.
+  // A getter reads the current element, after the plugin
+  // has built it.
+  getCardsEl: () => HTMLDivElement;
   onJumpTo(target: Item): void;
 }
 
@@ -611,7 +616,7 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
   function applySearchMatches(countEl: HTMLElement): void {
     if (searchIndex >= searchMatches.length) searchIndex = -1;
     const matchSet = new Set(searchMatches);
-    for (const child of Array.from(ctx.cardsEl.children)) {
+    for (const child of Array.from(ctx.getCardsEl().children)) {
       const el = child as HTMLElement;
       const id = Number(el.dataset.id);
       el.classList.toggle("search-match", matchSet.has(id));
@@ -644,7 +649,7 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
       closeSearchResults();
       countEl.textContent = "";
       if (!hadMatches) return;
-      for (const child of Array.from(ctx.cardsEl.children)) {
+      for (const child of Array.from(ctx.getCardsEl().children)) {
         (child as HTMLElement).classList.remove("search-match", "search-dim");
       }
       return;
