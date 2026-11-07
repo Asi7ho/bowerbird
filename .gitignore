@@ -5,3 +5,7 @@ electron-dist/
 out/
 *.tmp
 dist-mac/
+# Compiled bundled-plugin JavaScript (build artifact; the .ts is the source).
+# The runtime plugin loader serves .js over the plugin: scheme.
+plugins/*/*.js
+plugins/*/*/*.js

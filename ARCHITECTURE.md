@@ -160,7 +160,11 @@ core UI itself is fully plugin-built.
 - **User plugins** (in `plugins/` or installed): unchanged.
   Multi-file `main.js` (relative imports resolve over the
   plugin: scheme), `apiVersion` checked, permissions enforced.
-  This is the v1 contract and it does not change.
+  This is the v1 contract and it does not change. The bundled
+  plugins in `plugins/` are written in TypeScript and compiled
+  to `.js` in place by `scripts/build-plugins.mjs` (see
+  PLUGIN_API.md); a user plugin may be JavaScript, or
+  TypeScript compiled the same way.
 - **First-party plugins** (in `plugins/core-*/`): ES modules
   bundled with the app. The core loads them with a normal
   `import()` at boot, then calls `activate(api)` with the

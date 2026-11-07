@@ -45,6 +45,8 @@ my-plugin/
 
 `main.js` is a JavaScript module. It must export `activate(api)` and may export `deactivate()`. It is loaded as an ES module over the `plugin:` scheme (`plugin://<plugin-id>/main.js`), so it may be multiple files: a relative import in `main.js` resolves against the plugin's own folder, exactly like a first-party plugin. Only `.js`, `.css` and `.json` files are served, and only from the plugin's own folder. A single-file plugin is the special case; libraries may also be bundled inside one file.
 
+The bundled plugins are written in TypeScript, not JavaScript: each one is a `main.ts` entry point plus its own modules (`*.ts`), compiled to `.js` in place by `scripts/build-plugins.mjs` (type-checked by `tsc -p tsconfig.plugins.json`, both wired into `npm run build` and `npm run dev`). The `.js` is a build artifact; the `.ts` is the source. A plugin author may write JavaScript directly, or do the same — write TypeScript and compile it to `.js` before installing. Either way the loader only ever sees JavaScript: a type-only import from the core (for example `import type { PluginContext } from "../../src/plugins"`) is erased at compile time, so a plugin never depends on the core's source at runtime.
+
 ```js
 export function activate(api) {
   api.cards.register({

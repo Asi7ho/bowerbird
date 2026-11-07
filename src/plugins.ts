@@ -347,7 +347,7 @@ export interface PluginContext {
     list: () => Promise<Array<{ name: string; current: boolean; items: number }>>;
     current: () => Promise<string>;
     create: (name: string) => Promise<{ name: string }>;
-    switch: (name: string) => Promise<boolean>;
+    switch: (name: string, preserveUndo?: boolean) => Promise<boolean>;
     rename: (oldName: string, newName: string) => Promise<{ name: string }>;
     delete: (name: string) => Promise<{ wasCurrent: boolean }>;
   };

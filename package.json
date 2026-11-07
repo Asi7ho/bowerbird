@@ -2,6 +2,7 @@
   "devDependencies": {
     "@types/node": "^24.19.2",
     "electron": "^45.2.1",
+    "esbuild": "^0.28.2",
     "typescript": "^7.0.2",
     "vite": "^8.3.5"
   },
@@ -9,10 +10,11 @@
   "name": "bowerbird",
   "private": true,
   "scripts": {
-    "build": "tsc && tsc -p tsconfig.main.json && cp electron/peek.html electron-dist/peek.html && vite build",
-    "dev": "tsc -p tsconfig.main.json && cp electron/peek.html electron-dist/peek.html && node electron-dist/dev.js",
+    "build": "tsc && tsc -p tsconfig.main.json && tsc -p tsconfig.plugins.json && node scripts/build-plugins.mjs && cp electron/peek.html electron-dist/peek.html && vite build",
+    "dev": "tsc -p tsconfig.main.json && tsc -p tsconfig.plugins.json && node scripts/build-plugins.mjs && cp electron/peek.html electron-dist/peek.html && node electron-dist/dev.js",
     "start": "electron .",
-    "demo": "BOWERBIRD_DEMO=1 electron ."
+    "demo": "BOWERBIRD_DEMO=1 electron .",
+    "build:plugins": "tsc -p tsconfig.plugins.json && node scripts/build-plugins.mjs"
   },
   "version": "0.2.1",
   "dependencies": {
