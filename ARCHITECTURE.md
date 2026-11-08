@@ -26,10 +26,11 @@ src/plugins.ts        plugin host: loads first-party (ES module)
 src/core-plugins/     first-party UI plugins, one file per surface,
                       each using only PluginContext: board, cards,
                       toolbar, titlebar, search, settings.
-plugins/              the eight bundled plugins (AI Chat, Boards,
-                      Command Palette, Hide Button, Colour Palette,
-                      Presentation, Tidy Up, Visual Library).
-                      Same API, opt-in, written in TypeScript.
+plugins/              the eight bundled plugins (AI Chat, Multiple
+                      Boards, Command Palette, Hide Button, Colour
+                      Palette, Presentation, Tidy Up, Visual
+                      Library). Same API, opt-in, written in
+                      TypeScript.
 electron/             main process and the window.bowerbird bridge
                       (board load/save, files, window controls,
                       plugin IPC). TypeScript, compiled to
@@ -44,4 +45,4 @@ electron/             main process and the window.bowerbird bridge
 
 ## Known boundary
 
-The render loop and the input loop (pan, zoom, drag, resize/rotate, text edit, ~1000 lines in `src/main.ts`) still live in the core. The core renders no DOM but still owns the board controller. Moving them into `core-board` needs the drag state machine rewritten against `api.board` (hitTest, updateItems) and the render loop against `api.board.getItems()` / `api.board.renderCard()`. `api.board.hitTest` was added for that move.
+The render loop and the input loop (pan, zoom, drag, resize/rotate, text edit, ~1000 lines in `src/main.ts`) still live in the core. The core renders no DOM but still owns the board controller. Moving them into the board plugin (`src/core-plugins/board.ts`) needs the drag state machine rewritten against `api.board` (hitTest, updateItems) and the render loop against `api.board.getItems()` / `api.board.renderCard()`. `api.board.hitTest` was added for that move.

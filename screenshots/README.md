@@ -12,4 +12,4 @@ Note: these shots predate the title bar, so they show the old floating search bo
 | `04-sketch-board.png` | Annotating a photo: a pen circle around a real photograph, pen strokes in several colours, swatches, a waterfall video and a short audio card. |
 | `05-find-anything.png` | A large board at zoom 0.4 with one element selected by Tab, centred. A waterfall video and two audio cards are among the spread-out elements. |
 
-To recapture: resize the window to 1440x900, open a board in Bowerbird and take a screenshot of the app window (on macOS, Cmd+Shift+4, then Space, then click the window). On Linux, `BOWERBIRD_WINDOW_SIZE=1440x900` forces the window to that size for a full-bleed shot, since the default window is 800x600.
+To recapture: resize the window to 1440x900, open a board in Bowerbird and take a screenshot of the app window (on macOS, Cmd+Shift+4, then Space, then click the window). On Linux, `BOWERBIRD_WINDOW_SIZE=1440x900` forces the window to that size for a full-bleed shot, since the default window is 1280x850.

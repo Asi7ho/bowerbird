@@ -1,4 +1,4 @@
-// Hello Card — sample plugin for Bowerbird Plugin API v1.
+// Hello Card — sample plugin for the Bowerbird Plugin API.
 // See PLUGIN_API.md in the repo root. Copy this folder to start
 // a new plugin; keep the manifest and the activate() shape, and
 // replace the Hello card with your own kind.
