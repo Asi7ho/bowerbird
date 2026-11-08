@@ -19,7 +19,7 @@ export const manifest: PluginManifest = {
   id: "core-settings",
   name: "Settings",
   version: "1.0.0",
-  description: "The Settings window: shortcuts, canvas, data, backups, feedback, plugins.",
+  description: "Shortcuts, canvas, data, backups, feedback and plugins.",
   main: "settings.js",
   permissions: ["board:read", "board:write", "plugins:install"],
   required: true,
@@ -267,6 +267,7 @@ function renderPluginSettings(): void {
     // toggle; a failed plugin shows its error underneath.
     const off = !lp.active;
     let row = `<div class="plugin-row${off ? " plugin-row-off" : ""}"><span class="plugin-dot" aria-hidden="true"></span><div class="plugin-row-text"><div><strong>${escapeHtml(lp.name)}</strong></div>`;
+    if (lp.description) row += `<p class="plugin-desc">${escapeHtml(lp.description)}</p>`;
     if (lp.failed && lp.error) row += `<p class="meta"><strong>${escapeHtml(lp.error)}</strong></p>`;
     // A Settings button, when the plugin has a settings
     // section: it jumps to the Plugin settings tab and
@@ -385,10 +386,10 @@ export function activate(context: PluginContext): void {
             <h3>Data</h3>
             <p class="meta" id="board-dir-meta"></p>
             <p class="meta" id="build-meta"></p>
-            <button id="btn-reset">Delete all board data</button>
-            <div id="reset-confirm" style="display:none">
-              <p class="meta">You can undo it with Ctrl / Cmd + Z.</p>
-              <button id="btn-reset-confirm">Delete everything</button>
+            <button id="btn-factory-reset">Factory reset</button>
+            <div id="factory-reset-confirm" style="display:none">
+              <p class="meta">Boards, settings, plugins and keys — everything. This cannot be undone.</p>
+              <button id="btn-factory-reset-confirm">Reset everything</button>
             </div>
             <h3>Backups</h3>
             <div id="backups-list"></div>
@@ -429,19 +430,26 @@ export function activate(context: PluginContext): void {
   for (const btn of Array.from(backdrop.querySelectorAll("[data-settings-tab]"))) {
     (btn as HTMLElement).addEventListener("click", () => setSettingsTab((btn as HTMLElement).dataset.settingsTab ?? "general"));
   }
-  el("btn-reset")?.addEventListener("click", () => {
-    const confirmEl = el<HTMLDivElement>("reset-confirm");
-    const btn = el<HTMLButtonElement>("btn-reset");
+  // Factory reset: two-click confirm, like the old board-data
+  // reset. The first click arms it; the second wipes everything
+  // (boards, settings, plugins, plugin storage, secure storage)
+  // and reloads, so the app boots as if freshly installed.
+  el("btn-factory-reset")?.addEventListener("click", () => {
+    const confirmEl = el<HTMLDivElement>("factory-reset-confirm");
+    const btn = el<HTMLButtonElement>("btn-factory-reset");
     if (confirmEl) confirmEl.style.display = "block";
     if (btn) btn.style.display = "none";
   });
-  el("btn-reset-confirm")?.addEventListener("click", async () => {
-    const ok = await context.board.reset();
-    if (ok) {
-      const confirmEl = el<HTMLDivElement>("reset-confirm");
-      const btn = el<HTMLButtonElement>("btn-reset");
+  el("btn-factory-reset-confirm")?.addEventListener("click", async () => {
+    const result = await context.app.factoryReset();
+    if (result?.ok) {
+      window.location.reload();
+    } else {
+      const confirmEl = el<HTMLDivElement>("factory-reset-confirm");
+      const btn = el<HTMLButtonElement>("btn-factory-reset");
       if (confirmEl) confirmEl.style.display = "none";
       if (btn) btn.style.display = "";
+      context.ui.toast("Factory reset did not run.");
     }
   });
 

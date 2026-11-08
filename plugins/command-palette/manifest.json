@@ -14,7 +14,7 @@
       }
     ]
   },
-  "description": "Every command, from one place. Press Cmd or Ctrl + K, type to search, Enter to run.",
+  "description": "Every command, from one place. Cmd/Ctrl + K.",
   "id": "command-palette",
   "main": "main.ts",
   "name": "Command Palette",

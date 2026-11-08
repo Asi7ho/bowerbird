@@ -73,6 +73,7 @@
   flex-direction: column;
   gap: 8px;
   overflow-y: auto;
+  overflow-x: hidden;
   flex: 1;
   min-height: 0;
 }
@@ -161,8 +162,14 @@
   cursor: default;
 }
 
+/* The install row: a label and a button. The label is a plugin
+   name, which can be one long unbroken word, so it must shrink
+   and break — otherwise it pushes the button out of the panel
+   and the button is cut off. The row wraps, the label takes the
+   room and breaks, the button never shrinks. */
 .ai-install {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   padding: 8px 10px;
@@ -171,4 +178,14 @@
   border-radius: 12px;
   box-shadow: var(--shadow-sm);
   font-size: 13px;
+}
+
+.ai-install span {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+
+.ai-install button {
+  flex: none;
 }

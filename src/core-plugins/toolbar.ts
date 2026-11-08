@@ -22,7 +22,7 @@ export const manifest: PluginManifest = {
   id: "core-toolbar",
   name: "Toolbar",
   version: "1.0.0",
-  description: "The toolbar: tools, pen palette, shape picker, note colours, zoom, delete, settings.",
+  description: "Tools, pen, shapes, zoom, delete and settings.",
   main: "toolbar.js",
   permissions: ["board:read", "board:write", "pen"],
 };

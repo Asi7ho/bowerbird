@@ -851,6 +851,28 @@ function registerIpc(): void {
     return installShowcaseAssets(dir);
   });
 
+  // Factory reset: wipe everything the app has saved, so it boots
+  // as if freshly installed — every board and its assets and
+  // backups, every user-installed plugin, the app settings, the
+  // plugin on/off state, all plugin storage and all secure storage
+  // (API keys). The bundled plugins ship in the app bundle, so
+  // they are untouched. The showcase assets are reinstalled so a
+  // fresh welcome board can be built. The renderer reloads after
+  // this returns, so the fresh defaults load. Not in demo mode.
+  ipcMain.handle("bowerbird:factory-reset", () => {
+    if (DEMO) return { ok: false };
+    const base = defaultBaseDir();
+    try { fs.rmSync(base, { recursive: true, force: true }); } catch { /* already gone */ }
+    const userPlugins = process.env.BOWERBIRD_PLUGINS_DIR
+      ?? path.join(process.env.XDG_DATA_HOME ?? path.join(process.env.HOME || ".", ".local", "share"), "bowerbird", "plugins");
+    try { fs.rmSync(userPlugins, { recursive: true, force: true }); } catch { /* already gone */ }
+    for (const file of [appSettingsPath(), pluginEnabledPath(), pluginStoragePath(), secureStoragePath()]) {
+      try { fs.rmSync(file, { force: true }); } catch { /* already gone */ }
+    }
+    installShowcaseAssets(base);
+    return { ok: true };
+  });
+
   // Media diagnostic: for a given board path, report
   // whether the board copy exists and its size, whether
   // the bundle copy exists and its size, and both paths —

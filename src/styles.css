@@ -618,10 +618,11 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #settings .meta .email { word-break: normal; }
 #settings #reset-confirm { margin-top: 12px; }
 /* Feedback box: a plain textarea in the core style — white, hairline
-   border, the same radius as a card, system font. */
+   border, the same radius as a card, system font. Fixed height: it
+   never resizes, and long text scrolls inside it. */
 #feedback-text {
   display: block; width: 100%; box-sizing: border-box;
-  margin: 0 0 12px; padding: 8px 10px; resize: vertical;
+  margin: 0 0 12px; padding: 8px 10px; resize: none; overflow-y: auto;
   font-family: inherit; font-size: 13px; line-height: 1.5; color: var(--ink);
   background: #fff; border: 1px solid var(--separator); border-radius: 9px;
   outline: none;
@@ -638,13 +639,13 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   color: var(--ink); box-shadow: var(--shadow-sm);
 }
 #settings #btn-feedback:hover { background: var(--fill); }
-#settings #btn-reset {
+#settings #btn-factory-reset {
   border: 1px solid var(--separator); background: #fff; border-radius: 9px;
   padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 600;
   color: #e63946; box-shadow: var(--shadow-sm);
 }
-#settings #btn-reset:hover { background: rgba(230, 57, 70, 0.06); }
-#settings #btn-reset-confirm {
+#settings #btn-factory-reset:hover { background: rgba(230, 57, 70, 0.06); }
+#settings #btn-factory-reset-confirm {
   border: none; background: #e63946; color: #fff; border-radius: 9px;
   padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 600; margin-right: 8px;
 }
@@ -905,6 +906,13 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #settings .plugin-row:last-child { border-bottom: none; }
 #settings .plugin-row-text { flex: 1 1 auto; min-width: 0; }
 #settings .plugin-row-text .meta { margin: 4px 0 0; }
+/* The one-line description under the name: quiet grey, 12px, so
+   the name stays the row's loudest text and the description reads
+   as a caption. An off plugin dims its description with its name. */
+#settings .plugin-row-text .plugin-desc {
+  margin: 2px 0 0; color: var(--grey); font-size: 12px; line-height: 1.4;
+}
+#settings .plugin-row-off .plugin-row-text .plugin-desc { color: var(--grey); }
 /* The state dot, before the name: filled ink when the plugin
    is on, a hollow grey ring when it is off. The whole row
    dims with it, so the state is visible without reading. */

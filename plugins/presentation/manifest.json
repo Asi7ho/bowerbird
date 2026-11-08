@@ -26,7 +26,7 @@
       }
     ]
   },
-  "description": "Draw slides on the board, then play them. A slide is a rectangle on the board \u2014 everything inside it is the slide. Play from the panel, or double-click a slide on the board.",
+  "description": "Draw slides on the board, then play them.",
   "id": "presentation",
   "main": "main.ts",
   "name": "Presentation",

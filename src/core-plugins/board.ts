@@ -19,7 +19,7 @@ import type { PluginContext, PluginManifest } from "../plugins";
 export const manifest: PluginManifest = {
   id: "core-board",
   name: "Board",
-  description: "The board view: canvas, grid, cards layer, handles and toast.",
+  description: "The board itself: canvas, grid, cards and handles.",
   version: "1.0.0",
   apiVersion: "2",
   main: "board.js",

@@ -176,6 +176,7 @@ export interface PluginBridge {
   pluginStorageSet(pluginId: string, key: string, value: unknown): Promise<void>;
   pluginStorageDelete(pluginId: string, key: string): Promise<void>;
   listBoards: () => Promise<Array<{ name: string; current: boolean; items: number }>>;
+  factoryReset(): Promise<{ ok: boolean }>;
   createBoard: (name: string) => Promise<{ name: string }>;
   renameBoard: (oldName: string, newName: string) => Promise<{ name: string }>;
   deleteBoard: (name: string) => Promise<{ wasCurrent: boolean }>;
@@ -355,10 +356,15 @@ export interface PluginContext {
   };
   // The app itself: build id, platform and demo mode. Read-only;
   // a plugin that shows a version or a demo notice uses these.
+  // factoryReset wipes everything the app has saved (boards,
+  // settings, plugins, plugin storage, secure storage) and is a
+  // board write, not available to a trial plugin. The caller
+  // reloads after it returns, so the fresh defaults load.
   app: {
     getBuildId: () => string;
     getPlatform: () => string;
     isDemo: () => boolean;
+    factoryReset: () => Promise<{ ok: boolean }>;
   };
   // Backups: list them (newest first) and restore one. A
   // restore loads the backup's board into the app, like
@@ -1140,6 +1146,11 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       getBuildId: () => host!.getBuildId(),
       getPlatform: () => bridge!.platform,
       isDemo: () => bridge!.isDemo,
+      factoryReset: async () => {
+        require("board:write");
+        requireNotTrial("factory reset");
+        return bridge!.factoryReset();
+      },
     },
     backups: {
       list: async () => bridge!.listBackups(),

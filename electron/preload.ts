@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld("bowerbird", {
   listBackups: () => ipcRenderer.invoke("bowerbird:list-backups"),
   restoreBackup: (name: string) => ipcRenderer.invoke("bowerbird:restore-backup", name),
   resetBoard: () => ipcRenderer.invoke("bowerbird:reset-board"),
+  factoryReset: () => ipcRenderer.invoke("bowerbird:factory-reset"),
   restoreShowcase: () => ipcRenderer.invoke("bowerbird:restore-showcase"),
   readFileBase64: (filePath: string) => ipcRenderer.invoke("bowerbird:read-file-base64", filePath),
   contextEmbedImage: (filePath: string) => ipcRenderer.invoke("bowerbird:context-embed-image", filePath),

@@ -8,7 +8,7 @@
       }
     ]
   },
-  "description": "Align and distribute the selected cards: align to an edge or the centre of the selection, or space them evenly. One tidy action is one undo step. Cards only \u2014 strokes and connectors stay where they are.",
+  "description": "Align and distribute the selected cards.",
   "id": "tidy-up",
   "main": "main.ts",
   "name": "Tidy Up",

@@ -1,9 +1,9 @@
 {
   "id": "hide",
-  "name": "Hide",
+  "name": "Hide Button",
   "version": "1.1.0",
   "apiVersion": "2",
-  "description": "The corner button that hides Bowerbird into a corner, plus H to minimise. Click it to hide; drag the top bar to move the window. This is a bundled plugin: it ships inside the app and is off by default.",
+  "description": "A corner button that hides the app. H minimises.",
   "permissions": [
     "window",
     "board:write"

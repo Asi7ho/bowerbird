@@ -16,6 +16,7 @@ export interface BowerbirdAPI {
   listBackups(): Promise<Array<{ name: string; items: number; size: number }>>;
   restoreBackup(name: string): Promise<{ json: string; board_path: string; board_dir: string }>;
   resetBoard(): Promise<{ pdf_size_bytes: number; video_size_bytes: number }>;
+  factoryReset(): Promise<{ ok: boolean }>;
   checkFile(filePath: string): Promise<{ path: string; exists: boolean; size: number; bundlePath: string; bundleExists: boolean; bundleSize: number }>;
   readFileBase64(filePath: string): Promise<{ mime: string; base64: string }>;
   contextEmbedImage(filePath: string): Promise<number[]>;

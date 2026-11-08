@@ -27,8 +27,8 @@ import type { PluginContext, PluginManifest } from "../plugins";
 
 export const manifest: PluginManifest = {
   id: "core-titlebar",
-  name: "Title bar",
-  description: "Window controls, app name, undo/redo, panels toggle and the search box.",
+  name: "Title Bar",
+  description: "Window controls, app name, undo/redo and the search box.",
   version: "1.0.0",
   apiVersion: "2",
   main: "titlebar.js",

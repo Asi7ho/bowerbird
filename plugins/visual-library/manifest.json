@@ -14,7 +14,7 @@
       }
     ]
   },
-  "description": "The board as a library: every card on the whiteboard, in panel and whiteboard modes, rendered as the same card at the same aspect, all in Uncategorized by default, packed in a spanning masonry grid with no large gaps between small cards. Click or drag a card to duplicate it onto the board.",
+  "description": "Every card on the board, as a library.",
   "id": "visual-library",
   "main": "main.ts",
   "name": "Visual Library",

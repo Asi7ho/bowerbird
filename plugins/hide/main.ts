@@ -33,7 +33,7 @@ export async function activate(api: PluginContext): Promise<void> {
   });
   api.ui.registerSettingsSection({
     id: "corner",
-    title: "Hide",
+    title: "Hide Button",
     render: (container) => renderSettings(api, container),
   });
   api.ui.registerShortcut({

@@ -38,8 +38,9 @@ JavaScript never depends on the core's source at runtime.
 - `ai/` — a general AI chat panel. Ask anything; when you ask
   for a plugin, the AI writes it and you install it from the
   reply. Paste your API key in Settings → Plugin settings → AI
-  (OpenAI or Ollama Cloud). The key lives in secure storage;
-  the chat call runs in the main process.
+  Chat (OpenAI, Ollama Cloud, Gemini, Grok, DeepSeek, Mistral
+  or OpenRouter). The key lives in secure storage; the chat call
+  runs in the main process.
 
 Packaging: `scripts/package-mac.sh` copies this folder into the
 app bundle (`Contents/Resources/app/plugins/`). Running from

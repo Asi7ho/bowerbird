@@ -1,6 +1,6 @@
 {
   "id": "ai",
-  "name": "AI",
+  "name": "AI Chat",
   "version": "1.0.0",
   "apiVersion": "2",
   "description": "Chat with an AI. Ask anything, or describe a plugin and it will build it.",

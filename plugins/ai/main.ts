@@ -16,7 +16,7 @@ export function activate(api: PluginContext): void {
   });
   api.ui.registerSettingsSection({
     id: "ai",
-    title: "AI",
+    title: "AI Chat",
     render: (container) => renderSettings(api, container),
   });
 }
