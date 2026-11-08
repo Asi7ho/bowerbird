@@ -127,6 +127,13 @@ export function renderPanel(api: PluginContext, container: HTMLElement): void {
     sendBtn.disabled = busy || input.value.trim().length === 0;
   });
   input.addEventListener("keydown", (e) => {
+    // Without this, the core window keydown handler sees
+    // every key typed here: v/p/a would switch tools,
+    // Backspace would delete the selected card, +/- would
+    // zoom, and so on. The core guards textareas and the
+    // board search input, so a plugin input must stop its
+    // own keydown — the same as the Visual Library search.
+    e.stopPropagation();
     if (e.key === "Enter") {
       e.preventDefault();
       void send();

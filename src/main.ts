@@ -1506,6 +1506,13 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
     if (input) { input.focus(); input.select(); }
     return;
   }
+  // Typing in any text input (a plugin's chat or search box,
+  // not just the board search) must never trigger board
+  // shortcuts: without this, typing "v" in the AI chat
+  // switched tools, Backspace deleted the selected card,
+  // and a space started panning. Ctrl/Cmd shortcuts,
+  // Escape and Tab still work in inputs.
+  if (active && active.tagName === "INPUT" && !ctrl0 && e.key !== "Escape" && e.key !== "Tab") return;
   // Settings open means the board is not listening: without this,
   // Delete deleted the selected card behind the sheet, v/p/a
   // switched tools, and +/- zoomed, all while the user thought
