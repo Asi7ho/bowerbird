@@ -173,7 +173,6 @@ const undoStore: UndoStore = createUndoStore({
   getSelected: () => selected,
   setSelected: (ids) => { selected = ids; },
   clearEditing: () => { editingId = null; },
-  isDemo: () => DEMO,
   bumpSearchVersion: () => { boardSearchVersion++; },
   requestRender: () => render(),
   refreshSettings: () => { refreshSettingsUI(); },
@@ -225,7 +224,6 @@ function zoomCentre(factor: number): void {
   const s = boardSize();
   zoomAt({ x: s.x / 2, y: s.y / 2 }, factor);
 }
-const DEMO = api.isDemo === true;
 // Search documents and the MiniSearch index are cached
 // by board version, not rebuilt on every keystroke:
 // building the old cache key alone joined every doc's
@@ -287,7 +285,6 @@ async function loadBoardFromJson(json: string, dir: string, preserveUndo = false
   void search.loadContextIndex();
 }
 async function switchToBoard(name: string, preserveUndo = false): Promise<boolean> {
-  if (DEMO) { toast("Demo — boards do not switch in demo mode"); return false; }
   try {
     commitEditingIfAny();
     await api.saveBoard(JSON.stringify(board));
@@ -302,7 +299,6 @@ async function switchToBoard(name: string, preserveUndo = false): Promise<boolea
   }
 }
 async function restoreBoardBackup(name: string): Promise<boolean> {
-  if (DEMO) { toast("Demo — backups are not available in demo mode"); return false; }
   try {
     const loaded = await api.restoreBackup(name);
     await loadBoardFromJson(loaded.json, loaded.board_dir);
@@ -335,7 +331,7 @@ async function resetBoardToWelcome(): Promise<boolean> {
     undoStore.save();
     render();
     void drops.refreshLinkPreviews();
-    toast(DEMO ? "Demo board reset — nothing was saved" : "Board data deleted — fresh welcome board restored");
+    toast("Board data deleted — fresh welcome board restored");
     return true;
   } catch (e) {
     toast(`Reset failed: ${String(e)}`);
@@ -1942,7 +1938,6 @@ async function init(): Promise<void> {
   // so the first search does not pay the index-load
   // cost on top of everything else.
   void search.loadContextIndex();
-  if (DEMO) toast("Demo \u2014 try anything, nothing is saved");
   // Fill in previews for cards that never got one (welcome card, old
   // boards): title, description, image and icon, in the background.
   void drops.refreshLinkPreviews();

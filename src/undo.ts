@@ -28,7 +28,6 @@ export interface UndoContext {
   getSelected(): number[];
   setSelected(ids: number[]): void;
   clearEditing(): void;
-  isDemo(): boolean;
   bumpSearchVersion(): void;
   requestRender(): void;
   refreshSettings(): void;
@@ -86,23 +85,15 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
       // actually changed: camera-only saves and no-op
       // saves used to invalidate the whole index.
       ctx.bumpSearchVersion();
-      // Undo capture runs before the demo return, so undo works in
-      // demo too, in memory, even though nothing is written to disk.
       captureUndoStep(itemsJson, contentKey);
     }
     if (cameraChanged) lastSeenCameraJson = cameraJson;
-    // The board event fires in demo too: plugins refresh
-    // from it (library, slides, board list, tidy counts),
-    // and in demo they otherwise go stale after the first
-    // change, since nothing else re-renders them. A
+    // The board event fires so plugins refresh from it
+    // (library, slides, board list, tidy counts). A
     // camera-only save does not emit: no plugin refreshes
     // from a camera move, and emitting would make every
     // pan pay a full-board copy in each listening plugin.
     if (contentChanged) emitPluginEvent("board");
-    // Demo mode saves nothing: not even an IPC call, so a main-process
-    // guard failure alone could never write. The main process also
-    // no-ops save-board in demo mode, as a second guard.
-    if (ctx.isDemo()) return { itemsJson, contentKey };
     api.saveBoard(JSON.stringify(ctx.getBoard())).catch((e) => {
       // A failed write must not be remembered as saved:
       // clear the seen keys so the next save retries

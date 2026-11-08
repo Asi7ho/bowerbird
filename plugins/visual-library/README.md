@@ -10,5 +10,3 @@ Bundled plugin. The library is the board, not a folder on disk.
 - Video and audio play in place. Link clicks duplicate, they do not open the site.
 
 The library refreshes automatically when the board is saved. There is no Refresh button, no folder to manage, and no library folder.
-
-API used: `api.ui.registerPanel`, `api.ui.registerView`, `api.board.renderCard`, `api.board.addItem`, `api.board.getItems`, `api.view.getCamera`, `api.events`.

@@ -4,7 +4,6 @@
 import type { PluginManifest } from "./plugins";
 
 export interface BowerbirdAPI {
-  isDemo: boolean;
   platform: string;
   loadBoard(): Promise<{ json: string | null; board_path: string; board_dir: string; pdf_size_bytes: number; video_size_bytes: number; panelOrder?: string[]; buildId?: string }>;
   saveBoard(json: string): Promise<void>;

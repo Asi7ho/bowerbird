@@ -3,7 +3,6 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron";
 
 contextBridge.exposeInMainWorld("bowerbird", {
-  isDemo: process.env.BOWERBIRD_DEMO === "1",
   platform: process.platform,
   loadBoard: () => ipcRenderer.invoke("bowerbird:load-board"),
   saveBoard: (json: string) => ipcRenderer.invoke("bowerbird:save-board", json),

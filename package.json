@@ -14,7 +14,6 @@
     "build": "tsc && tsc -p tsconfig.main.json && node scripts/bundle-sucrase.mjs && cp electron/peek.html electron-dist/peek.html && vite build",
     "dev": "tsc -p tsconfig.main.json && node scripts/bundle-sucrase.mjs && cp electron/peek.html electron-dist/peek.html && node electron-dist/dev.js",
     "start": "electron .",
-    "demo": "BOWERBIRD_DEMO=1 electron .",
     "typecheck:plugins": "tsc -p tsconfig.plugins.json"
   },
   "version": "0.2.1",

@@ -11,4 +11,4 @@ Align and distribute the selected cards.
 - Rotated cards align by their unrotated box, the same box the core uses for their handles.
 - One tidy action is one undo step, through the core's batch `updateItems`.
 
-This is a bundled plugin: it ships inside the app and is on by default.
+This is a bundled plugin: it ships inside the app and is off by default, like all bundled plugins.

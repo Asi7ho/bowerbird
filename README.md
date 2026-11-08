@@ -1,8 +1,8 @@
 # Bowerbird
 
-An infinite whiteboard for creatives, built like a quick note: one window, always there, ready to drop things onto.
+An infinite whiteboard for creatives. One window, always there, ready to drop things onto.
 
-Drop images, notes, links, PDFs, audio, video and colours onto the board. Pan and zoom freely, sketch with a pen, connect things with lines, draw shapes, rotate cards and strokes, and group items that belong together. The board saves on every change, so closing it never loses anything, and it backs itself up at most once an hour, plus before a reset or a restore — see Settings → Data → Backups.
+Drop images, notes, links, PDFs, audio, video and colours onto the board. Pan and zoom freely, sketch with a pen, connect things with lines, draw shapes, rotate cards and strokes, and group items that belong together. The board saves on every change, and backs itself up at most once an hour.
 
 Link cards are previews only. They do not embed web pages.
 
@@ -13,44 +13,35 @@ npm install
 npm run dev
 ```
 
-That starts the board in development mode. No Xcode is needed on a Mac to run it from source.
+No Xcode is needed on a Mac to run it from source. The first run opens a welcome board that explains the controls on the board itself.
 
-Do not run `npm audit fix --force`. It downgrades `@xenova/transformers` to 1.x, which depends on `canvas` — and `canvas` has no prebuilt binary for Node 26 on Mac arm64 and fails to build from source. Instead, the known vulnerabilities in transformers 2.x are fixed by the `overrides` in `package.json`: `sharp` is forced to 0.35.5 (fixing its libvips/libheif/librsvg advisories and dropping the deprecated `prebuild-install`) and `protobufjs` to 7.6.6 (fixing its critical code-execution advisory). With those overrides, `npm audit` reports 0 vulnerabilities, and `npm install` shows no deprecated-package warnings. If search ever shows "Context unavailable", it means a model failed to load — it does not mean the install is broken.
+Your board is one JSON file: `~/.local/share/bowerbird/board.json` (or `$XDG_DATA_HOME/bowerbird/board.json`). To use a different file: `BOWERBIRD_BOARD_PATH=/tmp/my-board.json npm run dev`. A board left in the old `quickboard` folder is still read from there.
 
-The first run opens a welcome board that explains the controls on the board itself.
+Do not run `npm audit fix --force`. It downgrades `@xenova/transformers` to 1.x, which needs `canvas`, and `canvas` has no prebuilt binary for Node 26 on Mac arm64. The `overrides` in `package.json` already fix the known vulnerabilities (`sharp` 0.35.5, `protobufjs` 7.6.6), so `npm audit` reports 0.
 
-Your board is one JSON file:
-
-- Linux and macOS: `~/.local/share/bowerbird/board.json` (or `$XDG_DATA_HOME/bowerbird/board.json`)
-- To use a different file: `BOWERBIRD_BOARD_PATH=/tmp/my-board.json npm run dev`
-- A board left in the old `quickboard` folder is still read from there.
-
-To build a Mac app and DMG:
+## Package it
 
 ```sh
-./scripts/package-mac.sh
+./scripts/package-mac.sh      # macOS DMG
+./scripts/package-win.sh      # Windows zip
+./scripts/package-linux.sh    # Linux tarball
 ```
 
-The build is unsigned, so a recipient must right-click it and choose Open the first time. For a demo that saves nothing, see `./scripts/demo.sh`.
+Or push a version tag (`v0.2.2`) and the release workflow builds all three and attaches them to a GitHub Release. The builds are unsigned, so a recipient must right-click the app and choose Open the first time (macOS) or accept the SmartScreen warning (Windows).
 
 ## Use it
 
 - **Pan:** hold `Space` and drag, or scroll. **Zoom:** `Ctrl` + scroll, `+` / `-`, or the toolbar buttons.
-- **Shapes:** one shape button in the toolbar, with a flyout beside it to choose rectangle (R), ellipse (E), triangle, diamond, hexagon, star, or block arrow. Drag on the board to size it, in the pen colour.
-- **Rotate:** drag the round handle above a selected card or stroke, or press `[` / `]` to rotate the selection by 15°. Connectors and slide frames do not rotate.
-- **Note colours:** select a text note and pick a background from the colour flyout beside the toolbar. Light pastels only, so the text stays readable.
-- **Boards:** the Boards plugin (off by default — enable it in Settings → Plugins) lists boards in the right panel. Click a board to open it, click the current board's name to rename it, × to delete it. Main is the default board.
-- **Select:** click an item, `Shift`-click to add to the selection, or drag a box around several items. Dragging one member of a group moves the whole group. Clicking a card brings it to the front.
-- **Find:** `Tab` steps through elements in board order and centres each one. `Shift + Tab` steps backwards. Pen strokes and connectors are skipped.
-- **Text:** double-click empty space for a new note, double-click a note to edit it. `Esc` commits, and the note renders markdown: headings, bullets, numbered lists, quotes, code blocks, bold, italic, code, links and strikethrough.
-- **PDF:** a PDF card shows its pages, one at a time, with previous/next buttons and a page count. Double-click still opens it outside Bowerbird. New PDFs are dropped at a tall size so the page is readable; a short card shows a small page preview instead.
-- **Pen:** drag on the canvas to sketch.
-- **Connector:** drag from one item to another, or from empty space to empty space. Ends anchored to items follow them when they move.
-- **Resize:** drag the small handle at a card's bottom-right corner. Connectors have no handle: move the cards they connect instead.
-- **Group:** `Ctrl/Cmd + G` groups the selection, `Ctrl/Cmd + U` ungroups it.
-- **Undo and redo:** `Ctrl/Cmd + Z` undoes, `Ctrl/Cmd + Shift + Z` or `Ctrl/Cmd + Y` redoes, or use the undo and redo buttons on the left of the top bar, next to Bowerbird. Undo covers board changes, including plugin actions and deleting all data, up to 50 steps. Panning and zooming are not undo steps, and undoing never moves the view.
-- **Hide:** the button in a corner hides the whole board into that corner. Only a small round icon stays visible. Click it to restore the board. Change the corner in Settings, under Plugin settings → Hide, or turn it off there. Pressing `H` minimises the board.
-- **Delete all data:** Settings → General → Data → Delete all board data. It asks you to confirm first, then removes the board file and every dropped file, and restores a fresh welcome board. The corner setting is kept. You can undo it with `Ctrl/Cmd + Z`.
+- **Text:** double-click empty space for a new note, double-click a note to edit it. `Esc` commits. Notes render markdown.
+- **Pen:** drag on the canvas to sketch. **Connector:** drag from one item to another. Ends anchored to items follow them.
+- **Shapes:** one shape button in the toolbar, with a flyout to choose rectangle (R), ellipse (E), triangle, diamond, hexagon, star, or block arrow. Drag on the board to size it.
+- **Rotate:** drag the round handle above a selected card or stroke, or `[` / `]` for 15°. Connectors and slide frames do not rotate.
+- **Select:** click an item, `Shift`-click to add, or drag a box around several. Dragging one member of a group moves the whole group.
+- **Find:** `Tab` steps through elements in board order and centres each one. `Shift + Tab` steps backwards.
+- **Group:** `Ctrl/Cmd + G` groups, `Ctrl/Cmd + U` ungroups.
+- **Undo and redo:** `Ctrl/Cmd + Z` undoes, `Ctrl/Cmd + Shift + Z` or `Ctrl/Cmd + Y` redoes, up to 50 steps. Panning and zooming are not undo steps.
+- **Hide:** the button in a corner hides the whole board into that corner. Only a small round icon stays visible. Click it to restore. Change the corner in Settings, under Plugin settings → Hide Button. `H` minimises.
+- **Factory reset:** Settings → General → Data → Factory reset. It wipes boards, settings, plugins and keys, and cannot be undone.
 
 Shortcuts in full are in Settings, under General.
 
@@ -59,58 +50,35 @@ Shortcuts in full are in Settings, under General.
 Dropped files are copied into an `assets` folder next to your board file, so deleting the original later never breaks the card. Drop several at once and they fan out from the drop point.
 
 - Images: PNG, JPG, GIF, WebP, BMP, SVG
-- PDFs: a card showing its pages, with previous/next buttons and a page count. It opens in your system viewer on double-click.
-- Audio: MP3, WAV, FLAC, OGG, M4A. It plays in place, with a play button, the file name, time and a seek control.
-- Video: MP4, MOV, WebM, MKV, AVI. Local MP4, WebM and M4V files play in place. Other local files and video links open outside Bowerbird.
-- Text: `.txt` and `.md` files become notes. A file whose whole content is a colour code, like `#FF6B35`, becomes a swatch instead.
-- Shortcuts: `.url` and `.webloc` files become link cards. A video link becomes a video card instead.
+- PDFs: a card showing its pages, with previous/next buttons. Double-click opens it outside Bowerbird.
+- Audio: MP3, WAV, FLAC, OGG, M4A. Plays in place.
+- Video: MP4, MOV, WebM, MKV, AVI. Local MP4, WebM and M4V play in place; the rest open outside.
+- Text: `.txt` and `.md` files become notes. A file whose whole content is a colour code, like `#FF6B35`, becomes a swatch.
+- Shortcuts: `.url` and `.webloc` files become link cards. A video link becomes a video card.
 
-A link card shows the site's preview image when it has one, plus its title, description, icon and domain. Click the image, title or domain to open the site in your browser. A card with no preview yet just shows its domain until the fetch lands.
-
-Long names are clipped to the card. Nothing runs onto the canvas or over a neighbour.
+A link card shows the site's preview image, title, description, icon and domain. Click it to open the site in your browser.
 
 ## Settings
 
-Settings has three tabs: General, Plugins, and Plugin settings.
+Three tabs: General, Plugins, and Plugin settings.
 
-General holds the keyboard shortcuts, the canvas background and grid, and Data. Plugins turns plugins on and off. Plugin settings holds one section per plugin that is on and has settings. Each setting has a one-line description.
+General holds the keyboard shortcuts, the canvas background and grid, data, backups, and feedback. Plugins turns plugins on and off. Plugin settings holds one section per plugin that is on and has settings.
 
 ## Plugins
 
-Bowerbird has plugins. The bundled ones are Hide, Visual Library, Palette, Presentation, Command Palette, Boards, for switching between boards, and Tidy Up, for aligning and distributing the selected cards. See `plugins/README.md` for what each one does, and `PLUGIN_API.md` if you want to write one.
+Bowerbird has plugins. The bundled ones are AI Chat, Boards, Command Palette, Hide Button, Colour Palette, Presentation, Tidy Up, and Visual Library. They are off by default — enable them in Settings → Plugins. See `plugins/README.md` for what each one does, and `PLUGIN_API.md` if you want to write one.
 
-## Icon
-
-The icon is two black line wings, no fill, no body, on a white squircle. The source is `assets/icon.svg`. `assets/icon.png` is the 1024px export, `assets/icon.ico` is the Windows icon, and `assets/icon.iconset/` is the macOS iconset. For a packaged Mac build, generate the `.icns` on a Mac with:
-
-```sh
-iconutil -c icns assets/icon.iconset
-```
-
-## Screenshots
-
-`screenshots/` holds five 1440×900 PNGs captured from the running app. See `screenshots/README.md` for what each one shows.
-
-## Project layout
+## Layout
 
 ```
 electron/   main process: window, board file, asset embedding,
-            link previews, IPC
-  main.js, preload.js, peek.html, dev.js
-src/        renderer
-  main.ts     board UI: tools, rendering, interactions (the core
-              renders the board; the Settings window is a plugin)
-  model.ts    board data, geometry, hit-testing, grouping, markdown
-  plugins.ts  plugin API: discovery, panels, views, tools, cards
-  core-plugins/  first-party UI plugins (Settings), built on the
-              same plugin API as user plugins — see ARCHITECTURE.md
-  welcome.ts  the welcome board
-  styles.css  board styling
-plugins/    bundled plugins: hide, visual-library, palette,
-            presentation, command-palette (see plugins/README.md)
-index.html  board shell and toolbar
+            link previews, IPC (TypeScript, compiled to electron-dist/)
+src/        renderer: board UI, model, plugin host and API
+  core-plugins/  first-party UI plugins (Settings, board, toolbar),
+              built on the same plugin API as user plugins
+plugins/    bundled plugins (see plugins/README.md)
+index.html  board shell
 assets/     welcome photo, birdsong, video, sample PDF, icon
-screenshots/  App Store screenshots
 ```
 
 Checks:
@@ -119,10 +87,6 @@ Checks:
 npx tsc --noEmit
 npm run build
 ```
-
-## Later
-
-- Sync, sharing and collaboration: planned much later, as a plugin, not in core.
 
 ## License
 

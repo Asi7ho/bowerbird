@@ -42,6 +42,6 @@ JavaScript never depends on the core's source at runtime.
   or OpenRouter). The key lives in secure storage; the chat call
   runs in the main process.
 
-Packaging: `scripts/package-mac.sh` copies this folder into the
-app bundle (`Contents/Resources/app/plugins/`). Running from
-source finds this folder via the current working directory.
+Packaging: the `scripts/package-*.sh` scripts copy this folder into the
+app bundle (`Contents/Resources/app/plugins/` on Mac, `resources/app/plugins/`
+on Windows and Linux). Running from source finds this folder via the current working directory.

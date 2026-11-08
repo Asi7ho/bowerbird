@@ -14,7 +14,6 @@
 import { app, BaseWindow, BrowserWindow, WebContentsView, ipcMain, shell, protocol, screen, safeStorage } from "electron";
 import type { Rectangle } from "electron";
 import * as fs from "node:fs";
-import * as os from "node:os";
 import * as path from "node:path";
 import { createBackups } from "./backups";
 import { handleAppFileRequest, MIME } from "./appFile";
@@ -28,50 +27,6 @@ import { transform as sucraseTransform } from "./sucrase.cjs";
 
 let win: BaseWindow | null = null;
 let boardView: WebContentsView | null = null;
-
-// ---------------------------------------------------------------- demo mode
-
-// BOWERBIRD_DEMO=1 runs a demo that saves nothing, anywhere:
-// no board file, no settings file, no showcase copies, no dropped
-// file copies, no reset/delete. The demo always starts from the
-// welcome board, with its media read straight from the app's own
-// assets folder, and everything the user does lives only in
-// memory until quit. The real board and settings are never even
-// opened, so a demo can never overwrite or delete them. Every
-// write path below checks DEMO first, and the renderer also
-// short-circuits save() in demo mode, so a write needs both
-// guards to fail before anything could reach disk.
-// Demo mode is on either by environment (running from source with
-// BOWERBIRD_DEMO=1) or by a demo-mode marker file next to the app
-// code (Contents/Resources/app/demo-mode in a packaged demo).
-// The marker is how an installed demo knows it is a demo: a user
-// who installs the demo DMG does not set any environment variable,
-// and macOS does not reliably pass one through Finder launches.
-// Once DEMO is known, it is also written back into process.env so
-// the preload bridge — which only reads the environment — reports
-// isDemo correctly in a packaged demo too. The marker file is
-// created only in the demo staging folder by package-demo.sh;
-// it must never be committed at the repo root, or source runs
-// would become demos.
-const DEMO = process.env.BOWERBIRD_DEMO === "1" || fs.existsSync(path.join(__dirname, "..", "demo-mode"));
-if (DEMO) {
-  process.env.BOWERBIRD_DEMO = "1";
-  try {
-    app.setPath("userData", fs.mkdtempSync(path.join(os.tmpdir(), "bowerbird-demo-")));
-  } catch {
-    // If the redirect fails, the demo guards below still prevent
-    // any board or settings write; only Chromium cache would land
-    // in the normal userData folder.
-  }
-}
-function demoShowcaseSizes(): { pdf_size_bytes: number; video_size_bytes: number } {
-  const sizeOf = (file: string): number => { try { return fs.statSync(file).size; } catch { return 0; } };
-  const dir = assetsDir();
-  return {
-    pdf_size_bytes: sizeOf(path.join(dir, "sample.pdf")),
-    video_size_bytes: sizeOf(path.join(dir, "welcome-video.mp4")),
-  };
-}
 
 // ---------------------------------------------------------------- corner reveal
 
@@ -180,7 +135,7 @@ async function collapseBoard(): Promise<void> {
     resizable: false,
     minimizable: false,
     maximizable: false,
-    title: DEMO ? "Bowerbird \u2014 Demo" : "Bowerbird",
+    title: "Bowerbird",
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -359,7 +314,6 @@ function emptyBoardJson(): string {
   return JSON.stringify({ items: [], camera: { x: 0, y: 0, zoom: 1 }, next_id: 1, next_group: 1, bg: "#FFFFFF", grid: "Dots" });
 }
 function guardBoards(): void {
-  if (DEMO) throw new Error("cannot switch boards in demo mode");
   if (process.env.BOWERBIRD_BOARD_PATH || process.env.QB_BOARD_PATH) throw new Error("board switching is disabled when a board path is set");
 }
 function createBoard(name: unknown): { name: string } {
@@ -423,10 +377,9 @@ function deleteBoard(name: unknown): { wasCurrent: boolean } {
 
 
 // Backups live in electron/backups.ts. The factory reads the
-// demo flag and the current board path through these, so a
-// restore always writes the board the app is on now.
+// current board path through these, so a restore always writes
+// the board the app is on now.
 const { maybeBackup, listBackups, restoreBackup, makeBackup } = createBackups({
-  isDemo: DEMO,
   boardPath: () => boardPath(),
   boardItemCount: (file: string) => boardItemCount(file),
 });
@@ -522,7 +475,7 @@ function createWindow(): void {
     minWidth: 1100,
     minHeight: 720,
     frame: false,
-    title: DEMO ? "Bowerbird \u2014 Demo" : "Bowerbird",
+    title: "Bowerbird",
     backgroundColor: "#ffffff",
     ...(iconPath() ? { icon: iconPath() as string } : {}),
   });
@@ -747,7 +700,7 @@ async function secureStorageAvailable(): Promise<boolean> {
 //    permission entirely (the scheme has no permission check).
 //    Legitimate media is always board-owned: dropped files
 //    are copied into boardDir()/assets, the welcome board
-//    lives in boardDir(), and demo mode uses assetsDir().
+//    lives in boardDir().
 //  - openExternal: https URLs open in the browser; anything
 //    else must be a board-local file (a PDF, image or video
 //    card). A shared board must not be able to make a click
@@ -787,9 +740,6 @@ function isPrivateHost(host: string): boolean {
 
 function registerIpc(): void {
   ipcMain.handle("bowerbird:load-board", () => {
-    if (DEMO) {
-      return { json: null, board_path: "", board_dir: assetsDir(), buildId: buildId(), ...demoShowcaseSizes() };
-    }
     const file = boardPath();
     const dir = path.dirname(file);
     // Always fill in missing welcome files, not only on first
@@ -826,7 +776,6 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("bowerbird:save-board", (_event, json: string) => {
-    if (DEMO) return;
     const file = boardPath();
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const tmp = file + ".tmp";
@@ -842,7 +791,6 @@ function registerIpc(): void {
   // App settings (e.g. the corner) are NOT touched: they are not
   // board data. Returns the PDF size for the fresh welcome board.
   ipcMain.handle("bowerbird:reset-board", () => {
-    if (DEMO) return demoShowcaseSizes();
     const file = boardPath();
     const dir = path.dirname(file);
     try { makeBackup(dir, fs.readFileSync(file, "utf8")); } catch { /* reset still proceeds */ }
@@ -858,9 +806,8 @@ function registerIpc(): void {
   // (API keys). The bundled plugins ship in the app bundle, so
   // they are untouched. The showcase assets are reinstalled so a
   // fresh welcome board can be built. The renderer reloads after
-  // this returns, so the fresh defaults load. Not in demo mode.
+  // this returns, so the fresh defaults load.
   ipcMain.handle("bowerbird:factory-reset", () => {
-    if (DEMO) return { ok: false };
     const base = defaultBaseDir();
     try { fs.rmSync(base, { recursive: true, force: true }); } catch { /* already gone */ }
     const userPlugins = process.env.BOWERBIRD_PLUGINS_DIR
@@ -897,7 +844,6 @@ function registerIpc(): void {
   // copied and what could not be found, so the user can
   // report the exact failure instead of a blank card.
   ipcMain.handle("bowerbird:restore-showcase", () => {
-    if (DEMO) return { copied: [], missing: ["demo mode"], srcDir: assetsDir(), destDir: "" };
     const dir = path.dirname(boardPath());
     try {
       return installShowcaseAssets(dir, true);
@@ -907,13 +853,10 @@ function registerIpc(): void {
   });
 
   // Visual Library folder: a user's personal collection of images
-  // and PDFs, next to the board (board/library/). In demo mode it
-  // lives under the demo's temp userData, so a demo never reads
-  // or writes the real library. Listing and copying are scoped to
-  // this one folder only: a plugin never gets an arbitrary path
-  // to list or an arbitrary destination to copy to.
+  // and PDFs, next to the board (board/library/). Listing and
+  // copying are scoped to this one folder only: a plugin never gets
+  // an arbitrary path to list or an arbitrary destination to copy to.
   function libraryDir(): string {
-    if (DEMO) return path.join(app.getPath("userData"), "library");
     return path.join(boardDir(), "library");
   }
   const LIBRARY_EXTS = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf"]);
@@ -1043,7 +986,6 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("bowerbird:embed-file", (_event, filePath: string) => {
-    if (DEMO) return filePath;
     const assets = path.join(boardDir(), "assets");
     fs.mkdirSync(assets, { recursive: true });
     const resolved = path.resolve(filePath);
@@ -1213,7 +1155,6 @@ function registerIpc(): void {
   });
   ipcMain.handle("bowerbird:get-app-settings", () => ({ corner: cornerReveal, panelOrder: [...panelOrder], panelWidth }));
   ipcMain.handle("bowerbird:list-boards", () => {
-    if (DEMO) return [{ name: "Main", current: true, items: 0 }];
     return listBoards();
   });
   ipcMain.handle("bowerbird:create-board", (_event, name: unknown) => createBoard(name));
@@ -1221,19 +1162,18 @@ function registerIpc(): void {
   ipcMain.handle("bowerbird:rename-board", (_event, oldName: unknown, newName: unknown) => renameBoard(oldName, newName));
   ipcMain.handle("bowerbird:delete-board", (_event, name: unknown) => deleteBoard(name));
   ipcMain.handle("bowerbird:list-backups", () => {
-    if (DEMO) return [];
     return listBackups(boardDir());
   });
   ipcMain.handle("bowerbird:restore-backup", (_event, name: string) => restoreBackup(boardDir(), name));
   ipcMain.handle("bowerbird:set-panel-order", (_event, order: unknown) => {
     if (!Array.isArray(order)) return panelOrder;
     panelOrder = order.filter((x: unknown) => typeof x === "string").slice(0, 100);
-    if (!DEMO) saveAppSettings();
+    saveAppSettings();
     return panelOrder;
   });
   ipcMain.handle("bowerbird:set-panel-width", (_event, width: unknown) => {
     panelWidth = clampPanelWidth(width);
-    if (!DEMO) saveAppSettings();
+    saveAppSettings();
     return panelWidth;
   });
   ipcMain.handle("bowerbird:list-plugins", () => listPlugins());
@@ -1269,9 +1209,8 @@ function registerIpc(): void {
   // Writes only to the user plugins folder, never to the
   // bundled folder, and never overwrites an existing plugin:
   // a clash is an error the caller shows, not a silent
-  // replacement. Blocked in demo mode, which saves nothing.
+  // replacement.
   ipcMain.handle("bowerbird:install-plugin", (_event, plugin: Record<string, unknown>) => {
-    if (DEMO) throw new Error("cannot install a plugin in demo mode");
     if (!plugin || typeof plugin !== "object") throw new Error("bad plugin");
     const { id, name, description, permissions, mainCode, styleCode } = plugin;
     if (typeof id !== "string" || !/^[a-z0-9-]+$/.test(id)) throw new Error("plugin id must be lowercase letters, digits and hyphens");
@@ -1426,7 +1365,7 @@ function registerIpc(): void {
   ipcMain.handle("bowerbird:set-corner", (_event, corner: string) => {
     if (!CORNERS.includes(corner)) return cornerReveal;
     cornerReveal = corner;
-    if (!DEMO) saveAppSettings();
+    saveAppSettings();
     // Moving the icon while collapsed: it follows the new corner
     // and its arrow is re-pointed by reloading with the new corner.
     if (isCollapsed && peekWin) {
@@ -1559,14 +1498,12 @@ app.whenReady().then(() => {
       return new Response("not found", { status: 404 });
     }
   });
-  if (!DEMO) {
-    loadAppSettings();
-    // A board deleted outside the app must not leave the
-    // app pointing at a missing folder: fall back to Main.
-    if (currentBoard && !fs.existsSync(boardPathFor(currentBoard)) && !fs.existsSync(path.dirname(boardPathFor(currentBoard)))) {
-      currentBoard = null;
-      saveAppSettings();
-    }
+  loadAppSettings();
+  // A board deleted outside the app must not leave the
+  // app pointing at a missing folder: fall back to Main.
+  if (currentBoard && !fs.existsSync(boardPathFor(currentBoard)) && !fs.existsSync(path.dirname(boardPathFor(currentBoard)))) {
+    currentBoard = null;
+    saveAppSettings();
   }
   registerIpc();
   createWindow();

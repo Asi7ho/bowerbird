@@ -189,7 +189,6 @@ async function renderBackups(): Promise<void> {
   if (!api) return;
   const container = el<HTMLDivElement>("backups-list");
   if (!container) return;
-  if (api.app.isDemo()) { container.innerHTML = `<p class="meta">Backups are not available in demo mode.</p>`; return; }
   let list: Array<{ name: string; items: number; size: number }> = [];
   try { list = await api.backups.list(); } catch { list = []; }
   if (list.length === 0) {

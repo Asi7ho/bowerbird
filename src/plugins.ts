@@ -157,7 +157,6 @@ export interface PluginShortcutDef {
 // preload API. main.ts passes its `api` object here; it satisfies
 // this interface once preload exposes the plugin IPC methods.
 export interface PluginBridge {
-  isDemo: boolean;
   platform: string;
   fileUrl(path: string): string;
   embedFile(path: string): Promise<string>;
@@ -354,8 +353,8 @@ export interface PluginContext {
     rename: (oldName: string, newName: string) => Promise<{ name: string }>;
     delete: (name: string) => Promise<{ wasCurrent: boolean }>;
   };
-  // The app itself: build id, platform and demo mode. Read-only;
-  // a plugin that shows a version or a demo notice uses these.
+  // The app itself: build id and platform. Read-only; a plugin
+  // that shows a version uses these.
   // factoryReset wipes everything the app has saved (boards,
   // settings, plugins, plugin storage, secure storage) and is a
   // board write, not available to a trial plugin. The caller
@@ -363,7 +362,6 @@ export interface PluginContext {
   app: {
     getBuildId: () => string;
     getPlatform: () => string;
-    isDemo: () => boolean;
     factoryReset: () => Promise<{ ok: boolean }>;
   };
   // Backups: list them (newest first) and restore one. A
@@ -1145,7 +1143,6 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
     app: {
       getBuildId: () => host!.getBuildId(),
       getPlatform: () => bridge!.platform,
-      isDemo: () => bridge!.isDemo,
       factoryReset: async () => {
         require("board:write");
         requireNotTrial("factory reset");
