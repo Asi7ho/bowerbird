@@ -14,12 +14,100 @@ export interface LibrarySection {
   items: Item[];
 }
 
-// No categories are created for the user: every board item
-// goes, by default, in a single "Uncategorized" section, in
-// board order. A future category system (user-created
-// categories, drag to move) would add sections here; for now
-// there is exactly one, so the library never invents an
-// organisation the user did not ask for.
+export interface LibraryCategory {
+  id: string;
+  name: string;
+}
+
+// User-created categories, stored in plugin storage so
+// they survive restarts. Every board item goes, by default,
+// in a single "Uncategorized" section, in board order.
+// A category holds the items the user moved into it;
+// assignments are keyed by board item id, so they survive
+// a board sync, and an item deleted from the board simply
+// stops appearing (its assignment is dropped on save).
+const CATEGORIES_KEY = "categories";
+const ASSIGNMENTS_KEY = "assignments";
+
+let categories: LibraryCategory[] = [];
+let assignments: Record<number, string> = {};
+let categoriesLoaded = false;
+
+export function getCategories(): LibraryCategory[] {
+  return categories;
+}
+
+export function getAssignment(itemId: number): string | null {
+  return assignments[itemId] ?? null;
+}
+
+export async function loadCategories(api: PluginContext): Promise<void> {
+  if (categoriesLoaded) return;
+  categoriesLoaded = true;
+  try {
+    const savedCats = (await api.storage.get(CATEGORIES_KEY)) as LibraryCategory[] | undefined;
+    if (Array.isArray(savedCats)) categories = savedCats.filter((c) => c && typeof c.id === "string" && typeof c.name === "string");
+    const savedAssign = (await api.storage.get(ASSIGNMENTS_KEY)) as Record<number, string> | undefined;
+    if (savedAssign && typeof savedAssign === "object") assignments = savedAssign;
+  } catch {
+    categories = [];
+    assignments = {};
+  }
+}
+
+async function saveCategories(api: PluginContext): Promise<void> {
+  try {
+    await api.storage.set(CATEGORIES_KEY, categories);
+    await api.storage.set(ASSIGNMENTS_KEY, assignments);
+  } catch {
+    // Storage is a convenience: a failed save leaves the
+    // in-memory categories working for this session.
+  }
+}
+
+export function createCategory(api: PluginContext, name: string): LibraryCategory {
+  const id = `c${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`;
+  const cat = { id, name };
+  categories = [...categories, cat];
+  void saveCategories(api);
+  return cat;
+}
+
+export function renameCategory(api: PluginContext, id: string, name: string): void {
+  const trimmed = name.trim();
+  if (!trimmed) return;
+  categories = categories.map((c) => (c.id === id ? { ...c, name: trimmed } : c));
+  void saveCategories(api);
+}
+
+export function deleteCategory(api: PluginContext, id: string): void {
+  categories = categories.filter((c) => c.id !== id);
+  for (const itemId of Object.keys(assignments)) {
+    if (assignments[Number(itemId)] === id) delete assignments[Number(itemId)];
+  }
+  void saveCategories(api);
+}
+
+export function moveItemToCategory(api: PluginContext, itemId: number, categoryId: string | null): void {
+  if (categoryId === null) delete assignments[itemId];
+  else assignments[itemId] = categoryId;
+  void saveCategories(api);
+}
+
+export function sectionsList(): LibrarySection[] {
+  const q = query.trim().toLowerCase();
+  const filtered = q ? boardItems.filter((it) => searchText(it).toLowerCase().includes(q)) : boardItems;
+  // A search with no matches leaves a blank sections area.
+  // With no query, even an empty library renders as a single
+  // Uncategorized header (no text).
+  if (q && filtered.length === 0) return [];
+  const uncategorized = filtered.filter((it) => !assignments[it.id] || !categories.some((c) => c.id === assignments[it.id]));
+  const sections: LibrarySection[] = [{ key: "uncategorized", label: "Uncategorized", items: uncategorized }];
+  for (const cat of categories) {
+    sections.push({ key: cat.id, label: cat.name, items: filtered.filter((it) => assignments[it.id] === cat.id) });
+  }
+  return sections;
+}
 export const KIND_SINGULAR: Record<string, string> = { Audio: "audio", Image: "image", UrlCard: "link", PdfCard: "PDF", Plugin: "plugin card", Swatch: "swatch", Text: "text note", Video: "video" };
 const LIBRARY_KINDS = new Set(["Audio", "Image", "UrlCard", "PdfCard", "Plugin", "Swatch", "Text", "Video"]);
 
@@ -85,16 +173,6 @@ export function searchText(item: Item): string {
   if ("Video" in k) return k.Video.remote ? domainOfUrl(k.Video.source) : basename(k.Video.source);
   if ("Plugin" in k) return `${k.Plugin.plugin} ${k.Plugin.kind} ${JSON.stringify(k.Plugin.data)}`;
   return "";
-}
-
-export function sectionsList(): LibrarySection[] {
-  const q = query.trim().toLowerCase();
-  const filtered = q ? boardItems.filter((it) => searchText(it).toLowerCase().includes(q)) : boardItems;
-  // A search with no matches leaves a blank sections area.
-  // With no query, even an empty library renders as a single
-  // Uncategorized header (no text).
-  if (q && filtered.length === 0) return [];
-  return [{ key: "uncategorized", label: "Uncategorized", items: filtered }];
 }
 
 export function signature(items: Item[]): string {

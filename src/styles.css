@@ -514,7 +514,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #settings-backdrop {
   position: absolute; inset: 0; background: rgba(0, 0, 0, 0.22);
   backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
-  display: none; align-items: center; justify-content: center; padding: 24px; z-index: 20;
+  display: none; align-items: center; justify-content: center; padding: 24px; z-index: 200;
 }
 #settings-backdrop.open { display: flex; }
 /* Settings as a proper two-pane window, not a popup that

@@ -5,7 +5,8 @@
 // through, so a duplicate never lands 48px low.
 import type { PluginContext } from "../../src/plugins";
 import type { Item, Pt } from "../../src/model";
-import { KIND_SINGULAR, kindKey } from "./items.js";
+import { KIND_SINGULAR, kindKey, moveItemToCategory } from "./items.js";
+import { updateAllDynamic } from "./render.js";
 import type { LibraryMode } from "./items.js";
 import { playLibraryAudio, seekLibAudio } from "./audio.js";
 
@@ -131,6 +132,22 @@ export function attachCardInteractions(api: PluginContext, wrap: HTMLElement, it
     const onUp = (me: MouseEvent) => {
       cleanup();
       if (!moved) return;
+      // A drop onto a category section moves the card into
+      // that category instead of duplicating it — including
+      // a drop on Uncategorized, which moves it back out.
+      // This runs before the UI-cancel checks below, because
+      // the sections live inside the library panel, which
+      // the panel-mode check would otherwise cancel.
+      const dropEl = document.elementFromPoint(me.clientX, me.clientY);
+      const catWrap = dropEl && dropEl.closest ? dropEl.closest(".vl-category") as HTMLElement | null : null;
+      if (catWrap && catWrap.dataset.category) {
+        const key = catWrap.dataset.category;
+        moveItemToCategory(api, item.id, key === "uncategorized" ? null : key);
+        // Re-render the library so the card appears in its
+        // new section at once.
+        updateAllDynamic(api);
+        return;
+      }
       if (mode === "panel") {
         // Panel mode: only a drop onto the visible board
         // duplicates. A drop back onto any UI cancels.

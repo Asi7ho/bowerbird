@@ -6,10 +6,19 @@
 // layout observers.
 import type { PluginContext } from "../../src/plugins";
 import type { Item } from "../../src/model";
-import { getBoardItems, getQuery, isSectionCollapsed, sectionsList, setQuery, setSectionCollapsed, syncFromBoard } from "./items.js";
+import { createCategory, deleteCategory, getBoardItems, getCategories, getQuery, isSectionCollapsed, renameCategory, sectionsList, setQuery, setSectionCollapsed, syncFromBoard } from "./items.js";
 import type { LibraryMode } from "./items.js";
 import { attachCardInteractions } from "./interactions.js";
 import { getLibAudioItemId, hasLibAudio, loadLibraryAudioDuration, rewireLibraryAudio, stopLibraryAudio } from "./audio.js";
+
+// The category whose name is being edited inline, if any.
+// Set when a category is created (so the user names it
+// straight away) or when its name is double-clicked.
+let editingCategory: string | null = null;
+
+export function setEditingCategory(id: string | null): void {
+  editingCategory = id;
+}
 
 // Panel refs (built once by initPanel).
 let panelSearch: HTMLInputElement | null = null;
@@ -199,13 +208,73 @@ export function renderSections(api: PluginContext, container: HTMLElement, mode:
     const arrow = document.createElement("span");
     arrow.className = "vl-arrow";
     arrow.textContent = isCollapsed ? "▸" : "▾";
-    const name = document.createElement("span");
-    name.className = "vl-category-name";
-    name.textContent = section.label;
+    head.append(arrow);
+    // A user category's name is editable inline: it starts
+    // in edit mode when the category is created, and a
+    // double-click renames it later. Uncategorized has no
+    // rename and no delete — it is the default, not a
+    // category the user made.
+    const isUserCategory = section.key !== "uncategorized";
+    if (section.key === editingCategory) {
+      const input = document.createElement("input");
+      input.className = "vl-category-rename";
+      input.type = "text";
+      input.value = section.label;
+      input.setAttribute("aria-label", "Category name");
+      let done = false;
+      const commit = (save: boolean) => {
+        if (done) return;
+        done = true;
+        if (save) renameCategory(api, section.key, input.value);
+        editingCategory = null;
+        updateAllDynamic(api);
+      };
+      input.addEventListener("keydown", (e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") commit(true);
+        else if (e.key === "Escape") commit(false);
+      });
+      input.addEventListener("blur", () => commit(true));
+      input.addEventListener("click", (e) => e.stopPropagation());
+      input.addEventListener("dblclick", (e) => e.stopPropagation());
+      head.append(input);
+      // Focus after the section is in the document, so the
+      // input is laid out and the text can be selected.
+      queueMicrotask(() => { input.focus(); input.select(); });
+    } else {
+      const name = document.createElement("span");
+      name.className = "vl-category-name";
+      name.textContent = section.label;
+      if (isUserCategory) {
+        name.addEventListener("dblclick", (e) => {
+          e.stopPropagation();
+          editingCategory = section.key;
+          updateAllDynamic(api);
+        });
+      }
+      head.append(name);
+    }
     const count = document.createElement("span");
     count.className = "vl-count";
     count.textContent = `(${section.items.length})`;
-    head.append(arrow, name, count);
+    head.append(count);
+    if (isUserCategory) {
+      const del = document.createElement("span");
+      del.className = "vl-category-delete";
+      del.textContent = "×";
+      del.title = "Delete category";
+      del.setAttribute("aria-label", "Delete category");
+      del.addEventListener("click", (e) => {
+        // Inside the collapse button: stop the click from
+        // toggling the section as well. Deleting a category
+        // never deletes its cards — they return to
+        // Uncategorized.
+        e.stopPropagation();
+        deleteCategory(api, section.key);
+        updateAllDynamic(api);
+      });
+      head.append(del);
+    }
     head.addEventListener("click", () => {
       // Keep the scroll position: collapsing a section far
       // down should not jump the library back to the top.
@@ -274,7 +343,22 @@ export function searchRow(api: PluginContext, targetView: LibraryMode): { row: H
   btn.addEventListener("click", () => {
     api.view.setView(toView ? "library" : "board");
   });
-  row.append(input, btn);
+  // New category: creates one and puts its name straight
+  // into edit mode, so the user names it on the spot.
+  // The default name counts the categories already there,
+  // so the first is "Category 1", not a bare "Category".
+  const addBtn = document.createElement("button");
+  addBtn.className = "vl-icon-btn";
+  addBtn.title = "New category";
+  addBtn.setAttribute("aria-label", "New category");
+  addBtn.textContent = "+";
+  addBtn.addEventListener("click", () => {
+    const n = getCategories().length + 1;
+    const cat = createCategory(api, `Category ${n}`);
+    editingCategory = cat.id;
+    updateAllDynamic(api);
+  });
+  row.append(input, addBtn, btn);
   return { row, input };
 }
 

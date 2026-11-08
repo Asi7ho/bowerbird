@@ -65,6 +65,9 @@
   align-items: center; justify-content: center; flex: none;
 }
 .vl-search-row .vl-icon-btn:hover { background: rgba(0, 0, 0, 0.05); }
+/* The new-category button is text, not an icon: a plain
+   plus at a size that reads as a button, not a speck. */
+.vl-search-row .vl-icon-btn { font-size: 18px; font-weight: 400; color: var(--ink); }
 /* Icon glyphs are pure CSS, so no asset is needed. Masonry:
    three columns of blocks. Sidebar: a main area with a
    right-hand bar. */
@@ -112,6 +115,25 @@
 .vl-arrow { width: 12px; flex: none; text-align: center; color: var(--grey); }
 .vl-category-name { flex: 1 1 auto; min-width: 0; }
 .vl-count { color: var(--grey); font-weight: 400; }
+/* Delete a user category: a quiet grey cross at the end of
+   the header, next to the count. Only user categories get
+   one — Uncategorized has nothing to delete. */
+.vl-category-delete {
+  flex: none; width: 20px; height: 20px; display: flex;
+  align-items: center; justify-content: center;
+  color: var(--grey); font-size: 16px; line-height: 1;
+  border-radius: 6px; cursor: pointer;
+}
+.vl-category-delete:hover { background: var(--fill); color: var(--ink); }
+/* Rename inline: the name becomes a text field in place,
+   in the header's own type, with the app's quiet grey
+   field background — not a bordered white web input. */
+.vl-category-rename {
+  flex: 1 1 auto; min-width: 0; box-sizing: border-box;
+  padding: 2px 6px; background: var(--bg-system); border: none;
+  border-radius: 6px; font: inherit; font-weight: 600;
+  color: var(--ink); outline: none;
+}
 .vl-category-body { position: relative; }
 /* A library card wrapper: a positioning box at the column
    width, with the board card inside it, scaled uniformly to

@@ -3,6 +3,7 @@
 Bundled plugin. The library is the board, not a folder on disk.
 
 - Every board card except strokes and connectors, in board order, under a single Uncategorized section. Slide frames are not shown.
+- Categories: the + button adds a category (named on the spot). Drag a card onto a category section to move it there; drag it back onto Uncategorized to move it out. Double-click a category name to rename it; the × deletes the category, and its cards return to Uncategorized.
 - Search by the card's text or file name.
 - Click an item to focus the original on the board — it centres on it and selects it, and adds nothing. A link's title and image focus the original too; they do not open the site.
 - Drag an item onto the board to duplicate it at the drop point. A duplicate is an ordinary board item of the same kind and size, so it appears in the library too.

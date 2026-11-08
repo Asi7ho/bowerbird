@@ -19,10 +19,11 @@
 // icon button beside it (masonry icon for whiteboard, sidebar
 // icon for panel).
 //
-// There is one category, Uncategorized, holding every board
-// item in board order. Nothing is auto-categorised by kind.
-// Drag therefore never moves anything between categories —
-// it duplicates, as it always did.
+// Categories are user-created: Uncategorized holds every
+// board item in board order by default, and the user adds
+// named categories and drags cards into them. Dragging a
+// card onto a category section moves it there; dragging it
+// onto the board duplicates it, as it always did.
 //
 // Clicking a library card focuses the original on the
 // board: it centres on it and selects it, and adds nothing.
@@ -49,7 +50,7 @@
 // render.ts the panel and view surfaces. main.ts is the
 // entry point that wires them together.
 import type { PluginContext } from "../../src/plugins";
-import { syncFromBoard } from "./items.js";
+import { loadCategories, syncFromBoard } from "./items.js";
 import { stopLibraryAudio } from "./audio.js";
 import { buildView, clearPanelRefs, disconnectPanelObservers, getViewSections, initPanel, isViewBuilt, renderSections, updateAllDynamic, updateSelectionHighlight, viewContainerClear } from "./render.js";
 
@@ -60,6 +61,7 @@ let resizeHandler: (() => void) | null = null;
 
 export async function activate(api: PluginContext): Promise<void> {
   apiRef = api;
+  await loadCategories(api);
   onBoardHandler = () => { if (syncFromBoard(api, false)) updateAllDynamic(api); };
   api.events.on("board", onBoardHandler);
   onSelectionHandler = () => updateSelectionHighlight(api);
