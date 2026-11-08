@@ -13,12 +13,6 @@ npm install
 npm run dev
 ```
 
-No Xcode is needed on a Mac to run it from source. The first run opens a welcome board that explains the controls on the board itself.
-
-Your board is one JSON file: `~/.local/share/bowerbird/board.json` (or `$XDG_DATA_HOME/bowerbird/board.json`). To use a different file: `BOWERBIRD_BOARD_PATH=/tmp/my-board.json npm run dev`.
-
-Do not run `npm audit fix --force`. It downgrades `@xenova/transformers` to 1.x, which needs `canvas`, and `canvas` has no prebuilt binary for Node 26 on Mac arm64. The `overrides` in `package.json` already fix the known vulnerabilities, so `npm audit` reports 0.
-
 ## Package it
 
 ```sh
