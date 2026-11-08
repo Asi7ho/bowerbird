@@ -10,8 +10,12 @@
 # costs nothing between releases. (macOS minutes bill at 10x, so a
 # release is roughly 100 macOS minutes + the Windows/Linux time.)
 #
-# The executables are unsigned: macOS needs a right-click → Open
-# the first time, Windows shows a SmartScreen warning. See
+# The executables are unsigned except for an ad-hoc macOS
+# signature (package-mac.sh re-signs after assembly, so the
+# downloaded DMG is not "damaged" — see that script): macOS
+# needs a right-click → Open the first time, Windows shows a
+# SmartScreen warning. A Developer ID signature + notarization
+# is the only way to avoid the macOS warning entirely. See
 # scripts/package-mac.sh and scripts/package-win.sh for how to sign.
 name: Release
 

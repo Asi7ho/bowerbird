@@ -11,16 +11,15 @@
 # those are missing the script still leaves a working .app and a
 # .zip of it, and says exactly which tools are missing.
 #
-# The app is NOT signed or notarized by this script: a recipient
-# opening a shared, unsigned app must right-click it and choose
-# Open the first time. To sign it, on a Mac with a Developer ID
-# certificate run:
+# The app is ad-hoc signed by this script (macOS only), not
+# notarized: a recipient opening a downloaded, ad-hoc signed
+# app must right-click it and choose Open the first time.
+# To avoid the warning entirely, sign with a Developer ID
+# and notarize the DMG (needs the Apple Developer Program):
 #   codesign --deep --force --options runtime \
 #     --sign "Developer ID Application: Your Name (TEAMID)" \
 #     dist-mac/Bowerbird.app
 # and then notarize the DMG with xcrun notarytool (see Apple docs).
-# Sharing a signed + notarized build is the only way to avoid the
-# Gatekeeper warning entirely; this script does not pretend otherwise.
 set -eu
 cd "$(dirname "$0")/.."
 
@@ -126,6 +125,25 @@ cat > "$APP/Contents/Info.plist" <<EOF
 </plist>
 EOF
 printf 'APPL????' > "$APP/Contents/PkgInfo"
+
+# Re-sign the app. Assembling it (renaming the Electron binary,
+# replacing Info.plist, adding our files) breaks Electron's own
+# signature, so the bundle ships with a signature that no longer
+# matches its contents. A locally built app still opens, because
+# it carries no quarantine flag and Gatekeeper never checks it.
+# But a downloaded app is quarantined, Gatekeeper verifies it,
+# finds the broken signature, and refuses it as "damaged" — an
+# error right-click → Open cannot bypass. Ad-hoc signing makes
+# the signature valid again, so Gatekeeper instead shows the
+# bypassable "unidentified developer" warning. (A Developer ID
+# signature + notarization is the only way to avoid the warning
+# entirely.) macOS only: codesign does not exist on Linux, and
+# the Linux-built DMG is a fallback, not a distribution build.
+if [ "$(uname)" = "Darwin" ] && command -v codesign >/dev/null 2>&1; then
+  echo "-- ad-hoc signing $APP"
+  codesign --deep --force --sign - "$APP"
+  codesign --verify --deep --strict "$APP"
+fi
 
 echo "== built $APP"
 find "$APP/Contents/Resources/app" -maxdepth 1 | sort
