@@ -1,0 +1,97 @@
+# Release: build the Windows, macOS and Linux executables and attach
+# them to a GitHub Release, when a version tag is pushed.
+#
+# Trigger: push a tag like v0.2.2. The tag is the version: the
+# packaging scripts take it from the VERSION env var, so the files
+# match the tag even if package.json was not bumped first.
+#
+# This is the one place a full three-platform run is wanted: a tag
+# is a release. It does not run on pushes or pull requests, so it
+# costs nothing between releases. (macOS minutes bill at 10x, so a
+# release is roughly 100 macOS minutes + the Windows/Linux time.)
+#
+# The executables are unsigned: macOS needs a right-click → Open
+# the first time, Windows shows a SmartScreen warning. See
+# scripts/package-mac.sh and scripts/package-win.sh for how to sign.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac
+            script: ./scripts/package-mac.sh
+          - os: windows-latest
+            platform: win
+            script: ./scripts/package-win.sh
+          - os: ubuntu-latest
+            platform: linux
+            script: ./scripts/package-linux.sh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Version from tag
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - name: Install dependencies
+        run: npm ci
+      - name: Package
+        shell: bash
+        run: ${{ matrix.script }}
+      - name: Upload macOS DMG
+        if: matrix.platform == 'mac'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bowerbird-mac
+          path: |
+            dist-mac/Bowerbird-*.dmg
+            dist-mac/Bowerbird-*.zip
+          if-no-files-found: error
+      - name: Upload Windows zip
+        if: matrix.platform == 'win'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bowerbird-win
+          path: dist-win/Bowerbird-*.zip
+          if-no-files-found: error
+      - name: Upload Linux tarball
+        if: matrix.platform == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bowerbird-linux
+          path: Bowerbird-*.tar.gz
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: bowerbird-*
+          path: release-files
+          merge-multiple: true
+      - name: List files
+        run: ls -lh release-files/
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: release-files/*

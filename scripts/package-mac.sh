@@ -25,7 +25,10 @@ set -eu
 cd "$(dirname "$0")/.."
 
 ARCH="${ARCH:-arm64}"
-VERSION="$(node -e "console.log(require('./package.json').version)")"
+# The version comes from package.json, unless VERSION is set (the
+# release workflow sets it from the tag, so the DMG matches the tag
+# even when package.json was not bumped first).
+VERSION="${VERSION:-$(node -e "console.log(require('./package.json').version)")}"
 # node_modules is gitignored, so a zip download does not contain it.
 # Fail with the actual fix instead of a Node stack trace.
 if [ ! -f node_modules/electron/package.json ]; then
