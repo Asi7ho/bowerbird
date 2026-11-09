@@ -26,9 +26,10 @@
   color: var(--ink);
 }
 
-/* The provider dropdown is the app's only <select>. The native
-   chevron sits cramped against the right edge, so hide it and
-   draw one 12px from the edge instead. */
+/* The provider dropdown. The native chevron sits cramped
+   against the right edge, so hide it and draw one 12px from
+   the edge instead. The chat switcher in the panel uses the
+   same chevron, so the two selects match. */
 .plugin-settings-section .ai-field select {
   -webkit-appearance: none;
   appearance: none;
@@ -188,4 +189,58 @@
 
 .ai-install button {
   flex: none;
+}
+
+/* The chat header: a switcher listing past chats, and a
+   button to start a fresh one. The select takes the room,
+   the button never shrinks. Both use the app's own tokens —
+   the select the same custom chevron as the provider
+   dropdown in settings, so the two selects match. */
+.ai-chat-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.ai-chat-header select.ai-chat-select {
+  flex: 1 1 auto;
+  min-width: 0;
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 32px 6px 8px;
+  border: 1px solid var(--separator);
+  border-radius: 9px;
+  background-color: #fff;
+  color: var(--ink);
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231d1d1f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px 12px;
+  cursor: pointer;
+}
+
+.ai-chat-header button.ai-new-chat {
+  flex: none;
+  border: 1px solid var(--separator);
+  background: #fff;
+  border-radius: 9px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.ai-chat-header button.ai-new-chat:hover {
+  background: var(--fill);
+}
+
+.ai-chat-header button.ai-new-chat:disabled,
+.ai-chat-header select.ai-chat-select:disabled {
+  color: var(--grey);
+  opacity: 0.5;
+  cursor: default;
 }
