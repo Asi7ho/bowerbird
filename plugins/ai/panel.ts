@@ -31,8 +31,10 @@ export function renderPanel(api: PluginContext, container: HTMLElement): void {
   // and the input stays pinned to the bottom.
   container.classList.add("ai-panel");
 
-  // The chat switcher: a select listing past chats by title,
-  // and a button to start a fresh one.
+  // The chat header: a switcher listing past chats, a + to
+  // start a fresh one, and a trash icon to delete the
+  // current chat. The switcher takes the room; the two icon
+  // buttons never shrink.
   const header = document.createElement("div");
   header.className = "ai-chat-header";
   const chatSelect = document.createElement("select");
@@ -41,9 +43,18 @@ export function renderPanel(api: PluginContext, container: HTMLElement): void {
   const newChatBtn = document.createElement("button");
   newChatBtn.type = "button";
   newChatBtn.className = "ai-new-chat";
-  newChatBtn.textContent = "New chat";
+  newChatBtn.textContent = "+";
+  newChatBtn.setAttribute("aria-label", "New chat");
+  const deleteChatBtn = document.createElement("button");
+  deleteChatBtn.type = "button";
+  deleteChatBtn.className = "ai-delete-chat";
+  deleteChatBtn.setAttribute("aria-label", "Delete chat");
+  // The same trash icon as the toolbar's delete button.
+  deleteChatBtn.innerHTML =
+    '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l1 13h9l1-13" /><path d="M10 10.5v5M14 10.5v5" /></svg>';
   header.appendChild(chatSelect);
   header.appendChild(newChatBtn);
+  header.appendChild(deleteChatBtn);
   container.appendChild(header);
 
   const list = document.createElement("div");
@@ -93,6 +104,8 @@ export function renderPanel(api: PluginContext, container: HTMLElement): void {
       chatSelect.appendChild(option);
     }
     chatSelect.value = current.id;
+    // Nothing to delete in an empty chat.
+    deleteChatBtn.disabled = current.messages.length === 0;
   };
 
   const addMessage = (msg: ChatMessage, parent: HTMLElement = list): void => {
@@ -182,12 +195,30 @@ export function renderPanel(api: PluginContext, container: HTMLElement): void {
     await saveCurrentChatId(api, current.id);
   };
 
+  const deleteCurrentChat = async (): Promise<void> => {
+    if (busy) return;
+    // An empty chat is not persisted, so there is nothing to
+    // delete — the button is disabled for it.
+    if (current.messages.length === 0) return;
+    chats = chats.filter((c) => c.id !== current.id);
+    // Fall back to the most recent remaining chat, or a fresh
+    // one when the list is now empty.
+    current = [...chats].sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? newChat();
+    if (!chats.some((c) => c.id === current.id)) chats.unshift(current);
+    renderChatSelect();
+    renderMessages();
+    await saveChats(api, chats);
+    await saveCurrentChatId(api, current.id);
+    input.focus();
+  };
+
   const send = async (): Promise<void> => {
     const text = input.value.trim();
     if (!text || busy) return;
     busy = true;
     chatSelect.disabled = true;
     newChatBtn.disabled = true;
+    deleteChatBtn.disabled = true;
     sendBtn.disabled = true;
     input.value = "";
     current.messages.push({ role: "user", content: text });
@@ -217,6 +248,7 @@ export function renderPanel(api: PluginContext, container: HTMLElement): void {
       busy = false;
       chatSelect.disabled = false;
       newChatBtn.disabled = false;
+      deleteChatBtn.disabled = current.messages.length === 0;
       sendBtn.disabled = input.value.trim().length === 0;
       input.focus();
     }
@@ -224,6 +256,7 @@ export function renderPanel(api: PluginContext, container: HTMLElement): void {
 
   chatSelect.addEventListener("change", () => void switchChat(chatSelect.value));
   newChatBtn.addEventListener("click", () => void startNewChat());
+  deleteChatBtn.addEventListener("click", () => void deleteCurrentChat());
   sendBtn.addEventListener("click", () => void send());
   input.addEventListener("input", () => {
     sendBtn.disabled = busy || input.value.trim().length === 0;

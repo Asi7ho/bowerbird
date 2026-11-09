@@ -222,25 +222,49 @@
   cursor: pointer;
 }
 
-.ai-chat-header button.ai-new-chat {
+.ai-chat-header button.ai-new-chat,
+.ai-chat-header button.ai-delete-chat {
   flex: none;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* The panel's generic button rule sets padding 6px 12px,
+     which would leave only 4px of room in a 28px button and
+     squeeze the icon. An icon button has no padding. */
+  padding: 0;
   border: 1px solid var(--separator);
   background: #fff;
   border-radius: 9px;
-  padding: 6px 10px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 600;
+  line-height: 1;
   color: var(--ink);
 }
 
-.ai-chat-header button.ai-new-chat:hover {
+.ai-chat-header button.ai-new-chat:hover,
+.ai-chat-header button.ai-delete-chat:hover {
   background: var(--fill);
 }
 
 .ai-chat-header button.ai-new-chat:disabled,
+.ai-chat-header button.ai-delete-chat:disabled,
 .ai-chat-header select.ai-chat-select:disabled {
   color: var(--grey);
   opacity: 0.5;
   cursor: default;
+}
+
+/* The trash icon draws in the app's own stroke style, like
+   the toolbar's delete button. */
+.ai-chat-header button.ai-delete-chat svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
