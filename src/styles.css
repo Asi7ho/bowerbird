@@ -906,6 +906,10 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #settings .plugin-row:last-child { border-bottom: none; }
 #settings .plugin-row-text { flex: 1 1 auto; min-width: 0; }
 #settings .plugin-row-text .meta { margin: 4px 0 0; }
+/* The disable warning is plain words, not a path or an id:
+   it must break between words, never inside one, so
+   "re-enable" is never split as "re-enabl" and "e". */
+#settings .plugin-row-text .meta.plugin-warn { word-break: normal; overflow-wrap: break-word; }
 /* The one-line description under the name: quiet grey, 12px, so
    the name stays the row's loudest text and the description reads
    as a caption. An off plugin dims its description with its name. */

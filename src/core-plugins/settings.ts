@@ -291,7 +291,7 @@ function renderPluginSettings(): void {
     const confirming = lp.active && confirmingDisable?.id === lp.id ? confirmingDisable : null;
     if (confirming) {
       const noun = confirming.count === 1 ? "card" : "cards";
-      row += `<p class="meta">${confirming.count} ${noun} on the board will show as placeholders until you re-enable this plugin.</p>`;
+      row += `<p class="meta plugin-warn">${confirming.count} ${noun} on the board will show as placeholders until you re‑enable this plugin.</p>`;
     }
     // A Settings button, when the plugin has a settings
     // section: it jumps to the Plugin settings tab and
