@@ -241,6 +241,20 @@ function renderPluginSettingsSections(): void {
   if (empty && sections) empty.style.display = sections.children.length > 0 ? "none" : "";
 }
 
+// The plugin awaiting a disable confirmation, with how many
+// of its cards are on the board. Disabling a plugin never
+// deletes its cards — they stay on the board as placeholders
+// ("Install the plugin to view this card. Your data is
+// kept.") until it is re-enabled — but the user should know
+// before they disable, not after, so a disable with cards
+// on the board asks first instead of toggling straight off.
+let confirmingDisable: { id: string; count: number } | null = null;
+
+function countPluginCards(pluginId: string): number {
+  if (!api) return 0;
+  return api.board.getItems().filter((it) => "Plugin" in it.kind && it.kind.Plugin.plugin === pluginId).length;
+}
+
 function renderPluginSettings(): void {
   if (!api) return;
   const list = el<HTMLDivElement>("plugin-list");
@@ -268,6 +282,15 @@ function renderPluginSettings(): void {
     let row = `<div class="plugin-row${off ? " plugin-row-off" : ""}"><span class="plugin-dot" aria-hidden="true"></span><div class="plugin-row-text"><div><strong>${escapeHtml(lp.name)}</strong></div>`;
     if (lp.description) row += `<p class="plugin-desc">${escapeHtml(lp.description)}</p>`;
     if (lp.failed && lp.error) row += `<p class="meta"><strong>${escapeHtml(lp.error)}</strong></p>`;
+    // The disable warning: when this plugin is awaiting a
+    // disable confirmation, say how many of its cards are on
+    // the board and what will happen to them, so the user
+    // decides with the consequence in front of them.
+    const confirming = confirmingDisable?.id === lp.id ? confirmingDisable : null;
+    if (confirming) {
+      const noun = confirming.count === 1 ? "card" : "cards";
+      row += `<p class="meta">${confirming.count} ${noun} on the board will show as placeholders until you re-enable this plugin.</p>`;
+    }
     // A Settings button, when the plugin has a settings
     // section: it jumps to the Plugin settings tab and
     // scrolls to that plugin's section, so settings are
@@ -278,9 +301,14 @@ function renderPluginSettings(): void {
     if (lp.active && hasSettings) row += `<button data-plugin-settings="${lp.id}">Settings</button>`;
     // A required plugin has no toggle: it is the foundation
     // (board, Settings) and cannot be disabled, so there is
-    // nothing to toggle. Every other plugin gets one.
-    if (!lp.trial && !lp.required) row += `<button data-plugin-toggle="${lp.id}">${lp.active ? "Disable" : "Enable"}</button></span>`;
-    else row += `</span>`;
+    // nothing to toggle. Every other plugin gets one. While
+    // a disable is awaiting confirmation, the toggle reads
+    // as the confirm ("Disable anyway") and is armed red,
+    // like other confirm states.
+    if (!lp.trial && !lp.required) {
+      if (confirming) row += `<button data-plugin-toggle="${lp.id}" class="armed">Disable anyway</button></span>`;
+      else row += `<button data-plugin-toggle="${lp.id}">${lp.active ? "Disable" : "Enable"}</button></span>`;
+    } else row += `</span>`;
     row += `</div>`;
     return row;
   };
@@ -314,7 +342,32 @@ function renderPluginSettings(): void {
       const id = (btn as HTMLElement).dataset.pluginToggle ?? "";
       const lp = api!.plugins.list().find((x) => x.id === id);
       if (!lp) return;
-      await api!.plugins.setEnabled(id, !lp.active);
+      if (confirmingDisable?.id === id) {
+        // The confirm click: the warning is already shown,
+        // so disable now.
+        confirmingDisable = null;
+        await api!.plugins.setEnabled(id, false);
+      } else if (lp.active) {
+        // Disabling. If this plugin has cards on the board,
+        // ask first instead of toggling straight off: the
+        // row re-renders with the warning and a "Disable
+        // anyway" confirm. A plugin with no cards on the
+        // board disables at once, with nothing to warn about.
+        // A confirm left open on another plugin is dropped
+        // when this toggle is clicked.
+        const n = countPluginCards(id);
+        if (n > 0) {
+          confirmingDisable = { id, count: n };
+          renderPluginSettings();
+          return;
+        }
+        confirmingDisable = null;
+        await api!.plugins.setEnabled(id, false);
+      } else {
+        // Enabling: no warning, the cards come back.
+        confirmingDisable = null;
+        await api!.plugins.setEnabled(id, true);
+      }
       renderShortcutsTable();
       renderPluginSettingsSections();
       renderPluginSettings();
@@ -327,6 +380,9 @@ function setSettings(open: boolean): void {
   if (!backdrop || !api) return;
   settingsOpen = open;
   backdrop.classList.toggle("open", open);
+  // A disable confirmation left open is dropped when the
+  // sheet closes, so it is not still armed next time.
+  if (!open) confirmingDisable = null;
   if (open) {
     const confirmEl = el<HTMLDivElement>("reset-confirm");
     const resetBtn = el<HTMLButtonElement>("btn-reset");

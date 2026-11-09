@@ -939,3 +939,6 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
   margin: 0; flex: none;
 }
+/* The armed confirm state reads red, like other confirm states:
+   "Disable anyway" is a deliberate second click, not a toggle. */
+#settings .plugin-row button.armed { color: #e63946; }
