@@ -23,8 +23,8 @@
 // break. A future version may sandbox panels and views harder;
 // v1 does not pretend otherwise.
 
-import type { Anchor, Board, Camera, Item, Kind, Pt, Size } from "./model";
-import { anchorPoint, centre, clippedEnds, domainOf, elide, escapeHtml, itemRotation, rectCrossing, renderMarkdownHtml, segmentIntersectsRect, tileColorFor, tint } from "./model";
+import type { Anchor, ArrangeOptions, Board, Camera, Item, Kind, Pt, Size } from "./model";
+import { anchorPoint, arrangeItems, boardGet, centre, clippedEnds, domainOf, elide, escapeHtml, itemRotation, rectCrossing, renderMarkdownHtml, segmentIntersectsRect, tileColorFor, tint } from "./model";
 
 // ---------------------------------------------------------------- types
 
@@ -216,6 +216,11 @@ export interface PluginHost {
   getSelected: () => number[];
   setSelected: (ids: number[]) => void;
   addItem: (kind: Kind, pos: Pt, size: Size) => number;
+  // Add several items at once, in one save (one undo step).
+  // A plugin that builds a structure — a mind map, a grid of
+  // cards — adds them all here, so undoing it takes one undo,
+  // not one per card. addItem saves after every item.
+  addItems: (items: Array<{ kind: Kind; pos: Pt; size: Size }>) => number[];
   updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown }) => boolean;
   updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; data?: unknown }>) => boolean;
   moveItem: (id: number, toIndex: number) => boolean;
@@ -319,6 +324,27 @@ export interface PluginContext {
     setSelected: (ids: number[]) => void;
     addItem: (kind: Kind, pos: Pt, size: Size) => number;
     addPluginCard: (kind: string, data: unknown, pos: Pt, size: Size) => number;
+    // Add several items at once, in one save (one undo step).
+    // A plugin that builds a structure — a mind map, a grid
+    // of cards — adds them all here, so undoing it takes one
+    // undo, not one per card. addItem saves after every item.
+    addItems: (items: Array<{ kind: Kind; pos: Pt; size: Size }>) => number[];
+    // Arrange a set of cards: a grid, flowing columns, a
+    // single row or column, or a ring around a central card
+    // (a mind map). The layout math lives in the core, so a
+    // caller picks the cards and the shape and the core works
+    // out the positions. Applied as one undo step, anchored
+    // on the cards' current bounding box, so the arrangement
+    // happens in place. Returns false when there is nothing
+    // to arrange (no cards, or a radial with no centre).
+    arrange: (ids: number[], options: ArrangeOptions) => boolean;
+    // Connect two cards with a connector, the line the
+    // connector tool draws. The caller gives the two card
+    // ids; the core works out the line's bounding box and
+    // the anchor format, so the caller never has to. Returns
+    // the new connector's id, or null when either card does
+    // not exist.
+    connect: (fromId: number, toId: number, options?: { color?: string }) => number | null;
     updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown }) => boolean;
     updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; data?: unknown }>) => boolean;
     moveItem: (id: number, toIndex: number) => boolean;
@@ -1052,6 +1078,35 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         require("board:write");
         const id = host!.addItem({ Plugin: { plugin: pluginId, kind, data } }, pos, size);
         return id;
+      },
+      addItems: (items: Array<{ kind: Kind; pos: Pt; size: Size }>) => {
+        require("board:write");
+        return host!.addItems(items);
+      },
+      arrange: (ids: number[], options: ArrangeOptions) => {
+        require("board:write");
+        const patches = arrangeItems(host!.getBoard(), ids, options);
+        if (patches.length === 0) return false;
+        return host!.updateItems(patches);
+      },
+      connect: (fromId: number, toId: number, options?: { color?: string }) => {
+        require("board:write");
+        const board = host!.getBoard();
+        const from = boardGet(board, fromId);
+        const to = boardGet(board, toId);
+        if (!from || !to) return null;
+        // The connector's pos/size is the bounding box of the
+        // line between the two card centres, the same box the
+        // connector tool uses when it draws one by hand.
+        const a = centre(from);
+        const b = centre(to);
+        const pos = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) };
+        const size = { w: Math.max(1, Math.abs(b.x - a.x)), h: Math.max(1, Math.abs(b.y - a.y)) };
+        return host!.addItem(
+          { Connector: { from: { Item: fromId }, to: { Item: toId }, color: options?.color ?? "#333333" } },
+          pos,
+          size
+        );
       },
       updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown }) => {
         require("board:write");

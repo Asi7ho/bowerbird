@@ -87,7 +87,7 @@ Enable and disable are per plugin, in Settings → Plugins. Disabling unregister
 
 `activate(api)` receives one object, per plugin, filtered to the manifest's permissions. `api.version` is `"2"`. The full reference is the `PluginContext` type in `src/plugins.ts`. The domains:
 
-- `board` — read and write the board: items, selection, add / update / remove, group / ungroup / delete, undo / redo, canvas, save, render. Writes need `board:write`. A plugin may read any card but may only write its own plugin cards' data, plus core kinds' position, size and group.
+- `board` — read and write the board: items, selection, add / update / remove, group / ungroup / delete, undo / redo, canvas, save, render. Writes need `board:write`. A plugin may read any card but may only write its own plugin cards' data, plus core kinds' position, size and group. Three methods exist for building and tidying structures: `addItems` adds several items at once, in one undo step (addItem saves after every item); `arrange` lays a set of cards out — a grid, flowing columns, a single row or column, or a ring around a central card — in one undo step, anchored on the cards' current bounding box; `connect` draws a connector between two cards by id, so the caller never builds the anchor format or the line's bounding box.
 - `boards` — list, create, switch, rename and delete boards. Needs `board:write` except for `list` and `current`.
 - `app` — read-only app info: build id and platform.
 - `backups` — list and restore board backups.

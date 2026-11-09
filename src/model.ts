@@ -110,6 +110,110 @@ export function itemBounds(board: Board, item: Item): [Pt, Size] {
   return [item.pos, item.size];
 }
 
+// Arranging cards: the layout math for api.board.arrange.
+// Given the board and a set of item ids, compute where each
+// card goes. The caller applies the positions (one undo step
+// via updateItems). Every layout anchors on the bounding box
+// of the cards' current positions, so the arrangement happens
+// in place — "tidy these" keeps them where they are,
+// organised. Connectors are not cards to lay out, so they
+// are skipped. A single card has nowhere to go, so it stays.
+export type ArrangeOptions =
+  | { type: "grid"; columns: number; gap?: number }
+  | { type: "columns"; columns: number; gap?: number }
+  | { type: "row"; gap?: number }
+  | { type: "column"; gap?: number }
+  | { type: "radial"; center: number; radius?: number };
+
+export function arrangeItems(board: Board, ids: number[], options: ArrangeOptions): Array<{ id: number; pos: Pt }> {
+  const items = ids
+    .map((id) => boardGet(board, id))
+    .filter((it): it is Item => !!it && !("Connector" in it.kind));
+  if (items.length === 0) return [];
+  const gap = options.type === "radial" ? 0 : (options.gap ?? 24);
+  const origin = {
+    x: Math.min(...items.map((it) => it.pos.x)),
+    y: Math.min(...items.map((it) => it.pos.y)),
+  };
+  const maxW = Math.max(...items.map((it) => it.size.w));
+  const maxH = Math.max(...items.map((it) => it.size.h));
+
+  if (options.type === "radial") {
+    const centerItem = boardGet(board, options.center);
+    if (!centerItem) return [];
+    const satellites = items.filter((it) => it.id !== options.center);
+    if (satellites.length === 0) return [];
+    const c = centre(centerItem);
+    // Default radius: wide enough that neighbours do not
+    // overlap. The arc between two neighbours should fit
+    // the widest card, so the circumference must hold them.
+    const radius =
+      options.radius ?? Math.max(160, (satellites.length * (maxW + 40)) / (2 * Math.PI));
+    return satellites.map((it, i) => {
+      // Start at the top and go clockwise, evenly spaced.
+      const angle = -Math.PI / 2 + (i * 2 * Math.PI) / satellites.length;
+      return {
+        id: it.id,
+        pos: {
+          x: c.x + radius * Math.cos(angle) - it.size.w / 2,
+          y: c.y + radius * Math.sin(angle) - it.size.h / 2,
+        },
+      };
+    });
+  }
+
+  if (options.type === "row") {
+    let x = origin.x;
+    return items.map((it) => {
+      const pos = { x, y: origin.y + (maxH - it.size.h) / 2 };
+      x += it.size.w + gap;
+      return { id: it.id, pos };
+    });
+  }
+
+  if (options.type === "column") {
+    let y = origin.y;
+    return items.map((it) => {
+      const pos = { x: origin.x + (maxW - it.size.w) / 2, y };
+      y += it.size.h + gap;
+      return { id: it.id, pos };
+    });
+  }
+
+  // grid and columns both take a column count. A grid is a
+  // strict grid: every cell is the size of the largest card,
+  // so rows and columns align. Columns are flowing stacks:
+  // each column is independent, so column heights vary and
+  // no row aligns across columns. Cards are centred in
+  // their cell or column, so mixed sizes still look tidy.
+  const columns = Math.max(1, Math.floor(options.columns) || 1);
+  if (options.type === "grid") {
+    return items.map((it, i) => {
+      const col = i % columns;
+      const row = Math.floor(i / columns);
+      return {
+        id: it.id,
+        pos: {
+          x: origin.x + col * (maxW + gap) + (maxW - it.size.w) / 2,
+          y: origin.y + row * (maxH + gap) + (maxH - it.size.h) / 2,
+        },
+      };
+    });
+  }
+  // columns: round-robin into columns, so the columns stay
+  // balanced instead of filling one before the next.
+  const colHeights = new Array<number>(columns).fill(0);
+  return items.map((it, i) => {
+    const col = i % columns;
+    const pos = {
+      x: origin.x + col * (maxW + gap) + (maxW - it.size.w) / 2,
+      y: origin.y + colHeights[col],
+    };
+    colHeights[col] += it.size.h + gap;
+    return { id: it.id, pos };
+  });
+}
+
 function distToSegment(p: Pt, a: Pt, b: Pt): number {
   const dx = b.x - a.x, dy = b.y - a.y;
   const len2 = dx * dx + dy * dy;
