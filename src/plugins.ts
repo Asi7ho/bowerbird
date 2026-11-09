@@ -48,7 +48,7 @@ export interface PluginManifest {
   // plugins.json cannot lock the app out either.
   required?: boolean;
   contributions?: {
-    cards?: Array<{ kind: string; title: string }>;
+    cards?: Array<{ kind: string; title: string; frame?: boolean }>;
     tools?: Array<{ id: string; title: string }>;
     panels?: Array<{ id: string; title: string }>;
     views?: Array<{ id: string; title: string }>;
@@ -580,7 +580,7 @@ export interface PluginContext {
     // List every loaded plugin with its state, so a settings
     // UI can show them and toggle them. Read-only; no
     // permission needed.
-    list: () => Array<{ id: string; name: string; version: string; description: string; core: boolean; required: boolean; active: boolean; failed: boolean; error: string | null; trial: boolean }>;
+    list: () => Array<{ id: string; name: string; version: string; description: string; core: boolean; required: boolean; active: boolean; failed: boolean; error: string | null; trial: boolean; frameKinds: string[] }>;
     // Enable or disable a plugin. This is plugin management,
     // so it needs the plugins:install permission, like
     // install. A trial plugin cannot be toggled this way.
@@ -1446,6 +1446,13 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         failed: lp.failed,
         error: lp.error,
         trial: !!lp.trial,
+        // The card kinds that are frames, from the manifest:
+        // a frame hides when its plugin is disabled instead
+        // of showing a placeholder, so a settings UI can say
+        // so. Empty when the plugin has no frame cards.
+        frameKinds: (lp.manifest.contributions?.cards ?? [])
+          .filter((c) => c.frame === true)
+          .map((c) => c.kind),
       })),
       setEnabled: async (id: string, enabled: boolean) => {
         require("plugins:install");
@@ -1827,6 +1834,18 @@ export function getCardHtml(item: Item): string | null {
   // wrapper in main.ts; this returns inner HTML only.
   if (!def) {
     const { plugin, kind } = item.kind.Plugin;
+    // A frame card is a container, not content: when its
+    // plugin is disabled, the frame itself goes away rather
+    // than showing a placeholder. The frame is declared in
+    // the plugin's manifest, so the core knows it is a frame
+    // even though the plugin was never activated in this
+    // session — the card's data stays in the board, and
+    // re-enabling the plugin brings the frame back.
+    const manifest = loaded.get(plugin)?.manifest;
+    const isFrame = manifest?.contributions?.cards?.some(
+      (c) => c.kind === kind && c.frame === true
+    );
+    if (isFrame) return null;
     return `<div style="padding:12px"><div class="title" style="font-size:14px">Plugin card</div><div class="sub" style="font-size:12px">${escapeHtml(plugin)} — ${escapeHtml(kind)}</div><div class="sub" style="font-size:12px">Install the plugin to view this card. Your data is kept.</div></div>`;
   }
   try {

@@ -41,7 +41,7 @@ my-plugin/
 - `apiVersion` is `"2"`. A plugin written for API 1 does not load.
 - `permissions` gates the API object. A method that needs a permission the manifest did not declare throws. `board:read` is always allowed; everything else must be declared.
 - `required` (optional) marks a plugin that cannot be disabled. Only the board and the Settings window use it. Do not mark an ordinary plugin required.
-- `contributions` is a summary for Settings. The code in `main.ts` is what actually registers each contribution. If the two disagree, the registered contributions win.
+- `contributions` is a summary for Settings. The code in `main.ts` is what actually registers each contribution. If the two disagree, the registered contributions win. One exception: a card contribution may carry `"frame": true`, which the core reads from the manifest — a frame card is a container, not content, so when its plugin is disabled the frame hides instead of showing a placeholder, and re-enabling the plugin brings it back.
 
 ## TypeScript, compiled in the app
 

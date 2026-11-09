@@ -248,11 +248,21 @@ function renderPluginSettingsSections(): void {
 // kept.") until it is re-enabled — but the user should know
 // before they disable, not after, so a disable with cards
 // on the board asks first instead of toggling straight off.
-let confirmingDisable: { id: string; count: number } | null = null;
+let confirmingDisable: { id: string; count: number; frames: number } | null = null;
 
-function countPluginCards(pluginId: string): number {
-  if (!api) return 0;
-  return api.board.getItems().filter((it) => "Plugin" in it.kind && it.kind.Plugin.plugin === pluginId).length;
+// How many of a plugin's cards are on the board, and how
+// many of those are frames. A frame hides when its plugin
+// is disabled instead of showing a placeholder, so the
+// warning can say so — the frame kinds come from the
+// plugin's manifest, via plugins.list().
+function countPluginCards(pluginId: string): { count: number; frames: number } {
+  if (!api) return { count: 0, frames: 0 };
+  const frameKinds = new Set(api.plugins.list().find((p) => p.id === pluginId)?.frameKinds ?? []);
+  const cards = api.board.getItems().filter((it) => "Plugin" in it.kind && it.kind.Plugin.plugin === pluginId);
+  return {
+    count: cards.length,
+    frames: cards.filter((it) => "Plugin" in it.kind && frameKinds.has(it.kind.Plugin.kind)).length,
+  };
 }
 
 function renderPluginSettings(): void {
@@ -291,7 +301,11 @@ function renderPluginSettings(): void {
     const confirming = lp.active && confirmingDisable?.id === lp.id ? confirmingDisable : null;
     if (confirming) {
       const noun = confirming.count === 1 ? "card" : "cards";
-      row += `<p class="meta plugin-warn">${confirming.count} ${noun} on the board will show as placeholders until you re‑enable this plugin.</p>`;
+      // When every card is a frame, the cards hide rather
+      // than showing as placeholders — say so, so the warning
+      // describes what actually happens.
+      const outcome = confirming.frames === confirming.count ? "will be hidden" : "will show as placeholders";
+      row += `<p class="meta plugin-warn">${confirming.count} ${noun} on the board ${outcome} until you re‑enable this plugin.</p>`;
     }
     // A Settings button, when the plugin has a settings
     // section: it jumps to the Plugin settings tab and
@@ -362,9 +376,9 @@ function renderPluginSettings(): void {
         // board disables at once, with nothing to warn about.
         // A confirm left open on another plugin is dropped
         // when this toggle is clicked.
-        const n = countPluginCards(id);
-        if (n > 0) {
-          confirmingDisable = { id, count: n };
+        const { count, frames } = countPluginCards(id);
+        if (count > 0) {
+          confirmingDisable = { id, count, frames };
           renderPluginSettings();
           return;
         }
