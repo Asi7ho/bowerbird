@@ -108,6 +108,13 @@ export function activate(api: PluginContext): void {
     title: "Slide",
     frame: true,
     render: (item) => {
+      // A slide frame shows only while the slides panel is
+      // open: the frames are Presentation's own view of the
+      // board, and off the panel they are clutter over the
+      // user's work. Returning null hides the frame
+      // entirely — the core renders nothing for it — and
+      // the cards inside it stay exactly where they are.
+      if (!state.api?.ui.isPanelActive("slides")) return null;
       // The slide number is its position among frames in
       // board order, computed at render time, not stored,
       // so deleting a frame renumbers the rest correctly.

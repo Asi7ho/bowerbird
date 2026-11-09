@@ -105,7 +105,12 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
       const ww0 = num(item.size.w, 0), hh0 = num(item.size.h, 0);
       const rot0 = itemRotation(item);
       const style0 = `left:${num(item.pos.x, 0)}px;top:${num(item.pos.y, 0)}px;width:${ww0}px;height:${hh0}px;${rot0 ? `transform:rotate(${rot0}deg);` : ""}`;
-      const inner = getCardHtml(item) ?? "";
+      // A renderer returning null hides the card entirely:
+      // the core renders nothing for it, not even the frame
+      // border. A plugin uses this to show a card only in
+      // the context it belongs to.
+      const inner = getCardHtml(item);
+      if (inner === null) return "";
       const frameCls = getCardRenderer(item)?.frame === true ? " plugin-frame" : "";
       return `<div class="${cls}${frameCls}" data-id="${id}" style="${style0}"><div class="inner">${inner}</div></div>`;
     }

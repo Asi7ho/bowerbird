@@ -65,7 +65,11 @@ export interface PluginCardDef {
   // Handlers receive the full board item AND the plugin's data
   // separately, so a plugin author never has to dig through
   // item.kind.Plugin.data: render(item, data) is the easy path.
-  render: (item: Item, data: unknown) => string;
+  // Returning null hides the card entirely — the core renders
+  // nothing for it — so a plugin can show a card only in
+  // the context it belongs to (for example, a slide frame
+  // only while its panel is open).
+  render: (item: Item, data: unknown) => string | null;
   onDoubleClick?: (item: Item, data: unknown) => void;
   onAction?: (action: string, item: Item, data: unknown) => void;
   searchText?: (data: unknown) => string;
@@ -515,6 +519,13 @@ export interface PluginContext {
     getSearchBoxEl: () => HTMLElement | null;
     showPanel: (id: string) => void;
     hidePanel: (id: string) => void;
+    // Whether one of this plugin's panels is the active
+    // (shown) panel in the dock. A plugin uses this to
+    // show its board content only in the context it
+    // belongs to — for example, a slide frame only while
+    // its panel is open. False when the dock is closed,
+    // even if the panel was last active.
+    isPanelActive: (id: string) => boolean;
     getPanelElement: (id: string) => HTMLElement | null;
   };
   cards: {
@@ -913,13 +924,27 @@ function updatePanelDock(): void {
 function setActivePanel(key: string): void {
   const p = panels.get(key);
   if (!p || p.hidden) return;
+  // The board re-renders when the active panel changes,
+  // so a plugin whose board content depends on its panel
+  // being open — a slide frame, for example — appears and
+  // disappears with the panel. Clicking the already-active
+  // tab changes nothing, so it renders nothing. No render
+  // while plugins are still loading: the board renders once
+  // after they all activate.
+  const prev = activePanelKey;
   activePanelKey = key;
   updatePanelDock();
+  if (pluginsReady && prev !== key) host?.render();
 }
 
 function setDockVisible(visible: boolean): void {
+  // Same as setActivePanel: closing the dock leaves no
+  // panel open, so panel-dependent board content hides,
+  // and opening it shows it again.
+  const prev = dockVisible;
   dockVisible = visible;
   updatePanelDock();
+  if (pluginsReady && prev !== visible) host?.render();
 }
 
 export function pluginsLoaded(): boolean {
@@ -1303,6 +1328,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         updatePanelDock();
         host?.render();
       },
+      isPanelActive: (id: string) => dockVisible && activePanelKey === `${pluginId}:${id}`,
       getPanelElement: (id: string) => {
         const p = panels.get(`${pluginId}:${id}`);
         return p ? p.body : null;
