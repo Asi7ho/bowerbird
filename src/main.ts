@@ -1717,6 +1717,20 @@ async function init(): Promise<void> {
       undoStore.save(); render();
       return id;
     },
+    addItems: (items) => {
+      // One save for the whole batch, so building a structure
+      // is one undo step, not one per card: addItem saves
+      // after every item, and a mind map of eleven cards
+      // would otherwise take eleven undos to undo.
+      const ids: number[] = [];
+      for (const { kind, pos, size } of items) {
+        const id = allocId();
+        board.items.push({ id, pos, size, group: null, kind });
+        ids.push(id);
+      }
+      if (ids.length > 0) { undoStore.save(); render(); }
+      return ids;
+    },
     updateItem: (id, patch) => {
       const it = boardGet(board, id);
       if (!it) return false;
