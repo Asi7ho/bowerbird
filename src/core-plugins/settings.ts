@@ -46,6 +46,7 @@ const SHORTCUTS: Array<[string, string]> = [
   ["V", "Select tool"],
   ["L", "Lasso selection"],
   ["P", "Pen tool"],
+  ["X", "Eraser tool"],
   ["A", "Arrow (connector) tool"],
   ["R", "Rectangle tool"],
   ["E", "Ellipse tool"],

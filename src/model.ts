@@ -296,6 +296,33 @@ export function hitTest(board: Board, world: Pt): number | null {
   return null;
 }
 
+// Every stroke the eraser touches: all stroke ids whose
+// segments come within `radius` of the point, in world
+// units. The test is the same as the stroke branch of
+// itemHit — the eraser circle overlaps the stroke when
+// a segment passes within radius plus half the stroke
+// width — but it collects every hit, not just the
+// topmost one, so one sweep can erase several strokes.
+export function strokesWithin(board: Board, world: Pt, radius: number): number[] {
+  const out: number[] = [];
+  for (const it of board.items) {
+    if (!("Stroke" in it.kind)) continue;
+    const { points, width } = it.kind.Stroke;
+    const tol = radius + width / 2;
+    const rot = itemRotation(it);
+    const p = rot !== 0 ? rotatePoint(world, centre(it), -rot) : world;
+    if (p.x < it.pos.x - tol || p.x > it.pos.x + it.size.w + tol ||
+        p.y < it.pos.y - tol || p.y > it.pos.y + it.size.h + tol) continue;
+    let hit = false;
+    for (let i = 0; i + 1 < points.length; i++) {
+      if (distToSegment(p, points[i], points[i + 1]) <= tol) { hit = true; break; }
+    }
+    if (!hit) hit = points.some((q) => Math.hypot(q.x - p.x, q.y - p.y) <= tol);
+    if (hit) out.push(it.id);
+  }
+  return out;
+}
+
 export function marquee(board: Board, a: Pt, b: Pt): number[] {
   const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x);
   const y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);

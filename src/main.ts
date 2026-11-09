@@ -14,7 +14,7 @@ import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
   anchorPoint, boardGet, centre, clippedEnds, estimateTextHeight,
   hitTest, itemBounds, itemRotation, lassoSelect, marquee, moveSelection, parseHex,
-  resizeItem, rotatePoint, select,
+  resizeItem, rotatePoint, select, strokesWithin,
 } from "./model";
 import { welcomeBoard } from "./welcome";
 import {
@@ -29,7 +29,7 @@ import {
 
 // ---------------------------------------------------------------- state
 
-// Core tools are select/pen/connector. Plugin tools are strings of
+// Core tools are select/pen/connector/eraser. Plugin tools are strings of
 // the form "plugin:<pluginId>:<toolId>" (see src/plugins.ts); the
 // type stays open so a plugin tool is a valid Tool.
 type Tool = string;
@@ -67,6 +67,7 @@ let drag: null
   | { kind: "move"; lastWorld: Pt; moved: boolean }
   | { kind: "stroke"; points: Pt[] }
   | { kind: "lasso"; points: Pt[] }
+  | { kind: "erase"; erased: boolean }
   | { kind: "connector"; from: Anchor; current: Pt }
   | { kind: "marquee"; start: Pt; current: Pt }
   | { kind: "shape"; shape: ShapeKind; start: Pt; current: Pt }
@@ -75,6 +76,45 @@ let drag: null
 let pluginToolDown = false;
 let toastTimer: ReturnType<typeof setTimeout> | null = null;
 let wheelSaveTimer: ReturnType<typeof setTimeout> | null = null;
+// The eraser's reach, in world units: a stroke is erased
+// when the eraser circle overlaps it. 12 is big enough
+// that a sweep feels forgiving, small enough to pick one
+// stroke out of a cluster.
+const ERASER_RADIUS = 12;
+// The ring that shows the eraser's reach at the cursor.
+// It is a body-level div, not part of the board SVG, so
+// renderSvgOnly() never wipes it mid-drag.
+let eraserRing: HTMLDivElement | null = null;
+function ensureEraserRing(): HTMLDivElement {
+  if (!eraserRing) {
+    eraserRing = document.createElement("div");
+    eraserRing.id = "eraser-ring";
+    document.body.appendChild(eraserRing);
+  }
+  return eraserRing;
+}
+function updateEraserRing(clientX: number, clientY: number, show: boolean): void {
+  const ring = ensureEraserRing();
+  if (!show) { ring.style.display = "none"; return; }
+  const d = ERASER_RADIUS * 2 * board.camera.zoom;
+  ring.style.display = "block";
+  ring.style.width = `${d}px`;
+  ring.style.height = `${d}px`;
+  ring.style.left = `${clientX - d / 2}px`;
+  ring.style.top = `${clientY - d / 2}px`;
+}
+// Remove every stroke the eraser touches at this point.
+// Returns true when at least one stroke went. The board
+// is not saved here: the drag saves once, on mouseup, so
+// a whole sweep is one undo step.
+function eraseAt(world: Pt): boolean {
+  const ids = strokesWithin(board, world, ERASER_RADIUS);
+  if (ids.length === 0) return false;
+  board.items = board.items.filter((it) => !ids.includes(it.id));
+  selected = selected.filter((id) => !ids.includes(id));
+  renderSvgOnly();
+  return true;
+}
 // Trackpad zoom coalescing: a pinch sends wheel events at
 // ~120 Hz, and every tick used to rebuild the card DOM
 // whenever the visible set changed — re-creating images
@@ -812,6 +852,7 @@ function setTool(t: Tool): void {
   // switching to Select.
   lassoMode = false;
   drag = null;
+  updateEraserRing(0, 0, false);
   // The toolbar plugin follows the tool through the "tool"
   // plugin event, so it can highlight the active tool and
   // show the right flyout without polling. The plugin tool
@@ -931,6 +972,11 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
   }
   if (tool === "select" && lassoMode) {
     drag = { kind: "lasso", points: [world] };
+    return;
+  }
+  if (tool === "eraser") {
+    drag = { kind: "erase", erased: false };
+    if (eraseAt(world)) drag.erased = true;
     return;
   }
   if (tool === "connector") {
@@ -1116,6 +1162,9 @@ window.addEventListener("mousemove", (e: MouseEvent) => {
           boardEl.style.cursor = "default";
         } else if (tool === "pen" || tool === "connector" || tool === "rect" || tool === "ellipse" || (tool === "select" && lassoMode)) {
           boardEl.style.cursor = "crosshair";
+        } else if (tool === "eraser") {
+          // The ring is the cursor while erasing.
+          boardEl.style.cursor = "none";
         } else if (spaceDown) {
           boardEl.style.cursor = "grab";
         } else if (selected.length === 1 && rotateHit(selected[0], w)) {
@@ -1129,9 +1178,16 @@ window.addEventListener("mousemove", (e: MouseEvent) => {
         }
       });
     }
+    // The eraser ring follows the mouse directly, not
+    // through the rAF above: it is the cursor, so it must
+    // not lag a frame. It shows only over the board itself,
+    // never over the toolbar, panels, title bar or settings.
+    const overBoard = !(e.target as HTMLElement).closest("#toolbar, #settings-backdrop, #plugin-panels, #title-bar, #plugin-overlays, #plugin-view, input, textarea, select");
+    const showRing = tool === "eraser" && overBoard && !isSettingsUIOpen() && editingId === null && getActiveView() === "board";
+    updateEraserRing(e.clientX, e.clientY, showRing);
     return;
   }
-  boardEl.style.cursor = drag.kind === "resize" ? "nwse-resize" : drag.kind === "rotate" ? "grabbing" : drag.kind === "pan" ? "grabbing" : drag.kind === "move" ? "move" : "default";
+  boardEl.style.cursor = drag.kind === "resize" ? "nwse-resize" : drag.kind === "rotate" ? "grabbing" : drag.kind === "pan" ? "grabbing" : drag.kind === "move" ? "move" : drag.kind === "erase" ? "none" : "default";
   if (drag.kind === "pan") {
     board.camera.x -= (winPt.x - drag.last.x) / board.camera.zoom;
     board.camera.y -= (winPt.y - drag.last.y) / board.camera.zoom;
@@ -1168,6 +1224,9 @@ window.addEventListener("mousemove", (e: MouseEvent) => {
       drag.points.push(world);
       updateLassoPreview(drag.points);
     }
+  } else if (drag.kind === "erase") {
+    if (eraseAt(world)) drag.erased = true;
+    updateEraserRing(e.clientX, e.clientY, true);
   } else if (drag.kind === "connector") {
     drag.current = world;
     const a = anchorPoint(board, drag.from);
@@ -1269,6 +1328,10 @@ window.addEventListener("mouseup", (e: MouseEvent) => {
     } else {
       selected = lassoSelect(board, d.points);
     }
+  } else if (d.kind === "erase") {
+    // A sweep that erased anything is one undo step. A
+    // click that erased nothing leaves no step behind.
+    if (d.erased) undoStore.save();
   } else if (d.kind === "connector") {
     const to = hitTestWithFrames(board, world);
     const toItem = to !== null ? boardGet(board, to) : null;
@@ -1330,7 +1393,7 @@ window.addEventListener("mouseup", (e: MouseEvent) => {
   // their final geometry). A move/resize that never moved was a
   // click, not a drag: rebuilding here would destroy the card
   // button just pressed, so its click would never fire.
-  if (d.kind === "stroke" || d.kind === "connector" || d.kind === "marquee" || d.kind === "shape" || d.kind === "lasso" || (d.kind === "rotate" && d.moved)) {
+  if (d.kind === "stroke" || d.kind === "connector" || d.kind === "marquee" || d.kind === "shape" || d.kind === "lasso" || (d.kind === "erase" && d.erased) || (d.kind === "rotate" && d.moved)) {
     render();
   } else if ((d.kind === "move" || d.kind === "resize") && d.moved) {
     render();
@@ -1345,6 +1408,10 @@ window.addEventListener("mouseup", (e: MouseEvent) => {
   // too, for the same reason. A lasso drag ends the same way.
   if (d.kind === "marquee" || d.kind === "lasso") updateSelection();
 });
+
+// The ring must not freeze at the edge when the pointer
+// leaves the window mid-erase.
+document.addEventListener("mouseleave", () => updateEraserRing(0, 0, false));
 
 window.addEventListener("wheel", (e: WheelEvent) => {
   // A wheel over a plugin panel or a plugin view must scroll
@@ -1616,6 +1683,7 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
     setTool("select");
     lassoMode = next;
   }
+  else if (e.key.toLowerCase() === "x" && !ctrl) setTool("eraser");
   else if (e.key === "[" && !ctrl) rotateSelected(-15);
   else if (e.key === "]" && !ctrl) rotateSelected(15);
   else if (e.key.toLowerCase() === "g" && ctrl) {

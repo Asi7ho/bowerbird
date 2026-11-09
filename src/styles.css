@@ -677,6 +677,18 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 }
 #toast.show { display: block; }
 
+/* The eraser's reach, drawn at the cursor while the eraser
+   tool is active. A white ring with a dark outline, so it
+   reads on a white board and on a dark stroke alike. The
+   size and position are set from the code (the radius in
+   world units, scaled by the zoom). */
+#eraser-ring {
+  position: fixed; display: none; pointer-events: none; z-index: 60;
+  border: 1.5px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 1.5px rgba(29, 29, 31, 0.55);
+  border-radius: 50%;
+}
+
 /* Search box, now in the title bar: centred in the bar, a
    quiet grey field on the opaque white bar, not a floating
    frosted card over the board. The field and its controls
