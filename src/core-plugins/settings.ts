@@ -285,8 +285,10 @@ function renderPluginSettings(): void {
     // The disable warning: when this plugin is awaiting a
     // disable confirmation, say how many of its cards are on
     // the board and what will happen to them, so the user
-    // decides with the consequence in front of them.
-    const confirming = confirmingDisable?.id === lp.id ? confirmingDisable : null;
+    // decides with the consequence in front of them. Only an
+    // active plugin can be confirming — an off plugin never
+    // shows a disable confirm, whatever the stored state is.
+    const confirming = lp.active && confirmingDisable?.id === lp.id ? confirmingDisable : null;
     if (confirming) {
       const noun = confirming.count === 1 ? "card" : "cards";
       row += `<p class="meta">${confirming.count} ${noun} on the board will show as placeholders until you re-enable this plugin.</p>`;
@@ -323,6 +325,11 @@ function renderPluginSettings(): void {
   html += `<button id="plugins-reset">Reset plugins</button>`;
   list.innerHTML = html;
   el("plugins-reset")?.addEventListener("click", async () => {
+    // Resetting turns every extra off at once, so a disable
+    // confirmation left open on one of them no longer
+    // applies — drop it, or the row would keep showing a
+    // "Disable anyway" confirm on a plugin that is already off.
+    confirmingDisable = null;
     await api!.plugins.reset();
     renderShortcutsTable();
     renderPluginSettingsSections();
