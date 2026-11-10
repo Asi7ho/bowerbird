@@ -13,7 +13,7 @@ import * as coreToolbar from "./core-plugins/toolbar";
 import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
   anchorPoint, boardGet, centre, clippedEnds, estimateTextHeight,
-  hitTest, itemBounds, itemRotation, marquee, moveSelection, parseHex,
+  hitTest, itemBounds, itemRotation, lassoSelect, marquee, moveSelection, parseHex,
   resizeItem, rotatePoint, select,
 } from "./model";
 import { welcomeBoard } from "./welcome";
@@ -29,7 +29,7 @@ import {
 
 // ---------------------------------------------------------------- state
 
-// Core tools are select/pen/connector. Plugin tools are strings of
+// Core tools are select/pen/connector/lasso. Plugin tools are strings of
 // the form "plugin:<pluginId>:<toolId>" (see src/plugins.ts); the
 // type stays open so a plugin tool is a valid Tool.
 type Tool = string;
@@ -61,6 +61,7 @@ let drag: null
   | { kind: "pan"; last: Pt }
   | { kind: "move"; lastWorld: Pt; moved: boolean }
   | { kind: "stroke"; points: Pt[] }
+  | { kind: "lasso"; points: Pt[] }
   | { kind: "connector"; from: Anchor; current: Pt }
   | { kind: "marquee"; start: Pt; current: Pt }
   | { kind: "shape"; shape: ShapeKind; start: Pt; current: Pt }
@@ -919,6 +920,10 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
     drag = { kind: "stroke", points: [world] };
     return;
   }
+  if (tool === "lasso") {
+    drag = { kind: "lasso", points: [world] };
+    return;
+  }
   if (tool === "connector") {
     const hit = hitTestWithFrames(board, world);
     const hitItem = hit !== null ? boardGet(board, hit) : null;
@@ -1062,6 +1067,16 @@ function updateLiveStroke(points: Pt[]): void {
   el.setAttribute("stroke-linecap", "round");
   el.setAttribute("stroke-linejoin", "round");
 }
+// The lasso loop, drawn live while dragging. The path is
+// closed (the Z joins the last point back to the first),
+// so the fill shows the region the loop will select.
+function updateLassoPreview(points: Pt[]): void {
+  const el = dragPreview("lasso-preview", "path");
+  el.setAttribute("d", points.map((pt, i) => `${i === 0 ? "M" : "L"}${pt.x},${pt.y}`).join(" ") + " Z");
+  el.setAttribute("fill", "rgba(0,122,255,0.08)");
+  el.setAttribute("stroke", ACCENT);
+  el.setAttribute("stroke-width", "1");
+}
 function updateDraggedCards(ids: number[]): void {
   // Cards are world-space now, so moving one is a style change on
   // its own node — no markdown, no image re-parse, no rebuild.
@@ -1090,7 +1105,7 @@ window.addEventListener("mousemove", (e: MouseEvent) => {
         if (!w) return;
         if (isSettingsUIOpen() || editingId !== null) {
           boardEl.style.cursor = "default";
-        } else if (tool === "pen" || tool === "connector" || tool === "rect" || tool === "ellipse") {
+        } else if (tool === "pen" || tool === "connector" || tool === "rect" || tool === "ellipse" || tool === "lasso") {
           boardEl.style.cursor = "crosshair";
         } else if (spaceDown) {
           boardEl.style.cursor = "grab";
@@ -1137,6 +1152,12 @@ window.addEventListener("mousemove", (e: MouseEvent) => {
     if (Math.hypot(world.x - last.x, world.y - last.y) > 2 / board.camera.zoom) {
       drag.points.push(world);
       updateLiveStroke(drag.points);
+    }
+  } else if (drag.kind === "lasso") {
+    const last = drag.points[drag.points.length - 1];
+    if (Math.hypot(world.x - last.x, world.y - last.y) > 2 / board.camera.zoom) {
+      drag.points.push(world);
+      updateLassoPreview(drag.points);
     }
   } else if (drag.kind === "connector") {
     drag.current = world;
@@ -1226,6 +1247,19 @@ window.addEventListener("mouseup", (e: MouseEvent) => {
       }
       undoStore.save();
     }
+  } else if (d.kind === "lasso") {
+    // A click, not a loop: select what is under the cursor,
+    // the way the select tool does. A real loop selects
+    // everything it touches. Either way it is only a
+    // selection change, never an undo step.
+    const xs = d.points.map((p) => p.x), ys = d.points.map((p) => p.y);
+    const w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys);
+    if (d.points.length < 3 || (w < 4 && h < 4)) {
+      const hit = hitTestWithFrames(board, world);
+      selected = hit !== null ? [hit] : [];
+    } else {
+      selected = lassoSelect(board, d.points);
+    }
   } else if (d.kind === "connector") {
     const to = hitTestWithFrames(board, world);
     const toItem = to !== null ? boardGet(board, to) : null;
@@ -1287,7 +1321,7 @@ window.addEventListener("mouseup", (e: MouseEvent) => {
   // their final geometry). A move/resize that never moved was a
   // click, not a drag: rebuilding here would destroy the card
   // button just pressed, so its click would never fire.
-  if (d.kind === "stroke" || d.kind === "connector" || d.kind === "marquee" || d.kind === "shape" || (d.kind === "rotate" && d.moved)) {
+  if (d.kind === "stroke" || d.kind === "connector" || d.kind === "marquee" || d.kind === "shape" || d.kind === "lasso" || (d.kind === "rotate" && d.moved)) {
     render();
   } else if ((d.kind === "move" || d.kind === "resize") && d.moved) {
     render();
@@ -1299,8 +1333,8 @@ window.addEventListener("mouseup", (e: MouseEvent) => {
   // marquee-selecting — and anything listening for it, like
   // a plugin panel enabling its buttons for the selection,
   // stays stale. The toolbar and resize handle update here
-  // too, for the same reason.
-  if (d.kind === "marquee") updateSelection();
+  // too, for the same reason. A lasso drag ends the same way.
+  if (d.kind === "marquee" || d.kind === "lasso") updateSelection();
 });
 
 window.addEventListener("wheel", (e: WheelEvent) => {
@@ -1564,6 +1598,7 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   else if (e.key.toLowerCase() === "a" && !ctrl) setTool("connector");
   else if (e.key.toLowerCase() === "r" && !ctrl) setTool("rect");
   else if (e.key.toLowerCase() === "e" && !ctrl) setTool("ellipse");
+  else if (e.key.toLowerCase() === "l" && !ctrl) setTool("lasso");
   else if (e.key === "[" && !ctrl) rotateSelected(-15);
   else if (e.key === "]" && !ctrl) rotateSelected(15);
   else if (e.key.toLowerCase() === "g" && ctrl) {

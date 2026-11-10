@@ -22,7 +22,7 @@ export const manifest: PluginManifest = {
   id: "core-toolbar",
   name: "Toolbar",
   version: "1.0.0",
-  description: "Tools, pen, shapes, zoom, delete and settings.",
+  description: "Tools, pen, lasso, shapes, zoom, delete and settings.",
   main: "toolbar.js",
   permissions: ["board:read", "board:write", "pen"],
 };
@@ -34,6 +34,7 @@ const NOTE_COLOURS = ["#FFFFFF", "#FEF3C7", "#FCE7F3", "#DCFCE7", "#DBEAFE", "#F
 
 const ICONS = {
   select: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5 19 12l-7.5 1.4L8.6 20.5 6 3.5Z" /></svg>',
+  lasso: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6" stroke-dasharray="3 2.5" /><path d="M14.5 14.5 20 20" /></svg>',
   pen: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 19.5 5.6 15 16.2 4.4a2.12 2.12 0 0 1 3 3L8.6 18l-4.1 1.5Z" fill="none"/><path d="M14.5 6.5l3 3" /></svg>',
   connector: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 20 4" /><path d="M14 4h6v6" /></svg>',
   zoomOut: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg>',
@@ -67,6 +68,7 @@ export function activate(api: PluginContext): void {
   }
 
   const selectBtn = toolButton("tool-select", "Select (V)", "Select", ICONS.select, () => api.ui.setTool("select"));
+  const lassoBtn = toolButton("tool-lasso", "Lasso (L)", "Lasso", ICONS.lasso, () => api.ui.setTool("lasso"));
   const penBtn = toolButton("tool-pen", "Pen (P)", "Pen", ICONS.pen, () => api.ui.setTool("pen"));
   const connectorBtn = toolButton("tool-connector", "Arrow (A)", "Arrow", ICONS.connector, () => api.ui.setTool("connector"));
   // The shape button shows the shape last chosen, and the
@@ -184,6 +186,7 @@ export function activate(api: PluginContext): void {
 
     const setActive = (el: HTMLElement, on: boolean) => el.classList.toggle("active", on);
     setActive(selectBtn, tool === "select");
+    setActive(lassoBtn, tool === "lasso");
     setActive(penBtn, tool === "pen");
     setActive(connectorBtn, tool === "connector");
 
