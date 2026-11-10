@@ -197,6 +197,18 @@ export function activate(api: PluginContext): void {
         shapeBtn.title = meta.key ? `${meta.label} (${meta.key})` : meta.label;
         shapeBtn.setAttribute("aria-label", meta.label);
       }
+    } else if (!shapeBtn.dataset.shape) {
+      // Before any shape is used there is no last shape, so
+      // the button starts on the first shape — the one a
+      // click activates. Without this it kept its initial
+      // select icon, a duplicate of Select.
+      const first = api.shapes.list()[0];
+      if (first) {
+        shapeBtn.dataset.shape = first.kind;
+        shapeBtn.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${first.svg}</svg>`;
+        shapeBtn.title = first.key ? `${first.label} (${first.key})` : first.label;
+        shapeBtn.setAttribute("aria-label", first.label);
+      }
     }
 
     // Shape picker: shown when a shape tool is active.
