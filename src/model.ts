@@ -564,6 +564,90 @@ export function renderMarkdownHtml(text: string, _baseSize: number): string {
   return renderNoteHtml(text);
 }
 
+// Syntax highlighting for fenced code blocks in text cards.
+// A small built-in tokenizer, no dependency: a handful of
+// languages, everything else gets strings, comments and
+// numbers. Colours are the app's own palette, kept muted.
+interface CodeLang {
+  keywords: string[];
+  lineComments: string[];
+  blockComments: [string, string][];
+  strings: string[];
+  tripleStrings?: string[];
+  tagNames?: boolean;
+  cssProps?: boolean;
+}
+const JS_KEYWORDS = ["const", "let", "var", "function", "return", "if", "else", "for", "while", "class", "extends", "new", "typeof", "import", "from", "export", "default", "async", "await", "try", "catch", "finally", "throw", "switch", "case", "break", "continue", "this", "super", "null", "undefined", "true", "false", "of", "in", "instanceof", "void", "delete", "yield", "static", "get", "set"];
+const CODE_LANGS: Record<string, CodeLang> = {
+  js: { keywords: JS_KEYWORDS, lineComments: ["//"], blockComments: [["/*", "*/"]], strings: ["\"", "'", "`"] },
+  ts: { keywords: [...JS_KEYWORDS, "interface", "type", "enum", "namespace", "implements", "readonly", "private", "public", "protected", "abstract", "declare"], lineComments: ["//"], blockComments: [["/*", "*/"]], strings: ["\"", "'", "`"] },
+  python: { keywords: ["def", "return", "if", "elif", "else", "for", "while", "class", "import", "from", "as", "pass", "None", "True", "False", "and", "or", "not", "in", "is", "lambda", "with", "try", "except", "finally", "raise", "global", "nonlocal", "assert", "del", "yield", "async", "await"], lineComments: ["#"], blockComments: [], strings: ["\"", "'"], tripleStrings: ["\"\"\"", "'''"] },
+  json: { keywords: ["true", "false", "null"], lineComments: [], blockComments: [], strings: ["\""] },
+  sh: { keywords: ["if", "then", "else", "elif", "fi", "for", "while", "do", "done", "case", "esac", "function", "return", "in", "echo", "cd", "export", "local", "read", "exit"], lineComments: ["#"], blockComments: [], strings: ["\"", "'"] },
+  css: { keywords: [], lineComments: [], blockComments: [["/*", "*/"]], strings: ["\"", "'"], cssProps: true },
+  html: { keywords: [], lineComments: [], blockComments: [["<!--", "-->"]], strings: ["\"", "'"], tagNames: true },
+};
+const CODE_LANG_ALIASES: Record<string, string> = {
+  javascript: "js", typescript: "ts", py: "python", bash: "sh", shell: "sh", xml: "html",
+};
+function highlightCode(code: string, langRaw: string): string {
+  const key = CODE_LANG_ALIASES[langRaw.toLowerCase()] ?? langRaw.toLowerCase();
+  const lang: CodeLang = CODE_LANGS[key] ?? { keywords: [], lineComments: ["//", "#"], blockComments: [["/*", "*/"]], strings: ["\"", "'"] };
+  const span = (cls: string, s: string): string => `<span class="tok-${cls}">${escapeHtml(s)}</span>`;
+  let out = "", i = 0;
+  const n = code.length;
+  while (i < n) {
+    if (lang.tripleStrings) {
+      const t = lang.tripleStrings.find((q) => code.startsWith(q, i));
+      if (t) { const end = code.indexOf(t, i + 3); const j = end === -1 ? n : end + 3; out += span("str", code.slice(i, j)); i = j; continue; }
+    }
+    const bc = lang.blockComments.find(([o]) => code.startsWith(o, i));
+    if (bc) { const end = code.indexOf(bc[1], i + bc[0].length); const j = end === -1 ? n : end + bc[1].length; out += span("com", code.slice(i, j)); i = j; continue; }
+    const lc = lang.lineComments.find((c) => code.startsWith(c, i));
+    if (lc) { let j = code.indexOf("\n", i); if (j === -1) j = n; out += span("com", code.slice(i, j)); i = j; continue; }
+    const q = lang.strings.find((qq) => code[i] === qq);
+    if (q) {
+      let j = i + 1;
+      while (j < n) {
+        if (code[j] === "\\") { j += 2; continue; }
+        if (code[j] === q) { j++; break; }
+        if (code[j] === "\n" && q !== "`") break;
+        j++;
+      }
+      out += span("str", code.slice(i, j)); i = j; continue;
+    }
+    if (lang.tagNames && code[i] === "<") {
+      const m = /^<\/?([a-zA-Z][\w-]*)/.exec(code.slice(i));
+      if (m) { out += escapeHtml(code.slice(i, i + m[0].length - m[1].length)) + span("kw", m[1]); i += m[0].length; continue; }
+    }
+    const hex = /^0x[0-9a-fA-F]+/.exec(code.slice(i));
+    if (hex && (i === 0 || !/[\w$]/.test(code[i - 1]))) { out += span("num", hex[0]); i += hex[0].length; continue; }
+    const num = /^\d+(?:\.\d+)?/.exec(code.slice(i));
+    if (num && (i === 0 || !/[\w$]/.test(code[i - 1]))) { out += span("num", num[0]); i += num[0].length; continue; }
+    const id = /^[A-Za-z_$][\w$-]*/.exec(code.slice(i));
+    if (id) {
+      const word = id[0];
+      if (lang.keywords.includes(word)) out += span("kw", word);
+      else if (lang.cssProps && code[i + word.length] === ":") out += span("kw", word);
+      else if (code[i + word.length] === "(") out += span("fn", word);
+      else out += escapeHtml(word);
+      i += word.length; continue;
+    }
+    out += escapeHtml(code[i]); i++;
+  }
+  return out;
+}
+
+// Flip one checklist line ([ ] <-> [x]); the state lives in
+// the markdown text itself, so a toggle is a text edit and
+// one undo step. Returns the new line, or null when the
+// line is not a task.
+export function toggleTaskLine(line: string): string | null {
+  const m = /^([-*]\s+)\[([ xX])\](\s+.*|)$/.exec(line);
+  if (!m) return null;
+  return `${m[1]}[${m[2] === " " ? "x" : " "}]${m[3]}`;
+}
+
 function renderNoteHtml(text: string): string {
   // Render blocks, keeping link URLs: walk the raw lines and render
   // inline markup with a link-aware pass instead of parseInline's
@@ -593,14 +677,22 @@ function renderNoteHtml(text: string): string {
     const line = lines[i];
     if (line.trim() === "") { i++; continue; }
     if (line.startsWith("```")) {
+      const lang = line.slice(3).trim();
       const codeLines: string[] = []; i++;
       while (i < lines.length && !lines[i].startsWith("```")) { codeLines.push(lines[i]); i++; }
       i++;
-      html += `<pre>${escapeHtml(codeLines.join("\n"))}</pre>`;
+      html += `<pre>${highlightCode(codeLines.join("\n"), lang)}</pre>`;
       continue;
     }
     const heading = /^(#{1,3})\s+(.*)$/.exec(line);
     if (heading) { const lvl = heading[1].length; html += `<h${lvl}>${inlineHtml(heading[2])}</h${lvl}>`; i++; continue; }
+    const task = /^[-*]\s+\[([ xX])\](?:\s+(.*))?$/.exec(line);
+    if (task) {
+      const checked = task[1] !== " ";
+      const label = task[2] === undefined ? "" : `<span>${inlineHtml(task[2])}</span>`;
+      html += `<p class="task"><input type="checkbox" data-action="toggle-task" data-line="${i}"${checked ? " checked" : ""}>${label}</p>`;
+      i++; continue;
+    }
     const bullet = /^[-*]\s+(.*)$/.exec(line);
     if (bullet) { html += `<p>• ${inlineHtml(bullet[1])}</p>`; i++; continue; }
     const ordered = /^(\d+)\.\s+(.*)$/.exec(line);
