@@ -14,7 +14,7 @@ import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
   anchorPoint, boardGet, centre, clippedEnds, estimateTextHeight,
   hitTest, itemBounds, itemRotation, lassoSelect, marquee, moveSelection, parseHex,
-  resizeItem, rotatePoint, select, strokesWithin,
+  resizeItem, rotatePoint, select, strokesWithin, toggleTaskLine,
 } from "./model";
 import { welcomeBoard } from "./welcome";
 import {
@@ -1052,6 +1052,25 @@ cardsEl.addEventListener("click", (e: MouseEvent) => {
     const pid = Number(pbtn.dataset.id);
     const pit = boardGet(board, pid);
     if (pit && handlePluginCardAction(pbtn.dataset.pluginAction ?? "", pit)) return;
+  }
+  const task = target.closest("[data-action=\"toggle-task\"]") as HTMLElement | null;
+  if (task) {
+    // The browser would toggle the checkbox itself after
+    // this click; the re-render below replaces the node, so
+    // suppress that and let the text be the state instead.
+    e.preventDefault();
+    const cardEl = task.closest(".card") as HTMLElement | null;
+    const it = boardGet(board, Number(cardEl?.dataset.id));
+    if (!it || !("Text" in it.kind)) return;
+    const lineNo = Number(task.dataset.line);
+    const lines = it.kind.Text.text.split("\n");
+    const next = toggleTaskLine(lines[lineNo] ?? "");
+    if (next === null) return;
+    lines[lineNo] = next;
+    it.kind.Text.text = lines.join("\n");
+    undoStore.save();
+    render();
+    return;
   }
   const btn = target.closest("[data-action]") as HTMLElement | null;
   if (!btn) return;

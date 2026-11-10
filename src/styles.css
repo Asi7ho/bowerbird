@@ -295,6 +295,13 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   background: var(--bg-system); border-radius: 4px; padding: 1px 4px;
   font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.9em;
 }
+.card .note-body pre .tok-kw { color: #6a4c93; }
+.card .note-body pre .tok-str { color: #2a9d8f; }
+.card .note-body pre .tok-com { color: #86868b; }
+.card .note-body pre .tok-num { color: #b56576; }
+.card .note-body pre .tok-fn { color: #2e86ab; }
+.card .note-body .task { display: flex; align-items: flex-start; gap: 6px; }
+.card .note-body .task input[type="checkbox"] { flex: none; margin: 3px 0 0; accent-color: var(--accent); }
 .card .note-body blockquote {
   margin: 0 0 6px; padding-left: 10px; color: var(--grey);
   border-left: 2px solid var(--separator);
