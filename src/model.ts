@@ -305,6 +305,42 @@ export function marquee(board: Board, a: Pt, b: Pt): number[] {
   }).map((it) => it.id);
 }
 
+// Whether a point is inside a polygon (ray casting). The
+// lasso loop is closed implicitly: the last point connects
+// back to the first.
+export function pointInPolygon(p: Pt, poly: Pt[]): boolean {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if ((a.y > p.y) !== (b.y > p.y) && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+
+// Freehand selection: every item whose bounds touch the
+// loop. An item counts when its centre or any corner is
+// inside, or when a loop edge crosses its bounds — the
+// same intersection semantics as the rectangular marquee,
+// so a long stroke crossing the loop is selected, not
+// just one whose centre happens to fall inside it.
+export function lassoSelect(board: Board, points: Pt[]): number[] {
+  if (points.length < 3) return [];
+  return board.items.filter((it) => {
+    const [p, s] = itemBounds(board, it);
+    if (pointInPolygon({ x: p.x + s.w / 2, y: p.y + s.h / 2 }, points)) return true;
+    const corners = [
+      { x: p.x, y: p.y }, { x: p.x + s.w, y: p.y },
+      { x: p.x, y: p.y + s.h }, { x: p.x + s.w, y: p.y + s.h },
+    ];
+    if (corners.some((c) => pointInPolygon(c, points))) return true;
+    const rect = { x: p.x, y: p.y, w: s.w, h: s.h };
+    for (let i = 0; i < points.length; i++) {
+      if (segmentIntersectsRect(points[i], points[(i + 1) % points.length], rect)) return true;
+    }
+    return false;
+  }).map((it) => it.id);
+}
+
 export function allocId(board: Board): number {
   board.next_id += 1;
   return board.next_id;
