@@ -29,7 +29,7 @@ import {
 
 // ---------------------------------------------------------------- state
 
-// Core tools are select/pen/connector/lasso. Plugin tools are strings of
+// Core tools are select/pen/connector. Plugin tools are strings of
 // the form "plugin:<pluginId>:<toolId>" (see src/plugins.ts); the
 // type stays open so a plugin tool is a valid Tool.
 type Tool = string;
@@ -53,6 +53,11 @@ let currentBuildId = "dev";
 // result into the new board's card with the same id.
 let boardGeneration = 0;
 let tool: Tool = "select";
+// Lasso is not a tool of its own — it is a mode of Select,
+// toggled by L, with no toolbar button. While it is on, a
+// drag on the board draws a lasso loop instead of the
+// rectangular marquee.
+let lassoMode = false;
 let penColor = PALETTE[0];
 let selected: number[] = [];
 let spaceDown = false;
@@ -802,6 +807,10 @@ function commitEditingIfAny(): void {
 
 function setTool(t: Tool): void {
   tool = t;
+  // Every tool switch leaves lasso mode: it belongs to
+  // Select only. The L handler turns it back on after
+  // switching to Select.
+  lassoMode = false;
   drag = null;
   // The toolbar plugin follows the tool through the "tool"
   // plugin event, so it can highlight the active tool and
@@ -920,7 +929,7 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
     drag = { kind: "stroke", points: [world] };
     return;
   }
-  if (tool === "lasso") {
+  if (tool === "select" && lassoMode) {
     drag = { kind: "lasso", points: [world] };
     return;
   }
@@ -1105,7 +1114,7 @@ window.addEventListener("mousemove", (e: MouseEvent) => {
         if (!w) return;
         if (isSettingsUIOpen() || editingId !== null) {
           boardEl.style.cursor = "default";
-        } else if (tool === "pen" || tool === "connector" || tool === "rect" || tool === "ellipse" || tool === "lasso") {
+        } else if (tool === "pen" || tool === "connector" || tool === "rect" || tool === "ellipse" || (tool === "select" && lassoMode)) {
           boardEl.style.cursor = "crosshair";
         } else if (spaceDown) {
           boardEl.style.cursor = "grab";
@@ -1598,7 +1607,15 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   else if (e.key.toLowerCase() === "a" && !ctrl) setTool("connector");
   else if (e.key.toLowerCase() === "r" && !ctrl) setTool("rect");
   else if (e.key.toLowerCase() === "e" && !ctrl) setTool("ellipse");
-  else if (e.key.toLowerCase() === "l" && !ctrl) setTool("lasso");
+  else if (e.key.toLowerCase() === "l" && !ctrl) {
+    // L toggles lasso mode on the select tool: from any
+    // other tool it switches to Select with lasso on; on
+    // Select it flips the mode. V, or any other tool
+    // switch, turns it off again (setTool clears it).
+    const next = tool !== "select" || !lassoMode;
+    setTool("select");
+    lassoMode = next;
+  }
   else if (e.key === "[" && !ctrl) rotateSelected(-15);
   else if (e.key === "]" && !ctrl) rotateSelected(15);
   else if (e.key.toLowerCase() === "g" && ctrl) {

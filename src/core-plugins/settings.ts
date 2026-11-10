@@ -44,7 +44,7 @@ function feedbackMailto(message: string, buildId: string, platform: string): str
 
 const SHORTCUTS: Array<[string, string]> = [
   ["V", "Select tool"],
-  ["L", "Lasso tool"],
+  ["L", "Lasso selection"],
   ["P", "Pen tool"],
   ["A", "Arrow (connector) tool"],
   ["R", "Rectangle tool"],
