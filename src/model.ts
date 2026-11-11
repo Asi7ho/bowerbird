@@ -9,6 +9,27 @@ export interface Size { w: number; h: number }
 export type Anchor = { Point: Pt } | { Item: number };
 export type ShapeKind = "rect" | "ellipse" | "triangle" | "diamond" | "hexagon" | "star" | "arrow";
 
+// Shape outline fractions, in % of the shape's box. The single
+// source of truth for a shape's geometry: cards.ts renders the
+// shape from these (clip-path) and the drag preview from these,
+// and hit-testing uses them too, so the clickable area is
+// exactly the visible shape — never its empty corners.
+export const SHAPE_POLYGONS: Record<"triangle" | "diamond" | "hexagon" | "star" | "arrow", Array<[number, number]>> = {
+  triangle: [[0.5, 0], [1, 1], [0, 1]],
+  diamond: [[0.5, 0], [1, 0.5], [0.5, 1], [0, 0.5]],
+  hexagon: [[0.25, 0], [0.75, 0], [1, 0.5], [0.75, 1], [0.25, 1], [0, 0.5]],
+  star: [[0.5, 0], [0.61, 0.35], [0.98, 0.35], [0.68, 0.57], [0.79, 0.91], [0.5, 0.7], [0.21, 0.91], [0.32, 0.57], [0.02, 0.35], [0.39, 0.35]],
+  arrow: [[0, 0.4], [0.6, 0.4], [0.6, 0.15], [1, 0.5], [0.6, 0.85], [0.6, 0.6], [0, 0.6]],
+};
+
+// Outline polygon of a shape in board coords, or null when the
+// shape has no polygon (rect fills its box; ellipse is curved).
+export function shapePolygon(kind: ShapeKind, x: number, y: number, w: number, h: number): Pt[] | null {
+  const fractions = SHAPE_POLYGONS[kind as keyof typeof SHAPE_POLYGONS];
+  if (!fractions) return null;
+  return fractions.map(([fx, fy]) => ({ x: x + fx * w, y: y + fy * h }));
+}
+
 export type Kind =
   | { Text: { text: string; bold: boolean; size: number; color: string; bg?: string } }
   | { Shape: { shape: ShapeKind; fill: string } }
@@ -267,6 +288,21 @@ function itemHit(board: Board, item: Item, world: Pt): boolean {
   let p = world;
   const rot = itemRotation(item);
   if (rot !== 0) p = rotatePoint(world, centre(item), -rot);
+  // A shape is hit on its visible geometry, not its box: the
+  // empty corners of a triangle, star or arrow must not steal
+  // clicks meant for the card beneath, or block a marquee
+  // starting there. Rect fills its box; an ellipse is tested
+  // as an ellipse.
+  if ("Shape" in item.kind) {
+    const shape = item.kind.Shape.shape;
+    if (shape === "ellipse") {
+      const dx = (p.x - (item.pos.x + item.size.w / 2)) / (item.size.w / 2);
+      const dy = (p.y - (item.pos.y + item.size.h / 2)) / (item.size.h / 2);
+      return dx * dx + dy * dy <= 1;
+    }
+    const poly = shapePolygon(shape, item.pos.x, item.pos.y, item.size.w, item.size.h);
+    if (poly) return pointInPolygon(p, poly);
+  }
   return (
     p.x >= item.pos.x && p.x <= item.pos.x + item.size.w &&
     p.y >= item.pos.y && p.y <= item.pos.y + item.size.h

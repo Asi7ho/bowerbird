@@ -10,7 +10,7 @@
 // never trusted from the board.
 import type { Media } from "./media";
 import {
-  itemRotation, type Item, type ShapeKind,
+  itemRotation, SHAPE_POLYGONS, shapePolygon, type Item, type ShapeKind,
 } from "./model";
 import { getBuiltinCardHtml, getCardHtml, getCardRenderer } from "./plugins";
 
@@ -56,30 +56,20 @@ export function isShapeTool(t: string): t is ShapeKind {
 }
 // clip-path polygons, in % of the shape's box. The arrow
 // points right; rotate it (handle or [ ]) to point
-// anywhere else, like any other shape.
+// anywhere else, like any other shape. The fractions come
+// from model.ts, the single source of truth for a shape's
+// geometry, so the rendered shape and its hit area agree.
 export function shapeClipPath(kind: ShapeKind): string | null {
-  switch (kind) {
-    case "triangle": return "polygon(50% 0, 100% 100%, 0 100%)";
-    case "diamond": return "polygon(50% 0, 100% 50%, 50% 100%, 0 50%)";
-    case "hexagon": return "polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)";
-    case "star": return "polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)";
-    case "arrow": return "polygon(0 40%, 60% 40%, 60% 15%, 100% 50%, 60% 85%, 60% 60%, 0 60%)";
-    default: return null;
-  }
+  const fractions = SHAPE_POLYGONS[kind as keyof typeof SHAPE_POLYGONS];
+  if (!fractions) return null;
+  return `polygon(${fractions.map(([fx, fy]) => `${fx * 100}% ${fy * 100}%`).join(", ")})`;
 }
 // Drag-preview polygon points, in board coords for a
 // box from (x0, y0) sized w x h. Same geometry as the
 // clip-paths above, so the preview is the shape drawn.
 export function shapePreviewPoints(kind: ShapeKind, x0: number, y0: number, w: number, h: number): string {
-  const px = (fx: number, fy: number) => `${x0 + fx * w},${y0 + fy * h}`;
-  switch (kind) {
-    case "triangle": return [px(0.5, 0), px(1, 1), px(0, 1)].join(" ");
-    case "diamond": return [px(0.5, 0), px(1, 0.5), px(0.5, 1), px(0, 0.5)].join(" ");
-    case "hexagon": return [px(0.25, 0), px(0.75, 0), px(1, 0.5), px(0.75, 1), px(0.25, 1), px(0, 0.5)].join(" ");
-    case "star": return [[0.5, 0], [0.61, 0.35], [0.98, 0.35], [0.68, 0.57], [0.79, 0.91], [0.5, 0.7], [0.21, 0.91], [0.32, 0.57], [0.02, 0.35], [0.39, 0.35]].map(([fx, fy]) => px(fx, fy)).join(" ");
-    case "arrow": return [px(0, 0.4), px(0.6, 0.4), px(0.6, 0.15), px(1, 0.5), px(0.6, 0.85), px(0.6, 0.6), px(0, 0.6)].join(" ");
-    default: return "";
-  }
+  const poly = shapePolygon(kind, x0, y0, w, h);
+  return poly ? poly.map((p) => `${p.x},${p.y}`).join(" ") : "";
 }
 
 export function createCardRenderer(ctx: CardContext): CardRenderer {
