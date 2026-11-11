@@ -607,6 +607,14 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   width: 26px; height: 26px; border-radius: 50%;
   border: 1px solid rgba(0, 0, 0, 0.12); flex: none;
 }
+#settings .canvas-opt .bg-swatch.custom {
+  display: flex; align-items: center; justify-content: center;
+  color: var(--grey); font-size: 16px; background: #fff;
+}
+#settings .canvas-opt button.custom { position: relative; }
+#settings .canvas-opt .bg-picker {
+  position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer;
+}
 #settings .canvas-opt .grid-tile {
   width: 26px; height: 26px; border-radius: 5px; background: #fff;
   border: 1px solid rgba(0, 0, 0, 0.12); flex: none;
