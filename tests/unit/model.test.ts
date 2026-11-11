@@ -28,6 +28,7 @@ import {
   toggleTaskLine,
   type Board,
   type Item,
+  type ShapeKind,
 } from "../../src/model";
 
 function textCard(id: number, x: number, y: number, w = 260, h = 48, text = "Note"): Item {
@@ -45,6 +46,14 @@ function stroke(id: number, points: Array<{ x: number; y: number }>, pressures?:
     size: { w: Math.max(1, Math.max(...xs) - Math.min(...xs)), h: Math.max(1, Math.max(...ys) - Math.min(...ys)) },
     group: null,
     kind: { Stroke: { points, color: "#1A1A1A", width: 3, marker: false, ...(pressures ? { pressures } : {}) } },
+  };
+}
+
+function shape(id: number, kind: ShapeKind, x: number, y: number, w = 200, h = 100, rotation?: number): Item {
+  return {
+    id, pos: { x, y }, size: { w, h }, group: null,
+    kind: { Shape: { shape: kind, fill: "#1A1A1A" } },
+    ...(rotation !== undefined ? { rotation } : {}),
   };
 }
 
@@ -111,6 +120,46 @@ describe("hitTest", () => {
       { id: 3, pos: { x: 100, y: 100 }, size: { w: 300, h: 48 }, group: null, kind: { Connector: { from: { Item: 1 }, to: { Item: 2 }, color: "#333333" } } },
     ]);
     expect(hitTest(b, { x: 150, y: 120 })).toBe(1);
+  });
+  it("a shape is hit on its geometry, not its box", () => {
+    // Triangle (100,100) 200x100: the top corners are empty.
+    const tri = board([shape(1, "triangle", 100, 100)]);
+    expect(hitTest(tri, { x: 200, y: 130 })).toBe(1);
+    expect(hitTest(tri, { x: 110, y: 110 })).toBeNull();
+    // Arrow (100,100) 200x100: the shaft and head hit, the
+    // top-left corner above the shaft does not.
+    const arr = board([shape(1, "arrow", 100, 100)]);
+    expect(hitTest(arr, { x: 150, y: 150 })).toBe(1);
+    expect(hitTest(arr, { x: 280, y: 150 })).toBe(1);
+    expect(hitTest(arr, { x: 150, y: 110 })).toBeNull();
+    expect(hitTest(arr, { x: 280, y: 110 })).toBeNull();
+    // Ellipse (100,100) 200x100: the centre and the top
+    // middle hit, the corners do not.
+    const ell = board([shape(1, "ellipse", 100, 100)]);
+    expect(hitTest(ell, { x: 200, y: 150 })).toBe(1);
+    expect(hitTest(ell, { x: 200, y: 105 })).toBe(1);
+    expect(hitTest(ell, { x: 110, y: 110 })).toBeNull();
+    // Star (100,100) 200x100: the centre hits, the top-left
+    // corner above the star's left point does not.
+    const star = board([shape(1, "star", 100, 100)]);
+    expect(hitTest(star, { x: 200, y: 150 })).toBe(1);
+    expect(hitTest(star, { x: 110, y: 110 })).toBeNull();
+    // Rect fills its box, so a corner still hits.
+    const rect = board([shape(1, "rect", 100, 100)]);
+    expect(hitTest(rect, { x: 110, y: 110 })).toBe(1);
+  });
+  it("a shape's empty corner does not steal a click from the card beneath it", () => {
+    const b = board([textCard(1, 100, 100), shape(2, "triangle", 100, 100)]);
+    expect(hitTest(b, { x: 110, y: 110 })).toBe(1);
+    expect(hitTest(b, { x: 200, y: 130 })).toBe(2);
+  });
+  it("a rotated shape is hit where it actually is", () => {
+    // Triangle rotated 180 degrees: the apex is at the
+    // bottom, so the bottom corners are empty and the
+    // middle still hits.
+    const b = board([shape(1, "triangle", 100, 100, 200, 100, 180)]);
+    expect(hitTest(b, { x: 200, y: 170 })).toBe(1);
+    expect(hitTest(b, { x: 110, y: 190 })).toBeNull();
   });
 });
 
