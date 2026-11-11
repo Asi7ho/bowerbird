@@ -165,6 +165,7 @@ export interface PluginBridge {
   fileUrl(path: string): string;
   embedFile(path: string): Promise<string>;
   readTextFile(path: string): Promise<string>;
+  readFileBase64(filePath: string): Promise<{ mime: string; base64: string }>;
   fileSize(path: string): Promise<number>;
   fetchPreview(url: string): Promise<{ title: string | null; description: string | null; image: string | null; icon: string | null }>;
   aiChat(opts: { base: string; key: string; model: string; messages: Array<{ role: string; content: string }> }): Promise<string>;
@@ -216,6 +217,12 @@ export interface PluginHost {
   getSelected: () => number[];
   setSelected: (ids: number[]) => void;
   addItem: (kind: Kind, pos: Pt, size: Size) => number;
+  // Add an item without saving or rendering, for a text
+  // note that is about to be edited: the edit commit saves
+  // it, or removes it if left empty, so a cancelled note
+  // leaves no undo step and no board change behind. The
+  // caller saves (or removes and saves) once the edit ends.
+  addItemSilent: (kind: Kind, pos: Pt, size: Size) => number;
   // Add several items at once, in one save (one undo step).
   // A plugin that builds a structure — a mind map, a grid of
   // cards — adds them all here, so undoing it takes one undo,
@@ -226,10 +233,57 @@ export interface PluginHost {
   moveItem: (id: number, toIndex: number) => boolean;
   removeItem: (id: number) => boolean;
   renderBoardCard: (id: number) => string | null;
+  // Render a board item exactly as the board renders it, at
+  // its real position and with its selection and editing
+  // state, so the board view can build the card DOM from
+  // it. Unlike renderBoardCard (position 0,0, plain, for a
+  // plugin embedding a card in a panel or view), this is
+  // the card as it appears on the board — a PDF shows its
+  // rendered page, audio shows its playback state, a
+  // selected image shows whole. Strokes and connectors
+  // render as null: the board draws those as SVG itself.
+  renderBoardCardAt: (id: number) => string | null;
   // Hit-test: the top item id at a world point, or null.
   // Frames lose to the cards inside them (see hitTest).
   hitTest: (world: Pt) => number | null;
+  // Selection queries, for the board view's drags: which
+  // items a marquee rect or a lasso loop covers, and which
+  // strokes an eraser circle touches. Pure reads over the
+  // live board, no save, no render — the caller applies
+  // the selection itself.
+  marqueeSelect: (a: Pt, b: Pt) => number[];
+  lassoSelect: (points: Pt[]) => number[];
+  strokesNear: (point: Pt, radius: number) => number[];
+  // Live-drag mutations, for the board view only: they
+  // change the live board without saving or rendering, so
+  // a drag can move, resize, rotate, erase or re-stack
+  // on every pointermove without flooding the undo stack
+  // or rebuilding the card DOM. The caller saves once at
+  // drag end (save, or saveWithoutUndo for a click that
+  // only re-stacked) and renders once. A plugin that wants
+  // a saved, undoable change uses updateItem(s) instead.
+  moveItems: (ids: number[], dx: number, dy: number) => void;
+  resizeItem: (id: number, w: number, h: number) => void;
+  setItemRotation: (id: number, rot: number) => void;
+  removeItems: (ids: number[]) => void;
+  bringToFront: (ids: number[]) => void;
+  // Set a text note's text (and its height, from the text),
+  // without saving or rendering. The board view's text
+  // commit: it saves once after the edit, so the commit is
+  // one undo step. False when the card is not a text note.
+  setTextContent: (id: number, text: string) => boolean;
+  // Group a set of cards: a new group id comes from the
+  // board's next_group, so a later group can never collide
+  // with it. One save, one undo step. Returns the group id,
+  // or null when fewer than two cards were given.
+  createGroup: (ids: number[]) => number | null;
   save: () => void;
+  // Save the board to disk without creating an undo step,
+  // for changes the user did not make as edits: a pan's
+  // camera move, a click's re-stack, a link preview
+  // filling in. The file still saves, so closing the
+  // window keeps the change; undo never steps to it.
+  saveWithoutUndo: () => void;
   render: () => void;
   switchBoard: (name: string, preserveUndo?: boolean) => Promise<boolean>;
   setTool: (tool: string) => void;
@@ -238,6 +292,11 @@ export interface PluginHost {
   setPenColor: (hex: string) => boolean;
   getCamera: () => Camera;
   setCamera: (cam: Camera) => void;
+  // Set the camera without saving or rendering, for a live
+  // pan or zoom drag: the drag applies the camera on every
+  // pointermove through this, and saves once at drag end,
+  // so a pinch does not write the board JSON per frame.
+  setCameraSilent: (cam: Camera) => void;
   // Zoom around the board centre, by a factor (1.2 in,
   // 1/1.2 out). The core owns the camera math; a UI plugin
   // just says "zoom in" or "zoom out".
@@ -245,6 +304,11 @@ export interface PluginHost {
   // The shape table (kind, label, key, SVG icon) for the
   // shape picker's flyout. Read-only UI data.
   listShapes: () => Array<{ kind: string; label: string; key: string; svg: string }>;
+  // Drag-preview polygon points for a shape in a box from
+  // (x0, y0) sized w x h. Same geometry as the shape's
+  // clip-path, so the preview is the shape drawn. The board
+  // view draws the live shape preview from this.
+  shapePreviewPoints: (kind: string, x0: number, y0: number, w: number, h: number) => string;
   // Set the background of the given text notes, in one
   // save (one undo step). A board write. Only Text notes
   // are affected; other kinds are ignored.
@@ -277,8 +341,20 @@ export interface PluginHost {
   loadAudioDuration: (id: number, path: string) => void;
   audioFailed: (path: string) => boolean;
   formatAudioTime: (sec: number) => string;
+  // Toggle playback of an audio card: play it if it is not
+  // playing, pause it if it is. The board view's play
+  // button. The raw audio element is never handed out.
+  toggleAudio: (id: number, path: string) => void;
+  // Seek the playing audio card to a time in seconds. The
+  // board view's seek slider. No-op when that card is not
+  // the one playing.
+  seekAudio: (id: number, time: number) => void;
   getPdfPage: (id: number) => number;
   loadPdfPage: (id: number, path: string) => void;
+  // Move a PDF card to a page (clamped to the document),
+  // and render it. The board view's prev/next buttons.
+  // False when the document is not loaded yet.
+  setPdfPage: (id: number, path: string, page: number) => Promise<boolean>;
   pdfFailed: (path: string) => boolean;
   // Reset the board to a fresh welcome board (the settings
   // "Delete all board data" flow). A board write, and not
@@ -312,6 +388,13 @@ export interface PluginContext {
     getItems: () => Item[];
     getItem: (id: number) => Item | undefined;
     renderCard: (id: number) => string | null;
+    // Render a board item exactly as the board renders it,
+    // at its real position and with its selection and
+    // editing state. The board view builds the card DOM
+    // from this. Unlike renderCard (position 0,0, plain,
+    // for embedding a card in a panel or view), this is
+    // the card as it appears on the board.
+    renderCardAt: (id: number) => string | null;
     // Hit-test: the top item id at a world point, or null.
     // A frame is a container, not content: a card inside a
     // frame wins over the frame itself, so cards inside a
@@ -320,9 +403,45 @@ export interface PluginContext {
     // itself win. The board view uses this for clicks,
     // drags and cursor hints.
     hitTest: (world: Pt) => number | null;
+    // Selection queries, for the board view's drags: which
+    // items a marquee rect or a lasso loop covers, and which
+    // strokes an eraser circle touches. Pure reads over the
+    // live board, no save, no render.
+    marqueeSelect: (a: Pt, b: Pt) => number[];
+    lassoSelect: (points: Pt[]) => number[];
+    strokesNear: (point: Pt, radius: number) => number[];
+    // Live-drag mutations, for the board view only: they
+    // change the live board without saving or rendering, so
+    // a drag can move, resize, rotate, erase or re-stack
+    // on every pointermove without flooding the undo stack
+    // or rebuilding the card DOM. The caller saves once at
+    // drag end (save, or saveWithoutUndo for a click that
+    // only re-stacked) and renders once. A plugin that wants
+    // a saved, undoable change uses updateItem(s) instead.
+    moveItems: (ids: number[], dx: number, dy: number) => void;
+    resizeItem: (id: number, w: number, h: number) => void;
+    setItemRotation: (id: number, rot: number) => void;
+    removeItems: (ids: number[]) => void;
+    bringToFront: (ids: number[]) => void;
+    // Set a text note's text (and its height, from the text),
+    // without saving or rendering. The board view's text
+    // commit: it saves once after the edit, so the commit is
+    // one undo step. False when the card is not a text note.
+    setTextContent: (id: number, text: string) => boolean;
+    // Group a set of cards: a new group id comes from the
+    // board's next_group, so a later group can never collide
+    // with it. One save, one undo step. Returns the group id,
+    // or null when fewer than two cards were given.
+    createGroup: (ids: number[]) => number | null;
     getSelected: () => number[];
     setSelected: (ids: number[]) => void;
     addItem: (kind: Kind, pos: Pt, size: Size) => number;
+    // Add an item without saving or rendering, for a text
+    // note that is about to be edited: the edit commit saves
+    // it, or removes it if left empty, so a cancelled note
+    // leaves no undo step and no board change behind. The
+    // caller saves (or removes and saves) once the edit ends.
+    addItemSilent: (kind: Kind, pos: Pt, size: Size) => number;
     addPluginCard: (kind: string, data: unknown, pos: Pt, size: Size) => number;
     // Add several items at once, in one save (one undo step).
     // A plugin that builds a structure — a mind map, a grid
@@ -350,6 +469,12 @@ export interface PluginContext {
     moveItem: (id: number, toIndex: number) => boolean;
     removeItem: (id: number) => boolean;
     save: () => void;
+    // Save the board to disk without creating an undo step,
+    // for changes the user did not make as edits: a pan's
+    // camera move, a click's re-stack, a link preview
+    // filling in. The file still saves, so closing the
+    // window keeps the change; undo never steps to it.
+    saveWithoutUndo: () => void;
     render: () => void;
     commitEditing: () => void;
     groupSelected: () => boolean;
@@ -427,6 +552,11 @@ export interface PluginContext {
   view: {
     getCamera: () => Camera;
     setCamera: (cam: Camera) => void;
+    // Set the camera without saving or rendering, for a live
+    // pan or zoom drag: the drag applies the camera on every
+    // pointermove through this, and saves once at drag end,
+    // so a pinch does not write the board JSON per frame.
+    setCameraSilent: (cam: Camera) => void;
     // Zoom around the board centre, by a factor (1.2 in,
     // 1/1.2 out). The toolbar's zoom buttons. The core owns
     // the camera math; a UI plugin just says "zoom in" or
@@ -442,6 +572,10 @@ export interface PluginContext {
   // needed. The toolbar plugin builds the flyout from this.
   shapes: {
     list: () => Array<{ kind: string; label: string; key: string; svg: string }>;
+    // Drag-preview polygon points for a shape in a box from
+    // (x0, y0) sized w x h. The board view draws the live
+    // shape preview from this.
+    previewPoints: (kind: string, x0: number, y0: number, w: number, h: number) => string;
   };
   // Search: the search engine (MiniSearch + local context
   // search). The engine owns the matching, the dimming and
@@ -571,6 +705,11 @@ export interface PluginContext {
     addToLibrary: (path: string) => Promise<string>;
     fileUrl: (path: string) => string;
     readTextFile: (path: string) => Promise<string>;
+    // Read a file as base64 with its MIME type, for the
+    // board view's media fallback: when a board-local image
+    // or video fails to load through the app-file scheme,
+    // the card retries it once as a data URL.
+    readFileBase64: (path: string) => Promise<{ mime: string; base64: string }>;
     fileSize: (path: string) => Promise<number>;
     openExternal: (target: string) => Promise<void>;
     fetchPreview: (url: string) => Promise<{ title: string | null; description: string | null; image: string | null; icon: string | null }>;
@@ -656,9 +795,20 @@ export interface PluginContext {
     getAudioDuration: (path: string) => number | undefined;
     loadAudioDuration: (id: number, path: string) => void;
     formatAudioTime: (sec: number) => string;
+    // Toggle playback of an audio card: play it if it is not
+    // playing, pause it if it is. The board view's play button.
+    toggleAudio: (id: number, path: string) => void;
+    // Seek the playing audio card to a time in seconds. The
+    // board view's seek slider. No-op when that card is not
+    // the one playing.
+    seekAudio: (id: number, time: number) => void;
     pdfFailed: (path: string) => boolean;
     getPdfPage: (id: number) => number;
     loadPdfPage: (id: number, path: string) => void;
+    // Move a PDF card to a page (clamped to the document),
+    // and render it. The board view's prev/next buttons.
+    // False when the document is not loaded yet.
+    setPdfPage: (id: number, path: string, page: number) => Promise<boolean>;
   };
   // Pure text and colour helpers, from src/model.ts — no
   // permission needed. A card renderer needs these to escape
@@ -800,6 +950,64 @@ export function setSettingsUITab(tab: string): void {
 }
 export function refreshSettingsUI(): void {
   settingsUI?.refresh();
+}
+
+// The board controller: the board view (core-board plugin)
+// owns the render loop and the input loop, so the core
+// cannot call them directly. The plugin registers its
+// controller here, and the core delegates through these
+// functions — the same shape as the settings UI above.
+// Until the board plugin activates, every call is a no-op:
+// the board does not exist yet, so there is nothing to
+// render, select, edit or tool-switch.
+export interface BoardController {
+  render: () => void;
+  updateSelection: () => void;
+  commitEditing: () => void;
+  clearEditing: () => void;
+  getEditingId: () => number | null;
+  setTool: (tool: string) => void;
+  getTool: () => string;
+  groupSelected: () => boolean;
+  ungroupSelected: () => boolean;
+  deleteSelected: () => boolean;
+}
+let boardController: BoardController | null = null;
+export function registerBoardController(c: BoardController): void {
+  boardController = c;
+}
+export function getBoardController(): BoardController | null {
+  return boardController;
+}
+export function boardRender(): void {
+  boardController?.render();
+}
+export function boardUpdateSelection(): void {
+  boardController?.updateSelection();
+}
+export function boardCommitEditing(): void {
+  boardController?.commitEditing();
+}
+export function boardClearEditing(): void {
+  boardController?.clearEditing();
+}
+export function boardGetEditingId(): number | null {
+  return boardController?.getEditingId() ?? null;
+}
+export function boardSetTool(tool: string): void {
+  boardController?.setTool(tool);
+}
+export function boardGetTool(): string {
+  return boardController?.getTool() ?? "select";
+}
+export function boardGroupSelected(): boolean {
+  return boardController?.groupSelected() ?? false;
+}
+export function boardUngroupSelected(): boolean {
+  return boardController?.ungroupSelected() ?? false;
+}
+export function boardDeleteSelected(): boolean {
+  return boardController?.deleteSelected() ?? false;
 }
 
 // Panel tabs state: one panel shown at a time, switched by
@@ -1066,13 +1274,53 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       // can already read the item via getItems, so this needs no
       // extra permission; strokes and connectors render as null.
       renderCard: (id: number) => host!.renderBoardCard(id),
+      // The same card as it appears on the board: real position,
+      // selection state and editing exclusion. The board view
+      // builds the card DOM from this; a plugin embedding a card
+      // elsewhere uses renderCard instead.
+      renderCardAt: (id: number) => host!.renderBoardCardAt(id),
       hitTest: (world: Pt) => host!.hitTest(world),
+      marqueeSelect: (a: Pt, b: Pt) => host!.marqueeSelect(a, b),
+      lassoSelect: (points: Pt[]) => host!.lassoSelect(points),
+      strokesNear: (point: Pt, radius: number) => host!.strokesNear(point, radius),
+      moveItems: (ids: number[], dx: number, dy: number) => {
+        require("board:write");
+        host!.moveItems(ids, dx, dy);
+      },
+      resizeItem: (id: number, w: number, h: number) => {
+        require("board:write");
+        host!.resizeItem(id, w, h);
+      },
+      setItemRotation: (id: number, rot: number) => {
+        require("board:write");
+        host!.setItemRotation(id, rot);
+      },
+      removeItems: (ids: number[]) => {
+        require("board:write");
+        host!.removeItems(ids);
+      },
+      bringToFront: (ids: number[]) => {
+        require("board:write");
+        host!.bringToFront(ids);
+      },
+      setTextContent: (id: number, text: string) => {
+        require("board:write");
+        return host!.setTextContent(id, text);
+      },
+      createGroup: (ids: number[]) => {
+        require("board:write");
+        return host!.createGroup(ids);
+      },
       getSelected: () => host!.getSelected(),
       setSelected: (ids: number[]) => host!.setSelected(ids),
       addItem: (kind: Kind, pos: Pt, size: Size) => {
         require("board:write");
         const id = host!.addItem(kind, pos, size);
         return id;
+      },
+      addItemSilent: (kind: Kind, pos: Pt, size: Size) => {
+        require("board:write");
+        return host!.addItemSilent(kind, pos, size);
       },
       addPluginCard: (kind: string, data: unknown, pos: Pt, size: Size) => {
         require("board:write");
@@ -1148,6 +1396,10 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       save: () => {
         require("board:write");
         host!.save();
+      },
+      saveWithoutUndo: () => {
+        require("board:write");
+        host!.saveWithoutUndo();
       },
       render: () => host!.render(),
       commitEditing: () => {
@@ -1282,6 +1534,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
     view: {
       getCamera: () => ({ ...host!.getCamera() }),
       setCamera: (cam: Camera) => host!.setCamera(cam),
+      setCameraSilent: (cam: Camera) => host!.setCameraSilent(cam),
       zoomBy: (factor: number) => host!.zoomBy(factor),
       centreOn: (id: number) => host!.centreOn(id),
       getView: () => activeView,
@@ -1294,6 +1547,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
     },
     shapes: {
       list: () => host!.listShapes(),
+      previewPoints: (kind: string, x0: number, y0: number, w: number, h: number) => host!.shapePreviewPoints(kind, x0, y0, w, h),
     },
     search: {
       setElements: (els: { input: HTMLInputElement; count: HTMLElement; clear: HTMLButtonElement; results: HTMLElement }) => {
@@ -1403,9 +1657,12 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       getAudioDuration: (path: string) => host!.getAudioDuration(path),
       loadAudioDuration: (id: number, path: string) => host!.loadAudioDuration(id, path),
       formatAudioTime: (sec: number) => host!.formatAudioTime(sec),
+      toggleAudio: (id: number, path: string) => host!.toggleAudio(id, path),
+      seekAudio: (id: number, time: number) => host!.seekAudio(id, time),
       pdfFailed: (path: string) => host!.pdfFailed(path),
       getPdfPage: (id: number) => host!.getPdfPage(id),
       loadPdfPage: (id: number, path: string) => host!.loadPdfPage(id, path),
+      setPdfPage: (id: number, path: string, page: number) => host!.setPdfPage(id, path, page),
     },
     text: {
       escapeHtml,
@@ -1440,6 +1697,10 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       readTextFile: async (path: string) => {
         require("files:read");
         return bridge!.readTextFile(path);
+      },
+      readFileBase64: async (path: string) => {
+        require("files:read");
+        return bridge!.readFileBase64(path);
       },
       fileSize: async (path: string) => {
         require("files:read");
