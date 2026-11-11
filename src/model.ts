@@ -18,7 +18,7 @@ export type Kind =
   | { Swatch: { hex: string } }
   | { Audio: { path: string } }
   | { Video: { source: string; remote: boolean; size_bytes: number } }
-  | { Stroke: { points: Pt[]; color: string; width: number; marker: boolean } }
+  | { Stroke: { points: Pt[]; color: string; width: number; marker: boolean; pressures?: number[] } }
   | { Connector: { from: Anchor; to: Anchor; color: string } }
   // Plugin cards (see PLUGIN_API.md): namespaced so the core never
   // has to know a plugin's data shape. `data` is always JSON. If
@@ -239,8 +239,8 @@ function itemHit(board: Board, item: Item, world: Pt): boolean {
     if (a && b) return distToSegment(world, a, b) <= 8;
   }
   if ("Stroke" in item.kind) {
-    const { points, width } = item.kind.Stroke;
-    const tol = Math.max(width / 2 + 6, 8);
+    const { points } = item.kind.Stroke;
+    const tol = Math.max(strokeMaxWidth(item.kind.Stroke) / 2 + 6, 8);
     // A rotated stroke is hit in its own frame, like a
     // rotated card: rotate the point back by -rotation
     // around the bounding-box centre, then test the
@@ -296,6 +296,36 @@ export function hitTest(board: Board, world: Pt): number | null {
   return null;
 }
 
+// A stylus reports pressure 0..1; a mouse reports 0.5 while a
+// button is down, so a mouse stroke is exactly its base width.
+// Width follows pressure around the base width, floored so a
+// light touch still draws, capped so a hard press stays sane.
+export function pressureWidth(base: number, pressure: number): number {
+  return Math.min(8, Math.max(1, 2 * base * pressure));
+}
+// The widest a stroke gets, for hit-testing and the eraser:
+// its base width, or the widest its pressures make it.
+export function strokeMaxWidth(stroke: { width: number; pressures?: number[] }): number {
+  const p = stroke.pressures;
+  if (!p || p.length === 0) return stroke.width;
+  let max = stroke.width;
+  for (const v of p) {
+    const w = pressureWidth(stroke.width, v);
+    if (w > max) max = w;
+  }
+  return max;
+}
+// Whether a stroke's pressures actually vary: a pen held at
+// one pressure draws a uniform stroke, and it renders as a
+// single path like a mouse stroke.
+export function strokePressuresVary(stroke: { pressures?: number[] }): boolean {
+  const p = stroke.pressures;
+  if (!p || p.length < 2) return false;
+  let min = p[0], max = p[0];
+  for (const v of p) { if (v < min) min = v; if (v > max) max = v; }
+  return max - min > 0.02;
+}
+
 // Every stroke the eraser touches: all stroke ids whose
 // segments come within `radius` of the point, in world
 // units. The test is the same as the stroke branch of
@@ -307,8 +337,8 @@ export function strokesWithin(board: Board, world: Pt, radius: number): number[]
   const out: number[] = [];
   for (const it of board.items) {
     if (!("Stroke" in it.kind)) continue;
-    const { points, width } = it.kind.Stroke;
-    const tol = radius + width / 2;
+    const { points } = it.kind.Stroke;
+    const tol = radius + strokeMaxWidth(it.kind.Stroke) / 2;
     const rot = itemRotation(it);
     const p = rot !== 0 ? rotatePoint(world, centre(it), -rot) : world;
     if (p.x < it.pos.x - tol || p.x > it.pos.x + it.size.w + tol ||
