@@ -87,22 +87,22 @@ Enable and disable are per plugin, in Settings → Plugins. Disabling unregister
 
 `activate(api)` receives one object, per plugin, filtered to the manifest's permissions. `api.version` is `"2"`. The full reference is the `PluginContext` type in `src/plugins.ts`. The domains:
 
-- `board` — read and write the board: items, selection, add / update / remove, group / ungroup / delete, undo / redo, canvas, save, render. Writes need `board:write`. A plugin may read any card but may only write its own plugin cards' data, plus core kinds' position, size and group. Three methods exist for building and tidying structures: `addItems` adds several items at once, in one undo step (addItem saves after every item); `arrange` lays a set of cards out — a grid, flowing columns, a single row or column, or a ring around a central card — in one undo step, anchored on the cards' current bounding box; `connect` draws a connector between two cards by id, so the caller never builds the anchor format or the line's bounding box.
+- `board` — read and write the board: items, selection, add / update / remove, group / ungroup / delete, undo / redo, canvas, save, render. Writes need `board:write`. A plugin may read any card but may only write its own plugin cards' data, plus core kinds' position, size and group. Three methods exist for building and tidying structures: `addItems` adds several items at once, in one undo step (addItem saves after every item); `arrange` lays a set of cards out — a grid, flowing columns, a single row or column, or a ring around a central card — in one undo step, anchored on the cards' current bounding box; `connect` draws a connector between two cards by id, so the caller never builds the anchor format or the line's bounding box. The board view itself uses a further set of methods, which are part of the same contract: `renderCardAt` renders a card exactly as it appears on the board (real position, selection and editing state), while `renderCard` renders it at 0,0 with no selection or editing state, for embedding in a panel or view; `hitTest`, `marqueeSelect`, `lassoSelect` and `strokesNear` are pure selection queries over the live board; `moveItems`, `resizeItem`, `setItemRotation`, `removeItems`, `bringToFront`, `setTextContent` and `addItemSilent` change the live board without saving or rendering, so a drag (or a text commit) saves once at the end instead of once per pointermove — a plugin that wants a saved, undoable change uses `updateItem(s)` instead, and `saveWithoutUndo` saves to disk without creating an undo step, for a change the user did not make as an edit (a pan's camera move, a click's re-stack); `createGroup` groups a set of cards with a fresh group id from the board's `next_group`, in one undo step.
 - `boards` — list, create, switch, rename and delete boards. Needs `board:write` except for `list` and `current`.
 - `app` — read-only app info: build id and platform.
 - `backups` — list and restore board backups.
 - `window` — hide / show / minimise / close / fullscreen / maximise, and the Hide corner. Needs the `window` permission.
-- `view` — camera, zoom, the current view, switching views.
-- `shapes` — the shape table for a shape picker.
+- `view` — camera, zoom, the current view, switching views. `setCamera` saves and renders; `setCameraSilent` sets the camera without saving or rendering, for a live pan or zoom drag that saves once at drag end.
+- `shapes` — the shape table for a shape picker, and `previewPoints` for the drag-preview polygon of a shape in a box.
 - `ui` — toast, tools, panels, commands, views, overlays, settings sections, shortcuts, the settings UI. Tools are click tools, not drag tools: core drag state is not handed to plugins. Shortcuts are single keys, no modifiers; the core's keys win.
 - `cards` — register a card kind (`register`) or a built-in kind's renderer (`registerBuiltin`). Card data is always JSON.
-- `files` — embed files, the library folder, file URLs, open external, link previews. All file access goes through the core.
+- `files` — embed files, the library folder, file URLs, open external, link previews, and `readFileBase64` for the board view's media fallback. All file access goes through the core.
 - `storage` / `secureStorage` — per-plugin settings. Do not store secrets in plain storage; secure storage encrypts where the OS can.
 - `plugins` — list, enable / disable, reset, install, try in memory, end a trial. Needs `plugins:install`.
 - `ai` — chat completions (`chat({ base, key, model, messages })`), run in the main process, not the renderer. Only the chat-completions path of the given base is called, with the caller's own key, which is never stored by the main process. Public bases must be https; a localhost base may be http, for a local model server. Needs `ai`.
 - `events` — `on` / `off` for `selection`, `board`, `view`, `pen`, `tool`. Do not write to the board synchronously inside a `board` handler in a way that loops.
 - `pen` — the pen colour, shared with the toolbar.
-- `media` — PDF and audio state for the cards that play media.
+- `media` — PDF and audio state for the cards that play media: `toggleAudio` and `seekAudio` for an audio card's play button and seek slider, `setPdfPage` for a PDF card's prev/next buttons.
 - `text` / `geometry` — pure helpers: escaping, markdown, colour, hit-testing, segment and rect math.
 - `search` — the search engine: hand it the box elements, update, clear, jump to a match.
 
