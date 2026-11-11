@@ -36,7 +36,7 @@ html, body {
 body { display: flex; flex-direction: row; }
 #main-column { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; min-height: 0; }
 button { font-family: inherit; }
-#board { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; user-select: none; -webkit-user-select: none; }
+#board { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: none; }
 
 /* Custom title bar: opaque white, hairline underneath, the
    window's drag region. It is a layout sibling above the

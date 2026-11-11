@@ -38,8 +38,8 @@ import {
 import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
   boardGet, centre, clippedEnds,
-  itemBounds, itemRotation, parseHex, rotatePoint, select,
-  toggleTaskLine,
+  itemBounds, itemRotation, parseHex, pressureWidth, rotatePoint, select,
+  strokeMaxWidth, strokePressuresVary, toggleTaskLine,
 } from "../model";
 
 export const manifest: PluginManifest = {
@@ -96,7 +96,7 @@ let spaceDown = false;
 let drag: null
   | { kind: "pan"; last: Pt }
   | { kind: "move"; lastWorld: Pt; moved: boolean }
-  | { kind: "stroke"; points: Pt[] }
+  | { kind: "stroke"; points: Pt[]; pressures: number[] }
   | { kind: "lasso"; points: Pt[] }
   | { kind: "erase"; erased: boolean }
   | { kind: "connector"; from: Anchor; current: Pt }
@@ -352,7 +352,7 @@ function renderStrokesAndConnectors(board: Board): void {
     // drawn. The count is small, so this costs nothing.
     if (!("Stroke" in item.kind && itemRotation(item) !== 0) && !isVisibleItem(item, v, board)) continue;
     if ("Stroke" in item.kind) {
-      const { points, color, width, marker } = item.kind.Stroke;
+      const { points, color, width, marker, pressures } = item.kind.Stroke;
       if (points.length < 2) continue;
       const d = strokePath(item, points, color, width);
       const sel = selected.includes(item.id);
@@ -365,14 +365,27 @@ function renderStrokesAndConnectors(board: Board): void {
       const c = centre(item);
       const transform = rot !== 0 ? `rotate(${rot} ${c.x} ${c.y})` : undefined;
       if (sel) {
-        const selPath = svgEl2("path", { d, fill: "none", stroke: ACCENT, "stroke-width": String(width + 6), "stroke-linecap": "round", "stroke-linejoin": "round" });
+        const selPath = svgEl2("path", { d, fill: "none", stroke: ACCENT, "stroke-width": String(strokeMaxWidth(item.kind.Stroke) + 6), "stroke-linecap": "round", "stroke-linejoin": "round" });
         if (transform) selPath.setAttribute("transform", transform);
         worldEl.appendChild(selPath);
       }
-      const path = svgEl2("path", { d, fill: "none", stroke: color, "stroke-width": String(width), "stroke-linecap": "round", "stroke-linejoin": "round" });
-      if (transform) path.setAttribute("transform", transform);
-      if (marker) path.setAttribute("opacity", "0.45");
-      worldEl.appendChild(path);
+      if (pressures && strokePressuresVary(item.kind.Stroke)) {
+        // A pen stroke is one line per segment, each at
+        // the width its pressure makes; a uniform stroke
+        // stays a single path, as before.
+        for (let i = 0; i + 1 < points.length; i++) {
+          const w = pressureWidth(width, (pressures[i] + pressures[i + 1]) / 2);
+          const line = svgEl2("line", { x1: String(points[i].x), y1: String(points[i].y), x2: String(points[i + 1].x), y2: String(points[i + 1].y), stroke: color, "stroke-width": String(w), "stroke-linecap": "round" });
+          if (transform) line.setAttribute("transform", transform);
+          if (marker) line.setAttribute("opacity", "0.45");
+          worldEl.appendChild(line);
+        }
+      } else {
+        const path = svgEl2("path", { d, fill: "none", stroke: color, "stroke-width": String(width), "stroke-linecap": "round", "stroke-linejoin": "round" });
+        if (transform) path.setAttribute("transform", transform);
+        if (marker) path.setAttribute("opacity", "0.45");
+        worldEl.appendChild(path);
+      }
     }
     if ("Connector" in item.kind) {
       const ends = clippedEnds(board, item.kind.Connector.from, item.kind.Connector.to);
@@ -618,7 +631,7 @@ function startTextEdit(id: number): void {
     e.stopPropagation();
     if (e.key === "Escape") { e.preventDefault(); ta.blur(); }
   });
-  ta.addEventListener("mousedown", (e) => e.stopPropagation());
+  ta.addEventListener("pointerdown", (e) => e.stopPropagation());
 }
 
 function commitEditingIfAny(): void {
@@ -771,7 +784,7 @@ function navigateElements(dir: 1 | -1): void {
 // ---------------------------------------------------------------- input
 
 function attachBoardListeners(): void {
-boardEl.addEventListener("mousedown", (e: MouseEvent) => {
+boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
   const target = e.target as HTMLElement;
   if (target.closest("#toolbar, #settings-backdrop, #toast, #plugin-overlays, #search-box, #title-bar, video, input")) return;
   // A board click or drag must never start a native text selection
@@ -804,7 +817,10 @@ boardEl.addEventListener("mousedown", (e: MouseEvent) => {
     return;
   }
   if (tool === "pen") {
-    drag = { kind: "stroke", points: [world] };
+    // A stylus records its pressure per point, so the
+    // stroke can thicken and thin with the press; a mouse
+    // or finger records none, and draws a uniform stroke.
+    drag = { kind: "stroke", points: [world], pressures: e.pointerType === "pen" ? [e.pressure] : [] };
     return;
   }
   if (tool === "select" && lassoMode) {
@@ -970,14 +986,21 @@ function dragPreview(id: string, tag: string): SVGElement {
   }
   return el;
 }
-function updateLiveStroke(points: Pt[]): void {
-  const el = dragPreview("live-stroke", "path");
-  el.setAttribute("d", points.map((pt, i) => `${i === 0 ? "M" : "L"}${pt.x},${pt.y}`).join(" "));
-  el.setAttribute("fill", "none");
-  el.setAttribute("stroke", api.pen.getColor());
-  el.setAttribute("stroke-width", "3");
-  el.setAttribute("stroke-linecap", "round");
-  el.setAttribute("stroke-linejoin", "round");
+// The live stroke, drawn while the pen is down. A uniform
+// stroke is one path; a pen stroke whose pressure varies is
+// one line per segment, each at the width its pressure makes,
+// so the stroke visibly thickens as it is drawn.
+function updateLiveStroke(points: Pt[], pressures: number[]): void {
+  const el = dragPreview("live-stroke", "g");
+  while (el.firstChild) el.removeChild(el.firstChild);
+  if (pressures.length === points.length && strokePressuresVary({ pressures })) {
+    for (let i = 0; i + 1 < points.length; i++) {
+      const w = pressureWidth(3, (pressures[i] + pressures[i + 1]) / 2);
+      el.appendChild(svgEl2("line", { x1: String(points[i].x), y1: String(points[i].y), x2: String(points[i + 1].x), y2: String(points[i + 1].y), stroke: api.pen.getColor(), "stroke-width": String(w), "stroke-linecap": "round" }));
+    }
+  } else {
+    el.appendChild(svgEl2("path", { d: points.map((pt, i) => `${i === 0 ? "M" : "L"}${pt.x},${pt.y}`).join(" "), fill: "none", stroke: api.pen.getColor(), "stroke-width": "3", "stroke-linecap": "round", "stroke-linejoin": "round" }));
+  }
 }
 // The lasso loop, drawn live while dragging. The path is
 // closed (the Z joins the last point back to the first),
@@ -1008,7 +1031,7 @@ function attachWindowListeners(): void {
   if (listenersAttached) return;
   listenersAttached = true;
 
-window.addEventListener("mousemove", (e: MouseEvent) => {
+window.addEventListener("pointermove", (e: PointerEvent) => {
   const winPt: Pt = boardPoint(e.clientX, e.clientY);
   const world = toWorld(winPt);
   if (!drag) {
@@ -1085,7 +1108,8 @@ window.addEventListener("mousemove", (e: MouseEvent) => {
     const last = drag.points[drag.points.length - 1];
     if (Math.hypot(world.x - last.x, world.y - last.y) > 2 / cam.zoom) {
       drag.points.push(world);
-      updateLiveStroke(drag.points);
+      if (e.pointerType === "pen") drag.pressures.push(e.pressure);
+      updateLiveStroke(drag.points, drag.pressures);
     }
   } else if (drag.kind === "lasso") {
     const cam = api.view.getCamera();
@@ -1162,7 +1186,7 @@ window.addEventListener("mousemove", (e: MouseEvent) => {
   }
 });
 
-window.addEventListener("mouseup", (e: MouseEvent) => {
+window.addEventListener("pointerup", (e: PointerEvent) => {
   if (pluginToolDown) {
     pluginToolDown = false;
     const pt = getPluginTool(tool);
@@ -1180,7 +1204,7 @@ window.addEventListener("mouseup", (e: MouseEvent) => {
       const xs = d.points.map((p) => p.x), ys = d.points.map((p) => p.y);
       const pos = { x: Math.min(...xs), y: Math.min(...ys) };
       const size = { w: Math.max(1, Math.max(...xs) - pos.x), h: Math.max(1, Math.max(...ys) - pos.y) };
-      api.board.addItem({ Stroke: { points: d.points, color: api.pen.getColor(), width: 3, marker: false } }, pos, size);
+      api.board.addItem({ Stroke: { points: d.points, color: api.pen.getColor(), width: 3, marker: false, ...(d.pressures.length > 0 ? { pressures: d.pressures } : {}) } }, pos, size);
     }
   } else if (d.kind === "lasso") {
     // A click, not a loop: select what is under the cursor,
@@ -1280,6 +1304,7 @@ window.addEventListener("mouseup", (e: MouseEvent) => {
 // The ring must not freeze at the edge when the pointer
 // leaves the window mid-erase.
 document.addEventListener("mouseleave", () => updateEraserRing(0, 0, false));
+document.addEventListener("pointerleave", () => updateEraserRing(0, 0, false));
 
 window.addEventListener("wheel", (e: WheelEvent) => {
   // A wheel over a plugin panel or a plugin view must scroll
