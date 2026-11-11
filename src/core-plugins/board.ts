@@ -105,6 +105,12 @@ let drag: null
   | { kind: "rotate"; id: number; origRot: number; moved: boolean }
   | { kind: "resize"; id: number; startWorld: Pt; origW: number; origH: number; moved: boolean } = null;
 let pluginToolDown = false;
+// Double-click tracking: pointer events carry no click count
+// (detail is always 0 in Chrome), so the old mouse-event
+// `e.detail === 2` check never fired after the input switch
+// to pointer events, and double-click silently stopped opening
+// notes. A double-click is two presses close in time and space.
+let lastPointerDown = { x: 0, y: 0, t: 0 };
 // Trackpad zoom coalescing: a pinch sends wheel events at
 // ~120 Hz, and every tick used to rebuild the card DOM
 // whenever the visible set changed — re-creating images
@@ -841,7 +847,12 @@ boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
     return;
   }
   // Select tool.
-  if (e.detail === 2) {
+  const now = Date.now();
+  const isDoubleClick =
+    now - lastPointerDown.t < 500 &&
+    Math.hypot(winPt.x - lastPointerDown.x, winPt.y - lastPointerDown.y) < 5;
+  lastPointerDown = { x: winPt.x, y: winPt.y, t: now };
+  if (isDoubleClick) {
     // Without this, the browser's default mousedown focus runs after
     // this handler and steals focus from a textarea created here, so
     // typing would never land in a new or edited note.

@@ -3,9 +3,11 @@
     "@types/node": "^24.19.2",
     "electron": "^45.2.1",
     "esbuild": "^0.28.2",
+    "playwright-core": "^1.65.0",
     "sucrase": "^3.35.1",
     "typescript": "^7.0.2",
-    "vite": "^8.3.5"
+    "vite": "^8.3.5",
+    "vitest": "^5.1.0"
   },
   "main": "electron-dist/main.js",
   "name": "bowerbird",
@@ -14,7 +16,11 @@
     "build": "tsc && tsc -p tsconfig.main.json && node scripts/bundle-sucrase.mjs && cp electron/peek.html electron-dist/peek.html && vite build",
     "dev": "tsc -p tsconfig.main.json && node scripts/bundle-sucrase.mjs && cp electron/peek.html electron-dist/peek.html && node electron-dist/dev.js",
     "start": "electron .",
-    "typecheck:plugins": "tsc -p tsconfig.plugins.json"
+    "typecheck:plugins": "tsc -p tsconfig.plugins.json",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:e2e": "node tests/e2e/run.mjs",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.main.json --noEmit && npm run typecheck:plugins"
   },
   "version": "0.2.1",
   "dependencies": {

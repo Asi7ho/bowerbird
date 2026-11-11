@@ -8,3 +8,4 @@ dist-mac/
 dist-win/
 dist-linux/
 Bowerbird-*.tar.gz
+tests/e2e/artifacts/
