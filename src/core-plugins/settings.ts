@@ -154,6 +154,39 @@ function renderBgOpts(): void {
     });
     container.appendChild(b);
   }
+  // A sixth swatch, Custom: it opens the system colour picker,
+  // so the background can be any colour, not just the five
+  // named ones. The swatch shows the current background while
+  // it is a custom colour, and a + while a named one is active.
+  // The picker input itself covers the button, invisible, so
+  // a real click on the swatch opens the picker directly — a
+  // programmatic click on a hidden input does not open it.
+  const customHex = opts.some(([, hex]) => currentBg.toUpperCase() === hex) ? null : currentBg;
+  const cb = document.createElement("button");
+  cb.title = "Custom";
+  cb.setAttribute("aria-label", "Custom");
+  cb.classList.add("custom");
+  const csw = document.createElement("span");
+  csw.className = "bg-swatch" + (customHex ? "" : " custom");
+  if (customHex) csw.style.background = customHex;
+  else csw.textContent = "+";
+  cb.appendChild(csw);
+  if (customHex) cb.classList.add("active");
+  const picker = document.createElement("input");
+  picker.type = "color";
+  picker.value = /^#[0-9a-fA-F]{6}$/.test(currentBg) ? currentBg : "#FFFFFF";
+  picker.className = "bg-picker";
+  picker.setAttribute("aria-label", "Custom background colour");
+  picker.addEventListener("input", () => {
+    api!.board.setCanvas({ bg: picker.value });
+    api!.board.render();
+  });
+  picker.addEventListener("change", () => {
+    api!.board.save();
+    renderBgOpts();
+  });
+  cb.appendChild(picker);
+  container.appendChild(cb);
 }
 
 function renderGridOpts(): void {
