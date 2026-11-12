@@ -21,7 +21,6 @@ export async function sendChat(
   try {
     return await api.ai.chat({
       base: config.base,
-      key: config.key,
       model: config.model,
       messages,
     });

@@ -122,6 +122,19 @@ export function renderPanel(api: PluginContext, container: HTMLElement): void {
     wrap.className = "ai-install";
     const label = document.createElement("span");
     label.textContent = `Ready: ${plugin.name}.`;
+    // What the plugin asks for, and what installing means:
+    // a plugin is code, and it runs with the app's
+    // privileges once enabled — the permissions list is a
+    // contract, not a sandbox, so this is the moment to
+    // decide whether the plugin is trusted.
+    const perms = document.createElement("div");
+    perms.className = "ai-install-meta";
+    perms.textContent = plugin.permissions.length > 0
+      ? `Permissions: ${plugin.permissions.join(", ")}`
+      : "No permissions requested.";
+    const warn = document.createElement("div");
+    warn.className = "ai-install-meta";
+    warn.textContent = "Runs code in Bowerbird once enabled — only install plugins you trust.";
     const btn = document.createElement("button");
     btn.type = "button";
     // A plugin already installed shows as installed, not as
@@ -152,6 +165,8 @@ export function renderPanel(api: PluginContext, container: HTMLElement): void {
     });
     wrap.appendChild(label);
     wrap.appendChild(btn);
+    wrap.appendChild(perms);
+    wrap.appendChild(warn);
     list.appendChild(wrap);
     list.scrollTop = list.scrollHeight;
   };

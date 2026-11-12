@@ -482,8 +482,10 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #toolbar .swatch {
   width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.12);
   cursor: pointer; -webkit-app-region: no-drag; padding: 0;
+  appearance: none; -webkit-appearance: none;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
+#toolbar .swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 #toolbar .swatch:hover { transform: scale(1.1); }
 #toolbar .swatch.active {
   width: 26px; height: 26px;

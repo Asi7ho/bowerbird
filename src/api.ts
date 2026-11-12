@@ -14,6 +14,7 @@ export interface BowerbirdAPI {
   deleteBoard(name: string): Promise<{ wasCurrent: boolean }>;
   listBackups(): Promise<Array<{ name: string; items: number; size: number }>>;
   restoreBackup(name: string): Promise<{ json: string; board_path: string; board_dir: string }>;
+  openBackupsFolder(): Promise<string>;
   resetBoard(): Promise<{ pdf_size_bytes: number; video_size_bytes: number }>;
   factoryReset(): Promise<{ ok: boolean }>;
   checkFile(filePath: string): Promise<{ path: string; exists: boolean; size: number; bundlePath: string; bundleExists: boolean; bundleSize: number }>;
@@ -26,14 +27,16 @@ export interface BowerbirdAPI {
   contextIndexSave(index: Record<string, unknown>): Promise<boolean>;
   contextIndexSaveSync(index: Record<string, unknown>): boolean;
   embedFile(path: string): Promise<string>;
+  embedFileBytes(name: string, data: ArrayBuffer | Uint8Array): Promise<string>;
   listLibrary(): Promise<{ path: string; items: Array<{ name: string; path: string; relativePath: string; ext: string; kind: string; category: string | null; size_bytes: number; mtime_ms: number }>; categories: Array<{ name: string; count: number }>; uncategorizedCount: number }>;
-  addToLibrary(path: string): Promise<string>;
   createLibraryCategory(name: string): Promise<string>;
   moveLibraryItem(relativePath: string, category: string | null): Promise<string>;
   readTextFile(path: string): Promise<string>;
   fileSize(path: string): Promise<number>;
   fetchPreview(url: string): Promise<{ title: string | null; description: string | null; image: string | null; icon: string | null }>;
-  aiChat(opts: { base: string; key: string; model: string; messages: Array<{ role: string; content: string }> }): Promise<string>;
+  aiChat(opts: { base: string; model: string; messages: Array<{ role: string; content: string }> }): Promise<string>;
+  aiHasKey(): Promise<boolean>;
+  aiSetKey(key: string): Promise<boolean>;
   openExternal(target: string): Promise<void>;
   getAppSettings(): Promise<{ corner: string; panelOrder?: string[]; panelWidth?: number }>;
   setPanelWidth(width: number): Promise<number>;

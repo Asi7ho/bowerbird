@@ -242,10 +242,13 @@ export function activate(api: PluginContext): void {
     noteEl.style.display = showNotes ? "flex" : "none";
     if (showNotes && noteEl.childElementCount === 0) {
       for (const hex of NOTE_COLOURS) {
-        const b = document.createElement("div");
+        const b = document.createElement("button");
+        b.type = "button";
         b.className = "swatch";
         b.style.background = hex;
         b.title = hex;
+        b.setAttribute("aria-label", hex);
+        b.setAttribute("aria-pressed", "false");
         b.addEventListener("click", () => {
           const ids = api.board.getSelected();
           api.board.setNoteBackground(ids, hex);
@@ -256,8 +259,10 @@ export function activate(api: PluginContext): void {
     }
     if (showNotes) {
       for (const child of Array.from(noteEl.children)) {
-        const sw = child as HTMLDivElement;
-        sw.classList.toggle("active", sw.title.toUpperCase() === (noteBg ?? "#FFFFFF").toUpperCase());
+        const sw = child as HTMLButtonElement;
+        const active = sw.title.toUpperCase() === (noteBg ?? "#FFFFFF").toUpperCase();
+        sw.classList.toggle("active", active);
+        sw.setAttribute("aria-pressed", String(active));
       }
     }
 
@@ -265,10 +270,13 @@ export function activate(api: PluginContext): void {
     palette.style.display = tool === "pen" ? "flex" : "none";
     if (tool === "pen" && palette.childElementCount === 0) {
       for (const hex of PALETTE) {
-        const b = document.createElement("div");
+        const b = document.createElement("button");
+        b.type = "button";
         b.className = "swatch" + (hex === penColor ? " active" : "");
         b.style.background = hex;
         b.title = hex;
+        b.setAttribute("aria-label", hex);
+        b.setAttribute("aria-pressed", String(hex === penColor));
         b.addEventListener("click", () => { api.pen.setColor(hex); });
         palette.appendChild(b);
       }
@@ -281,21 +289,26 @@ export function activate(api: PluginContext): void {
       // Keep at most one such custom swatch: drop a stale
       // one, add the current colour if it is not fixed.
       for (const child of Array.from(palette.children)) {
-        const sw = child as HTMLDivElement;
+        const sw = child as HTMLButtonElement;
         if (!PALETTE.includes(sw.title) && sw.title.toUpperCase() !== penColor.toUpperCase()) sw.remove();
       }
-      const hasCurrent = Array.from(palette.children).some((c) => (c as HTMLDivElement).title.toUpperCase() === penColor.toUpperCase());
+      const hasCurrent = Array.from(palette.children).some((c) => (c as HTMLButtonElement).title.toUpperCase() === penColor.toUpperCase());
       if (!hasCurrent) {
-        const b = document.createElement("div");
+        const b = document.createElement("button");
+        b.type = "button";
         b.className = "swatch";
         b.style.background = penColor;
         b.title = penColor;
+        b.setAttribute("aria-label", penColor);
+        b.setAttribute("aria-pressed", "true");
         b.addEventListener("click", () => { api.pen.setColor(penColor); });
         palette.prepend(b);
       }
       for (const child of Array.from(palette.children)) {
-        const sw = child as HTMLDivElement;
-        sw.classList.toggle("active", sw.style.background === penColor || sw.title === penColor);
+        const sw = child as HTMLButtonElement;
+        const active = sw.style.background === penColor || sw.title === penColor;
+        sw.classList.toggle("active", active);
+        sw.setAttribute("aria-pressed", String(active));
       }
     }
 

@@ -19,7 +19,7 @@ export interface DropsContext {
 }
 
 export interface Drops {
-  dropPaths(paths: string[], atScreen: Pt): Promise<void>;
+  dropPaths(files: File[], atScreen: Pt): Promise<void>;
   addUrlAt(at: Pt, url: string): Promise<void>;
   refreshLinkPreviews(): Promise<void>;
 }
@@ -94,25 +94,41 @@ export function createDrops(ctx: DropsContext): Drops {
     } catch { /* domain-only card is fine */ }
   }
 
-  async function dropPaths(paths: string[], atScreen: Pt): Promise<void> {
+  async function dropPaths(files: File[], atScreen: Pt): Promise<void> {
+    // The board the drop started on. Every branch awaits
+    // file work, and the user may switch boards while it
+    // runs; items must land on the board they were dropped
+    // onto, never the board the app happens to be on when
+    // an await resolves. Switching saves the outgoing board
+    // first, so items already added are kept — the import
+    // just stops there, and says so.
+    const board = ctx.getBoard();
+    const sameBoard = (): boolean => ctx.getBoard() === board;
+    // Files arrive as File objects, not paths: text is read
+    // with the File API and media is embedded as bytes, so
+    // no renderer-supplied path is ever handed to the main
+    // process to open (see the security boundaries comment
+    // in electron/main.ts).
     let at = ctx.toWorld(atScreen);
     let added = 0;
-    for (const path of paths) {
-      const ext = path.split(".").pop() ?? "";
+    for (const file of files) {
+      const ext = file.name.split(".").pop() ?? "";
       const kind = dropKindForExt(ext);
       try {
         if (kind === "image") {
-          const stored = await api.embedFile(path);
+          const stored = await api.embedFileBytes(file.name, await file.arrayBuffer());
           const img = new Image();
           await new Promise<void>((resolve) => { img.onload = () => resolve(); img.onerror = () => resolve(); img.src = api.fileUrl(stored); });
+          if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
           const nw = img.naturalWidth || 320, nh = img.naturalHeight || 240;
           const scale = nw > 320 ? 320 / nw : 1;
           const id = ctx.allocId();
           ctx.getBoard().items.push({ id, pos: at, size: { w: Math.max(40, nw * scale), h: Math.max(40, nh * scale) }, group: null, kind: { Image: { path: stored } } });
           added++;
         } else if (kind === "pdf") {
-          const stored = await api.embedFile(path);
+          const stored = await api.embedFileBytes(file.name, await file.arrayBuffer());
           const size = await api.fileSize(stored).catch(() => 0);
+          if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
           const id = ctx.allocId();
           // Tall enough to show a page, not just a tile: the
           // page preview needs height, and a user can still
@@ -120,18 +136,21 @@ export function createDrops(ctx: DropsContext): Drops {
           ctx.getBoard().items.push({ id, pos: at, size: { w: 260, h: 360 }, group: null, kind: { PdfCard: { path: stored, size_bytes: size } } });
           added++;
         } else if (kind === "audio") {
-          const stored = await api.embedFile(path);
+          const stored = await api.embedFileBytes(file.name, await file.arrayBuffer());
+          if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
           const id = ctx.allocId();
           ctx.getBoard().items.push({ id, pos: at, size: { w: 300, h: 104 }, group: null, kind: { Audio: { path: stored } } });
           added++;
         } else if (kind === "video") {
-          const stored = await api.embedFile(path);
+          const stored = await api.embedFileBytes(file.name, await file.arrayBuffer());
           const size = await api.fileSize(stored).catch(() => 0);
+          if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
           const id = ctx.allocId();
           ctx.getBoard().items.push({ id, pos: at, size: { w: 360, h: 264 }, group: null, kind: { Video: { source: stored, remote: false, size_bytes: size } } });
           added++;
         } else if (kind === "text") {
-          const text = await api.readTextFile(path);
+          const text = await file.text();
+          if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
           const hex = normaliseHex(text.trim());
           const id = ctx.allocId();
           if (hex) {
@@ -141,12 +160,15 @@ export function createDrops(ctx: DropsContext): Drops {
           }
           added++;
         } else if (kind === "shortcut") {
-          const text = await api.readTextFile(path);
+          const text = await file.text();
           const url = extractShortcutUrl(text);
-          if (url) { await addUrlAt(at, url); added++; }
+          if (url) {
+            if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
+            await addUrlAt(at, url); added++;
+          }
         }
       } catch (err) {
-        ctx.toast(`Could not add ${path.split("/").pop()}: ${String(err)}`);
+        ctx.toast(`Could not add ${file.name}: ${String(err)}`);
       }
       at = { x: at.x + 24, y: at.y + 24 };
     }

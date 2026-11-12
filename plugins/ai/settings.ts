@@ -1,10 +1,14 @@
 // AI — settings. The provider, the API key and the model.
 //
-// The key is the only secret: it lives in secure storage (the OS
-// keychain where the OS can encrypt), never in plain storage and
-// never in the chat. The provider and model are plain settings.
-// The key is never shown back — the settings only say whether
-// one is saved.
+// The key is the only secret. It lives in the main process,
+// never in the renderer: the settings UI writes it through
+// api.ai.setKey (write-only) and checks it with
+// api.ai.hasKey, and ai-chat reads it from the main
+// process's own store. A plugin runs in the same renderer
+// as the app and can call the bridge directly, so a key the
+// renderer held could be read by any plugin. The provider
+// and model are plain settings. The key is never shown back
+// — the settings only say whether one is saved.
 import type { PluginContext } from "../../src/plugins";
 
 export interface Provider {
@@ -35,30 +39,25 @@ export function providerById(id: string): Provider {
 
 export interface AiConfig {
   base: string;
-  key: string;
   model: string;
 }
 
-const KEY_KEY = "apiKey";
 const PROVIDER_KEY = "provider";
 const MODEL_KEY = "model";
 
 export async function getConfig(api: PluginContext): Promise<AiConfig | null> {
   const providerId = (await api.storage.get(PROVIDER_KEY)) as string | undefined;
   const provider = providerById(typeof providerId === "string" ? providerId : "openai");
-  const key = (await api.secureStorage.get(KEY_KEY)) as string | undefined;
-  if (typeof key !== "string" || !key.trim()) return null;
+  if (!(await hasKey(api))) return null;
   const model = (await api.storage.get(MODEL_KEY)) as string | undefined;
   return {
     base: provider.base,
-    key: key.trim(),
     model: typeof model === "string" && model.trim() ? model.trim() : provider.defaultModel,
   };
 }
 
 export async function hasKey(api: PluginContext): Promise<boolean> {
-  const key = (await api.secureStorage.get(KEY_KEY)) as string | undefined;
-  return typeof key === "string" && key.trim().length > 0;
+  return api.ai.hasKey();
 }
 
 export function renderSettings(api: PluginContext, container: HTMLElement): void {
@@ -143,7 +142,7 @@ export function renderSettings(api: PluginContext, container: HTMLElement): void
     await api.storage.set(MODEL_KEY, model || provider.defaultModel);
     const key = keyInput.value.trim();
     if (key) {
-      await api.secureStorage.set(KEY_KEY, key);
+      await api.ai.setKey(key);
     }
     await refresh();
     saveBtn.textContent = "Saved";
