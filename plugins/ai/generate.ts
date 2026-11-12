@@ -43,7 +43,7 @@ The API (PluginContext):
 - api.storage: get(key), set(key, value), delete(key) — async, JSON, per plugin. api.secureStorage: same, for secrets (strings, OS-encrypted where possible). Both need the storage permission.
 - api.pen: getColor(), setColor(hex). api.view: getCamera(), setCamera({x, y, zoom}), zoomBy(factor), getView(), setView(id), listViews(). api.window: hide(), show(), minimise(), close(), fullscreen(), maximise(), getWindowState(). Needs the window permission.
 - api.boards: list(), current(), create(name), switch(name), rename(old, new), delete(name). api.backups: list(), restore(name). api.app: getBuildId(), getPlatform(), isDemo(). api.text: escapeHtml(s). api.geometry: centre(item), segmentIntersectsRect(a, b, rect), itemRotation(item).
-- api.files: embedFile(path), fileUrl(path), readTextFile(path), fileSize(path), openExternal(target), fetchPreview(url). Reads need files:read, writes need files:embed. All file access goes through the core.
+- api.files: embedFile(fileOrPath), fileUrl(path), readTextFile(path), fileSize(path), openExternal(target), fetchPreview(url). Reads need files:read, writes need files:embed. All file access goes through the core. embedFile takes a File (sent as bytes) or a board-local path; reads only ever touch board-local files.
 
 A minimal panel plugin, for reference:
 

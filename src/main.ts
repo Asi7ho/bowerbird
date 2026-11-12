@@ -359,17 +359,16 @@ function bringToFront(ids: number[]): void {
 
 
 
-// File drops from the OS arrive as HTML5 files in Electron; the
-// preload bridge turns each File into its real path via webUtils.
+// File drops from the OS arrive as HTML5 files in Electron.
+// They are handed to the drops flow as File objects: text is
+// read and media embedded from the File itself, so no file
+// path is ever handed to the main process to open.
 window.addEventListener("drop", (e) => {
   const files = e.dataTransfer?.files;
   if ((e.target as HTMLElement).closest("#title-bar")) { e.preventDefault(); return; }
   if (files && files.length > 0) {
-    const paths = Array.from(files).map((f) => api.getPathForFile(f)).filter((p) => p);
-    if (paths.length > 0) {
-      e.preventDefault();
-      void drops.dropPaths(paths, boardPoint(e.clientX, e.clientY));
-    }
+    e.preventDefault();
+    void drops.dropPaths(Array.from(files), boardPoint(e.clientX, e.clientY));
   }
 });
 

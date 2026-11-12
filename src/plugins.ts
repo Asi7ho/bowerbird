@@ -164,13 +164,17 @@ export interface PluginBridge {
   platform: string;
   fileUrl(path: string): string;
   embedFile(path: string): Promise<string>;
+  embedFileBytes(name: string, data: ArrayBuffer | Uint8Array): Promise<string>;
   readTextFile(path: string): Promise<string>;
   readFileBase64(filePath: string): Promise<{ mime: string; base64: string }>;
   fileSize(path: string): Promise<number>;
   fetchPreview(url: string): Promise<{ title: string | null; description: string | null; image: string | null; icon: string | null }>;
-  aiChat(opts: { base: string; key: string; model: string; messages: Array<{ role: string; content: string }> }): Promise<string>;
+  aiChat(opts: { base: string; model: string; messages: Array<{ role: string; content: string }> }): Promise<string>;
+  aiHasKey(): Promise<boolean>;
+  aiSetKey(key: string): Promise<boolean>;
   openExternal(target: string): Promise<void>;
   listBackups(): Promise<Array<{ name: string; items: number; size: number }>>;
+  openBackupsFolder(): Promise<string>;
   listPlugins(): Promise<PluginManifest[]>;
   readPluginFile(pluginId: string, relativePath: string): Promise<string>;
   getPluginEnabled(): Promise<Record<string, boolean>>;
@@ -191,7 +195,6 @@ export interface PluginBridge {
   listLibrary: () => Promise<{ path: string; items: Array<{ name: string; path: string; relativePath: string; ext: string; kind: string; category: string | null; size_bytes: number; mtime_ms: number }>; categories: Array<{ name: string; count: number }>; uncategorizedCount: number }>;
   createLibraryCategory: (name: string) => Promise<string>;
   moveLibraryItem: (relativePath: string, category: string | null) => Promise<string>;
-  addToLibrary: (filePath: string) => Promise<string>;
   // Window primitives: the main process owns the window and the
   // peek icon, so these are the only way a plugin can hide, show
   // or move the window. They are the existing preload bridge
@@ -522,10 +525,14 @@ export interface PluginContext {
   // Backups: list them (newest first) and restore one. A
   // restore loads the backup's board into the app, like
   // boards.switch, so it needs board:write and is not
-  // available to a trial plugin.
+  // available to a trial plugin. openFolder opens the
+  // backups folder in the file explorer, so an older
+  // backup can be reached even though the UI lists only
+  // the newest one.
   backups: {
     list: () => Promise<Array<{ name: string; items: number; size: number }>>;
     restore: (name: string) => Promise<boolean>;
+    openFolder: () => Promise<string>;
   };
   window: {
     hide: () => Promise<void>;
@@ -698,11 +705,15 @@ export interface PluginContext {
     registerBuiltin: (def: PluginBuiltinCardDef) => void;
   };
   files: {
-    embedFile: (path: string) => Promise<string>;
+    // Embed a file as a board-owned copy. A File (from a
+    // file input or a drop) is sent as bytes; a path must
+    // already be board-local — the main process refuses any
+    // other path, so a plugin cannot copy an arbitrary local
+    // file into the board and then read it back.
+    embedFile: (file: File | string) => Promise<string>;
     listLibrary: () => Promise<{ path: string; items: Array<{ name: string; path: string; relativePath: string; ext: string; kind: string; category: string | null; size_bytes: number; mtime_ms: number }>; categories: Array<{ name: string; count: number }>; uncategorizedCount: number }>;
   createLibraryCategory: (name: string) => Promise<string>;
   moveLibraryItem: (relativePath: string, category: string | null) => Promise<string>;
-    addToLibrary: (path: string) => Promise<string>;
     fileUrl: (path: string) => string;
     readTextFile: (path: string) => Promise<string>;
     // Read a file as base64 with its MIME type, for the
@@ -717,11 +728,15 @@ export interface PluginContext {
   // AI chat completions, run in the main process (not the
   // renderer): a browser fetch from the renderer is subject
   // to the provider's CORS policy, and a local model server
-  // is http, not https. The caller's own key is passed
-  // per call and never stored by the main process. Needs
-  // the "ai" permission.
+  // is http, not https. The API key is never passed per
+  // call and never held in the renderer: the main process
+  // looks it up from its own store (see ai-has-key and
+  // ai-set-key), so no plugin can read another plugin's
+  // key through the bridge. Needs the "ai" permission.
   ai: {
-    chat: (opts: { base: string; key: string; model: string; messages: Array<{ role: string; content: string }> }) => Promise<string>;
+    chat: (opts: { base: string; model: string; messages: Array<{ role: string; content: string }> }) => Promise<string>;
+    hasKey: () => Promise<boolean>;
+    setKey: (key: string) => Promise<boolean>;
   };
   storage: {
     get: (key: string) => Promise<unknown>;
@@ -1488,6 +1503,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         requireNotTrial("restore a backup");
         return host!.restoreBackup(name);
       },
+      openFolder: async () => bridge!.openBackupsFolder(),
     },
     window: {
       hide: async () => {
@@ -1673,17 +1689,16 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       tint,
     },
     files: {
-      embedFile: async (path: string) => {
+      embedFile: async (file: File | string) => {
         require("files:embed");
-        return bridge!.embedFile(path);
+        if (typeof file !== "string") {
+          return bridge!.embedFileBytes(file.name, await file.arrayBuffer());
+        }
+        return bridge!.embedFile(file);
       },
       listLibrary: async () => {
         require("files:read");
         return bridge!.listLibrary();
-      },
-      addToLibrary: async (path: string) => {
-        require("files:embed");
-        return bridge!.addToLibrary(path);
       },
       createLibraryCategory: async (name: string) => {
         require("files:embed");
@@ -1716,9 +1731,17 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       },
     },
     ai: {
-      chat: async (opts: { base: string; key: string; model: string; messages: Array<{ role: string; content: string }> }) => {
+      chat: async (opts: { base: string; model: string; messages: Array<{ role: string; content: string }> }) => {
         require("ai");
         return bridge!.aiChat(opts);
+      },
+      hasKey: async () => {
+        require("ai");
+        return bridge!.aiHasKey();
+      },
+      setKey: async (key: string) => {
+        require("ai");
+        return bridge!.aiSetKey(key);
       },
     },
     storage: {

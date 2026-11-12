@@ -232,6 +232,15 @@ async function renderBackups(): Promise<void> {
   });
   row.appendChild(meta);
   row.appendChild(btn);
+  // The list shows only the newest backup by design; the
+  // folder is how an older one is reached.
+  const openBtn = document.createElement("button");
+  openBtn.textContent = "Open folder";
+  openBtn.addEventListener("click", async () => {
+    const err = await api!.backups.openFolder();
+    if (err) api!.ui.toast("Could not open the backups folder.");
+  });
+  row.appendChild(openBtn);
   container.appendChild(row);
 }
 

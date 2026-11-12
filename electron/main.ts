@@ -681,6 +681,44 @@ function saveSecureStorage(data: SecureStore): void {
   fs.writeFileSync(tmp, JSON.stringify(data));
   fs.renameSync(tmp, file);
 }
+// Read one secret from the main-process store, decrypting
+// it here so the value never crosses into the renderer.
+// Used by ai-chat (the AI key) and by the generic
+// secure-storage-get handler below.
+async function readSecureValue(pluginId: string, key: string): Promise<string | null> {
+  const data = loadSecureStorage();
+  const per = data[pluginId];
+  if (!per || typeof per !== "object" || !per[key]) return null;
+  const entry = per[key];
+  if (entry.encrypted) {
+    try {
+      // decryptStringAsync resolves to { result, shouldReEncrypt },
+      // not a bare string like the old sync decryptString.
+      // The defensive string branch stays: an older Electron
+      // returned the bare string, and a secret must not be
+      // dropped silently if the shape ever differs again.
+      const out: unknown = await safeStorage.decryptStringAsync(Buffer.from(entry.value, "base64"));
+      if (typeof out === "string") return out;
+      if (out && typeof out === "object" && typeof (out as { result: unknown }).result === "string") {
+        return (out as { result: string }).result;
+      }
+      return null;
+    } catch { return null; }
+  }
+  return entry.value ?? null;
+}
+async function writeSecureValue(pluginId: string, key: string, value: string): Promise<boolean> {
+  const data = loadSecureStorage();
+  let per = data[pluginId];
+  if (!per || typeof per !== "object") { per = {}; data[pluginId] = per; }
+  if (await secureStorageAvailable()) {
+    per[key] = { encrypted: true, value: (await safeStorage.encryptStringAsync(String(value))).toString("base64") };
+  } else {
+    per[key] = { encrypted: false, value: String(value) };
+  }
+  saveSecureStorage(data);
+  return secureStorageAvailable();
+}
 async function secureStorageAvailable(): Promise<boolean> {
   // The sync isEncryptionAvailable is deprecated in
   // Electron 45; the async form is the same check.
@@ -712,6 +750,25 @@ async function secureStorageAvailable(): Promise<boolean> {
 //    and localhost names; a DNS name that resolves to a
 //    private address after this check (DNS rebinding) is
 //    still out of scope, and is noted in PLUGIN_API.md.
+//  - Path-taking handlers (read-text-file, file-size,
+//    check-file, embed-file) only ever touch board-local
+//    files. A plugin runs in the same renderer as the app,
+//    so it can call the bridge directly and bypass the
+//    PluginContext permission checks; the main process
+//    must therefore never trust a renderer-supplied path
+//    to reach outside the board. Files the user drops from
+//    elsewhere arrive as bytes (embed-file-bytes) or are
+//    read with the File API in the renderer — never as a
+//    path the main process is asked to open.
+//  - Plugin storage is keyed by a caller-supplied plugin
+//    id, and the main process cannot tell which plugin is
+//    calling: the ids are a contract, not a boundary (see
+//    PLUGIN_API.md). The one exception is the AI plugin's
+//    API key, which the renderer never sees: it is stored
+//    and read in the main process, and ai-chat looks it up
+//    there. Installing a plugin is therefore running its
+//    code with the app's privileges — the install UI says
+//    so, and only trusted plugins should be installed.
 function isBoardLocal(filePath: string): boolean {
   try {
     const resolved = path.resolve(filePath);
@@ -826,6 +883,7 @@ function registerIpc(): void {
   // so a user can report exactly which link in the chain
   // fails on their machine, instead of "File missing".
   ipcMain.handle("bowerbird:check-file", (_event, filePath: string) => {
+    if (!isBoardLocal(filePath)) throw new Error("not a board-local file");
     const sizeOf = (file: string): number => { try { return fs.statSync(file).size; } catch { return -1; } };
     const bundle = path.join(assetsDir(), path.basename(String(filePath)));
     return {
@@ -956,7 +1014,7 @@ function registerIpc(): void {
     const base = path.basename(src);
     let dest = path.join(destDir, base);
     if (dest === src) return relativePath.split(path.sep).join("/");
-    // Deduplicate like embedFile/addToLibrary: stem-1, stem-2, …
+    // Deduplicate like embedFile: stem-1, stem-2, …
     if (fs.existsSync(dest)) {
       const stem = path.basename(base, ext);
       let n = 1;
@@ -966,26 +1024,38 @@ function registerIpc(): void {
     return path.relative(lib, dest).split(path.sep).join("/");
   });
 
-  ipcMain.handle("bowerbird:add-to-library", (_event, filePath: string) => {
-    const dir = libraryDir();
-    fs.mkdirSync(dir, { recursive: true });
-    const resolved = path.resolve(filePath);
-    const resolvedDir = path.resolve(dir);
-    if (resolved.startsWith(resolvedDir + path.sep)) return filePath;
-    const clean = sanitise(path.basename(filePath));
-    let dest = path.join(dir, clean);
+  // Embed a file the user dropped from outside the board.
+  // It arrives as bytes, never as a path: a path the main
+  // process is asked to open could point anywhere on disk,
+  // while bytes can only be content the renderer already
+  // holds (a dropped File). The name is sanitised and
+  // deduplicated like embed-file.
+  ipcMain.handle("bowerbird:embed-file-bytes", (_event, name: string, data: ArrayBuffer | Uint8Array) => {
+    if (typeof name !== "string" || !name) throw new Error("embed needs a file name");
+    const buf = Buffer.from(data as ArrayBuffer);
+    const assets = path.join(boardDir(), "assets");
+    fs.mkdirSync(assets, { recursive: true });
+    const clean = sanitise(path.basename(name));
+    let dest = path.join(assets, clean);
     let n = 1;
     while (fs.existsSync(dest)) {
       const ext = path.extname(clean);
       const stem = path.basename(clean, ext);
-      dest = path.join(dir, ext ? `${stem}-${n}${ext}` : `${stem}-${n}`);
+      dest = path.join(assets, ext ? `${stem}-${n}${ext}` : `${stem}-${n}`);
       n += 1;
     }
-    fs.copyFileSync(filePath, dest);
+    fs.writeFileSync(dest, buf);
     return dest;
   });
 
   ipcMain.handle("bowerbird:embed-file", (_event, filePath: string) => {
+    // Board-local only: the source must already be a board
+    // file. A renderer-supplied path to anywhere else would
+    // let any plugin copy an arbitrary local file into the
+    // board, where the board-local readers could then read
+    // it. Files dropped from outside the board arrive as
+    // bytes instead (bowerbird:embed-file-bytes).
+    if (!isBoardLocal(filePath)) throw new Error("not a board-local file");
     const assets = path.join(boardDir(), "assets");
     fs.mkdirSync(assets, { recursive: true });
     const resolved = path.resolve(filePath);
@@ -1004,7 +1074,10 @@ function registerIpc(): void {
     return dest;
   });
 
-  ipcMain.handle("bowerbird:read-text-file", (_event, filePath: string) => fs.readFileSync(filePath, "utf8"));
+  ipcMain.handle("bowerbird:read-text-file", (_event, filePath: string) => {
+    if (!isBoardLocal(filePath)) throw new Error("not a board-local file");
+    return fs.readFileSync(filePath, "utf8");
+  });
   // Data-URL fallback for media: if the app-file scheme
   // fails to serve a file in a given run (the Mac dev-run
   // failure, where files exist and open in Preview but
@@ -1021,7 +1094,10 @@ function registerIpc(): void {
     const mime = MIME[ext] || "application/octet-stream";
     return { mime, base64: fs.readFileSync(filePath).toString("base64") };
   });
-  ipcMain.handle("bowerbird:file-size", (_event, filePath: string) => fs.statSync(filePath).size);
+  ipcMain.handle("bowerbird:file-size", (_event, filePath: string) => {
+    if (!isBoardLocal(filePath)) throw new Error("not a board-local file");
+    return fs.statSync(filePath).size;
+  });
   // Context search (local ML, see electron/context.ts).
   // Image and video-frame embeddings and audio labels are
   // computed here, in the main process, where the models
@@ -1165,6 +1241,15 @@ function registerIpc(): void {
     return listBackups(boardDir());
   });
   ipcMain.handle("bowerbird:restore-backup", (_event, name: string) => restoreBackup(boardDir(), name));
+  ipcMain.handle("bowerbird:open-backups-folder", () => {
+    // The Settings UI lists only the newest backup, so the
+    // folder is how a user reaches an older one. It is
+    // created on demand: a board with no backups yet has
+    // no backups folder to open.
+    const dir = path.join(boardDir(), "backups");
+    fs.mkdirSync(dir, { recursive: true });
+    return shell.openPath(dir);
+  });
   ipcMain.handle("bowerbird:set-panel-order", (_event, order: unknown) => {
     if (!Array.isArray(order)) return panelOrder;
     panelOrder = order.filter((x: unknown) => typeof x === "string").slice(0, 100);
@@ -1253,13 +1338,30 @@ function registerIpc(): void {
   // never stored here. Public bases must be https; a
   // localhost base may be http, for a local model server.
   // Other private addresses are refused, as with fetchPreview.
+  // The AI key lives in the main process and never crosses
+  // into the renderer: a plugin can call the bridge
+  // directly, so a key the renderer held could be read by
+  // any plugin. The chat looks the key up here, under the
+  // AI plugin's id, and the settings UI writes it through
+  // ai-set-key (write-only) and checks it with ai-has-key.
+  ipcMain.handle("bowerbird:ai-has-key", async () => {
+    const key = await readSecureValue("ai", "apiKey");
+    return typeof key === "string" && key.trim().length > 0;
+  });
+  ipcMain.handle("bowerbird:ai-set-key", async (_event, key: string) => {
+    if (typeof key !== "string" || !key.trim()) throw new Error("ai key must not be empty");
+    return writeSecureValue("ai", "apiKey", key.trim());
+  });
   ipcMain.handle("bowerbird:ai-chat", async (_event, opts: Record<string, unknown>) => {
     const base = typeof opts?.base === "string" ? opts.base : "";
-    const key = typeof opts?.key === "string" ? opts.key : "";
     const model = typeof opts?.model === "string" ? opts.model : "";
     const messages = Array.isArray(opts?.messages) ? opts.messages : [];
-    if (!base || !key || !model || messages.length === 0) {
-      throw new Error("ai chat needs a base URL, an API key, a model and at least one message");
+    if (!base || !model || messages.length === 0) {
+      throw new Error("ai chat needs a base URL, a model and at least one message");
+    }
+    const key = await readSecureValue("ai", "apiKey");
+    if (!key || !key.trim()) {
+      throw new Error("No API key saved yet. Add one in Settings → Plugin settings → AI.");
     }
     if (!messages.every((m: unknown) => typeof m === "object" && m !== null && typeof (m as { role?: unknown }).role === "string" && typeof (m as { content?: unknown }).content === "string")) {
       throw new Error("ai messages must be { role, content } objects");
@@ -1320,41 +1422,22 @@ function registerIpc(): void {
     }
   });
   ipcMain.handle("bowerbird:secure-storage-available", () => secureStorageAvailable());
+  // The AI key is not served here at all: it has dedicated
+  // main-only accessors (ai-has-key, ai-set-key, ai-chat),
+  // because any renderer code — any plugin — can call this
+  // handler with any plugin id. A plugin reading the AI
+  // key through the generic store would defeat the point
+  // of keeping it in the main process.
   ipcMain.handle("bowerbird:secure-storage-get", async (_event, pluginId: string, key: string) => {
-    const data = loadSecureStorage();
-    const per = data[pluginId];
-    if (!per || typeof per !== "object" || !per[key]) return null;
-    const entry = per[key];
-    if (entry.encrypted) {
-      try {
-        // decryptStringAsync resolves to { result, shouldReEncrypt },
-        // not a bare string like the old sync decryptString.
-        // The defensive string branch stays: an older Electron
-        // returned the bare string, and a secret must not be
-        // dropped silently if the shape ever differs again.
-        const out: unknown = await safeStorage.decryptStringAsync(Buffer.from(entry.value, "base64"));
-        if (typeof out === "string") return out;
-        if (out && typeof out === "object" && typeof (out as { result: unknown }).result === "string") {
-          return (out as { result: string }).result;
-        }
-        return null;
-      } catch { return null; }
-    }
-    return entry.value ?? null;
+    if (pluginId === "ai" && key === "apiKey") return null;
+    return readSecureValue(pluginId, key);
   });
   ipcMain.handle("bowerbird:secure-storage-set", async (_event, pluginId: string, key: string, value: string) => {
-    const data = loadSecureStorage();
-    let per = data[pluginId];
-    if (!per || typeof per !== "object") { per = {}; data[pluginId] = per; }
-    if (await secureStorageAvailable()) {
-      per[key] = { encrypted: true, value: (await safeStorage.encryptStringAsync(String(value))).toString("base64") };
-    } else {
-      per[key] = { encrypted: false, value: String(value) };
-    }
-    saveSecureStorage(data);
-    return secureStorageAvailable();
+    if (pluginId === "ai" && key === "apiKey") throw new Error("the AI key is set through ai-set-key");
+    return writeSecureValue(pluginId, key, value);
   });
   ipcMain.handle("bowerbird:secure-storage-delete", (_event, pluginId: string, key: string) => {
+    if (pluginId === "ai" && key === "apiKey") throw new Error("the AI key is managed through ai-set-key");
     const data = loadSecureStorage();
     const per = data[pluginId];
     if (per && typeof per === "object") {

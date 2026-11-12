@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld("bowerbird", {
   deleteBoard: (name: string) => ipcRenderer.invoke("bowerbird:delete-board", name),
   listBackups: () => ipcRenderer.invoke("bowerbird:list-backups"),
   restoreBackup: (name: string) => ipcRenderer.invoke("bowerbird:restore-backup", name),
+  openBackupsFolder: () => ipcRenderer.invoke("bowerbird:open-backups-folder"),
   resetBoard: () => ipcRenderer.invoke("bowerbird:reset-board"),
   factoryReset: () => ipcRenderer.invoke("bowerbird:factory-reset"),
   restoreShowcase: () => ipcRenderer.invoke("bowerbird:restore-showcase"),
@@ -26,10 +27,15 @@ contextBridge.exposeInMainWorld("bowerbird", {
   contextIndexSaveSync: (index: unknown) => ipcRenderer.sendSync("bowerbird:context-index-save-sync", index),
   checkFile: (filePath: string) => ipcRenderer.invoke("bowerbird:check-file", filePath),
   embedFile: (filePath: string) => ipcRenderer.invoke("bowerbird:embed-file", filePath),
+  embedFileBytes: (name: string, data: ArrayBuffer | Uint8Array) => ipcRenderer.invoke("bowerbird:embed-file-bytes", name, data),
   readTextFile: (filePath: string) => ipcRenderer.invoke("bowerbird:read-text-file", filePath),
   fileSize: (filePath: string) => ipcRenderer.invoke("bowerbird:file-size", filePath),
   fetchPreview: (url: string) => ipcRenderer.invoke("bowerbird:fetch-preview", url),
-  aiChat: (opts: { base: string; key: string; model: string; messages: Array<{ role: string; content: string }> }) => ipcRenderer.invoke("bowerbird:ai-chat", opts),
+  // The AI key never travels through here: ai-chat reads it
+  // in the main process, and ai-set-key is write-only.
+  aiChat: (opts: { base: string; model: string; messages: Array<{ role: string; content: string }> }) => ipcRenderer.invoke("bowerbird:ai-chat", opts),
+  aiHasKey: () => ipcRenderer.invoke("bowerbird:ai-has-key"),
+  aiSetKey: (key: string) => ipcRenderer.invoke("bowerbird:ai-set-key", key),
   openExternal: (target: string) => ipcRenderer.invoke("bowerbird:open-external", target),
   getAppSettings: () => ipcRenderer.invoke("bowerbird:get-app-settings"),
   setPanelWidth: (width: number) => ipcRenderer.invoke("bowerbird:set-panel-width", width),
@@ -70,6 +76,5 @@ contextBridge.exposeInMainWorld("bowerbird", {
   secureStorageDelete: (pluginId: string, key: string) => ipcRenderer.invoke("bowerbird:secure-storage-delete", pluginId, key),
   listLibrary: () => ipcRenderer.invoke("bowerbird:list-library"),
   createLibraryCategory: (name: string) => ipcRenderer.invoke("bowerbird:create-library-category", name),
-  addToLibrary: (filePath: string) => ipcRenderer.invoke("bowerbird:add-to-library", filePath),
   moveLibraryItem: (relativePath: string, category: string | null) => ipcRenderer.invoke("bowerbird:move-library-item", relativePath, category),
 });
