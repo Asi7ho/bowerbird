@@ -528,6 +528,18 @@ function createWindow(): void {
     },
   });
   win.contentView.addChildView(boardView);
+  // The microphone, for voice-note recording (and any plugin
+  // that records): Electron denies media by default, so grant
+  // it for this app's own board view. The grant is for media
+  // only, and this view loads no remote origin — the board is
+  // served locally, so there is nothing else to grant it to.
+  // On macOS the OS still asks the user for microphone access
+  // the first time, and a packaged build needs the
+  // audio-input entitlement for that prompt to succeed.
+  boardView.webContents.session.setPermissionCheckHandler((_wc, permission) => permission === "media");
+  boardView.webContents.session.setPermissionRequestHandler((_wc, permission, callback) => {
+    callback(permission === "media");
+  });
   const bounds = win.getContentBounds();
   boardView.setBounds({ x: 0, y: 0, width: bounds.width, height: bounds.height });
   if (process.env.ELECTRON_RENDERER_URL) {
