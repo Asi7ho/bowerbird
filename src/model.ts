@@ -48,6 +48,11 @@ export interface Board {
   camera: Camera;
   next_id: number;
   next_group: number;
+  // Labels for groups: a group is a section, so each group
+  // carries the label its frame shows. Optional so old
+  // boards load unchanged: a group with no entry gets
+  // "Section <id>" on load.
+  groups?: Record<number, { label: string }>;
   bg: string;
   grid: "Lines" | "Dots" | "Off";
 }

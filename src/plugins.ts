@@ -280,6 +280,10 @@ export interface PluginHost {
   // with it. One save, one undo step. Returns the group id,
   // or null when fewer than two cards were given.
   createGroup: (ids: number[]) => number | null;
+  // Rename a group's section label. One save, one undo
+  // step. False when the group has fewer than two members
+  // or the label is empty after trimming.
+  setGroupLabel: (group: number, label: string) => boolean;
   save: () => void;
   // Save the board to disk without creating an undo step,
   // for changes the user did not make as edits: a pan's
@@ -436,6 +440,10 @@ export interface PluginContext {
     // with it. One save, one undo step. Returns the group id,
     // or null when fewer than two cards were given.
     createGroup: (ids: number[]) => number | null;
+    // Rename a group's section label. One save, one undo
+    // step. False when the group has fewer than two members
+    // or the label is empty after trimming.
+    setGroupLabel: (group: number, label: string) => boolean;
     getSelected: () => number[];
     setSelected: (ids: number[]) => void;
     addItem: (kind: Kind, pos: Pt, size: Size) => number;
@@ -1325,6 +1333,10 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       createGroup: (ids: number[]) => {
         require("board:write");
         return host!.createGroup(ids);
+      },
+      setGroupLabel: (group: number, label: string) => {
+        require("board:write");
+        return host!.setGroupLabel(group, label);
       },
       getSelected: () => host!.getSelected(),
       setSelected: (ids: number[]) => host!.setSelected(ids),
