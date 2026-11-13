@@ -238,13 +238,20 @@ async function main() {
 
     await check("grouping cards frames them as a section", async () => {
       // The board holds the "Hello CI!" note at world (600, 552),
-      // 260x48, and the CI plugin card at (100, 100), 260x96.
-      // Select both, then group them with Ctrl+G.
+      // 260x48, and CI plugin cards stacked at (100, 100), 260x96
+      // (the plugin adds one per reload). Select the note and
+      // the top CI card, then group them with Ctrl+G.
       await page.mouse.click(730, 624);
-      await page.mouse.click(230, 196, { modifiers: ["Shift"] });
+      await page.keyboard.down("Shift");
+      await page.mouse.click(230, 196);
+      await page.keyboard.up("Shift");
+      await waitFor("two cards selected", async () => {
+        const n = await page.evaluate(() => document.querySelectorAll("#cards .card.selected").length);
+        return n === 2 ? true : null;
+      });
       await page.keyboard.press("Control+g");
       const frame = await waitFor("group frame in the DOM", async () => {
-        const el = await page.locator(".group-frame").first().elementHandle();
+        const el = await page.$(".group-frame");
         if (!el) return null;
         const box = await el.boundingBox();
         return box ? { box } : null;
@@ -258,9 +265,11 @@ async function main() {
       assert.equal(await page.locator(".group-frame .group-label").first().textContent(), "Section 1");
       const grouped = await waitFor("group label on disk", () => {
         const b = readBoard();
-        return b.groups?.[1]?.label === "Section 1" && b.items.every((it) => it.group === 1) ? b : null;
+        const note = b.items.find((it) => "Text" in it.kind);
+        const ci = b.items.find((it) => "Plugin" in it.kind && it.group === 1);
+        return b.groups?.[1]?.label === "Section 1" && note?.group === 1 && ci ? b : null;
       });
-      assert.equal(grouped.items.length, 2);
+      assert.equal(grouped.items.filter((it) => it.group === 1).length, 2);
       // Rename by double-clicking the label: the chip sits at
       // the frame's top left, 8px in — click its centre.
       await doubleClick(page, 120, 142);
@@ -279,7 +288,7 @@ async function main() {
       await page.mouse.move(830, 624, { steps: 10 });
       await page.mouse.up();
       await waitFor("frame follows the drag", async () => {
-        const el = await page.locator(".group-frame").first().elementHandle();
+        const el = await page.$(".group-frame");
         const box = el && (await el.boundingBox());
         return box && Math.round(box.width) === 884 ? true : null;
       });
@@ -288,7 +297,7 @@ async function main() {
       // One undo restores the drag, and the frame with it.
       await page.keyboard.press("Control+z");
       await waitFor("frame back after undo", async () => {
-        const el = await page.locator(".group-frame").first().elementHandle();
+        const el = await page.$(".group-frame");
         const box = el && (await el.boundingBox());
         return box && Math.round(box.width) === 784 ? true : null;
       });
