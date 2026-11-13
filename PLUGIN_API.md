@@ -62,7 +62,7 @@ export function activate(api: PluginContext) {
     render: (item, data) =>
       `<div class="hello"><strong>${api.text.escapeHtml(data.text)}</strong></div>`,
   });
-  api.commands.register({
+  api.ui.registerCommand({
     id: "add-hello",
     title: "Add a hello card",
     run: () =>
