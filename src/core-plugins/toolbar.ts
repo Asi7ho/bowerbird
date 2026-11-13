@@ -121,6 +121,18 @@ export function activate(api: PluginContext): void {
   zoomOut.addEventListener("click", () => api.view.zoomBy(1 / 1.2));
   zoomGroup.appendChild(zoomOut);
 
+  // The zoom level, as live state between the zoom buttons.
+  // Clicking it resets the view, the same as pressing 0.
+  const zoomLabel = document.createElement("button");
+  zoomLabel.id = "zoom-label";
+  zoomLabel.type = "button";
+  zoomLabel.className = "zoom-label";
+  zoomLabel.title = "Zoom level — reset the view (0)";
+  zoomLabel.setAttribute("aria-label", "Zoom level, reset the view");
+  zoomLabel.textContent = "100%";
+  zoomLabel.addEventListener("click", () => api.view.setCamera({ x: 0, y: 0, zoom: 1 }));
+  zoomGroup.appendChild(zoomLabel);
+
   const zoomIn = document.createElement("button");
   zoomIn.id = "zoom-in";
   zoomIn.title = "Zoom in (+)";
@@ -151,6 +163,15 @@ export function activate(api: PluginContext): void {
   });
   toolbar.appendChild(settingsBtn);
 
+  // Whether the board file holds the latest content, as live
+  // state at the bottom of the toolbar. The core drives it
+  // through the saving / saved / save-failed events.
+  const savedLabel = document.createElement("div");
+  savedLabel.id = "saved-label";
+  savedLabel.className = "saved-label";
+  savedLabel.textContent = "Saved";
+  toolbar.appendChild(savedLabel);
+
   // The toolbar lives in the board area, beside the cards
   // layer. The core's shell mounts it here; the plugin
   // appends it to the board area element the API provides.
@@ -180,9 +201,12 @@ export function activate(api: PluginContext): void {
     const selected = api.board.getSelected();
     const penColor = api.pen.getColor();
     const noteBg = noteBgOfSelected();
-    const key = `${tool}|${selected.join(",")}|${penColor}|${noteBg ?? ""}`;
+    const zoom = api.view.getCamera().zoom;
+    const key = `${tool}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}`;
     if (key === lastKey) return;
     lastKey = key;
+
+    zoomLabel.textContent = `${Math.round(zoom * 100)}%`;
 
     const setActive = (el: HTMLElement, on: boolean) => el.classList.toggle("active", on);
     setActive(selectBtn, tool === "select");
@@ -319,6 +343,11 @@ export function activate(api: PluginContext): void {
   api.events.on("tool", update);
   api.events.on("selection", update);
   api.events.on("pen", update);
+  // Follow the camera (zoom level) and the save state.
+  api.events.on("camera", update);
+  api.events.on("saving", () => { savedLabel.textContent = "Saving…"; });
+  api.events.on("saved", () => { savedLabel.textContent = "Saved"; });
+  api.events.on("save-failed", () => { savedLabel.textContent = "Not saved"; });
   update();
 }
 
