@@ -2,8 +2,8 @@
 // PLUGIN_API.md).
 //
 // A decorator only: no panel, no storage, no writes. For a
-// Text card containing checklist lines, it shows `n/m`
-// under the card — done over total. The task-line shape is
+// Text card containing checklist lines, it shows `n/m` as a
+// pill inside the card — done over total. The task-line shape is
 // the app's own (see toggleTaskLine in src/model.ts), so
 // the count always agrees with what a click toggles.
 import type { PluginContext } from "../../src/plugins";
