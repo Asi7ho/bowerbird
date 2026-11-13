@@ -352,23 +352,6 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 .card-decorations .tag-add svg { width: 13px; height: 13px; }
 .card.selected + .card-decorations .tag-add { opacity: 1; pointer-events: auto; }
 .card-decorations .tag-add:hover { color: var(--ink); background: var(--fill); }
-/* Double-click creation chooser: a small white menu at the
-   click point, "Type" first, then one row per registered
-   creation action. Same chip treatment as the tag pills. */
-.create-chooser {
-  position: absolute; z-index: 40; min-width: 160px;
-  background: #fff; border: 1px solid var(--hairline);
-  border-radius: 10px; box-shadow: var(--shadow-md);
-  padding: 4px; display: flex; flex-direction: column; gap: 2px;
-}
-.create-chooser-btn {
-  display: flex; align-items: center; gap: 8px;
-  font: inherit; font-size: 13px; color: var(--ink);
-  background: transparent; border: 0; border-radius: 7px;
-  padding: 7px 10px; cursor: pointer; text-align: left;
-}
-.create-chooser-btn svg { width: 14px; height: 14px; flex: none; }
-.create-chooser-btn:hover, .create-chooser-btn:focus-visible { background: var(--fill); outline: none; }
 .card-decorations .tag-add-input {
   font: inherit; font-size: 12px; color: var(--ink);
   background: #fff; border: 1px solid var(--hairline);
@@ -414,6 +397,18 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   width: 100%; height: 100%; border: none; outline: none; resize: none;
   padding: 14px; font: inherit; line-height: 1.55; background: transparent;
 }
+/* The text box and the creation-action icon beside it: the
+   textarea shrinks to leave the icon its own column, and
+   the icon is a quiet grey button that darkens on hover. */
+.card .note-edit-row { display: flex; align-items: stretch; width: 100%; height: 100%; }
+.card .note-edit-row .note-edit { width: auto; flex: 1 1 auto; min-width: 0; }
+.card .note-edit-mic {
+  flex: none; align-self: center; border: none; background: transparent;
+  color: var(--grey); cursor: pointer; padding: 6px; margin-right: 6px;
+  border-radius: 6px; line-height: 0;
+}
+.card .note-edit-mic:hover { color: var(--ink); background: var(--fill); }
+.card .note-edit-mic svg { width: 18px; height: 18px; display: block; }
 .card .row { display: flex; align-items: center; gap: 12px; padding: 12px; height: 100%; }
 .card .tile {
   flex: none; width: 56px; height: 56px; border-radius: 10px;
