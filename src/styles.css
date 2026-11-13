@@ -322,9 +322,10 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    with ink text, so the pill reads on the white card —
    and checklist progress is plain grey text at the bottom
    right. The pills are the app's own chip treatment, the
-   same as the swatch labels and the slide label. Neither
-   side takes clicks, so they cannot steal a drag or a
-   marquee selection. */
+   same as the swatch labels and the slide label. The row
+   itself never takes clicks, so it cannot steal a drag or
+   a marquee selection — except the "+ tag" button, which
+   is the one control in the row. */
 .card-decorations {
   position: absolute; display: flex; flex-wrap: wrap; gap: 6px;
   font-size: 12px; line-height: 1.4; color: var(--ink);
@@ -335,6 +336,23 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   border-radius: 999px; padding: 3px 9px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
 }
+/* The "+ tag" button: a quiet ghost pill at the end of
+   the tag row — transparent, grey text — so the board
+   stays clean until a tag is wanted. */
+.card-decorations .tag-add {
+  font: inherit; font-size: 12px; color: var(--grey);
+  background: transparent; border: 1px solid var(--hairline);
+  border-radius: 999px; padding: 3px 9px; cursor: pointer;
+  white-space: nowrap; pointer-events: auto;
+}
+.card-decorations .tag-add:hover { color: var(--ink); background: var(--fill); }
+.card-decorations .tag-add-input {
+  font: inherit; font-size: 12px; color: var(--ink);
+  background: #fff; border: 1px solid var(--hairline);
+  border-radius: 999px; padding: 3px 9px; width: 110px; max-width: 100%;
+  box-sizing: border-box; outline: none; pointer-events: auto;
+}
+.card-decorations .tag-add-input:focus { border-color: rgba(0, 122, 255, 0.5); }
 .card-decorations-right .card-progress {
   color: var(--grey); white-space: nowrap;
 }
