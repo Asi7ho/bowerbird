@@ -214,10 +214,15 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    (#board is untransformed and overflow:hidden), which clips in
    screen space after the transform. */
 #cards { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }
-/* #groups holds the group frames, below the cards. Same
-   no-overflow rule as #cards: frames live in world
-   coordinates. */
-#groups { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }
+/* #groups holds the group frames. Same no-overflow rule
+   as #cards: frames live in world coordinates. The layer
+   sits above the cards so a frame's label takes clicks —
+   but the layer itself never takes them (pointer-events
+   none, only the label re-enables them), and the frames
+   never overlap a card: they sit 24px outside the group's
+   bounds, so painting them above the cards changes nothing
+   visually. */
+#groups { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; pointer-events: none; }
 /* Text inside cards is never selected by a board click or drag — the
    board is a canvas, not a document. The note editor and Settings are
    the exceptions, where selecting text is the point. */
