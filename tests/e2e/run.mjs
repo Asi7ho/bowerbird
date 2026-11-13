@@ -366,6 +366,43 @@ async function main() {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       assert.equal(textCards().some((it) => it.kind.Text.text === "From the outside"), true);
     });
+    await check("tags and checklist progress show under cards", async () => {
+      assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("tags", true)), true);
+      assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("checklist-progress", true)), true);
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: 15000 });
+      // Jump to the Hello CI! note through the Library panel:
+      // that centres on the card and selects it, whatever the
+      // camera is doing. A synthetic click does not select
+      // board cards.
+      await page.locator('.plugin-tab[title^="Library"]').click();
+      await page.locator(".lib-search").fill("Hello CI!");
+      await page.locator(".lib-row").first().click();
+      await page.locator("#cards .card.selected", { hasText: "Hello CI!" }).waitFor({ timeout: 10000 });
+      await page.locator('.plugin-tab[title^="Tags"]').click();
+      await page.locator(".tags-status", { hasText: "1 card selected" }).waitFor({ timeout: 10000 });
+      await page.locator(".tags-input").fill("urgent");
+      await page.keyboard.press("Enter");
+      const helloId = await page.locator("#cards .card.selected").first().getAttribute("data-id");
+      await waitFor("tag shows under the card", async () => {
+        const text = await page.locator(`.card-decorations[data-for="${helloId}"]`).first().textContent().catch(() => "");
+        return (text ?? "").includes("#urgent");
+      });
+      // A checklist note, written from outside like the agent
+      // CLI would: the live-follow watcher reloads it.
+      const board = readBoard();
+      const id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
+      board.items.push({ id, pos: { x: 900, y: 300 }, size: { w: 320, h: 120 }, group: null, kind: { Text: { text: "Checklist card\n- [ ] first\n- [x] second", bold: false, size: 16, color: "#1A1A1A" } } });
+      board.next_id = id;
+      const tmp = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(board));
+      fs.renameSync(tmp, boardPath);
+      await page.locator("text=Checklist card").first().waitFor({ timeout: 15000 });
+      await waitFor("checklist progress shows under the card", async () => {
+        const text = await page.locator(`.card-decorations[data-for="${id}"]`).first().textContent().catch(() => "");
+        return (text ?? "").includes("1/2");
+      });
+    });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
     console.log(`  FAIL  setup: ${String(error.message).split("\n")[0]}`);
