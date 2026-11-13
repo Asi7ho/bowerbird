@@ -427,7 +427,7 @@ function renderStrokesAndConnectors(board: Board): void {
 
 // Groups are sections: every group with two or more members
 // gets a labelled frame around its cards, drawn in the
-// #groups layer below the cards. The frame is derived state
+// #groups layer. The frame is derived state
 // — its bounds come from the members on every render — so
 // it always follows the group and never needs saving. The
 // frame sits this far outside the group's cards, so the
@@ -1709,8 +1709,8 @@ export function activate(a: PluginContext): void {
   boardEl.innerHTML = `
     <div id="grid"></div>
     <svg id="canvas-svg"><g id="world"></g></svg>
-    <div id="groups"></div>
     <div id="cards"></div>
+    <div id="groups"></div>
     <div id="plugin-view" style="display:none"></div>
     <div id="plugin-overlays"></div>
     <div id="view-switcher" style="display:none"></div>
