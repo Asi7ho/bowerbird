@@ -254,7 +254,7 @@ async function main() {
       assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("library", true)), true);
       await page.reload();
       await page.waitForSelector("#board", { timeout: 15000 });
-      await page.locator("#panels-toggle").click();
+      // The dock is open by default when panels exist.
       await page.locator('.plugin-tab[title^="Library"]').click();
       await page.locator(".lib-row").first().waitFor({ timeout: 15000 });
       const titles = () => page.$$eval(".lib-row .lib-title", (els) => els.map((e) => e.textContent));
