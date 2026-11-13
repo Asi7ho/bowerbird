@@ -184,6 +184,7 @@ export interface PluginBridge {
   pluginStorageSet(pluginId: string, key: string, value: unknown): Promise<void>;
   pluginStorageDelete(pluginId: string, key: string): Promise<void>;
   listBoards: () => Promise<Array<{ name: string; current: boolean; items: number }>>;
+  readBoard: (name: string) => Promise<{ name: string; items: Item[] }>;
   factoryReset(): Promise<{ ok: boolean }>;
   createBoard: (name: string) => Promise<{ name: string }>;
   renameBoard: (oldName: string, newName: string) => Promise<{ name: string }>;
