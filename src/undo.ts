@@ -94,14 +94,22 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
     // from a camera move, and emitting would make every
     // pan pay a full-board copy in each listening plugin.
     if (contentChanged) emitPluginEvent("board");
-    api.saveBoard(JSON.stringify(ctx.getBoard())).catch((e) => {
-      // A failed write must not be remembered as saved:
-      // clear the seen keys so the next save retries
-      // instead of skipping on "nothing changed".
-      lastSeenContentKey = null;
-      lastSeenCameraJson = null;
-      ctx.toast(`Save failed: ${String(e)}`);
-    });
+    // The write is async: "saving" first (content writes
+    // only — a camera-only write is not a change worth
+    // announcing), "saved" when the file holds the board.
+    if (contentChanged) emitPluginEvent("saving");
+    api.saveBoard(JSON.stringify(ctx.getBoard())).then(
+      () => emitPluginEvent("saved"),
+      (e) => {
+        // A failed write must not be remembered as saved:
+        // clear the seen keys so the next save retries
+        // instead of skipping on "nothing changed".
+        lastSeenContentKey = null;
+        lastSeenCameraJson = null;
+        emitPluginEvent("save-failed");
+        ctx.toast(`Save failed: ${String(e)}`);
+      },
+    );
     return { itemsJson, contentKey };
   }
 
