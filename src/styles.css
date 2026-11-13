@@ -317,6 +317,19 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   background: none; border: none; outline: none; padding: 0;
 }
 .card .inner { width: 100%; height: 100%; overflow: hidden; }
+/* Card decorations (tags, checklist progress): plain grey
+   text under a card, one line per card. No pills, no
+   badges — the decoration is a caption, not a control —
+   and it never takes clicks, so it cannot steal a drag
+   or a marquee selection. */
+.card-decorations {
+  position: absolute; display: flex; flex-wrap: wrap; gap: 2px 8px;
+  font-size: 11px; line-height: 1.4; color: var(--grey);
+  pointer-events: none; overflow: hidden;
+}
+.card-decorations .card-tag {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+}
 .card button, .card .clickable, .card textarea, .card a, .card video, .card input { pointer-events: auto; }
 .card .note-body { padding: 14px; line-height: 1.55; word-wrap: break-word; }
 .card .note-body p { margin: 0 0 6px; }

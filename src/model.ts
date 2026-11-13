@@ -33,6 +33,10 @@ export interface Item {
   size: Size;
   group: number | null;
   kind: Kind;
+  // Tags, set by the Tags plugin through updateItem: short
+  // labels shown under the card. Optional so old boards load
+  // unchanged: missing means no tags.
+  tags?: string[];
   // Rotation in degrees, clockwise, around the item's centre
   // (card centre, or stroke bounding-box centre).
   // Optional so old boards load unchanged: missing means 0.

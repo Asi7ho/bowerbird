@@ -12,7 +12,7 @@ import type { Media } from "./media";
 import {
   itemRotation, type Item, type ShapeKind,
 } from "./model";
-import { getBuiltinCardHtml, getCardHtml, getCardRenderer } from "./plugins";
+import { getBuiltinCardHtml, getCardDecorations, getCardHtml, getCardRenderer } from "./plugins";
 
 export interface CardContext {
   media: Media;
@@ -101,6 +101,15 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
     const id = num(item.id, 0);
     const sel = plain ? false : ctx.isSelected(id);
     const cls = sel ? "card selected" : "card";
+    // Decorations (tags, checklist progress) sit under the
+    // card, as a sibling in the same layer — never inside the
+    // card's own HTML, which belongs to the renderer. A card
+    // being edited renders nothing, so it gets none.
+    const decorations = (x: number, y: number, w: number, h: number): string => {
+      const html = getCardDecorations(item);
+      if (!html) return "";
+      return `<div class="card-decorations" data-for="${id}" style="left:${x}px;top:${y + h + 4}px;width:${w}px">${html}</div>`;
+    };
     if ("Plugin" in item.kind) {
       const ww0 = num(item.size.w, 0), hh0 = num(item.size.h, 0);
       const rot0 = itemRotation(item);
@@ -112,7 +121,7 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
       const inner = getCardHtml(item);
       if (inner === null) return "";
       const frameCls = getCardRenderer(item)?.frame === true ? " plugin-frame" : "";
-      return `<div class="${cls}${frameCls}" data-id="${id}" style="${style0}"><div class="inner">${inner}</div></div>`;
+      return `<div class="${cls}${frameCls}" data-id="${id}" style="${style0}"><div class="inner">${inner}</div></div>` + decorations(num(item.pos.x, 0), num(item.pos.y, 0), ww0, hh0);
     }
     // Cards live in world coordinates; the whole #cards layer is
     // transformed once by the camera (see applyCamera). Per-card
@@ -132,13 +141,13 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
     // with no registered renderer falls through to the
     // placeholder below — the core renders no card itself.
     const builtinHtml = getBuiltinCardHtml(item, plain);
-    if (builtinHtml !== null) return builtinHtml;
+    if (builtinHtml !== null) return builtinHtml + decorations(num(item.pos.x, 0), num(item.pos.y, 0), ww, hh);
     // No plugin registered a renderer for this kind. The
     // core renders no card itself anymore; this is a
     // placeholder so a board never shows a blank hole.
     // (The core-cards plugin provides all eight built-in
     // kinds, so this only fires when it is missing.)
-    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner" style="padding:12px"><div class="title" style="font-size:14px">Card</div><div class="sub" style="font-size:12px">No plugin provides this card kind.</div></div></div>`;
+    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner" style="padding:12px"><div class="title" style="font-size:14px">Card</div><div class="sub" style="font-size:12px">No plugin provides this card kind.</div></div></div>` + decorations(num(item.pos.x, 0), num(item.pos.y, 0), ww, hh);
   }
   return { cardHtml, shapeMeta, shapeLabel, isShapeTool, shapeClipPath, shapePreviewPoints };
 }
