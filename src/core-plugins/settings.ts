@@ -85,7 +85,7 @@ const SHORTCUTS: Array<[string, string]> = [
   ["Click the board's corner", "Open the board again"],
   ["Shift + click", "Add to the selection"],
   ["Drag on empty space", "Marquee-select"],
-  ["Ctrl / Cmd + V", "Paste a link as a card"],
+  ["Ctrl / Cmd + V", "Paste a link or an image as a card"],
 ];
 
 let api: PluginContext | null = null;
