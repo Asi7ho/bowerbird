@@ -511,6 +511,34 @@ async function main() {
         return (text ?? "").includes("1/2") ? true : null;
       });
     });
+
+    await check("a voice note records and lands as an audio card", async () => {
+      // No microphone in CI: stand in a tone generator for
+      // getUserMedia, so the real record → embed → card flow
+      // runs. The first real click resumes the context.
+      await page.addInitScript(() => {
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        const dest = ctx.createMediaStreamDestination();
+        osc.connect(dest);
+        osc.start();
+        window.addEventListener("pointerdown", () => void ctx.resume(), { once: true });
+        navigator.mediaDevices.getUserMedia = async () => dest.stream;
+      });
+      assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("voice-notes", true)), true);
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: 15000 });
+      await page.locator('.plugin-tab[title^="Voice Notes"]').click();
+      await page.locator(".vn-record").click();
+      await page.locator(".vn-status", { hasText: "Recording" }).waitFor({ timeout: 10000 });
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await page.locator(".vn-record").click();
+      await page.locator("text=voice-note").first().waitFor({ timeout: 15000 });
+      const audios = readBoard().items.filter((it) => "Audio" in it.kind);
+      assert.equal(audios.length, 1);
+      assert.ok(fs.existsSync(audios[0].kind.Audio.path));
+      assert.ok(fs.statSync(audios[0].kind.Audio.path).size > 0);
+    });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
     console.log(`  FAIL  setup: ${String(error.message).split("\n")[0]}`);

@@ -1,0 +1,23 @@
+{
+  "apiVersion": "2",
+  "contributions": {
+    "panels": [
+      {
+        "id": "voice-notes",
+        "title": "Voice Notes"
+      }
+    ]
+  },
+  "description": "Record a voice note straight onto the board.",
+  "id": "voice-notes",
+  "main": "main.ts",
+  "name": "Voice Notes",
+  "permissions": [
+    "board:write",
+    "files:embed"
+  ],
+  "styles": [
+    "style.css"
+  ],
+  "version": "1.0.0"
+}
