@@ -281,8 +281,8 @@ async function main() {
         return t === "Reading" ? true : null;
       });
       await waitFor("renamed label on disk", () => readBoard().groups?.[1]?.label === "Reading");
-      // Drag one card 100px right: the frame's right edge
-      // follows it (its left edge stays on the other card).
+      // Drag one card 100px right: it is in a group, so the
+      // whole group moves and the frame follows it.
       await page.mouse.move(730, 624);
       await page.mouse.down();
       await page.mouse.move(830, 624, { steps: 10 });
@@ -290,18 +290,21 @@ async function main() {
       await waitFor("frame follows the drag", async () => {
         const el = await page.$(".group-frame");
         const box = el && (await el.boundingBox());
-        return box && Math.round(box.width) === 908 ? true : null;
+        return box && Math.round(box.x) === 176 ? true : null;
       });
       const moved = readBoard().items.find((it) => "Text" in it.kind);
       assert.equal(moved.pos.x, 700);
+      const movedCi = readBoard().items.find((it) => "Plugin" in it.kind && it.group === 1);
+      assert.equal(movedCi.pos.x, 200);
       // One undo restores the drag, and the frame with it.
       await page.keyboard.press("Control+z");
       await waitFor("frame back after undo", async () => {
         const el = await page.$(".group-frame");
         const box = el && (await el.boundingBox());
-        return box && Math.round(box.width) === 808 ? true : null;
+        return box && Math.round(box.x) === 76 ? true : null;
       });
       assert.equal(readBoard().items.find((it) => "Text" in it.kind).pos.x, 600);
+      assert.equal(readBoard().items.find((it) => "Plugin" in it.kind && it.group === 1).pos.x, 100);
     });
 
     await check("pasting an image from the clipboard adds an image card", async () => {
