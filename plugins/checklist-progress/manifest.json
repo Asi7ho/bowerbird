@@ -1,1 +1,0 @@
-{"apiVersion":"2","contributions":{},"description":"Shows n/m under a note with a checklist.","id":"checklist-progress","main":"main.ts","name":"Checklist Progress","permissions":["board:read"],"version":"1.0.0"}

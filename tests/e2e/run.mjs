@@ -367,11 +367,9 @@ async function main() {
       assert.equal(textCards().some((it) => it.kind.Text.text === "From the outside"), true);
     });
     await check("tags and checklist progress show inside cards", async () => {
-      // Tags is a core plugin now: on by default, no enabling
-      // needed — the reload below proves it survives a fresh
-      // load. Checklist Progress is still an extra until the
-      // next commit, so it is enabled the old way.
-      assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("checklist-progress", true)), true);
+      // Both are core plugins now: on by default, no enabling
+      // needed — the reload below proves they survive a fresh
+      // load.
       await page.reload();
       await page.waitForSelector("#board", { timeout: 15000 });
       // Jump to the Hello CI! note through the Library panel:
