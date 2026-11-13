@@ -111,13 +111,16 @@ export interface PluginBuiltinCardDef {
   searchText?: (data: unknown) => string;
 }
 
-// A card decoration: HTML shown under a card. `id` is unique
-// within the plugin (the core keys it as pluginId:id). The
-// renderer is called for every card on every render, so it
-// must be pure and fast, and it must escape any text it
-// puts in the HTML. Returning null renders nothing.
+// A card decoration: HTML shown inside a card, at its
+// bottom edge. `id` is unique within the plugin (the core
+// keys it as pluginId:id). `side` picks the corner —
+// "left" (the default) or "right". The renderer is called
+// for every card on every render, so it must be pure and
+// fast, and it must escape any text it puts in the HTML.
+// Returning null renders nothing.
 export interface PluginCardDecoratorDef {
   id: string;
+  side?: "left" | "right";
   render: (item: Item) => string | null;
 }
 
@@ -890,20 +893,23 @@ interface LoadedPlugin {
 const cards = new Map<string, PluginCardDef & { pluginId: string }>();
 const builtinCards = new Map<string, PluginBuiltinCardDef & { pluginId: string }>();
 // Card decorations: a plugin registers a renderer that
-// returns HTML shown under a card (tags, checklist
-// progress). Decorations are display only — they never
-// take clicks (pointer-events: none in styles.css) and
-// never write. A renderer that throws renders nothing.
+// returns HTML shown inside a card, at its bottom edge
+// (tags bottom-left, checklist progress bottom-right).
+// Decorations are display only — they never take clicks
+// (pointer-events: none in styles.css) and never write. A
+// renderer that throws renders nothing.
 const cardDecorators = new Map<string, PluginCardDecoratorDef & { pluginId: string }>();
-export function getCardDecorations(item: Item): string {
-  let out = "";
+export function getCardDecorations(item: Item): { left: string; right: string } {
+  let left = "";
+  let right = "";
   for (const def of cardDecorators.values()) {
     try {
       const html = def.render(item);
-      if (html) out += html;
+      if (!html) continue;
+      if (def.side === "right") right += html; else left += html;
     } catch { /* a broken decorator renders nothing */ }
   }
-  return out;
+  return { left, right };
 }
 const tools = new Map<string, PluginToolDef & { pluginId: string; fullId: string }>();
 const panels = new Map<string, PluginPanelDef & { pluginId: string; el: HTMLElement; body: HTMLElement; tab: HTMLElement; hidden: boolean }>();

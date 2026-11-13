@@ -101,16 +101,19 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
     const id = num(item.id, 0);
     const sel = plain ? false : ctx.isSelected(id);
     const cls = sel ? "card selected" : "card";
-    // Decorations (tags, checklist progress) sit inside the
-    // card, as a pill row at its bottom left — never below
-    // it on the canvas, and never inside the card's own
-    // HTML, which belongs to the renderer. A card being
+    // Decorations sit inside the card, at its bottom edge:
+    // tags as a pill row at the bottom left, checklist
+    // progress as plain text at the bottom right. They are
+    // siblings in the same layer — never inside the card's
+    // own HTML, which belongs to the renderer. A card being
     // edited renders nothing, so it gets none.
     const decorations = (x: number, y: number, w: number, h: number): string => {
-      const html = getCardDecorations(item);
-      if (!html) return "";
+      const { left, right } = getCardDecorations(item);
       const top = Math.max(y + 4, y + h - 28);
-      return `<div class="card-decorations" data-for="${id}" style="left:${x + 8}px;top:${top}px;width:${Math.max(w - 16, 0)}px">${html}</div>`;
+      let out = "";
+      if (left) out += `<div class="card-decorations" data-for="${id}" style="left:${x + 8}px;top:${top}px;width:${Math.max(w - 16, 0)}px">${left}</div>`;
+      if (right) out += `<div class="card-decorations card-decorations-right" data-for="${id}" style="left:${x + w - 8}px;top:${top}px;transform:translateX(-100%)">${right}</div>`;
+      return out;
     };
     if ("Plugin" in item.kind) {
       const ww0 = num(item.size.w, 0), hh0 = num(item.size.h, 0);
