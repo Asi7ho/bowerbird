@@ -184,6 +184,7 @@ export interface PluginBridge {
   pluginStorageSet(pluginId: string, key: string, value: unknown): Promise<void>;
   pluginStorageDelete(pluginId: string, key: string): Promise<void>;
   listBoards: () => Promise<Array<{ name: string; current: boolean; items: number }>>;
+  readBoard: (name: string) => Promise<{ name: string; items: Item[] }>;
   factoryReset(): Promise<{ ok: boolean }>;
   createBoard: (name: string) => Promise<{ name: string }>;
   renameBoard: (oldName: string, newName: string) => Promise<{ name: string }>;
@@ -505,6 +506,7 @@ export interface PluginContext {
   };
   boards: {
     list: () => Promise<Array<{ name: string; current: boolean; items: number }>>;
+    read: (name: string) => Promise<{ name: string; items: Item[] }>;
     current: () => Promise<string>;
     create: (name: string) => Promise<{ name: string }>;
     switch: (name: string, preserveUndo?: boolean) => Promise<boolean>;
@@ -1462,6 +1464,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
     },
     boards: {
       list: async () => bridge!.listBoards(),
+      read: async (name: string) => bridge!.readBoard(name),
       current: async () => {
         const list = await bridge!.listBoards();
         return list.find((b) => b.current)?.name ?? "Main";

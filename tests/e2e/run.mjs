@@ -143,6 +143,17 @@ async function main() {
       assert.equal(readBoard().items.length, 0);
     });
 
+    await check("toolbar shows zoom level and saved state", async () => {
+      const zoom = page.locator("#zoom-label");
+      await zoom.waitFor({ timeout: 10000 });
+      assert.equal(await zoom.textContent(), "100%");
+      assert.equal(await page.locator("#saved-label").textContent(), "Saved");
+      await page.keyboard.press("+");
+      await waitFor("zoom label 120%", async () => (await zoom.textContent()) === "120%");
+      await page.keyboard.press("0");
+      await waitFor("zoom label back to 100%", async () => (await zoom.textContent()) === "100%");
+    });
+
     await check("pen draws a stroke and it is saved to disk", async () => {
       await page.keyboard.press("p");
       await page.mouse.move(300, 300);
@@ -223,6 +234,44 @@ async function main() {
         textCards().some((it) => it.kind.Text.text === "Hello CI!"),
       );
       await page.locator("text=CI plugin card").first().waitFor({ timeout: 15000 });
+    });
+
+    await check("an external board edit is followed live", async () => {
+      const board = readBoard();
+      board.items.push({ id: board.next_id, pos: { x: 900, y: 100 }, size: { w: 320, h: 80 }, group: null, kind: { Text: { text: "From the outside", bold: false, size: 16, color: "#1A1A1A" } } });
+      board.next_id += 1;
+      const tmp = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(board));
+      fs.renameSync(tmp, boardPath);
+      await page.locator("text=From the outside").first().waitFor({ timeout: 15000 });
+      // And the app must not clobber the outside edit with its own
+      // next save: the card is still on disk a second later.
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      assert.equal(textCards().some((it) => it.kind.Text.text === "From the outside"), true);
+    });
+
+    await check("the Library panel lists every card and jumps to one", async () => {
+      assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("library", true)), true);
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: 15000 });
+      // The dock is open by default when panels exist.
+      await page.locator('.plugin-tab[title^="Library"]').click();
+      await page.locator(".lib-row").first().waitFor({ timeout: 15000 });
+      const titles = () => page.$$eval(".lib-row .lib-title", (els) => els.map((e) => e.textContent));
+      await waitFor("library lists the board's cards", async () => {
+        const ts = await titles();
+        return ts.some((t) => t.includes("Hello CI!")) && ts.some((t) => t.includes("From the outside"));
+      });
+      await page.locator(".lib-search").fill("outside");
+      await waitFor("search narrows the library list", async () => {
+        const ts = await titles();
+        return ts.length === 1 && ts[0].includes("From the outside");
+      });
+      await page.locator(".lib-row").first().click();
+      await waitFor("clicked library row selects the card", async () => {
+        const selected = await page.$$eval("#cards .card.selected", (els) => els.map((e) => e.textContent));
+        return selected.some((t) => t.includes("From the outside"));
+      });
     });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });

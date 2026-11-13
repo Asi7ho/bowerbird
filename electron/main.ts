@@ -181,6 +181,14 @@ function boardPathFor(name: string | null): string {
   if (!name || name === "Main") return defaultBoardPath();
   return path.join(defaultBaseDir(), "boards", sanitise(name), "board.json");
 }
+// Main's file: the board-path override, when one is set, IS
+// Main — listBoards and read-board must use it, not the
+// default location, or they report the wrong board.
+function mainBoardFile(): string {
+  if (process.env.BOWERBIRD_BOARD_PATH) return process.env.BOWERBIRD_BOARD_PATH;
+  if (process.env.QB_BOARD_PATH) return process.env.QB_BOARD_PATH;
+  return defaultBoardPath();
+}
 function boardPath(): string {
   if (process.env.BOWERBIRD_BOARD_PATH) return process.env.BOWERBIRD_BOARD_PATH;
   if (process.env.QB_BOARD_PATH) return process.env.QB_BOARD_PATH;
@@ -189,6 +197,47 @@ function boardPath(): string {
 
 function boardDir(): string {
   return path.dirname(boardPath());
+}
+
+// ---------------------------------------------------------------- live follow
+//
+// An agent or a script may rewrite board.json while the app is open
+// (see BOWERBIRD_SPEC.md). Watch the current board's folder; when
+// board.json changes to content the app did not itself write, tell
+// the renderer to reload it. The watch is on the folder, not the
+// file: the app writes through tmp+rename, which would drop a
+// file watch. The debounced re-read compares against the last
+// content the app wrote, so its own saves never trigger a reload.
+let boardWatcher: fs.FSWatcher | null = null;
+let lastSavedJson: string | null = null;
+let boardWatchTimer: NodeJS.Timeout | null = null;
+
+function startBoardWatcher(): void {
+  stopBoardWatcher();
+  try {
+    boardWatcher = fs.watch(boardDir(), (_eventType, filename) => {
+      if (filename !== "board.json") return;
+      if (boardWatchTimer) clearTimeout(boardWatchTimer);
+      boardWatchTimer = setTimeout(() => {
+        boardWatchTimer = null;
+        let json: string;
+        try {
+          json = fs.readFileSync(boardPath(), "utf8");
+        } catch { return; }
+        if (json === lastSavedJson) return; // the app's own save
+        lastSavedJson = json;
+        boardView?.webContents.send("bowerbird:board-changed-external");
+      }, 300);
+    });
+  } catch {
+    // Watching is a convenience: the board still loads on boot.
+    boardWatcher = null;
+  }
+}
+
+function stopBoardWatcher(): void {
+  if (boardWatchTimer) { clearTimeout(boardWatchTimer); boardWatchTimer = null; }
+  if (boardWatcher) { boardWatcher.close(); boardWatcher = null; }
 }
 
 // Build identifier, so a user can tell which packaged build
@@ -298,7 +347,7 @@ function boardItemCount(file: string): number {
 }
 function listBoards(): Array<{ name: string; current: boolean; items: number }> {
   const out: Array<{ name: string; current: boolean; items: number }> = [];
-  const mainFile = defaultBoardPath();
+  const mainFile = mainBoardFile();
   out.push({ name: "Main", current: !currentBoard || currentBoard === "Main", items: boardItemCount(mainFile) });
   const dir = boardsDir();
   let entries: string[] = [];
@@ -838,6 +887,11 @@ function registerIpc(): void {
     const tmp = file + ".tmp";
     fs.writeFileSync(tmp, json);
     fs.renameSync(tmp, file);
+    lastSavedJson = json;
+    // A fresh board has no folder until this first save, so a
+    // watcher started at launch could not attach then — start
+    // it now that the folder exists.
+    if (!boardWatcher) startBoardWatcher();
     maybeBackup(path.dirname(file), json);
   });
 
@@ -1233,9 +1287,25 @@ function registerIpc(): void {
   ipcMain.handle("bowerbird:list-boards", () => {
     return listBoards();
   });
+  ipcMain.handle("bowerbird:read-board", (_event, name: unknown) => {
+    // Read-only, and board-local by construction: the file is
+    // resolved from the listed board name, never from a path
+    // the caller supplies. A board with no file yet (Main on
+    // a fresh install) reads as empty.
+    const target = name === "Main" ? "Main" : (name as string);
+    const found = listBoards().some((b) => b.name === target);
+    if (!found) throw new Error("no such board");
+    const file = target === "Main" ? mainBoardFile() : boardPathFor(target);
+    let items: unknown[] = [];
+    try {
+      const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+      if (Array.isArray(parsed.items)) items = parsed.items;
+    } catch { items = []; }
+    return { name: target, items };
+  });
   ipcMain.handle("bowerbird:create-board", (_event, name: unknown) => createBoard(name));
-  ipcMain.handle("bowerbird:switch-board", (_event, name: unknown) => switchBoard(name));
-  ipcMain.handle("bowerbird:rename-board", (_event, oldName: unknown, newName: unknown) => renameBoard(oldName, newName));
+  ipcMain.handle("bowerbird:switch-board", (_event, name: unknown) => { const out = switchBoard(name); startBoardWatcher(); return out; });
+  ipcMain.handle("bowerbird:rename-board", (_event, oldName: unknown, newName: unknown) => { const out = renameBoard(oldName, newName); startBoardWatcher(); return out; });
   ipcMain.handle("bowerbird:delete-board", (_event, name: unknown) => deleteBoard(name));
   ipcMain.handle("bowerbird:list-backups", () => {
     return listBackups(boardDir());
@@ -1590,6 +1660,7 @@ app.whenReady().then(() => {
   }
   registerIpc();
   createWindow();
+  startBoardWatcher();
 });
 
 app.on("window-all-closed", () => {

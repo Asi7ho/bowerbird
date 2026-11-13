@@ -1,0 +1,23 @@
+{
+  "apiVersion": "2",
+  "contributions": {
+    "panels": [
+      {
+        "id": "library",
+        "title": "Library"
+      }
+    ]
+  },
+  "description": "Every card on every board, in one place, with search.",
+  "id": "library",
+  "main": "main.ts",
+  "name": "Library",
+  "permissions": [
+    "board:read",
+    "board:write"
+  ],
+  "styles": [
+    "style.css"
+  ],
+  "version": "1.0.0"
+}
