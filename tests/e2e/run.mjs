@@ -260,7 +260,7 @@ async function main() {
       // frame sits 24px outside it, at client y + 48.
       assert.equal(Math.round(frame.box.x), 76);
       assert.equal(Math.round(frame.box.y), 124);
-      assert.equal(Math.round(frame.box.width), 784);
+      assert.equal(Math.round(frame.box.width), 808);
       assert.equal(Math.round(frame.box.height), 548);
       assert.equal(await page.locator(".group-frame .group-label").first().textContent(), "Section 1");
       const grouped = await waitFor("group label on disk", () => {
@@ -290,7 +290,7 @@ async function main() {
       await waitFor("frame follows the drag", async () => {
         const el = await page.$(".group-frame");
         const box = el && (await el.boundingBox());
-        return box && Math.round(box.width) === 884 ? true : null;
+        return box && Math.round(box.width) === 908 ? true : null;
       });
       const moved = readBoard().items.find((it) => "Text" in it.kind);
       assert.equal(moved.pos.x, 700);
@@ -299,7 +299,7 @@ async function main() {
       await waitFor("frame back after undo", async () => {
         const el = await page.$(".group-frame");
         const box = el && (await el.boundingBox());
-        return box && Math.round(box.width) === 784 ? true : null;
+        return box && Math.round(box.width) === 808 ? true : null;
       });
       assert.equal(readBoard().items.find((it) => "Text" in it.kind).pos.x, 600);
     });
