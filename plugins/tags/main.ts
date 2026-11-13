@@ -1,11 +1,10 @@
 // Tags — bundled Bowerbird plugin (see PLUGIN_API.md).
 //
 // Tag the selected cards. Tags live on the item itself
-// (`item.tags`, set through updateItem) and are shown under
-// each card by the decorator below — plain grey text, no
-// pills. Adding or removing a tag is one undo step for the
-// whole selection. The panel refreshes on selection and on
-// board changes.
+// (`item.tags`, set through updateItem) and are shown as
+// pills inside each card by the decorator below. Adding or
+// removing a tag is one undo step for the whole selection.
+// The panel refreshes on selection and on board changes.
 import type { PluginContext } from "../../src/plugins";
 import type { Item } from "../../src/model";
 
