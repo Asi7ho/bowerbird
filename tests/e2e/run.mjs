@@ -557,7 +557,10 @@ async function main() {
       assert.ok(Math.abs(audioBox.x + audioBox.width / 2 - cx) < 5);
       assert.ok(Math.abs(audioBox.y + audioBox.height / 2 - cy) < 5);
       // And the chooser's Type branch still makes a text note.
-      doubleClick(page, cx, cy + 140);
+      // Left of the Hello note, inside the group frame but on
+      // empty space — below it is off the bottom of the window
+      // once the audio card has landed there.
+      doubleClick(page, noteBox.x - 110, noteBox.y + noteBox.height / 2);
       await page.locator(".create-chooser", { hasText: "Type" }).waitFor({ timeout: 10000 });
       await page.locator(".create-chooser-btn", { hasText: "Type" }).click();
       await page.locator("textarea.note-edit").waitFor({ timeout: 10000 });

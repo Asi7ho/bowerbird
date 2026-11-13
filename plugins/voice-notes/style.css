@@ -10,6 +10,9 @@
   box-shadow: var(--shadow-md); padding: 7px 12px;
   pointer-events: auto; white-space: nowrap;
 }
+/* The pill sets display:flex, which overrides the hidden
+   attribute's display:none — so hide it explicitly. */
+.vn-recording[hidden] { display: none; }
 .vn-recording .vn-dot {
   width: 8px; height: 8px; border-radius: 50%; background: #ff3b30; flex: none;
   animation: vn-pulse 1.2s ease-in-out infinite;
