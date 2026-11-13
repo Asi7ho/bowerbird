@@ -7,6 +7,9 @@ export interface BowerbirdAPI {
   platform: string;
   loadBoard(): Promise<{ json: string | null; board_path: string; board_dir: string; pdf_size_bytes: number; video_size_bytes: number; panelOrder?: string[]; buildId?: string }>;
   saveBoard(json: string): Promise<void>;
+  // Called when board.json changed on disk to content the app did
+  // not write (an agent or a script): the renderer reloads it.
+  onExternalBoardChange(cb: () => void): void;
   listBoards(): Promise<Array<{ name: string; current: boolean; items: number }>>;
   createBoard(name: string): Promise<{ name: string }>;
   switchBoard(name: string): Promise<{ json: string; board_path: string; board_dir: string }>;

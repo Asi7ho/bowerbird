@@ -281,6 +281,20 @@ async function main() {
       });
       assert.ok(inside, "every card is fully inside the board after F");
     });
+
+    await check("an external board edit is followed live", async () => {
+      const board = readBoard();
+      board.items.push({ id: board.next_id, pos: { x: 900, y: 100 }, size: { w: 320, h: 80 }, group: null, kind: { Text: { text: "From the outside", bold: false, size: 16, color: "#1A1A1A" } } });
+      board.next_id += 1;
+      const tmp = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(board));
+      fs.renameSync(tmp, boardPath);
+      await page.locator("text=From the outside").first().waitFor({ timeout: 15000 });
+      // And the app must not clobber the outside edit with its own
+      // next save: the card is still on disk a second later.
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      assert.equal(textCards().some((it) => it.kind.Text.text === "From the outside"), true);
+    });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
     console.log(`  FAIL  setup: ${String(error.message).split("\n")[0]}`);
