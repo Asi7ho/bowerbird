@@ -12,7 +12,7 @@ import type { Media } from "./media";
 import {
   itemRotation, type Item, type ShapeKind,
 } from "./model";
-import { getBuiltinCardHtml, getCardDecorations, getCardHtml, getCardRenderer } from "./plugins";
+import { getBuiltinCardHtml, getCardDecorations, getCardHtml, getCardRenderer, hasCardDecorator } from "./plugins";
 
 export interface CardContext {
   media: Media;
@@ -111,7 +111,13 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
       const { left, right } = getCardDecorations(item);
       const top = Math.max(y + 4, y + h - 36);
       let out = "";
-      if (left) out += `<div class="card-decorations" data-for="${id}" style="left:${x + 8}px;top:${top}px;width:${Math.max(w - 16, 0)}px">${left}</div>`;
+      // The "+ tag" button lives at the end of the tag row:
+      // it shows only while the Tags plugin is enabled, and
+      // never on a frame (frames are containers, not content).
+      const tagAdd = hasCardDecorator("tags:tags") && getCardRenderer(item)?.frame !== true
+        ? `<button type="button" class="tag-add" data-action="add-tag" data-id="${id}" title="Add tag">+ tag</button>`
+        : "";
+      if (left || tagAdd) out += `<div class="card-decorations" data-for="${id}" style="left:${x + 8}px;top:${top}px;width:${Math.max(w - 16, 0)}px">${left}${tagAdd}</div>`;
       if (right) out += `<div class="card-decorations card-decorations-right" data-for="${id}" style="left:${x + w - 8}px;top:${top}px;transform:translateX(-100%)">${right}</div>`;
       return out;
     };

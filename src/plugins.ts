@@ -911,6 +911,15 @@ export function getCardDecorations(item: Item): { left: string; right: string } 
   }
   return { left, right };
 }
+
+// Whether a card decorator is registered, by its full id
+// ("<pluginId>:<decoratorId>"). The core uses this for
+// affordances that belong to a decorator: the "+ tag"
+// button shows only while the Tags plugin's decorator is
+// registered, so disabling Tags hides it too.
+export function hasCardDecorator(id: string): boolean {
+  return cardDecorators.has(id);
+}
 const tools = new Map<string, PluginToolDef & { pluginId: string; fullId: string }>();
 const panels = new Map<string, PluginPanelDef & { pluginId: string; el: HTMLElement; body: HTMLElement; tab: HTMLElement; hidden: boolean }>();
 const views = new Map<string, PluginViewDef & { pluginId: string }>();

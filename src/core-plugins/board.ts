@@ -753,6 +753,54 @@ function commitEditingIfAny(): void {
   else { editingId = null; render(); }
 }
 
+// Add a tag to one card, from the "+ tag" button at its
+// bottom edge. Clicking the button swaps it for an input
+// in the same spot; Enter commits the tag (one undo step),
+// Escape or leaving the field cancels. The input is a real
+// input element, so the board's pointer and key handlers
+// leave it alone: the pointerdown guard ignores inputs,
+// and typing in one never triggers board shortcuts.
+function openTagInput(cardId: number): void {
+  const btn = cardsEl.querySelector(`[data-action="add-tag"][data-id="${cardId}"]`) as HTMLButtonElement | null;
+  if (!btn) return;
+  const input = document.createElement("input");
+  input.className = "tag-add-input";
+  input.type = "text";
+  input.placeholder = "Tag";
+  input.setAttribute("aria-label", "Add a tag");
+  input.maxLength = 24;
+  btn.replaceWith(input);
+  input.focus();
+  let done = false;
+  const commit = () => {
+    if (done) return;
+    done = true;
+    const value = input.value.trim();
+    const board = api.board.get();
+    const it = value ? boardGet(board, cardId) : undefined;
+    if (it) {
+      const tags = [...(it.tags ?? [])];
+      if (!tags.includes(value)) {
+        tags.push(value);
+        api.board.updateItem(cardId, { tags });
+        return;
+      }
+    }
+    render();
+  };
+  const cancel = () => {
+    if (done) return;
+    done = true;
+    render();
+  };
+  input.addEventListener("keydown", (ev) => {
+    ev.stopPropagation();
+    if (ev.key === "Enter") { ev.preventDefault(); commit(); }
+    else if (ev.key === "Escape") { ev.preventDefault(); cancel(); }
+  });
+  input.addEventListener("blur", cancel);
+}
+
 // ---------------------------------------------------------------- tools
 
 function setTool(t: Tool): void {
@@ -1053,6 +1101,11 @@ cardsEl.addEventListener("click", (e: MouseEvent) => {
     api.board.setTextContent(it.id, lines.join("\n"));
     api.board.save();
     render();
+    return;
+  }
+  const tagAdd = target.closest("[data-action=\"add-tag\"]") as HTMLElement | null;
+  if (tagAdd) {
+    openTagInput(Number(tagAdd.dataset.id));
     return;
   }
   const btn = target.closest("[data-action]") as HTMLElement | null;
