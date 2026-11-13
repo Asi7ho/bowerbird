@@ -513,7 +513,12 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    back), and the text fills the rest of the card and scrolls,
    so a long note does not grow the card. */
 .card .audio-transcript-toggle {
-  flex: none; align-self: flex-start; font: inherit; font-size: 12px; font-weight: 600; color: var(--grey);
+  /* Right-aligned: the bottom-left is where the core's
+     "+ tag" button sits on a selected card, and it would
+     cover a toggle there. The bottom-right is free on an
+     audio card (the checklist progress lives there only
+     on text cards). */
+  flex: none; align-self: flex-end; font: inherit; font-size: 12px; font-weight: 600; color: var(--grey);
   background: transparent; border: 0; padding: 2px 0; cursor: pointer; text-align: left; pointer-events: auto;
 }
 .card .audio-transcript-toggle:hover { color: var(--ink); }
