@@ -6,6 +6,15 @@
 
 export interface Pt { x: number; y: number }
 export interface Size { w: number; h: number }
+
+// An audio card with a transcript is short by default —
+// player, seek, and a Transcript toggle — until the toggle
+// grows it to show the text. The card's height is the
+// state: taller than the hidden height, the transcript
+// shows; at it or below, only the toggle does. Both the
+// card renderer and the toggle use these, so they agree.
+export const AUDIO_TRANSCRIPT_HIDDEN_H = 128;
+export const AUDIO_TRANSCRIPT_SHOWN_H = 240;
 export type Anchor = { Point: Pt } | { Item: number };
 export type ShapeKind = "rect" | "ellipse" | "triangle" | "diamond" | "hexagon" | "star" | "arrow";
 

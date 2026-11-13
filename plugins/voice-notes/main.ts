@@ -14,6 +14,7 @@
 // and the transcript is text on the card.
 import type { PluginContext } from "../../src/plugins";
 import type { Pt } from "../../src/model";
+import { AUDIO_TRANSCRIPT_HIDDEN_H } from "../../src/model";
 
 const MIC_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
 
@@ -125,7 +126,9 @@ async function finishRecording(api: PluginContext, world: Pt, mime: string): Pro
       api.files.embedFile(file),
       api.media.transcribeAudio(blob),
     ]);
-    const h = transcript ? 240 : 104;
+    // Short by default: the transcript stays hidden behind
+    // its toggle until the user expands the card.
+    const h = transcript ? AUDIO_TRANSCRIPT_HIDDEN_H : 104;
     const id = api.board.addItem({ Audio: { path, ...(transcript ? { transcript } : {}) } }, { x: world.x - 150, y: world.y - h / 2 }, { w: 300, h });
     api.board.setSelected([id]);
   } catch {
