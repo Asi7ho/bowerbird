@@ -14,7 +14,13 @@
 // and the transcript is text on the card.
 import type { PluginContext } from "../../src/plugins";
 import type { Pt } from "../../src/model";
-import { AUDIO_TRANSCRIPT_HIDDEN_H } from "../../src/model";
+
+// The hidden height, matching AUDIO_TRANSCRIPT_HIDDEN_H
+// in src/model.ts (the card renderer shows the transcript
+// only above it). A plugin cannot import a value from the
+// app's src/ — the loader only serves the plugin's own
+// folder — so the number is repeated here, not imported.
+const AUDIO_TRANSCRIPT_HIDDEN_H = 128;
 
 const MIC_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
 
