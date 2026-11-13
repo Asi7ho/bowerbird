@@ -379,11 +379,13 @@ async function main() {
       await page.locator(".lib-search").fill("Hello CI!");
       await page.locator(".lib-row").first().click();
       await page.locator("#cards .card.selected", { hasText: "Hello CI!" }).waitFor({ timeout: 10000 });
-      await page.locator('.plugin-tab[title^="Tags"]').click();
-      await page.locator(".tags-status", { hasText: "1 card selected" }).waitFor({ timeout: 10000 });
-      await page.locator(".tags-input").fill("urgent");
-      await page.keyboard.press("Enter");
+      // Tag it from the card itself: the "+ tag" button at
+      // the card's bottom edge opens an input in the same
+      // spot; Enter commits the tag.
       const helloId = await page.locator("#cards .card.selected").first().getAttribute("data-id");
+      await page.locator(`.card-decorations[data-for="${helloId}"] .tag-add`).click();
+      await page.locator(`.card-decorations[data-for="${helloId}"] .tag-add-input`).fill("urgent");
+      await page.keyboard.press("Enter");
       await waitFor("tag shows inside the card", async () => {
         const text = await page.locator(`.card-decorations[data-for="${helloId}"]`).first().textContent().catch(() => "");
         return (text ?? "").includes("#urgent");

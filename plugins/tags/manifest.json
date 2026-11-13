@@ -1,1 +1,1 @@
-{"apiVersion":"2","contributions":{"panels":[{"id":"tags","title":"Tags"}]},"description":"Tag the selected cards; tags show under each card.","id":"tags","main":"main.ts","name":"Tags","permissions":["board:read","board:write"],"styles":["style.css"],"version":"1.0.0"}
+{"apiVersion":"2","description":"Tag cards from the card itself; tags show as pills inside each card.","id":"tags","main":"main.ts","name":"Tags","permissions":["board:read"],"version":"1.0.0"}
