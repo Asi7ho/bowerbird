@@ -270,9 +270,9 @@ async function main() {
         return b.groups?.[1]?.label === "Section 1" && note?.group === 1 && ci ? b : null;
       });
       assert.equal(grouped.items.filter((it) => it.group === 1).length, 2);
-      // Rename by double-clicking the label: the chip sits at
-      // the frame's top left, 8px in — click its centre.
-      await doubleClick(page, 120, 142);
+      // Rename by double-clicking the label: the chip sits
+      // astride the frame's top border — click its centre.
+      await doubleClick(page, 123, 123);
       await page.locator("input.group-rename").waitFor({ timeout: 10000 });
       await page.keyboard.type("Reading");
       await page.keyboard.press("Enter");

@@ -295,14 +295,18 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 .group-frame {
   position: absolute; background: transparent;
   border: 2px dashed rgba(0, 0, 0, 0.20);
+  border-radius: 12px;
   pointer-events: none;
 }
 .group-frame.selected { border-color: rgba(0, 122, 255, 0.6); }
 /* The section label: the app's own frame-label treatment,
    as on slides — a small white chip at the frame's top
-   left. Double-click it to rename the section. */
+   left. It sits astride the top border, half above it, so
+   it never overlaps the cards inside the group — they
+   start 24px below the border. Double-click it to rename
+   the section. */
 .group-frame .group-label {
-  position: absolute; top: 8px; left: 8px;
+  position: absolute; top: -11px; left: 12px;
   background: #fff; border: 1px solid var(--hairline);
   border-radius: 6px; padding: 2px 8px;
   font-size: 12px; font-weight: 600; color: var(--ink);
