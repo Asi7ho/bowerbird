@@ -1,10 +1,16 @@
 {
   "apiVersion": "2",
   "contributions": {
-    "panels": [
+    "createActions": [
       {
-        "id": "voice-notes",
-        "title": "Voice Notes"
+        "id": "record-voice",
+        "title": "Record voice"
+      }
+    ],
+    "overlays": [
+      {
+        "id": "voice-recording",
+        "title": "Recording indicator"
       }
     ]
   },

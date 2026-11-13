@@ -528,16 +528,40 @@ async function main() {
       assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("voice-notes", true)), true);
       await page.reload();
       await page.waitForSelector("#board", { timeout: 15000 });
-      await page.locator('.plugin-tab[title^="Voice Notes"]').click();
-      await page.locator(".vn-record").click();
-      await page.locator(".vn-status", { hasText: "Recording" }).waitFor({ timeout: 10000 });
+      // Double-click empty space below the Hello note: the
+      // chooser offers Type or Record voice, and there is no
+      // Voice Notes panel any more.
+      assert.equal(await page.locator('.plugin-tab[title^="Voice Notes"]').count(), 0);
+      const noteBox = await page.locator("#cards .card", { hasText: "Hello CI!" }).first().boundingBox();
+      assert.ok(noteBox);
+      const cx = noteBox.x + 50;
+      const cy = noteBox.y + noteBox.height + 60;
+      doubleClick(page, cx, cy);
+      await page.locator(".create-chooser", { hasText: "Record voice" }).waitFor({ timeout: 10000 });
+      await page.locator(".create-chooser-btn", { hasText: "Record voice" }).click();
+      await page.locator(".vn-recording", { hasText: "Recording" }).waitFor({ timeout: 10000 });
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      await page.locator(".vn-record").click();
-      await page.locator("text=voice-note").first().waitFor({ timeout: 15000 });
+      await page.locator(".vn-stop").click();
+      // The tone has no speech, so the card lands without a
+      // transcript — but the transcription still runs, and
+      // the first run downloads the model, so the wait is
+      // generous.
+      await page.locator("text=voice-note").first().waitFor({ timeout: 120000 });
       const audios = readBoard().items.filter((it) => "Audio" in it.kind);
       assert.equal(audios.length, 1);
       assert.ok(fs.existsSync(audios[0].kind.Audio.path));
       assert.ok(fs.statSync(audios[0].kind.Audio.path).size > 0);
+      // The card is centred on the double-click point.
+      const audioBox = await page.locator("#cards .card", { hasText: "voice-note" }).first().boundingBox();
+      assert.ok(audioBox);
+      assert.ok(Math.abs(audioBox.x + audioBox.width / 2 - cx) < 5);
+      assert.ok(Math.abs(audioBox.y + audioBox.height / 2 - cy) < 5);
+      // And the chooser's Type branch still makes a text note.
+      doubleClick(page, cx, cy + 140);
+      await page.locator(".create-chooser", { hasText: "Type" }).waitFor({ timeout: 10000 });
+      await page.locator(".create-chooser-btn", { hasText: "Type" }).click();
+      await page.locator("textarea.note-edit").waitFor({ timeout: 10000 });
+      await page.keyboard.press("Escape");
     });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
