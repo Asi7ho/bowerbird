@@ -53,6 +53,7 @@ export interface PluginManifest {
     panels?: Array<{ id: string; title: string }>;
     views?: Array<{ id: string; title: string }>;
     commands?: Array<{ id: string; title: string }>;
+    createActions?: Array<{ id: string; title: string }>;
     overlays?: Array<{ id: string; title: string }>;
     settingsSections?: Array<{ id: string; title: string }>;
     shortcuts?: Array<{ key: string; title: string }>;

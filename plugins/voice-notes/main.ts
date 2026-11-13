@@ -1,15 +1,21 @@
 // Voice Notes — bundled Bowerbird plugin (see PLUGIN_API.md).
 //
-// Record a note straight onto the board: the panel's Record
-// button captures the microphone with MediaRecorder, and on
-// Stop the recording is embedded as a board-owned file and
-// added as an audio card at the centre of the view. The
+// No panel: double-clicking empty board space offers "Type"
+// or "Record voice", and the recording is an overlay pill at
+// the point — a red dot, the elapsed time, and Stop. On Stop
+// the recording is embedded as a board-owned file, transcribed
+// on-device, and added as an audio card at the point, with
+// its transcript under the player when there is one. The
 // microphone permission is granted by the main process (see
 // electron/main.ts); on macOS the OS still asks the first
 // time, and a packaged build needs the audio-input
 // entitlement. No recording leaves the machine: the audio is
-// a file in the board's assets folder, like any dropped file.
+// a file in the board's assets folder, like any dropped file,
+// and the transcript is text on the card.
 import type { PluginContext } from "../../src/plugins";
+import type { Pt } from "../../src/model";
+
+const MIC_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
 
 const MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", ""];
 
@@ -33,24 +39,23 @@ function fmtElapsed(ms: number): string {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-let apiRef: PluginContext | null = null;
 let recorder: MediaRecorder | null = null;
 let stream: MediaStream | null = null;
 let chunks: Blob[] = [];
 let startedAt = 0;
 let timer: ReturnType<typeof setInterval> | null = null;
-let recordBtn: HTMLButtonElement | null = null;
-let statusEl: HTMLElement | null = null;
+let pill: HTMLDivElement | null = null;
+let timeEl: HTMLElement | null = null;
+let stopBtn: HTMLButtonElement | null = null;
 
 function setStatus(text: string): void {
-  if (statusEl) statusEl.textContent = text;
+  if (timeEl) timeEl.textContent = text;
 }
 
 function setRecording(on: boolean): void {
-  if (recordBtn) {
-    recordBtn.textContent = on ? "Stop" : "Record";
-    recordBtn.classList.toggle("recording", on);
-  }
+  if (pill) pill.hidden = !on;
+  if (stopBtn) stopBtn.hidden = !on;
+  if (pill) pill.classList.toggle("recording", on);
 }
 
 function stopTimer(): void {
@@ -61,9 +66,21 @@ function stopStream(): void {
   if (stream) { for (const t of stream.getTracks()) t.stop(); stream = null; }
 }
 
-async function startRecording(api: PluginContext): Promise<void> {
+function showPill(api: PluginContext, world: Pt): void {
+  if (!pill) return;
+  // The overlay wrap covers the board element, so the pill
+  // is placed in board-relative coords: the click point in
+  // screen space, above the spot the card will land on.
+  const cam = api.view.getCamera();
+  pill.style.left = `${(world.x - cam.x) * cam.zoom}px`;
+  pill.style.top = `${(world.y - cam.y) * cam.zoom}px`;
+  pill.hidden = false;
+}
+
+async function startRecording(api: PluginContext, world: Pt): Promise<void> {
+  if (recorder && recorder.state !== "inactive") return;
   if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-    setStatus("Recording is not supported here.");
+    api.ui.toast("Recording is not supported here.");
     return;
   }
   let mic: MediaStream;
@@ -71,9 +88,9 @@ async function startRecording(api: PluginContext): Promise<void> {
     mic = await navigator.mediaDevices.getUserMedia({ audio: true });
   } catch (err) {
     const name = err instanceof Error ? err.name : "";
-    if (name === "NotAllowedError") setStatus("Microphone blocked — allow it and try again.");
-    else if (name === "NotFoundError") setStatus("No microphone found.");
-    else setStatus("Could not open the microphone.");
+    if (name === "NotAllowedError") api.ui.toast("Microphone blocked — allow it and try again.");
+    else if (name === "NotFoundError") api.ui.toast("No microphone found.");
+    else api.ui.toast("Could not open the microphone.");
     return;
   }
   const mime = pickMime();
@@ -81,39 +98,40 @@ async function startRecording(api: PluginContext): Promise<void> {
   chunks = [];
   recorder = new MediaRecorder(mic, mime ? { mimeType: mime } : undefined);
   recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
-  recorder.onstop = () => void finishRecording(api, mime);
+  recorder.onstop = () => void finishRecording(api, world, mime);
   recorder.start(250);
   startedAt = Date.now();
+  showPill(api, world);
   setRecording(true);
-  setStatus("Recording 0:00");
+  setStatus(`Recording ${fmtElapsed(0)}`);
   timer = setInterval(() => setStatus(`Recording ${fmtElapsed(Date.now() - startedAt)}`), 250);
 }
 
-async function finishRecording(api: PluginContext, mime: string): Promise<void> {
+async function finishRecording(api: PluginContext, world: Pt, mime: string): Promise<void> {
   stopTimer();
   stopStream();
-  setRecording(false);
   const blob = new Blob(chunks, { type: mime || "audio/webm" });
   chunks = [];
   if (blob.size === 0) {
-    setStatus("Nothing was recorded.");
+    setRecording(false);
+    api.ui.toast("Nothing was recorded.");
     return;
   }
-  setStatus("Saving…");
-  if (recordBtn) recordBtn.disabled = true;
+  setStatus("Transcribing…");
+  if (stopBtn) stopBtn.hidden = true;
+  const file = new File([blob], fileName(mime), { type: blob.type });
   try {
-    const file = new File([blob], fileName(mime), { type: blob.type });
-    const path = await api.files.embedFile(file);
-    const cam = api.view.getCamera();
-    const el = api.ui.boardEl;
-    const centre = { x: cam.x + el.clientWidth / 2 / cam.zoom, y: cam.y + el.clientHeight / 2 / cam.zoom };
-    const id = api.board.addItem({ Audio: { path } }, { x: centre.x - 150, y: centre.y - 52 }, { w: 300, h: 104 });
+    const [path, transcript] = await Promise.all([
+      api.files.embedFile(file),
+      api.media.transcribeAudio(blob),
+    ]);
+    const h = transcript ? 240 : 104;
+    const id = api.board.addItem({ Audio: { path, ...(transcript ? { transcript } : {}) } }, { x: world.x - 150, y: world.y - h / 2 }, { w: 300, h });
     api.board.setSelected([id]);
-    setStatus("Ready");
   } catch {
-    setStatus("Could not save the recording.");
+    api.ui.toast("Could not save the recording.");
   } finally {
-    if (recordBtn) recordBtn.disabled = false;
+    setRecording(false);
   }
 }
 
@@ -124,33 +142,37 @@ function stopRecording(): void {
     stopTimer();
     stopStream();
     setRecording(false);
-    setStatus("Ready");
   }
 }
 
 export async function activate(api: PluginContext): Promise<void> {
-  apiRef = api;
-  api.ui.registerPanel({
-    id: "voice-notes",
-    title: "Voice Notes",
-    icon: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>',
+  api.ui.registerCreateAction({
+    id: "record-voice",
+    label: "Record voice",
+    icon: MIC_ICON,
+    run: (world: Pt) => void startRecording(api, world),
+  });
+  api.ui.registerOverlay({
+    id: "voice-recording",
     render: (container) => {
-      container.replaceChildren();
-      const btn = document.createElement("button");
-      btn.className = "vn-record";
-      btn.type = "button";
-      btn.textContent = "Record";
-      btn.addEventListener("click", () => {
-        if (!apiRef) return;
-        if (recorder && recorder.state !== "inactive") stopRecording();
-        else void startRecording(apiRef);
-      });
-      const status = document.createElement("div");
-      status.className = "vn-status";
-      status.textContent = "Ready";
-      recordBtn = btn;
-      statusEl = status;
-      container.append(btn, status);
+      const el = document.createElement("div");
+      el.className = "vn-recording";
+      el.hidden = true;
+      const dot = document.createElement("span");
+      dot.className = "vn-dot";
+      const time = document.createElement("span");
+      time.className = "vn-time";
+      time.textContent = "Recording 0:00";
+      const stop = document.createElement("button");
+      stop.className = "vn-stop";
+      stop.type = "button";
+      stop.textContent = "Stop";
+      stop.addEventListener("click", () => stopRecording());
+      el.append(dot, time, stop);
+      pill = el;
+      timeEl = time;
+      stopBtn = stop;
+      container.appendChild(el);
     },
   });
 }
@@ -162,7 +184,7 @@ export function deactivate(): void {
   stopTimer();
   stopStream();
   recorder = null;
-  recordBtn = null;
-  statusEl = null;
-  apiRef = null;
+  pill = null;
+  timeEl = null;
+  stopBtn = null;
 }
