@@ -134,10 +134,13 @@ export interface PluginToolDef {
 }
 
 // A creation action: an alternative to typing when the user
-// double-clicks empty board space. The core shows a small
-// chooser with "Type" and one button per registered action;
-// the action's run receives the double-clicked world point,
-// so the thing it creates lands where the user pointed.
+// double-clicks. The core opens the text box as always, with
+// the action's icon beside it; clicking the icon runs the
+// action at the note's position (the double-click point for
+// a new note) instead of typing. The first registered
+// action is the one shown. The action's run receives a
+// world point, so the thing it creates lands where the
+// user pointed.
 export interface PluginCreateActionDef {
   id: string;
   label: string;
@@ -662,8 +665,9 @@ export interface PluginContext {
     registerPanel: (def: PluginPanelDef) => void;
     registerCommand: (def: PluginCommandDef) => void;
     // Offer an alternative to typing on double-click: the
-    // core shows the action in the creation chooser, next
-    // to "Type", and runs it at the double-clicked point.
+    // core opens the text box as always, with the action's
+    // icon beside it, and clicking the icon runs the action
+    // at the note's position instead of typing.
     registerCreateAction: (def: PluginCreateActionDef) => void;
     listCommands: () => Array<{ pluginId: string; pluginName: string; id: string; title: string }>;
     listTools: () => Array<{ pluginId: string; pluginName: string; id: string; title: string }>;
@@ -2024,8 +2028,9 @@ function registerCreateAction(pluginId: string, def: PluginCreateActionDef): voi
   createActions.set(`${pluginId}:${def.id}`, { ...def, pluginId });
 }
 
-// Every registered creation action, for the core's
-// double-click chooser. In registration order.
+// Every registered creation action, for the core's text
+// editor (the first one's icon sits beside the text box).
+// In registration order.
 export function getCreateActions(): Array<PluginCreateActionDef & { pluginId: string }> {
   return Array.from(createActions.values());
 }

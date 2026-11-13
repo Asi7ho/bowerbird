@@ -529,16 +529,18 @@ async function main() {
       await page.reload();
       await page.waitForSelector("#board", { timeout: 15000 });
       // Double-click empty space below the Hello note: the
-      // chooser offers Type or Record voice, and there is no
-      // Voice Notes panel any more.
+      // text box opens with the mic beside it, and there is
+      // no Voice Notes panel any more.
       assert.equal(await page.locator('.plugin-tab[title^="Voice Notes"]').count(), 0);
       const noteBox = await page.locator("#cards .card", { hasText: "Hello CI!" }).first().boundingBox();
       assert.ok(noteBox);
       const cx = noteBox.x + 50;
       const cy = noteBox.y + noteBox.height + 60;
       doubleClick(page, cx, cy);
-      await page.locator(".create-chooser", { hasText: "Record voice" }).waitFor({ timeout: 10000 });
-      await page.locator(".create-chooser-btn", { hasText: "Record voice" }).click();
+      await page.locator("textarea.note-edit").waitFor({ timeout: 10000 });
+      const mic = page.locator(".note-edit-mic");
+      assert.equal(await mic.count(), 1);
+      await mic.click();
       await page.locator(".vn-recording", { hasText: "Recording" }).waitFor({ timeout: 10000 });
       await new Promise((resolve) => setTimeout(resolve, 1500));
       await page.locator(".vn-stop").click();
@@ -556,14 +558,14 @@ async function main() {
       assert.ok(audioBox);
       assert.ok(Math.abs(audioBox.x + audioBox.width / 2 - cx) < 5);
       assert.ok(Math.abs(audioBox.y + audioBox.height / 2 - cy) < 5);
-      // And the chooser's Type branch still makes a text note.
-      // Left of the Hello note, inside the group frame but on
-      // empty space — below it is off the bottom of the window
+      // And typing still works: double-clicking opens the
+      // text box directly, with the mic beside it. Left of
+      // the Hello note, inside the group frame but on empty
+      // space — below it is off the bottom of the window
       // once the audio card has landed there.
       doubleClick(page, noteBox.x - 110, noteBox.y + noteBox.height / 2);
-      await page.locator(".create-chooser", { hasText: "Type" }).waitFor({ timeout: 10000 });
-      await page.locator(".create-chooser-btn", { hasText: "Type" }).click();
       await page.locator("textarea.note-edit").waitFor({ timeout: 10000 });
+      assert.equal(await page.locator(".note-edit-mic").count(), 1);
       await page.keyboard.press("Escape");
     });
 

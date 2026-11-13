@@ -61,6 +61,10 @@ export const manifest: PluginManifest = {
 type Tool = string;
 const ACCENT = "#007AFF";
 
+// The fallback icon for a creation action that offers
+// none of its own, shown beside the text box.
+const MIC_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>`;
+
 // The eraser's reach, in world units: a stroke is erased
 // when the eraser circle overlaps it. 12 is big enough
 // that a sweep feels forgiving, small enough to pick one
@@ -651,82 +655,12 @@ function applyStacking(): void {
 
 // ---------------------------------------------------------------- editing
 
-// Double-clicking empty space with a creation action
-// registered offers a choice instead of typing straight
-// away: "Type" does what double-click always did (a text
-// note at the point), and each action runs at that point.
-// With no action registered the chooser never appears, so
-// the base app's double-click is unchanged.
-let createChooser: HTMLElement | null = null;
-
-function closeCreateChooser(): void {
-  if (!createChooser) return;
-  createChooser.remove();
-  createChooser = null;
-}
-
 function createTextNoteAt(world: Pt): void {
   const id = api.board.addItemSilent({ Text: { text: "", bold: false, size: 16, color: "#1A1A1A" } }, world, { w: 260, h: 48 });
   // No save here: the commit saves the typed text, or
   // removes the note if it is empty, so an empty note
   // leaves no board change and no undo step behind.
   startTextEdit(id);
-}
-
-function showCreateChooser(at: Pt, world: Pt): void {
-  closeCreateChooser();
-  const actions = getCreateActions();
-  const el = document.createElement("div");
-  el.className = "create-chooser";
-  el.setAttribute("role", "menu");
-  const bs = boardSize();
-  el.style.left = `${Math.min(Math.max(at.x, 8), Math.max(8, bs.x - 180))}px`;
-  el.style.top = `${Math.min(Math.max(at.y + 8, 8), Math.max(8, bs.y - 40 - actions.length * 36))}px`;
-  const mk = (label: string, icon: string | undefined, onPick: () => void): HTMLButtonElement => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "create-chooser-btn";
-    if (icon) {
-      if (/<script/i.test(icon)) throw new Error("Create chooser icon contains <script>");
-      btn.innerHTML = icon;
-    }
-    const span = document.createElement("span");
-    span.textContent = label;
-    btn.appendChild(span);
-    btn.addEventListener("click", () => { closeCreateChooser(); onPick(); });
-    return btn;
-  };
-  const typeBtn = mk("Type", undefined, () => createTextNoteAt(world));
-  el.appendChild(typeBtn);
-  for (const a of actions) {
-    el.appendChild(mk(a.label, a.icon, () => {
-      try {
-        void a.run(world);
-      } catch (e) {
-        api.ui.toast(`Could not start ${a.label}: ${String(e)}`);
-      }
-    }));
-  }
-  // The chooser is board chrome, not board content: its own
-  // clicks must never reach the board's pointerdown handler
-  // (which would start a drag), and a click anywhere else or
-  // Escape closes it without creating anything.
-  el.addEventListener("pointerdown", (e) => e.stopPropagation());
-  const outside = (e: PointerEvent) => { if (!el.contains(e.target as Node)) closeCreateChooser(); };
-  const esc = (e: KeyboardEvent) => { if (e.key === "Escape") closeCreateChooser(); };
-  document.addEventListener("pointerdown", outside, true);
-  document.addEventListener("keydown", esc, true);
-  const obs = new MutationObserver(() => {
-    if (!el.isConnected) {
-      document.removeEventListener("pointerdown", outside, true);
-      document.removeEventListener("keydown", esc, true);
-      obs.disconnect();
-    }
-  });
-  obs.observe(document.body, { childList: true, subtree: true });
-  boardEl.appendChild(el);
-  createChooser = el;
-  typeBtn.focus();
 }
 
 function startTextEdit(id: number): void {
@@ -749,8 +683,50 @@ function startTextEdit(id: number): void {
   ta.value = item.kind.Text.text;
   ta.style.fontSize = `${size}px`;
   ta.style.color = item.kind.Text.color;
+  // A creation action is offered beside the text box, as
+  // its icon: the user types, or clicks the icon instead.
+  // The first registered action is the one shown (today
+  // that is the voice plugin's mic). Clicking it commits
+  // the note first — an empty note is removed, typed text
+  // is kept — then runs the action at the note's position
+  // (the double-click point for a new note).
+  const row = document.createElement("div");
+  row.className = "note-edit-row";
+  row.appendChild(ta);
+  const actions = getCreateActions();
+  if (actions.length > 0) {
+    const a = actions[0];
+    const mic = document.createElement("button");
+    mic.type = "button";
+    mic.className = "note-edit-mic";
+    mic.setAttribute("aria-label", a.label);
+    mic.title = a.label;
+    if (a.icon) {
+      if (/<script/i.test(a.icon)) throw new Error("Create action icon contains <script>");
+      mic.innerHTML = a.icon;
+    } else {
+      mic.innerHTML = MIC_SVG;
+    }
+    // Without this the board's pointerdown handler commits
+    // the edit and re-renders, destroying the button before
+    // its click ever fires.
+    mic.addEventListener("pointerdown", (e) => e.stopPropagation());
+    mic.addEventListener("click", () => {
+      const b = api.board.get();
+      const it = boardGet(b, id);
+      if (!it) return;
+      const point = { x: it.pos.x, y: it.pos.y };
+      commitEditingIfAny();
+      try {
+        void a.run(point);
+      } catch (e) {
+        api.ui.toast(`Could not start ${a.label}: ${String(e)}`);
+      }
+    });
+    row.appendChild(mic);
+  }
   card.innerHTML = "";
-  card.appendChild(ta);
+  card.appendChild(row);
   card.classList.add("selected");
   ta.focus();
   ta.setSelectionRange(ta.value.length, ta.value.length);
@@ -1100,8 +1076,7 @@ boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
       if (it && "PdfCard" in it.kind) { openExternal(it.kind.PdfCard.path); return; }
       if (it && "Image" in it.kind) { openExternal(it.kind.Image.path); return; }
     } else {
-      if (getCreateActions().length > 0) showCreateChooser(winPt, world);
-      else createTextNoteAt(world);
+      createTextNoteAt(world);
       return;
     }
   }
