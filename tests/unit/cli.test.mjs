@@ -95,13 +95,25 @@ describe("boards and cards", () => {
     ]);
   });
 
-  it("addTextCard takes the next id and sits right of the content", () => {
+  it("addTextCard takes the next free id and sits right of the content", () => {
     const board = readBoard(resolveBoardFile("Main", env).file);
     const item = addTextCard(board, { text: "New note", x: undefined, y: undefined, w: undefined, h: undefined });
-    expect(item.id).toBe(4);
+    expect(item.id).toBe(5); // next_id 4 is the last issued id, not the next free one
     expect(board.next_id).toBe(5);
     expect(item.pos.x).toBe(640); // right of the image card (400 + 200 + 40)
     expect(item.kind).toEqual({ Text: { text: "New note", bold: false, size: 16, color: "#1A1A1A" } });
+  });
+
+  it("addTextCard never collides when next_id lags behind the highest id", () => {
+    // The welcome board's shape: ids 1..3 with next_id 2.
+    const board = { items: [
+      { id: 1, pos: { x: 0, y: 0 }, size: { w: 10, h: 10 }, group: null, kind: { Text: { text: "a", bold: false, size: 16, color: "#1A1A1A" } } },
+      { id: 2, pos: { x: 0, y: 0 }, size: { w: 10, h: 10 }, group: null, kind: { Text: { text: "b", bold: false, size: 16, color: "#1A1A1A" } } },
+      { id: 3, pos: { x: 0, y: 0 }, size: { w: 10, h: 10 }, group: null, kind: { Text: { text: "c", bold: false, size: 16, color: "#1A1A1A" } } },
+    ], camera: { x: 0, y: 0, zoom: 1 }, next_id: 2, next_group: 1, bg: "#FFFFFF", grid: "Dots" };
+    const item = addTextCard(board, { text: "New", x: 10, y: 10, w: 320, h: 80 });
+    expect(item.id).toBe(4);
+    expect(board.next_id).toBe(4);
   });
 
   it("addTextCard on an empty board lands at 100,100", () => {
@@ -167,6 +179,7 @@ describe("run()", () => {
     expect(run(["add-card", "--text", "Real", "--x", "5", "--y", "6"], env, out.stream, err.stream)).toBe(EXIT.OK);
     const board = readBoard(path.join(data, "bowerbird", "board.json"));
     expect(board.items.length).toBe(2);
+    expect(board.items[1].id).toBe(3);
     expect(board.next_id).toBe(3);
     expect(board.items[1].pos).toEqual({ x: 5, y: 6 });
   });

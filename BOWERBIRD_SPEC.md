@@ -67,9 +67,12 @@ unless `display-name.txt` says otherwise.
   on top). Frames (see PLUGIN_API.md) are items too.
 - `camera` — the view: `x`/`y` is the world point at the top-left
   of the board area, `zoom` is clamped to 0.1–8.
-- `next_id` / `next_group` — the next free item id and group id.
-  A writer that adds items must bump `next_id` past every id it
-  uses; a writer that groups must bump `next_group`.
+- `next_id` / `next_group` — the last issued item id and group id.
+  The next free id is `next_id + 1`: the app allocates by
+  bumping first. A writer that adds items must take
+  `max(next_id, highest item id) + 1` as the new id and set
+  `next_id` to it; a writer that groups takes `next_group + 1`
+  and sets `next_group` to it.
 - `bg` — the canvas background colour. `grid` is `Dots`, `Lines`
   or `None`.
 - Unknown top-level fields are carried through load and save
