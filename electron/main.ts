@@ -191,6 +191,47 @@ function boardDir(): string {
   return path.dirname(boardPath());
 }
 
+// ---------------------------------------------------------------- live follow
+//
+// An agent or a script may rewrite board.json while the app is open
+// (see BOWERBIRD_SPEC.md). Watch the current board's folder; when
+// board.json changes to content the app did not itself write, tell
+// the renderer to reload it. The watch is on the folder, not the
+// file: the app writes through tmp+rename, which would drop a
+// file watch. The debounced re-read compares against the last
+// content the app wrote, so its own saves never trigger a reload.
+let boardWatcher: fs.FSWatcher | null = null;
+let lastSavedJson: string | null = null;
+let boardWatchTimer: NodeJS.Timeout | null = null;
+
+function startBoardWatcher(): void {
+  stopBoardWatcher();
+  try {
+    boardWatcher = fs.watch(boardDir(), (_eventType, filename) => {
+      if (filename !== "board.json") return;
+      if (boardWatchTimer) clearTimeout(boardWatchTimer);
+      boardWatchTimer = setTimeout(() => {
+        boardWatchTimer = null;
+        let json: string;
+        try {
+          json = fs.readFileSync(boardPath(), "utf8");
+        } catch { return; }
+        if (json === lastSavedJson) return; // the app's own save
+        lastSavedJson = json;
+        boardView?.webContents.send("bowerbird:board-changed-external");
+      }, 300);
+    });
+  } catch {
+    // Watching is a convenience: the board still loads on boot.
+    boardWatcher = null;
+  }
+}
+
+function stopBoardWatcher(): void {
+  if (boardWatchTimer) { clearTimeout(boardWatchTimer); boardWatchTimer = null; }
+  if (boardWatcher) { boardWatcher.close(); boardWatcher = null; }
+}
+
 // Build identifier, so a user can tell which packaged build
 // they are actually running (Settings → General → Data).
 // package-mac.sh writes dist/build-id.txt with the git short
@@ -838,6 +879,7 @@ function registerIpc(): void {
     const tmp = file + ".tmp";
     fs.writeFileSync(tmp, json);
     fs.renameSync(tmp, file);
+    lastSavedJson = json;
     maybeBackup(path.dirname(file), json);
   });
 
@@ -1234,8 +1276,8 @@ function registerIpc(): void {
     return listBoards();
   });
   ipcMain.handle("bowerbird:create-board", (_event, name: unknown) => createBoard(name));
-  ipcMain.handle("bowerbird:switch-board", (_event, name: unknown) => switchBoard(name));
-  ipcMain.handle("bowerbird:rename-board", (_event, oldName: unknown, newName: unknown) => renameBoard(oldName, newName));
+  ipcMain.handle("bowerbird:switch-board", (_event, name: unknown) => { const out = switchBoard(name); startBoardWatcher(); return out; });
+  ipcMain.handle("bowerbird:rename-board", (_event, oldName: unknown, newName: unknown) => { const out = renameBoard(oldName, newName); startBoardWatcher(); return out; });
   ipcMain.handle("bowerbird:delete-board", (_event, name: unknown) => deleteBoard(name));
   ipcMain.handle("bowerbird:list-backups", () => {
     return listBackups(boardDir());
@@ -1590,6 +1632,7 @@ app.whenReady().then(() => {
   }
   registerIpc();
   createWindow();
+  startBoardWatcher();
 });
 
 app.on("window-all-closed", () => {
