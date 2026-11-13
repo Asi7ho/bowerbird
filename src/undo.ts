@@ -18,6 +18,7 @@ export interface UndoState {
   items: Item[];
   next_id: number;
   next_group: number;
+  groups: Record<number, { label: string }>;
   bg: string;
   grid: Board["grid"];
   selected: number[];
@@ -60,7 +61,7 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
   // of a snapshot (same fields, same order), without
   // stringifying the items a second time.
   function contentKeyFor(itemsJson: string): string {
-    return `{"items":${itemsJson},"next_id":${ctx.getBoard().next_id},"next_group":${ctx.getBoard().next_group},"bg":${JSON.stringify(ctx.getBoard().bg)},"grid":${JSON.stringify(ctx.getBoard().grid)}}`;
+    return `{"items":${itemsJson},"next_id":${ctx.getBoard().next_id},"next_group":${ctx.getBoard().next_group},"groups":${JSON.stringify(ctx.getBoard().groups ?? {})},"bg":${JSON.stringify(ctx.getBoard().bg)},"grid":${JSON.stringify(ctx.getBoard().grid)}}`;
   }
   function save(): { itemsJson: string; contentKey: string } {
     // One serialisation of the items, shared by the undo
@@ -124,7 +125,8 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
   // is why PLUGIN_API.md no longer says plugin actions have no undo.
   //
   // What a snapshot holds, and what it does not:
-  // - Items, next_id, next_group, bg and grid: restored on undo.
+  // - Items, next_id, next_group, group labels, bg and grid:
+  //   restored on undo.
   // - Camera: not stored, so panning and zooming never create an
   //   undo step, and undoing never jumps the view.
   // - Selection at the time of the change: restored, so undoing a
@@ -161,6 +163,7 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
       items: JSON.parse(JSON.stringify(ctx.getBoard().items)) as Item[],
       next_id: ctx.getBoard().next_id,
       next_group: ctx.getBoard().next_group,
+      groups: JSON.parse(JSON.stringify(ctx.getBoard().groups ?? {})) as Record<number, { label: string }>,
       bg: ctx.getBoard().bg,
       grid: ctx.getBoard().grid,
       selected: [...ctx.getSelected()],
@@ -170,7 +173,7 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
   function contentKey(s: UndoState): string {
     // Selection is restored by undo, but a selection change alone
     // is not a board change, so it is not part of the key.
-    return JSON.stringify({ items: s.items, next_id: s.next_id, next_group: s.next_group, bg: s.bg, grid: s.grid });
+    return JSON.stringify({ items: s.items, next_id: s.next_id, next_group: s.next_group, groups: s.groups ?? {}, bg: s.bg, grid: s.grid });
   }
 
   function updateUndoButtons(): void {
@@ -188,7 +191,7 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
     const curKey = key ?? contentKeyFor(itemsJson ?? JSON.stringify(ctx.getBoard().items));
     if (lastSnapshot !== null && lastSnapshotKey === curKey) return;
     const cur: UndoState = itemsJson !== undefined
-      ? { items: JSON.parse(itemsJson) as Item[], next_id: ctx.getBoard().next_id, next_group: ctx.getBoard().next_group, bg: ctx.getBoard().bg, grid: ctx.getBoard().grid, selected: [...ctx.getSelected()] }
+      ? { items: JSON.parse(itemsJson) as Item[], next_id: ctx.getBoard().next_id, next_group: ctx.getBoard().next_group, groups: JSON.parse(JSON.stringify(ctx.getBoard().groups ?? {})) as Record<number, { label: string }>, bg: ctx.getBoard().bg, grid: ctx.getBoard().grid, selected: [...ctx.getSelected()] }
       : contentSnapshot();
     if (lastSnapshot !== null) {
       undoStack.push(lastSnapshot);
@@ -223,7 +226,7 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
     // Move lastSnapshot to the new content, reusing save()'s
     // serialisation instead of snapshotting the board again.
     if (ser.contentKey !== lastSnapshotKey) {
-      lastSnapshot = { items: JSON.parse(ser.itemsJson) as Item[], next_id: ctx.getBoard().next_id, next_group: ctx.getBoard().next_group, bg: ctx.getBoard().bg, grid: ctx.getBoard().grid, selected: [...ctx.getSelected()] };
+      lastSnapshot = { items: JSON.parse(ser.itemsJson) as Item[], next_id: ctx.getBoard().next_id, next_group: ctx.getBoard().next_group, groups: JSON.parse(JSON.stringify(ctx.getBoard().groups ?? {})) as Record<number, { label: string }>, bg: ctx.getBoard().bg, grid: ctx.getBoard().grid, selected: [...ctx.getSelected()] };
       lastSnapshotKey = ser.contentKey;
     }
     updateUndoButtons();
@@ -233,6 +236,11 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
     ctx.getBoard().items = JSON.parse(JSON.stringify(s.items)) as Item[];
     ctx.getBoard().next_id = s.next_id;
     ctx.getBoard().next_group = s.next_group;
+    if (Object.keys(s.groups ?? {}).length > 0) {
+      ctx.getBoard().groups = JSON.parse(JSON.stringify(s.groups)) as Record<number, { label: string }>;
+    } else {
+      delete ctx.getBoard().groups;
+    }
     ctx.getBoard().bg = s.bg;
     ctx.getBoard().grid = s.grid;
     ctx.setSelected(s.selected.filter((id) => boardGet(ctx.getBoard(), id) !== undefined));
