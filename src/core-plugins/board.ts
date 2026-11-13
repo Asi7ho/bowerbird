@@ -776,16 +776,10 @@ function openTagInput(cardId: number): void {
     if (done) return;
     done = true;
     const value = input.value.trim();
-    const board = api.board.get();
-    const it = value ? boardGet(board, cardId) : undefined;
-    if (it) {
-      const tags = [...(it.tags ?? [])];
-      if (!tags.includes(value)) {
-        tags.push(value);
-        api.board.updateItem(cardId, { tags });
-        return;
-      }
-    }
+    // The tags API validates and writes: a duplicate or an
+    // empty tag adds nothing. When it writes, the update
+    // renders the board, so there is nothing left to do.
+    if (value && api.tags.add(cardId, value)) return;
     render();
   };
   const cancel = () => {

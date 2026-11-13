@@ -48,6 +48,36 @@ export function activate(api) {
 export function deactivate() {}
 `;
 
+const API_TEST_PLUGIN_MANIFEST = {
+  id: "api-test-plugin",
+  name: "API Test Plugin",
+  version: "0.1.0",
+  apiVersion: "2",
+  description: "Test plugin for the e2e suite: exercises the tags and checklist APIs on a card of its own.",
+  permissions: ["board:write"],
+  main: "main.ts",
+};
+
+// Exercises the new APIs on a card it creates, and leaves
+// the results on the window for the suite to read. The
+// plugin is off by default and only the final check enables
+// it, so its card cannot disturb the earlier checks.
+const API_TEST_PLUGIN_MAIN = `
+export function activate(api) {
+  const id = api.board.addItem(
+    { Text: { text: "API card\\n- [ ] one\\n- [ ] two", bold: false, size: 16, color: "#1A1A1A" } },
+    { x: 900, y: 400 }, { w: 320, h: 120 },
+  );
+  const before = api.cards.getChecklistProgress(api.board.getItem(id));
+  api.cards.setChecklistProgress(id, 1);
+  const after = api.cards.getChecklistProgress(api.board.getItem(id));
+  api.tags.add(id, "api");
+  api.tags.add(id, "api");
+  window.__apiTest = { id, before, after, tags: api.tags.get(id), all: api.tags.list() };
+}
+export function deactivate() {}
+`;
+
 function fail(message) {
   throw new Error(message);
 }
@@ -100,9 +130,13 @@ async function main() {
   fs.mkdirSync(configHome, { recursive: true });
   const testPluginDir = path.join(pluginsDir, "ci-test-plugin");
   fs.mkdirSync(testPluginDir, { recursive: true });
+  const apiTestPluginDir = path.join(pluginsDir, "api-test-plugin");
+  fs.mkdirSync(apiTestPluginDir, { recursive: true });
   fs.writeFileSync(boardPath, JSON.stringify(EMPTY_BOARD));
   fs.writeFileSync(path.join(testPluginDir, "manifest.json"), JSON.stringify(TEST_PLUGIN_MANIFEST, null, 2));
   fs.writeFileSync(path.join(testPluginDir, "main.ts"), TEST_PLUGIN_MAIN);
+  fs.writeFileSync(path.join(apiTestPluginDir, "manifest.json"), JSON.stringify(API_TEST_PLUGIN_MANIFEST, null, 2));
+  fs.writeFileSync(path.join(apiTestPluginDir, "main.ts"), API_TEST_PLUGIN_MAIN);
 
   const readBoard = () => JSON.parse(fs.readFileSync(boardPath, "utf8"));
   const strokes = () => readBoard().items.filter((it) => "Stroke" in it.kind);
@@ -367,7 +401,8 @@ async function main() {
       assert.equal(textCards().some((it) => it.kind.Text.text === "From the outside"), true);
     });
     await check("tags and checklist progress show inside cards", async () => {
-      // Both are core plugins now: on by default, no enabling
+      // Tags is a core plugin and the checklist progress is
+      // core rendering: both on by default, no enabling
       // needed — the reload below proves they survive a fresh
       // load.
       await page.reload();
@@ -439,6 +474,33 @@ async function main() {
       assert.ok(progBox.cardRight - progBox.decRight < 16, "progress at the card's right edge");
       assert.ok(progBox.decBottom <= progBox.cardBottom && progBox.cardBottom - progBox.decBottom < 24, "progress inside the card's bottom edge");
       assert.ok(!progBox.isPill, "progress is plain text, not a pill");
+    });
+
+    await check("the tags and checklist APIs work from a plugin", async () => {
+      // The API test plugin is off by default and only this
+      // check enables it, so its card cannot disturb the
+      // earlier checks.
+      assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("api-test-plugin", true)), true);
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: 15000 });
+      const result = await waitFor("API test result on the page", () => page.evaluate(() => window.__apiTest ?? null));
+      assert.equal(result.before.done, 0);
+      assert.equal(result.before.total, 2);
+      assert.equal(result.after.done, 1);
+      assert.equal(result.after.total, 2);
+      assert.deepEqual(result.tags, ["api"]);
+      assert.ok(result.all.includes("api"));
+      // The writes landed on disk: the tag is on the card
+      // and the first task line is checked.
+      const card = readBoard().items.find((it) => it.id === result.id);
+      assert.deepEqual(card.tags, ["api"]);
+      assert.ok(card.kind.Text.text.includes("- [x] one"));
+      assert.ok(card.kind.Text.text.includes("- [ ] two"));
+      // And the core's rendered progress agrees with the API.
+      await waitFor("API card progress on the card", async () => {
+        const text = await page.locator(`.card-decorations-right[data-for="${result.id}"]`).first().textContent().catch(() => "");
+        return (text ?? "").includes("1/2") ? true : null;
+      });
     });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
