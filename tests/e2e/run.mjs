@@ -177,11 +177,12 @@ async function main() {
       assert.equal(readBoard().items.length, 0);
     });
 
-    await check("toolbar shows zoom level and saved state", async () => {
+    await check("toolbar shows zoom level and title bar shows saved state", async () => {
       const zoom = page.locator("#zoom-label");
       await zoom.waitFor({ timeout: 10000 });
       assert.equal(await zoom.textContent(), "100%");
-      assert.equal(await page.locator("#saved-label").textContent(), "Saved");
+      assert.equal(await page.locator("#title-bar-left #saved-label").textContent(), "Saved");
+      assert.equal(await page.locator("#toolbar #saved-label").count(), 0);
       await page.keyboard.press("+");
       await waitFor("zoom label 120%", async () => (await zoom.textContent()) === "120%");
       await page.keyboard.press("0");

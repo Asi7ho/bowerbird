@@ -556,7 +556,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #toolbar .zoom-group { display: flex; flex-direction: column; gap: 2px; width: 100%; }
 #toolbar .zoom-group button { width: 100%; }
 #toolbar button.zoom-label { width: 100%; height: auto; padding: 2px 0; font-size: 11px; font-weight: 600; color: var(--grey); }
-#toolbar .saved-label { width: 100%; font-size: 11px; color: var(--grey); text-align: center; white-space: nowrap; }
+#title-bar-left .saved-label { font-size: 12px; color: var(--grey); white-space: nowrap; }
 #toolbar .palette {
   position: absolute; left: calc(100% + 8px); top: 12px;
   display: flex; flex-direction: column; gap: 6px; align-items: center;
