@@ -352,6 +352,23 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 .card-decorations .tag-add svg { width: 13px; height: 13px; }
 .card.selected + .card-decorations .tag-add { opacity: 1; }
 .card-decorations .tag-add:hover { color: var(--ink); background: var(--fill); }
+/* Double-click creation chooser: a small white menu at the
+   click point, "Type" first, then one row per registered
+   creation action. Same chip treatment as the tag pills. */
+.create-chooser {
+  position: absolute; z-index: 40; min-width: 160px;
+  background: #fff; border: 1px solid var(--hairline);
+  border-radius: 10px; box-shadow: var(--shadow-md);
+  padding: 4px; display: flex; flex-direction: column; gap: 2px;
+}
+.create-chooser-btn {
+  display: flex; align-items: center; gap: 8px;
+  font: inherit; font-size: 13px; color: var(--ink);
+  background: transparent; border: 0; border-radius: 7px;
+  padding: 7px 10px; cursor: pointer; text-align: left;
+}
+.create-chooser-btn svg { width: 14px; height: 14px; flex: none; }
+.create-chooser-btn:hover, .create-chooser-btn:focus-visible { background: var(--fill); outline: none; }
 .card-decorations .tag-add-input {
   font: inherit; font-size: 12px; color: var(--ink);
   background: #fff; border: 1px solid var(--hairline);

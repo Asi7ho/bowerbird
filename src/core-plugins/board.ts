@@ -24,6 +24,7 @@ import {
   emitPluginEvent,
   getActiveView,
   getCardRenderer,
+  getCreateActions,
   getPluginTool,
   handlePluginCardAction,
   handlePluginCardDoubleClick,
@@ -649,6 +650,84 @@ function applyStacking(): void {
 
 // ---------------------------------------------------------------- editing
 
+// Double-clicking empty space with a creation action
+// registered offers a choice instead of typing straight
+// away: "Type" does what double-click always did (a text
+// note at the point), and each action runs at that point.
+// With no action registered the chooser never appears, so
+// the base app's double-click is unchanged.
+let createChooser: HTMLElement | null = null;
+
+function closeCreateChooser(): void {
+  if (!createChooser) return;
+  createChooser.remove();
+  createChooser = null;
+}
+
+function createTextNoteAt(world: Pt): void {
+  const id = api.board.addItemSilent({ Text: { text: "", bold: false, size: 16, color: "#1A1A1A" } }, world, { w: 260, h: 48 });
+  // No save here: the commit saves the typed text, or
+  // removes the note if it is empty, so an empty note
+  // leaves no board change and no undo step behind.
+  startTextEdit(id);
+}
+
+function showCreateChooser(at: Pt, world: Pt): void {
+  closeCreateChooser();
+  const actions = getCreateActions();
+  const el = document.createElement("div");
+  el.className = "create-chooser";
+  el.setAttribute("role", "menu");
+  const bs = boardSize();
+  el.style.left = `${Math.min(Math.max(at.x, 8), Math.max(8, bs.x - 180))}px`;
+  el.style.top = `${Math.min(Math.max(at.y + 8, 8), Math.max(8, bs.y - 40 - actions.length * 36))}px`;
+  const mk = (label: string, icon: string | undefined, onPick: () => void): HTMLButtonElement => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "create-chooser-btn";
+    if (icon) {
+      if (/<script/i.test(icon)) throw new Error("Create chooser icon contains <script>");
+      btn.innerHTML = icon;
+    }
+    const span = document.createElement("span");
+    span.textContent = label;
+    btn.appendChild(span);
+    btn.addEventListener("click", () => { closeCreateChooser(); onPick(); });
+    return btn;
+  };
+  const typeBtn = mk("Type", undefined, () => createTextNoteAt(world));
+  el.appendChild(typeBtn);
+  for (const a of actions) {
+    el.appendChild(mk(a.label, a.icon, () => {
+      try {
+        void a.run(world);
+      } catch (e) {
+        api.ui.toast(`Could not start ${a.label}: ${String(e)}`);
+      }
+    }));
+  }
+  // The chooser is board chrome, not board content: its own
+  // clicks must never reach the board's pointerdown handler
+  // (which would start a drag), and a click anywhere else or
+  // Escape closes it without creating anything.
+  el.addEventListener("pointerdown", (e) => e.stopPropagation());
+  const outside = (e: PointerEvent) => { if (!el.contains(e.target as Node)) closeCreateChooser(); };
+  const esc = (e: KeyboardEvent) => { if (e.key === "Escape") closeCreateChooser(); };
+  document.addEventListener("pointerdown", outside, true);
+  document.addEventListener("keydown", esc, true);
+  const obs = new MutationObserver(() => {
+    if (!el.isConnected) {
+      document.removeEventListener("pointerdown", outside, true);
+      document.removeEventListener("keydown", esc, true);
+      obs.disconnect();
+    }
+  });
+  obs.observe(document.body, { childList: true, subtree: true });
+  boardEl.appendChild(el);
+  createChooser = el;
+  typeBtn.focus();
+}
+
 function startTextEdit(id: number): void {
   const board = api.board.get();
   const item = boardGet(board, id);
@@ -1020,11 +1099,8 @@ boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
       if (it && "PdfCard" in it.kind) { openExternal(it.kind.PdfCard.path); return; }
       if (it && "Image" in it.kind) { openExternal(it.kind.Image.path); return; }
     } else {
-      const id = api.board.addItemSilent({ Text: { text: "", bold: false, size: 16, color: "#1A1A1A" } }, world, { w: 260, h: 48 });
-      // No save here: the commit saves the typed text, or
-      // removes the note if it is empty, so an empty note
-      // leaves no board change and no undo step behind.
-      startTextEdit(id);
+      if (getCreateActions().length > 0) showCreateChooser(winPt, world);
+      else createTextNoteAt(world);
       return;
     }
   }

@@ -132,6 +132,18 @@ export interface PluginToolDef {
   onMouseUp?: (world: Pt) => void;
 }
 
+// A creation action: an alternative to typing when the user
+// double-clicks empty board space. The core shows a small
+// chooser with "Type" and one button per registered action;
+// the action's run receives the double-clicked world point,
+// so the thing it creates lands where the user pointed.
+export interface PluginCreateActionDef {
+  id: string;
+  label: string;
+  icon?: string;
+  run: (world: Pt) => void | Promise<void>;
+}
+
 export interface PluginPanelDef {
   id: string;
   title: string;
@@ -642,6 +654,10 @@ export interface PluginContext {
     registerTool: (def: PluginToolDef) => void;
     registerPanel: (def: PluginPanelDef) => void;
     registerCommand: (def: PluginCommandDef) => void;
+    // Offer an alternative to typing on double-click: the
+    // core shows the action in the creation chooser, next
+    // to "Type", and runs it at the double-clicked point.
+    registerCreateAction: (def: PluginCreateActionDef) => void;
     listCommands: () => Array<{ pluginId: string; pluginName: string; id: string; title: string }>;
     listTools: () => Array<{ pluginId: string; pluginName: string; id: string; title: string }>;
     runCommand: (pluginId: string, commandId: string) => Promise<void>;
@@ -955,6 +971,7 @@ const tools = new Map<string, PluginToolDef & { pluginId: string; fullId: string
 const panels = new Map<string, PluginPanelDef & { pluginId: string; el: HTMLElement; body: HTMLElement; tab: HTMLElement; hidden: boolean }>();
 const views = new Map<string, PluginViewDef & { pluginId: string }>();
 const commands = new Map<string, PluginCommandDef & { pluginId: string }>();
+const createActions = new Map<string, PluginCreateActionDef & { pluginId: string }>();
 const overlays = new Map<string, PluginOverlayDef & { pluginId: string; el: HTMLElement }>();
 const settingsSections = new Map<string, PluginSettingsSectionDef & { pluginId: string }>();
 const shortcuts = new Map<string, PluginShortcutDef & { pluginId: string }>();
@@ -1671,6 +1688,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       registerTool: (def: PluginToolDef) => registerTool(pluginId, def),
       registerPanel: (def: PluginPanelDef) => registerPanel(pluginId, def),
       registerCommand: (def: PluginCommandDef) => registerCommand(pluginId, def),
+      registerCreateAction: (def: PluginCreateActionDef) => registerCreateAction(pluginId, def),
       // Commands are user actions, not code: listing and running
       // them is what Settings' Run buttons already do, so a
       // palette plugin can do the same without a permission.
@@ -1988,6 +2006,17 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
 }
 
 // ---------------------------------------------------------------- registration
+
+function registerCreateAction(pluginId: string, def: PluginCreateActionDef): void {
+  if (def.icon && /<script/i.test(def.icon)) throw new Error(`Plugin ${pluginId} create action icon contains <script>`);
+  createActions.set(`${pluginId}:${def.id}`, { ...def, pluginId });
+}
+
+// Every registered creation action, for the core's
+// double-click chooser. In registration order.
+export function getCreateActions(): Array<PluginCreateActionDef & { pluginId: string }> {
+  return Array.from(createActions.values());
+}
 
 function registerTool(pluginId: string, def: PluginToolDef): void {
   const fullId = `plugin:${pluginId}:${def.id}`;
@@ -2474,6 +2503,9 @@ function unregisterPlugin(pluginId: string): void {
   updatePanelDock();
   for (const [key, v] of Array.from(views.entries())) {
     if (v.pluginId === pluginId) views.delete(key);
+  }
+  for (const key of Array.from(createActions.keys())) {
+    if (key.startsWith(`${pluginId}:`)) createActions.delete(key);
   }
   for (const key of Array.from(commands.keys())) {
     if (key.startsWith(`${pluginId}:`)) commands.delete(key);
