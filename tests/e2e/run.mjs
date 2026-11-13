@@ -236,6 +236,65 @@ async function main() {
       await page.locator("text=CI plugin card").first().waitFor({ timeout: 15000 });
     });
 
+    await check("grouping cards frames them as a section", async () => {
+      // The board holds the "Hello CI!" note at world (600, 552),
+      // 260x48, and the CI plugin card at (100, 100), 260x96.
+      // Select both, then group them with Ctrl+G.
+      await page.mouse.click(730, 624);
+      await page.mouse.click(230, 196, { modifiers: ["Shift"] });
+      await page.keyboard.press("Control+g");
+      const frame = await waitFor("group frame in the DOM", async () => {
+        const el = await page.locator(".group-frame").first().elementHandle();
+        if (!el) return null;
+        const box = await el.boundingBox();
+        return box ? { box } : null;
+      });
+      // The union of the two cards is (100,100)-(860,600); the
+      // frame sits 24px outside it, at client y + 48.
+      assert.equal(Math.round(frame.box.x), 76);
+      assert.equal(Math.round(frame.box.y), 124);
+      assert.equal(Math.round(frame.box.width), 784);
+      assert.equal(Math.round(frame.box.height), 548);
+      assert.equal(await page.locator(".group-frame .group-label").first().textContent(), "Section 1");
+      const grouped = await waitFor("group label on disk", () => {
+        const b = readBoard();
+        return b.groups?.[1]?.label === "Section 1" && b.items.every((it) => it.group === 1) ? b : null;
+      });
+      assert.equal(grouped.items.length, 2);
+      // Rename by double-clicking the label: the chip sits at
+      // the frame's top left, 8px in — click its centre.
+      await doubleClick(page, 120, 142);
+      await page.locator("input.group-rename").waitFor({ timeout: 10000 });
+      await page.keyboard.type("Reading");
+      await page.keyboard.press("Enter");
+      await waitFor("renamed label in the DOM", async () => {
+        const t = await page.locator(".group-frame .group-label").first().textContent();
+        return t === "Reading" ? true : null;
+      });
+      await waitFor("renamed label on disk", () => readBoard().groups?.[1]?.label === "Reading");
+      // Drag one card 100px right: the frame's right edge
+      // follows it (its left edge stays on the other card).
+      await page.mouse.move(730, 624);
+      await page.mouse.down();
+      await page.mouse.move(830, 624, { steps: 10 });
+      await page.mouse.up();
+      await waitFor("frame follows the drag", async () => {
+        const el = await page.locator(".group-frame").first().elementHandle();
+        const box = el && (await el.boundingBox());
+        return box && Math.round(box.width) === 884 ? true : null;
+      });
+      const moved = readBoard().items.find((it) => "Text" in it.kind);
+      assert.equal(moved.pos.x, 700);
+      // One undo restores the drag, and the frame with it.
+      await page.keyboard.press("Control+z");
+      await waitFor("frame back after undo", async () => {
+        const el = await page.locator(".group-frame").first().elementHandle();
+        const box = el && (await el.boundingBox());
+        return box && Math.round(box.width) === 784 ? true : null;
+      });
+      assert.equal(readBoard().items.find((it) => "Text" in it.kind).pos.x, 600);
+    });
+
     await check("pasting an image from the clipboard adds an image card", async () => {
       // A synthetic paste carrying a 1x1 PNG, the way a
       // copied screenshot arrives on the clipboard.
