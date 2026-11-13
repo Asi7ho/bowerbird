@@ -72,6 +72,7 @@ let boardEl!: HTMLDivElement;
 let gridEl!: HTMLDivElement;
 let worldEl!: SVGGElement;
 let cardsEl!: HTMLDivElement;
+let groupsEl!: HTMLDivElement;
 
 // The board as last rendered (a copy from api.board.get()).
 // The render loop reads bg/grid/items from this; the
@@ -267,6 +268,7 @@ function applyCamera(): void {
   const cam = api.view.getCamera();
   worldEl.setAttribute("transform", `translate(${-cam.x * cam.zoom},${-cam.y * cam.zoom}) scale(${cam.zoom})`);
   cardsEl.style.transform = `translate(${-cam.x * cam.zoom}px,${-cam.y * cam.zoom}px) scale(${cam.zoom})`;
+  groupsEl.style.transform = `translate(${-cam.x * cam.zoom}px,${-cam.y * cam.zoom}px) scale(${cam.zoom})`;
   applyGrid();
   updateResizeHandle();
 }
@@ -423,6 +425,51 @@ function renderStrokesAndConnectors(board: Board): void {
   // rebuild every card.
 }
 
+// Groups are sections: every group with two or more members
+// gets a labelled frame around its cards, drawn in the
+// #groups layer below the cards. The frame is derived state
+// — its bounds come from the members on every render — so
+// it always follows the group and never needs saving. The
+// frame sits this far outside the group's cards, so the
+// dashed border never touches them.
+const GROUP_PAD = 24;
+
+function groupBounds(board: Board, group: number): { x: number; y: number; w: number; h: number } | null {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const it of board.items) {
+    if (it.group !== group) continue;
+    const [p, s] = itemBounds(board, it);
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x + s.w);
+    maxY = Math.max(maxY, p.y + s.h);
+  }
+  if (!Number.isFinite(minX)) return null;
+  return { x: minX - GROUP_PAD, y: minY - GROUP_PAD, w: maxX - minX + GROUP_PAD * 2, h: maxY - minY + GROUP_PAD * 2 };
+}
+
+function renderGroupFrames(board: Board): void {
+  if (!groupsEl) return;
+  const selected = api.board.getSelected();
+  const v = visibleRect();
+  let html = "";
+  const groups = [...new Set(board.items.map((it) => it.group).filter((g): g is number => g !== null))];
+  for (const g of groups) {
+    const members = board.items.filter((it) => it.group === g);
+    if (members.length < 2) continue;
+    const b = groupBounds(board, g);
+    if (!b) continue;
+    if (b.x > v.x1 || b.y > v.y1 || b.x + b.w < v.x0 || b.y + b.h < v.y0) continue;
+    const isSel = members.some((it) => selected.includes(it.id));
+    const label = board.groups?.[g]?.label ?? `Section ${g}`;
+    html += `<div class="group-frame${isSel ? " selected" : ""}" data-group="${g}" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px"><span class="group-label" data-group="${g}">${api.text.escapeHtml(label)}</span></div>`;
+  }
+  groupsEl.innerHTML = html;
+}
+
 function render(): void {
   // A render requested before the board DOM exists (during
   // plugin activation) finds nothing to draw; init() renders
@@ -445,6 +492,7 @@ function render(): void {
   }
   worldEl.innerHTML = "";
   renderStrokesAndConnectors(board);
+  renderGroupFrames(board);
   // Cards: rebuild, except the note being edited (its textarea stays).
   // Only visible cards are built (see visibleRect).
   const editingEl = editingId !== null ? cardsEl.querySelector(`[data-id="${editingId}"]`) : null;
@@ -564,6 +612,14 @@ function updateSelectionInner(): void {
       (media as HTMLElement).style.objectFit = isSel ? "contain" : "cover";
     }
   }
+  // Group frames follow the selection too: a frame reads as
+  // selected when any of its members is.
+  const board = cachedBoard ?? api.board.get();
+  for (const child of Array.from(groupsEl.children)) {
+    const el = child as HTMLElement;
+    const g = Number(el.dataset.group);
+    el.classList.toggle("selected", board.items.some((it) => it.group === g && selected.includes(it.id)));
+  }
   // Selection changes without a full render (a plain click) still
   // need the resize handle to appear / disappear immediately.
   updateResizeHandle();
@@ -646,6 +702,48 @@ function startTextEdit(id: number): void {
     if (e.key === "Escape") { e.preventDefault(); ta.blur(); }
   });
   ta.addEventListener("pointerdown", (e) => e.stopPropagation());
+}
+
+// Rename a group's section label, in place on its frame.
+// Double-clicking the label swaps it for an input; Enter
+// or leaving the field commits (one undo step), Escape
+// cancels. The input is a real input element, so the
+// board's pointer and key handlers leave it alone: the
+// pointerdown guard ignores inputs, and typing in one
+// never triggers board shortcuts.
+function startGroupRename(group: number): void {
+  const board = api.board.get();
+  const label = board.groups?.[group]?.label ?? `Section ${group}`;
+  const chip = groupsEl.querySelector(`.group-label[data-group="${group}"]`) as HTMLElement | null;
+  if (!chip) return;
+  const input = document.createElement("input");
+  input.className = "group-rename";
+  input.value = label;
+  input.setAttribute("aria-label", "Section name");
+  input.style.width = `${Math.max(8, label.length + 2)}ch`;
+  chip.textContent = "";
+  chip.appendChild(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const commit = () => {
+    if (done) return;
+    done = true;
+    if (input.value.trim() !== "" && input.value !== label) api.board.setGroupLabel(group, input.value);
+    render();
+  };
+  const cancel = () => {
+    if (done) return;
+    done = true;
+    render();
+  };
+  input.addEventListener("keydown", (ev) => {
+    ev.stopPropagation();
+    if (ev.key === "Enter") { ev.preventDefault(); input.blur(); }
+    else if (ev.key === "Escape") { ev.preventDefault(); cancel(); }
+  });
+  input.addEventListener("change", commit);
+  input.addEventListener("blur", commit);
 }
 
 function commitEditingIfAny(): void {
@@ -865,6 +963,11 @@ boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
     // this handler and steals focus from a textarea created here, so
     // typing would never land in a new or edited note.
     e.preventDefault();
+    // Double-clicking a section label renames the group,
+    // instead of creating a note under it (the label sits
+    // in the frame's padding, which is empty board space).
+    const labelEl = target.closest(".group-label") as HTMLElement | null;
+    if (labelEl) { startGroupRename(Number(labelEl.dataset.group)); return; }
     const hit = api.board.hitTest(world);
     if (hit !== null) {
       const board = api.board.get();
@@ -1606,6 +1709,7 @@ export function activate(a: PluginContext): void {
   boardEl.innerHTML = `
     <div id="grid"></div>
     <svg id="canvas-svg"><g id="world"></g></svg>
+    <div id="groups"></div>
     <div id="cards"></div>
     <div id="plugin-view" style="display:none"></div>
     <div id="plugin-overlays"></div>
@@ -1623,18 +1727,20 @@ export function activate(a: PluginContext): void {
   const grid = boardEl.querySelector<HTMLElement>("#grid");
   const canvasSvg = boardEl.querySelector<HTMLElement>("#canvas-svg");
   const cards = boardEl.querySelector<HTMLElement>("#cards");
+  const groups = boardEl.querySelector<HTMLElement>("#groups");
   const resizeHandle = boardEl.querySelector<HTMLElement>("#resize-handle");
   const rotateHandle = boardEl.querySelector<HTMLElement>("#rotate-handle");
   const pluginView = boardEl.querySelector<HTMLElement>("#plugin-view");
   const overlays = boardEl.querySelector<HTMLElement>("#plugin-overlays");
   const viewSwitcher = boardEl.querySelector<HTMLElement>("#view-switcher");
   const toast = boardEl.querySelector<HTMLElement>("#toast");
-  if (grid && canvasSvg && cards && resizeHandle && rotateHandle && pluginView && overlays && viewSwitcher && toast) {
+  if (grid && canvasSvg && cards && groups && resizeHandle && rotateHandle && pluginView && overlays && viewSwitcher && toast) {
     gridEl = grid as HTMLDivElement;
     // The SVG world group, inside the canvas SVG.
     const w = canvasSvg.querySelector("#world") as unknown as SVGGElement | null;
     if (w) worldEl = w;
     cardsEl = cards as HTMLDivElement;
+    groupsEl = groups as HTMLDivElement;
     // Hand the plugin system the board DOM elements, so the
     // core reads them back through the shell instead of
     // querying them by id.
