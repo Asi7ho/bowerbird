@@ -418,7 +418,10 @@ async function main() {
       fs.renameSync(tmp, boardPath);
       await page.locator("text=Checklist card").first().waitFor({ timeout: 15000 });
       await waitFor("checklist progress shows inside the card", async () => {
-        const text = await page.locator(`.card-decorations[data-for="${id}"]`).first().textContent().catch(() => "");
+        // Progress is the right-hand decoration: the left
+        // div now exists even on a tag-less card (it holds
+        // the "+ tag" button), so .first() would read it.
+        const text = await page.locator(`.card-decorations-right[data-for="${id}"]`).first().textContent().catch(() => "");
         return (text ?? "").includes("1/2");
       });
       // Progress sits at the bottom right, as plain text —
