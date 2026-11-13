@@ -2,6 +2,7 @@
 // touches Node or Electron directly; every privileged call goes through
 // this bridge, which the main process exposes with context isolation on.
 import type { PluginManifest } from "./plugins";
+import type { Item } from "./model";
 
 export interface BowerbirdAPI {
   platform: string;
@@ -11,6 +12,7 @@ export interface BowerbirdAPI {
   // not write (an agent or a script): the renderer reloads it.
   onExternalBoardChange(cb: () => void): void;
   listBoards(): Promise<Array<{ name: string; current: boolean; items: number }>>;
+  readBoard(name: string): Promise<{ name: string; items: Item[] }>;
   createBoard(name: string): Promise<{ name: string }>;
   switchBoard(name: string): Promise<{ json: string; board_path: string; board_dir: string }>;
   renameBoard(oldName: string, newName: string): Promise<{ name: string }>;

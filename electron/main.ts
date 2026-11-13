@@ -181,6 +181,14 @@ function boardPathFor(name: string | null): string {
   if (!name || name === "Main") return defaultBoardPath();
   return path.join(defaultBaseDir(), "boards", sanitise(name), "board.json");
 }
+// Main's file: the board-path override, when one is set, IS
+// Main — listBoards and read-board must use it, not the
+// default location, or they report the wrong board.
+function mainBoardFile(): string {
+  if (process.env.BOWERBIRD_BOARD_PATH) return process.env.BOWERBIRD_BOARD_PATH;
+  if (process.env.QB_BOARD_PATH) return process.env.QB_BOARD_PATH;
+  return defaultBoardPath();
+}
 function boardPath(): string {
   if (process.env.BOWERBIRD_BOARD_PATH) return process.env.BOWERBIRD_BOARD_PATH;
   if (process.env.QB_BOARD_PATH) return process.env.QB_BOARD_PATH;
@@ -339,7 +347,7 @@ function boardItemCount(file: string): number {
 }
 function listBoards(): Array<{ name: string; current: boolean; items: number }> {
   const out: Array<{ name: string; current: boolean; items: number }> = [];
-  const mainFile = defaultBoardPath();
+  const mainFile = mainBoardFile();
   out.push({ name: "Main", current: !currentBoard || currentBoard === "Main", items: boardItemCount(mainFile) });
   const dir = boardsDir();
   let entries: string[] = [];
@@ -1278,6 +1286,22 @@ function registerIpc(): void {
   ipcMain.handle("bowerbird:get-app-settings", () => ({ corner: cornerReveal, panelOrder: [...panelOrder], panelWidth }));
   ipcMain.handle("bowerbird:list-boards", () => {
     return listBoards();
+  });
+  ipcMain.handle("bowerbird:read-board", (_event, name: unknown) => {
+    // Read-only, and board-local by construction: the file is
+    // resolved from the listed board name, never from a path
+    // the caller supplies. A board with no file yet (Main on
+    // a fresh install) reads as empty.
+    const target = name === "Main" ? "Main" : (name as string);
+    const found = listBoards().some((b) => b.name === target);
+    if (!found) throw new Error("no such board");
+    const file = target === "Main" ? mainBoardFile() : boardPathFor(target);
+    let items: unknown[] = [];
+    try {
+      const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
+      if (Array.isArray(parsed.items)) items = parsed.items;
+    } catch { items = []; }
+    return { name: target, items };
   });
   ipcMain.handle("bowerbird:create-board", (_event, name: unknown) => createBoard(name));
   ipcMain.handle("bowerbird:switch-board", (_event, name: unknown) => { const out = switchBoard(name); startBoardWatcher(); return out; });
