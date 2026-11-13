@@ -37,7 +37,7 @@ import {
 } from "../plugins";
 import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
-  boardGet, centre, clippedEnds,
+  boardGet, centre, clippedEnds, fitCamera,
   itemBounds, itemRotation, parseHex, pressureWidth, rotatePoint, select,
   strokeMaxWidth, strokePressuresVary, toggleTaskLine,
 } from "../model";
@@ -168,6 +168,14 @@ function zoomAt(screen: Pt, factor: number): void {
 function zoomCentre(factor: number): void {
   const s = boardSize();
   zoomAt({ x: s.x / 2, y: s.y / 2 }, factor);
+}
+// F: zoom to fit — every item on screen at once. A no-op on
+// an empty board. Like the 0 reset, this only moves the view;
+// it does not save.
+function zoomToFit(): void {
+  const bs = boardSize();
+  const cam = fitCamera(api.board.get(), { w: bs.x, h: bs.y });
+  if (cam) api.view.setCamera(cam);
 }
 
 function ensureEraserRing(): HTMLDivElement {
@@ -1572,6 +1580,7 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   } else if (e.key === "+" || e.key === "=") { zoomCentre(1.2); api.board.save(); render(); }
   else if (e.key === "-") { zoomCentre(1 / 1.2); api.board.save(); render(); }
   else if (e.key === "0") { api.view.setCamera({ x: 0, y: 0, zoom: 1 }); }
+  else if (e.key.toLowerCase() === "f" && !ctrl) zoomToFit();
   // Plugin shortcuts, last: core keys above win, so a plugin cannot
   // steal V, P, A, Ctrl+G/U, Delete, zoom or reset. The core guards
   // above (textarea, search box, Settings open) already applied.

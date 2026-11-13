@@ -61,6 +61,7 @@ const SHORTCUTS: Array<[string, string]> = [
   ["+ / =", "Zoom in"],
   ["−", "Zoom out"],
   ["0", "Reset the view"],
+  ["F", "Zoom to fit"],
   ["Ctrl / Cmd + scroll", "Zoom at the cursor"],
   ["Scroll", "Pan the canvas"],
   ["Space + drag", "Pan the canvas"],

@@ -9,6 +9,7 @@ import {
   domainOf,
   escapeHtml,
   estimateTextHeight,
+  fitCamera,
   hitTest,
   lassoSelect,
   marquee,
@@ -253,6 +254,36 @@ describe("text cards: markdown, checklists, height", () => {
   });
   it("escapeHtml escapes the four characters", () => {
     expect(escapeHtml(`<a href="x">&`)).toBe("&lt;a href=&quot;x&quot;&gt;&amp;");
+  });
+});
+
+describe("fitCamera", () => {
+  it("returns null for an empty board", () => {
+    expect(fitCamera(board([]), { w: 1280, h: 802 })).toBeNull();
+  });
+  it("centres a small board at zoom 1, never zooming in", () => {
+    // One 260x48 card at (100, 100): centre (230, 124).
+    const cam = fitCamera(board([textCard(1, 100, 100)]), { w: 1280, h: 802 });
+    expect(cam).not.toBeNull();
+    expect(cam!.zoom).toBe(1);
+    expect(cam!.x).toBe(230 - 1280 / 2);
+    expect(cam!.y).toBe(124 - 802 / 2);
+  });
+  it("zooms out to fit a board wider than the viewport", () => {
+    // Cards spanning x 0..2000, y 0..48: the width binds.
+    const b = board([textCard(1, 0, 0), textCard(2, 1740, 0)]);
+    const cam = fitCamera(b, { w: 1280, h: 802 });
+    expect(cam).not.toBeNull();
+    expect(cam!.zoom).toBeCloseTo((1280 - 96) / 2000, 6);
+    // The content centre (1000, 24) lands on the viewport centre.
+    expect(cam!.x + 640 / cam!.zoom).toBeCloseTo(1000, 6);
+    expect(cam!.y + 401 / cam!.zoom).toBeCloseTo(24, 6);
+  });
+  it("zooms out to fit a board taller than the viewport", () => {
+    const b = board([textCard(1, 0, 0), textCard(2, 0, 1952)]);
+    const cam = fitCamera(b, { w: 1280, h: 802 });
+    expect(cam).not.toBeNull();
+    expect(cam!.zoom).toBeCloseTo((802 - 96) / 2000, 6);
   });
 });
 
