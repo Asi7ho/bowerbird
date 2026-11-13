@@ -155,14 +155,19 @@ function estimateTextHeight(text, w) {
 }
 
 export function addTextCard(board, { text, x, y, w, h }) {
-  const id = board.next_id ?? 1;
+  // next_id is the last issued id, not the next free one: the
+  // app allocates by bumping first. Take the max of next_id
+  // and the highest id on the board, so a board whose next_id
+  // lags behind still gets a fresh id, never a collision.
+  const items = board.items || [];
+  const highest = items.reduce((m, it) => Math.max(m, it.id || 0), 0);
+  const id = Math.max(board.next_id ?? 0, highest) + 1;
   const width = w ?? 320;
   const height = h ?? estimateTextHeight(text, width);
   const pos = { x: x ?? 100, y: y ?? 100 };
   if (x === undefined || y === undefined) {
     // No position given: sit to the right of the existing
     // content, or at 100,100 on an empty board.
-    const items = board.items || [];
     if (items.length > 0) {
       const maxX = Math.max(...items.map((it) => (it.pos?.x ?? 0) + (it.size?.w ?? 0)));
       const minY = Math.min(...items.map((it) => it.pos?.y ?? 0));
@@ -177,8 +182,8 @@ export function addTextCard(board, { text, x, y, w, h }) {
     group: null,
     kind: { Text: { text, bold: false, size: 16, color: "#1A1A1A" } },
   };
-  board.items = [...(board.items || []), item];
-  board.next_id = id + 1;
+  board.items = [...items, item];
+  board.next_id = id;
   return item;
 }
 
