@@ -338,13 +338,18 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 }
 /* The "+ tag" button: a quiet ghost pill at the end of
    the tag row — transparent, grey text — so the board
-   stays clean until a tag is wanted. */
+   stays clean until a tag is wanted. It shows only on the
+   selected card: the row sits over the card's bottom
+   edge, so a button on every card would cover the text
+   of any card whose content runs to the bottom. */
 .card-decorations .tag-add {
   font: inherit; font-size: 12px; color: var(--grey);
   background: transparent; border: 1px solid var(--hairline);
   border-radius: 999px; padding: 3px 9px; cursor: pointer;
   white-space: nowrap; pointer-events: auto;
+  opacity: 0; transition: opacity 0.12s;
 }
+.card.selected + .card-decorations .tag-add { opacity: 1; }
 .card-decorations .tag-add:hover { color: var(--ink); background: var(--fill); }
 .card-decorations .tag-add-input {
   font: inherit; font-size: 12px; color: var(--ink);
