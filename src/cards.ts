@@ -112,9 +112,10 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
       const top = Math.max(y + 4, y + h - 36);
       let out = "";
       // The "+ tag" button lives at the end of the tag row:
-      // it shows only while the Tags plugin is enabled, and
-      // never on a frame (frames are containers, not content).
-      const tagAdd = hasCardDecorator("tags:tags") && getCardRenderer(item)?.frame !== true
+      // it shows only while the core Tags plugin is enabled,
+      // and never on a frame (frames are containers, not
+      // content).
+      const tagAdd = hasCardDecorator("core-tags:tags") && getCardRenderer(item)?.frame !== true
         ? `<button type="button" class="tag-add" data-action="add-tag" data-id="${id}" title="Add tag" aria-label="Add tag">+ <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4h7l9 9-7 7-9-9V4z"/><circle cx="9" cy="9" r="1.6"/></svg></button>`
         : "";
       if (left || tagAdd) out += `<div class="card-decorations" data-for="${id}" style="left:${x + 8}px;top:${top}px;width:${Math.max(w - 16, 0)}px">${left}${tagAdd}</div>`;
