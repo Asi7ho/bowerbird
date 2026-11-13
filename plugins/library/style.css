@@ -1,0 +1,40 @@
+/* Library panel: same surface as every other panel — 13px
+   type, hairline separators, quiet grey meta. No pills,
+   no badges, no custom colours. */
+.plugin-panel[data-panel="library"] .lib-search {
+  width: 100%; box-sizing: border-box;
+  font: inherit; font-size: 13px; color: var(--ink);
+  background: var(--bg-system); border: none; border-radius: 8px;
+  padding: 8px 12px; margin-bottom: 8px;
+}
+.plugin-panel[data-panel="library"] .lib-count {
+  color: var(--grey); font-size: 12px; line-height: 1.45; margin: 0 0 8px;
+}
+.plugin-panel[data-panel="library"] .lib-list {
+  display: flex; flex-direction: column;
+}
+.plugin-panel[data-panel="library"] .lib-board {
+  font-size: 12px; font-weight: 600; color: var(--grey);
+  padding: 8px 12px 4px;
+}
+.plugin-panel[data-panel="library"] .lib-board:first-child {
+  padding-top: 0;
+}
+.plugin-panel[data-panel="library"] .lib-row {
+  display: flex; align-items: baseline; gap: 8px;
+  width: 100%; text-align: left;
+  font: inherit; color: var(--ink);
+  background: none; border: none; border-bottom: 1px solid var(--separator);
+  padding: 8px 12px; border-radius: 9px; cursor: pointer;
+}
+.plugin-panel[data-panel="library"] .lib-row:hover { background: var(--fill); }
+.plugin-panel[data-panel="library"] .lib-title {
+  flex: 1 1 auto; min-width: 0; font-size: 13px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.plugin-panel[data-panel="library"] .lib-meta {
+  flex: none; color: var(--grey); font-size: 12px; white-space: nowrap;
+}
+.plugin-panel[data-panel="library"] .lib-empty {
+  color: var(--grey); font-size: 13px; padding: 8px 12px;
+}

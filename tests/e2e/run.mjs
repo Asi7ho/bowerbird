@@ -249,6 +249,30 @@ async function main() {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       assert.equal(textCards().some((it) => it.kind.Text.text === "From the outside"), true);
     });
+
+    await check("the Library panel lists every card and jumps to one", async () => {
+      assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("library", true)), true);
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: 15000 });
+      await page.locator("#panels-toggle").click();
+      await page.locator('.plugin-tab[title^="Library"]').click();
+      await page.locator(".lib-row").first().waitFor({ timeout: 15000 });
+      const titles = () => page.$$eval(".lib-row .lib-title", (els) => els.map((e) => e.textContent));
+      await waitFor("library lists the board's cards", async () => {
+        const ts = await titles();
+        return ts.some((t) => t.includes("Hello CI!")) && ts.some((t) => t.includes("From the outside"));
+      });
+      await page.locator(".lib-search").fill("outside");
+      await waitFor("search narrows the library list", async () => {
+        const ts = await titles();
+        return ts.length === 1 && ts[0].includes("From the outside");
+      });
+      await page.locator(".lib-row").first().click();
+      await waitFor("clicked library row selects the card", async () => {
+        const selected = await page.$$eval("#cards .card.selected", (els) => els.map((e) => e.textContent));
+        return selected.some((t) => t.includes("From the outside"));
+      });
+    });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
     console.log(`  FAIL  setup: ${String(error.message).split("\n")[0]}`);
