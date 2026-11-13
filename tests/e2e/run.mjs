@@ -143,6 +143,17 @@ async function main() {
       assert.equal(readBoard().items.length, 0);
     });
 
+    await check("toolbar shows zoom level and saved state", async () => {
+      const zoom = page.locator("#zoom-label");
+      await zoom.waitFor({ timeout: 10000 });
+      assert.equal(await zoom.textContent(), "100%");
+      assert.equal(await page.locator("#saved-label").textContent(), "Saved");
+      await page.keyboard.press("+");
+      await waitFor("zoom label 120%", async () => (await zoom.textContent()) === "120%");
+      await page.keyboard.press("0");
+      await waitFor("zoom label back to 100%", async () => (await zoom.textContent()) === "100%");
+    });
+
     await check("pen draws a stroke and it is saved to disk", async () => {
       await page.keyboard.press("p");
       await page.mouse.move(300, 300);
