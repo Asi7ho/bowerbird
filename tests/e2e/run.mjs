@@ -407,18 +407,26 @@ async function main() {
       // load.
       await page.reload();
       await page.waitForSelector("#board", { timeout: 15000 });
-      // Jump to the Hello CI! note through the Library panel:
-      // that centres on the card and selects it, whatever the
-      // camera is doing. A synthetic click does not select
-      // board cards.
-      await page.locator('.plugin-tab[title^="Library"]').click();
-      await page.locator(".lib-search").fill("Hello CI!");
-      await page.locator(".lib-row").first().click();
+      // Select the Hello CI! note by clicking it at its
+      // on-screen centre: a synthetic click does not select
+      // board cards, and the note is on screen after F
+      // (zoom to fit) whatever the camera was doing. The
+      // Library panel used to jump here, but it lives in
+      // its own PR, not this one.
+      const hello = readBoard().items.find((it) => "Text" in it.kind && it.kind.Text.text === "Hello CI!");
+      const centre = await page.evaluate((id) => {
+        const el = document.querySelector(`#cards .card[data-id="${id}"]`);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      }, hello.id);
+      assert.ok(centre, "Hello note on screen");
+      await page.mouse.click(centre.x, centre.y);
       await page.locator("#cards .card.selected", { hasText: "Hello CI!" }).waitFor({ timeout: 10000 });
       // Tag it from the card itself: the "+ tag" button at
       // the card's bottom edge opens an input in the same
       // spot; Enter commits the tag.
-      const helloId = await page.locator("#cards .card.selected").first().getAttribute("data-id");
+      const helloId = String(hello.id);
       await page.locator(`.card-decorations[data-for="${helloId}"] .tag-add`).click();
       await page.locator(`.card-decorations[data-for="${helloId}"] .tag-add-input`).fill("urgent");
       await page.keyboard.press("Enter");
