@@ -615,7 +615,7 @@ async function init(): Promise<void> {
     // Zoom around the board centre, by a factor. The
     // toolbar's zoom buttons. The camera math stays here;
     // the plugin just says "zoom in" or "zoom out".
-    zoomBy: (factor: number) => { zoomCentre(factor); boardRender(); },
+    zoomBy: (factor: number) => { const z = board.camera.zoom; zoomCentre(factor); if (board.camera.zoom !== z) emitPluginEvent("camera"); boardRender(); },
     // The shape table for the toolbar's shape picker.
     listShapes: () => SHAPES.map((s) => ({ kind: s.kind, label: s.label, key: s.key, svg: s.svg })),
     // Drag-preview polygon points for a shape. The board
@@ -656,14 +656,18 @@ async function init(): Promise<void> {
     getCamera: () => board.camera,
     setCamera: (cam) => {
       if (!isFinite(cam.x) || !isFinite(cam.y) || !isFinite(cam.zoom)) return;
+      const z = board.camera.zoom;
       board.camera = { x: cam.x, y: cam.y, zoom: Math.max(0.1, Math.min(8, cam.zoom)) };
+      if (board.camera.zoom !== z) emitPluginEvent("camera");
       undoStore.save(); boardRender();
     },
     // Set the camera without saving or rendering, for a live
     // pan or zoom drag. The drag saves once at drag end.
     setCameraSilent: (cam) => {
       if (!isFinite(cam.x) || !isFinite(cam.y) || !isFinite(cam.zoom)) return;
+      const z = board.camera.zoom;
       board.camera = { x: cam.x, y: cam.y, zoom: Math.max(0.1, Math.min(8, cam.zoom)) };
+      if (board.camera.zoom !== z) emitPluginEvent("camera");
     },
     setCanvas: (patch) => {
       if (patch.bg !== undefined) board.bg = patch.bg;
