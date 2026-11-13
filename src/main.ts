@@ -463,6 +463,21 @@ async function init(): Promise<void> {
   // The loaded board is the first undo baseline: nothing before
   // it is undoable, and the first saved change pushes it as step 1.
   undoStore.resetUndo();
+  // Live follow: an agent or a script rewrote board.json on disk.
+  // Reload it like a same-board restore — the undo stack survives
+  // (loadBoardFromJson keeps it for the same folder), the redo
+  // chain clears — and tell plugins the content changed.
+  api.onExternalBoardChange(async () => {
+    try {
+      const reloaded = await api.loadBoard();
+      if (!reloaded.json) return;
+      await loadBoardFromJson(reloaded.json, reloaded.board_dir);
+      emitPluginEvent("board");
+      toast("Board updated on disk");
+    } catch {
+      // A reload that fails leaves the current board alone.
+    }
+  });
   // Panel tab order, loaded with the board: the plugin system
   // applies it once panels are registered, and saves it back
   // whenever the user drags a tab.
