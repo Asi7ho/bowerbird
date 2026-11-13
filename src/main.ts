@@ -814,6 +814,7 @@ async function init(): Promise<void> {
     },
     getAudioDuration: (path) => media.audioDurations.get(path),
     loadAudioDuration: (id, path) => media.loadAudioDuration(id, path),
+    transcribeAudio: (blob) => media.transcribeAudio(blob),
     audioFailed: (path) => media.audioFailed.has(path),
     formatAudioTime: (sec) => media.formatAudioTime(sec),
     // Toggle playback of an audio card. The board view's

@@ -40,6 +40,11 @@ export interface Media {
   toggleAudio(id: number, path: string): void;
   stopAudio(): void;
   getAudioState(): { el: HTMLAudioElement | null; id: number | null };
+  // Transcribe a recorded audio blob to text, on-device
+  // (Whisper in the main process). Null when the audio
+  // cannot be decoded or the model cannot run — the caller
+  // keeps the recording, just without a transcript.
+  transcribeAudio(blob: Blob): Promise<string | null>;
   clearBoardCaches(): void;
 }
 
@@ -361,6 +366,45 @@ export function createMedia(host: MediaContext): Media {
     toggleAudio,
     stopAudio,
     getAudioState,
+    transcribeAudio,
     clearBoardCaches,
   };
+}
+
+// Decode a recorded blob to 16kHz mono samples, the shape
+// Whisper takes. Node has no AudioContext to decode with,
+// so the decode happens here, in the renderer, and only
+// the samples cross to the main process.
+async function decodeTo16kMono(blob: Blob): Promise<Float32Array | null> {
+  try {
+    const ctx = new AudioContext();
+    let decoded: AudioBuffer;
+    try {
+      decoded = await ctx.decodeAudioData(await blob.arrayBuffer());
+    } finally {
+      void ctx.close();
+    }
+    if (decoded.numberOfChannels === 0 || decoded.length === 0) return null;
+    // An offline render at 16kHz resamples and downmixes to
+    // mono in one step, whatever the recording's format.
+    const offline = new OfflineAudioContext(1, Math.ceil(decoded.duration * 16000), 16000);
+    const src = offline.createBufferSource();
+    src.buffer = decoded;
+    src.connect(offline.destination);
+    src.start();
+    const rendered = await offline.startRendering();
+    return rendered.getChannelData(0).slice();
+  } catch {
+    return null;
+  }
+}
+
+async function transcribeAudio(blob: Blob): Promise<string | null> {
+  const samples = await decodeTo16kMono(blob);
+  if (!samples || samples.length === 0) return null;
+  try {
+    return await api.transcribeAudio(samples);
+  } catch {
+    return null;
+  }
 }

@@ -371,6 +371,12 @@ export interface PluginHost {
   getAudioState: () => { id: number | null; playing: boolean; currentTime: number; duration: number };
   getAudioDuration: (path: string) => number | undefined;
   loadAudioDuration: (id: number, path: string) => void;
+  // Transcribe a recorded audio blob to text, on-device.
+  // Null when the audio cannot be decoded or the model
+  // cannot run. No permission needed: the model runs
+  // locally, like the search models, and no audio leaves
+  // the machine.
+  transcribeAudio: (blob: Blob) => Promise<string | null>;
   audioFailed: (path: string) => boolean;
   formatAudioTime: (sec: number) => string;
   // Toggle playback of an audio card: play it if it is not
@@ -882,6 +888,10 @@ export interface PluginContext {
     getAudioState: () => { id: number | null; playing: boolean; currentTime: number; duration: number };
     getAudioDuration: (path: string) => number | undefined;
     loadAudioDuration: (id: number, path: string) => void;
+    // Transcribe a recorded audio blob to text, on-device
+    // (Whisper in the main process). Null when the audio
+    // cannot be decoded or the model cannot run.
+    transcribeAudio: (blob: Blob) => Promise<string | null>;
     formatAudioTime: (sec: number) => string;
     // Toggle playback of an audio card: play it if it is not
     // playing, pause it if it is. The board view's play button.
@@ -1829,6 +1839,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       getAudioState: () => host!.getAudioState(),
       getAudioDuration: (path: string) => host!.getAudioDuration(path),
       loadAudioDuration: (id: number, path: string) => host!.loadAudioDuration(id, path),
+      transcribeAudio: (blob: Blob) => host!.transcribeAudio(blob),
       formatAudioTime: (sec: number) => host!.formatAudioTime(sec),
       toggleAudio: (id: number, path: string) => host!.toggleAudio(id, path),
       seekAudio: (id: number, time: number) => host!.seekAudio(id, time),

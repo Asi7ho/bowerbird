@@ -47,11 +47,17 @@ interface ClipBundle {
 // an array of samples in, the top labels out.
 type AudioPipeline = (input: Float32Array, options: { topk: number }) => Promise<Array<{ label: string; score: number }>>;
 
+// The speech pipeline, typed by the one way it is called:
+// 16kHz mono samples in, the transcript text out.
+type WhisperPipeline = (input: Float32Array) => Promise<{ text: string }>;
+
 let transformers: TransformersModule | null = null;
 let clip: ClipBundle | null = null; // { tokenizer, processor, model }
 let ast: AudioPipeline | null = null; // pipeline
+let whisper: WhisperPipeline | null = null; // pipeline
 let clipLoading: Promise<ClipBundle> | null = null;
 let astLoading: Promise<AudioPipeline> | null = null;
+let whisperLoading: Promise<WhisperPipeline> | null = null;
 
 function modelsDir(app: App): string {
   try {
@@ -102,6 +108,22 @@ async function loadAst(app: App): Promise<AudioPipeline> {
   return astLoading;
 }
 
+async function loadWhisper(app: App): Promise<WhisperPipeline> {
+  if (whisper) return whisper;
+  if (!whisperLoading) {
+    whisperLoading = (async () => {
+      const t = await loadTransformers(app);
+      // The multilingual tiny model: it detects the language
+      // itself, so an English or a French note transcribes
+      // without the caller choosing. On-device, like the
+      // search models — no audio leaves the machine.
+      whisper = await t.pipeline("automatic-speech-recognition", "Xenova/whisper-tiny") as WhisperPipeline;
+      return whisper;
+    })().catch((e: unknown) => { whisperLoading = null; throw e; });
+  }
+  return whisperLoading;
+}
+
 function toArray(tensor: { data: ArrayLike<number> }): number[] {
   return Array.from(tensor.data);
 }
@@ -144,6 +166,19 @@ export async function classifyAudio(app: App, pcm: Float32Array | number[]): Pro
   const arr = pcm instanceof Float32Array ? pcm : Float32Array.from(pcm);
   const out = await pipe(arr, { topk: 8 });
   return out.map((o) => ({ label: o.label, score: o.score }));
+}
+
+// Transcribe 16kHz mono speech to text, on-device. Null
+// when there is nothing to transcribe, or the model cannot
+// run — the caller still keeps the recording, just without
+// a transcript.
+export async function transcribeAudio(app: App, pcm: Float32Array | number[]): Promise<string | null> {
+  const arr = pcm instanceof Float32Array ? pcm : Float32Array.from(pcm);
+  if (arr.length === 0) return null;
+  const pipe = await loadWhisper(app);
+  const out = await pipe(arr);
+  const text = (out.text ?? "").trim();
+  return text.length > 0 ? text : null;
 }
 
 export function cosine(a: number[], b: number[]): number {

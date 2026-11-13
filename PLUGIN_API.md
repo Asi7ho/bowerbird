@@ -103,7 +103,7 @@ Enable and disable are per plugin, in Settings → Plugins. Disabling unregister
 - `ai` — chat completions (`chat({ base, model, messages })`), run in the main process, not the renderer. Only the chat-completions path of the given base is called. The API key is never passed per call and never held in the renderer: the main process looks it up from its own store (set it with `setKey`, check it with `hasKey`), and it is not readable through `api.secureStorage`. Public bases must be https; a localhost base may be http, for a local model server. Needs `ai`.
 - `events` — `on` / `off` for `selection`, `board`, `view`, `pen`, `tool`, plus `camera` (the zoom changed), `saving` (a content write started), `saved` (the board file holds the latest content) and `save-failed` (a write failed — the next save retries). Do not write to the board synchronously inside a `board` handler in a way that loops.
 - `pen` — the pen colour, shared with the toolbar.
-- `media` — PDF and audio state for the cards that play media: `toggleAudio` and `seekAudio` for an audio card's play button and seek slider, `setPdfPage` for a PDF card's prev/next buttons.
+- `media` — PDF and audio state for the cards that play media: `toggleAudio` and `seekAudio` for an audio card's play button and seek slider, `setPdfPage` for a PDF card's prev/next buttons. `transcribeAudio(blob)` transcribes a recorded audio blob to text, on-device (Whisper in the main process), or null when it cannot be decoded or the model cannot run; no audio leaves the machine, and no permission is needed.
 - `text` / `geometry` — pure helpers: escaping, markdown, colour, hit-testing, segment and rect math.
 - `search` — the search engine: hand it the box elements, update, clear, jump to a match.
 
