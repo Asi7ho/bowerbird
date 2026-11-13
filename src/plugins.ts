@@ -111,6 +111,16 @@ export interface PluginBuiltinCardDef {
   searchText?: (data: unknown) => string;
 }
 
+// A card decoration: HTML shown under a card. `id` is unique
+// within the plugin (the core keys it as pluginId:id). The
+// renderer is called for every card on every render, so it
+// must be pure and fast, and it must escape any text it
+// puts in the HTML. Returning null renders nothing.
+export interface PluginCardDecoratorDef {
+  id: string;
+  render: (item: Item) => string | null;
+}
+
 export interface PluginToolDef {
   id: string;
   title: string;
@@ -231,8 +241,8 @@ export interface PluginHost {
   // cards — adds them all here, so undoing it takes one undo,
   // not one per card. addItem saves after every item.
   addItems: (items: Array<{ kind: Kind; pos: Pt; size: Size }>) => number[];
-  updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown }) => boolean;
-  updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; data?: unknown }>) => boolean;
+  updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown; tags?: string[] }) => boolean;
+  updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; data?: unknown; tags?: string[] }>) => boolean;
   moveItem: (id: number, toIndex: number) => boolean;
   removeItem: (id: number) => boolean;
   renderBoardCard: (id: number) => string | null;
@@ -475,8 +485,8 @@ export interface PluginContext {
     // the new connector's id, or null when either card does
     // not exist.
     connect: (fromId: number, toId: number, options?: { color?: string }) => number | null;
-    updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown }) => boolean;
-    updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; data?: unknown }>) => boolean;
+    updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown; tags?: string[] }) => boolean;
+    updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; data?: unknown; tags?: string[] }>) => boolean;
     moveItem: (id: number, toIndex: number) => boolean;
     removeItem: (id: number) => boolean;
     save: () => void;
@@ -711,6 +721,11 @@ export interface PluginContext {
     // for the kind. This is how the core-cards plugin provides
     // the built-in kinds; a user plugin could replace one.
     registerBuiltin: (def: PluginBuiltinCardDef) => void;
+    // Register a decoration renderer: HTML shown under a
+    // card (tags, checklist progress). The core calls it for
+    // every card on every render; it must be pure and fast,
+    // and it must escape any text it puts in the HTML.
+    registerDecorator: (def: PluginCardDecoratorDef) => void;
   };
   files: {
     // Embed a file as a board-owned copy. A File (from a
@@ -874,6 +889,22 @@ interface LoadedPlugin {
 
 const cards = new Map<string, PluginCardDef & { pluginId: string }>();
 const builtinCards = new Map<string, PluginBuiltinCardDef & { pluginId: string }>();
+// Card decorations: a plugin registers a renderer that
+// returns HTML shown under a card (tags, checklist
+// progress). Decorations are display only — they never
+// take clicks (pointer-events: none in styles.css) and
+// never write. A renderer that throws renders nothing.
+const cardDecorators = new Map<string, PluginCardDecoratorDef & { pluginId: string }>();
+export function getCardDecorations(item: Item): string {
+  let out = "";
+  for (const def of cardDecorators.values()) {
+    try {
+      const html = def.render(item);
+      if (html) out += html;
+    } catch { /* a broken decorator renders nothing */ }
+  }
+  return out;
+}
 const tools = new Map<string, PluginToolDef & { pluginId: string; fullId: string }>();
 const panels = new Map<string, PluginPanelDef & { pluginId: string; el: HTMLElement; body: HTMLElement; tab: HTMLElement; hidden: boolean }>();
 const views = new Map<string, PluginViewDef & { pluginId: string }>();
@@ -1383,7 +1414,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
           size
         );
       },
-      updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown }) => {
+      updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown; tags?: string[] }) => {
         require("board:write");
         // A plugin may only rewrite its own plugin card data. Core
         // pos/size/group edits are allowed for any card, because
@@ -1397,7 +1428,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         const ok = host!.updateItem(id, patch);
         return ok;
       },
-      updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; data?: unknown }>) => {
+      updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; data?: unknown; tags?: string[] }>) => {
         require("board:write");
         // Same data rule as updateItem, per patch: a plugin
         // may only rewrite its own plugin card data.
@@ -1677,6 +1708,9 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       },
       registerBuiltin: (def: PluginBuiltinCardDef) => {
         registerBuiltinCard(pluginId, def);
+      },
+      registerDecorator: (def: PluginCardDecoratorDef) => {
+        cardDecorators.set(`${pluginId}:${def.id}`, { ...def, pluginId });
       },
     },
     media: {
@@ -2323,6 +2357,9 @@ export async function runPluginCommand(pluginId: string, commandId: string): Pro
 function unregisterPlugin(pluginId: string): void {
   for (const key of Array.from(cards.keys())) {
     if (key.startsWith(`${pluginId}:`)) cards.delete(key);
+  }
+  for (const key of Array.from(cardDecorators.keys())) {
+    if (key.startsWith(`${pluginId}:`)) cardDecorators.delete(key);
   }
   for (const [fullId, t] of Array.from(tools.entries())) {
     if (t.pluginId === pluginId) {

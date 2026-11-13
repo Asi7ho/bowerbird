@@ -64,7 +64,9 @@ unless `display-name.txt` says otherwise.
 ```
 
 - `items` — the cards, strokes and connectors, in z-order (last is
-  on top). Frames (see PLUGIN_API.md) are items too.
+  on top). Frames (see PLUGIN_API.md) are items too. An item may
+  carry `tags`, an array of short label strings set through
+  `updateItem` (see PLUGIN_API.md); missing means no tags.
 - `camera` — the view: `x`/`y` is the world point at the top-left
   of the board area, `zoom` is clamped to 0.1–8.
 - `next_id` / `next_group` — the last issued item id and group id.
