@@ -110,6 +110,28 @@ export function itemBounds(board: Board, item: Item): [Pt, Size] {
   return [item.pos, item.size];
 }
 
+// Zoom to fit: the camera that shows every item at once.
+// The zoom is capped at 1 — a small board is centred, not
+// blown up — and a margin keeps cards off the edges. An
+// empty board has nothing to fit, so there is no camera.
+export function fitCamera(board: Board, viewport: Size, padding = 48): Camera | null {
+  if (board.items.length === 0) return null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const it of board.items) {
+    const [p, s] = itemBounds(board, it);
+    minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x + s.w); maxY = Math.max(maxY, p.y + s.h);
+  }
+  const bw = Math.max(1, maxX - minX), bh = Math.max(1, maxY - minY);
+  const availW = Math.max(1, viewport.w - padding * 2), availH = Math.max(1, viewport.h - padding * 2);
+  const zoom = Math.min(1, availW / bw, availH / bh);
+  return {
+    x: (minX + maxX) / 2 - viewport.w / 2 / zoom,
+    y: (minY + maxY) / 2 - viewport.h / 2 / zoom,
+    zoom,
+  };
+}
+
 // Arranging cards: the layout math for api.board.arrange.
 // Given the board and a set of item ids, compute where each
 // card goes. The caller applies the positions (one undo step

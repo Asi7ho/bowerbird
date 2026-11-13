@@ -240,6 +240,36 @@ async function main() {
       });
       assert.ok(fs.existsSync(image.kind.Image.path), "embedded asset file exists on disk");
     });
+
+    await check("F zooms to fit the whole board", async () => {
+      // Zoom in until the CI cards at world (100, 100) are
+      // pushed off the left edge — they stay in the DOM
+      // (the visible rect has a 200px margin), so the probe
+      // is their screen rect, not their presence — then F
+      // must bring every card back on screen.
+      for (let i = 0; i < 5; i++) await page.keyboard.press("+");
+      await waitFor("CI cards off-screen while zoomed in", async () => {
+        const boardLeft = await page.locator("#board").evaluate((el) => el.getBoundingClientRect().left);
+        const rights = await page.locator("#cards .card", { hasText: "CI plugin card" }).evaluateAll((els) =>
+          els.map((el) => el.getBoundingClientRect().right),
+        );
+        return rights.length > 0 && rights.every((right) => right < boardLeft) ? true : null;
+      });
+      await page.keyboard.press("f");
+      await waitFor("all cards back in the DOM after F", async () => {
+        const n = await page.locator("#cards .card").count();
+        return n === readBoard().items.length ? true : null;
+      });
+      const inside = await page.evaluate(() => {
+        const boardRect = document.querySelector("#board").getBoundingClientRect();
+        return [...document.querySelectorAll("#cards .card")].every((el) => {
+          const r = el.getBoundingClientRect();
+          return r.left >= boardRect.left - 1 && r.top >= boardRect.top - 1
+            && r.right <= boardRect.right + 1 && r.bottom <= boardRect.bottom + 1;
+        });
+      });
+      assert.ok(inside, "every card is fully inside the board after F");
+    });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
     console.log(`  FAIL  setup: ${String(error.message).split("\n")[0]}`);
