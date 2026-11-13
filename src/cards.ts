@@ -10,7 +10,7 @@
 // never trusted from the board.
 import type { Media } from "./media";
 import {
-  itemRotation, type Item, type ShapeKind,
+  itemRotation, type Item, type ShapeKind, checklistProgress,
 } from "./model";
 import { getBuiltinCardHtml, getCardDecorations, getCardHtml, getCardRenderer, hasCardDecorator } from "./plugins";
 
@@ -109,6 +109,11 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
     // edited renders nothing, so it gets none.
     const decorations = (x: number, y: number, w: number, h: number): string => {
       const { left, right } = getCardDecorations(item);
+      // Checklist progress is core, not a decorator: a Text
+      // card with task lines shows n/m at the bottom right,
+      // next to any right-side decoration.
+      const progress = "Text" in item.kind ? checklistProgress(item.kind.Text.text) : null;
+      const rightHtml = right + (progress ? `<span class="card-progress">${progress.done}/${progress.total}</span>` : "");
       const top = Math.max(y + 4, y + h - 36);
       let out = "";
       // The "+ tag" button lives at the end of the tag row:
@@ -119,7 +124,7 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
         ? `<button type="button" class="tag-add" data-action="add-tag" data-id="${id}" title="Add tag" aria-label="Add tag">+ <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4h7l9 9-7 7-9-9V4z"/><circle cx="9" cy="9" r="1.6"/></svg></button>`
         : "";
       if (left || tagAdd) out += `<div class="card-decorations" data-for="${id}" style="left:${x + 8}px;top:${top}px;width:${Math.max(w - 16, 0)}px">${left}${tagAdd}</div>`;
-      if (right) out += `<div class="card-decorations card-decorations-right" data-for="${id}" style="left:${x + w - 8}px;top:${top}px;transform:translateX(-100%)">${right}</div>`;
+      if (rightHtml) out += `<div class="card-decorations card-decorations-right" data-for="${id}" style="left:${x + w - 8}px;top:${top}px;transform:translateX(-100%)">${rightHtml}</div>`;
       return out;
     };
     if ("Plugin" in item.kind) {

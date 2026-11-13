@@ -699,14 +699,57 @@ function highlightCode(code: string, langRaw: string): string {
   return out;
 }
 
+// A checklist line: a bullet or dash, then [ ] or [x].
+// The state lives in the markdown text itself, so a toggle
+// or a progress change is a text edit and one undo step.
+// One shape, used by toggleTaskLine, checklistProgress and
+// setChecklistDone, so the count always agrees with what
+// a click toggles.
+const TASK_LINE = /^([-*]\s+)\[([ xX])\](\s+.*|)$/;
+
 // Flip one checklist line ([ ] <-> [x]); the state lives in
 // the markdown text itself, so a toggle is a text edit and
 // one undo step. Returns the new line, or null when the
 // line is not a task.
 export function toggleTaskLine(line: string): string | null {
-  const m = /^([-*]\s+)\[([ xX])\](\s+.*|)$/.exec(line);
+  const m = TASK_LINE.exec(line);
   if (!m) return null;
   return `${m[1]}[${m[2] === " " ? "x" : " "}]${m[3]}`;
+}
+
+// The checklist progress of a note's text: how many task
+// lines are done over how many there are. Null when the
+// text holds no task lines. The core renders it under the
+// card, and plugins read and set it through api.cards.
+export function checklistProgress(text: string): { done: number; total: number } | null {
+  let total = 0;
+  let done = 0;
+  for (const line of text.split("\n")) {
+    const m = TASK_LINE.exec(line);
+    if (!m) continue;
+    total += 1;
+    if (m[2] !== " ") done += 1;
+  }
+  return total === 0 ? null : { done, total };
+}
+
+// Set the progress of a note's text: the first `done`
+// task lines are checked, the rest unchecked. Returns the
+// new text, or null when the text holds no task lines.
+// `done` is clamped to the number of task lines.
+export function setChecklistDone(text: string, done: number): string | null {
+  const lines = text.split("\n");
+  const taskCount = lines.filter((line) => TASK_LINE.test(line)).length;
+  if (taskCount === 0) return null;
+  const want = Math.max(0, Math.min(done, taskCount));
+  let seen = 0;
+  const next = lines.map((line) => {
+    const m = TASK_LINE.exec(line);
+    if (!m) return line;
+    seen += 1;
+    return `${m[1]}[${seen <= want ? "x" : " "}]${m[3]}`;
+  });
+  return next.join("\n");
 }
 
 function renderNoteHtml(text: string): string {
