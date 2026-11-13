@@ -20,6 +20,7 @@
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:e2e": "node tests/e2e/run.mjs",
+    "cli": "node cli/bowerbird.mjs",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.main.json --noEmit && npm run typecheck:plugins"
   },
   "version": "0.2.1",
