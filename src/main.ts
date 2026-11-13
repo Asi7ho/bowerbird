@@ -78,6 +78,28 @@ function toast(msg: string): void {
   toastTimer = setTimeout(() => toastEl.classList.remove("show"), 4000);
 }
 
+// Groups are sections: each group carries the label its
+// frame shows. Keep the label map in step with membership:
+// a group with fewer than two members is not a section,
+// so its entry goes; a group with members and no entry
+// gets "Section <id>". Called after every mutation that
+// can change membership, and on load for old boards.
+function syncGroupLabels(b: Board): void {
+  const counts = new Map<number, number>();
+  for (const it of b.items) {
+    if (it.group === null) continue;
+    counts.set(it.group, (counts.get(it.group) ?? 0) + 1);
+  }
+  const labels: Record<number, { label: string }> = b.groups ?? {};
+  for (const key of Object.keys(labels)) {
+    if ((counts.get(Number(key)) ?? 0) < 2) delete labels[Number(key)];
+  }
+  for (const [g, n] of counts) {
+    if (n >= 2 && !labels[g]) labels[g] = { label: `Section ${g}` };
+  }
+  if (Object.keys(labels).length > 0) b.groups = labels; else delete b.groups;
+}
+
 // Media owns the PDF and audio state (see src/media.ts); the
 // context below is how it reads the board and asks the core
 // to re-render or re-run a search after async work lands.
@@ -226,6 +248,9 @@ async function loadBoardFromJson(json: string, dir: string, preserveUndo = false
   for (const it of parsed.items) {
     if (isFrameCard(it)) delete (it as { rotation?: number }).rotation;
   }
+  // Groups are sections: give every group its label, and
+  // drop labels for groups that no longer have members.
+  syncGroupLabels(parsed);
   board = parsed;
   boardGeneration++;
   boardSearchVersion++;
@@ -532,6 +557,7 @@ async function init(): Promise<void> {
       if (patch.size) it.size = patch.size;
       if (patch.group !== undefined) it.group = patch.group;
       if (patch.data !== undefined && "Plugin" in it.kind) it.kind.Plugin.data = patch.data;
+      syncGroupLabels(board);
       undoStore.save(); boardRender();
       return true;
     },
@@ -551,6 +577,7 @@ async function init(): Promise<void> {
         changed = true;
       }
       if (!changed) return false;
+      syncGroupLabels(board);
       undoStore.save(); boardRender();
       return true;
     },
@@ -572,6 +599,7 @@ async function init(): Promise<void> {
       board.items = board.items.filter((it) => it.id !== id);
       if (board.items.length === before) return false;
       selected = selected.filter((s) => s !== id);
+      syncGroupLabels(board);
       undoStore.save(); boardRender();
       return true;
     },
@@ -610,6 +638,7 @@ async function init(): Promise<void> {
     removeItems: (ids: number[]) => {
       board.items = board.items.filter((it) => !ids.includes(it.id));
       selected = selected.filter((s) => !ids.includes(s));
+      syncGroupLabels(board);
     },
     bringToFront: (ids: number[]) => { bringToFront(ids); },
     // Set a text note's text (and its height, from the text),
@@ -622,6 +651,19 @@ async function init(): Promise<void> {
       it.size.h = Math.max(40, estimateTextHeight(text, it.kind.Text.size, it.size.w));
       return true;
     },
+    // Rename a group's section label. One save, one undo
+    // step. False when the group has fewer than two members
+    // or the label is empty after trimming.
+    setGroupLabel: (group: number, label: string) => {
+      const members = board.items.filter((it) => it.group === group);
+      if (members.length < 2) return false;
+      const trimmed = label.trim();
+      if (!trimmed) return false;
+      board.groups = board.groups ?? {};
+      board.groups[group] = { label: trimmed };
+      undoStore.save(); boardRender();
+      return true;
+    },
     // Group a set of cards: a new group id comes from the
     // board's next_group, so a later group can never collide
     // with it. One save, one undo step.
@@ -630,6 +672,8 @@ async function init(): Promise<void> {
       board.next_group += 1;
       const g = board.next_group;
       for (const it of board.items) if (ids.includes(it.id)) it.group = g;
+      board.groups = board.groups ?? {};
+      board.groups[g] = { label: `Section ${g}` };
       undoStore.save(); boardRender();
       return g;
     },
