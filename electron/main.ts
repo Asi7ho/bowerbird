@@ -880,6 +880,10 @@ function registerIpc(): void {
     fs.writeFileSync(tmp, json);
     fs.renameSync(tmp, file);
     lastSavedJson = json;
+    // A fresh board has no folder until this first save, so a
+    // watcher started at launch could not attach then — start
+    // it now that the folder exists.
+    if (!boardWatcher) startBoardWatcher();
     maybeBackup(path.dirname(file), json);
   });
 
