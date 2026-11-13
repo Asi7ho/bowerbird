@@ -109,7 +109,7 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
     // edited renders nothing, so it gets none.
     const decorations = (x: number, y: number, w: number, h: number): string => {
       const { left, right } = getCardDecorations(item);
-      const top = Math.max(y + 4, y + h - 28);
+      const top = Math.max(y + 4, y + h - 36);
       let out = "";
       if (left) out += `<div class="card-decorations" data-for="${id}" style="left:${x + 8}px;top:${top}px;width:${Math.max(w - 16, 0)}px">${left}</div>`;
       if (right) out += `<div class="card-decorations card-decorations-right" data-for="${id}" style="left:${x + w - 8}px;top:${top}px;transform:translateX(-100%)">${right}</div>`;

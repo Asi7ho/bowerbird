@@ -403,7 +403,7 @@ async function main() {
       assert.ok(tagBox, "tag decoration found");
       assert.ok(tagBox.decLeft - tagBox.cardLeft < 16, "tag pill at the card's left edge");
       assert.ok(tagBox.decRight < tagBox.cardRight - 40, "tag pill ends inside the card");
-      assert.ok(tagBox.decBottom <= tagBox.cardBottom && tagBox.cardBottom - tagBox.decBottom < 16, "tag pill inside the card's bottom edge");
+      assert.ok(tagBox.decBottom <= tagBox.cardBottom && tagBox.cardBottom - tagBox.decBottom < 24, "tag pill inside the card's bottom edge");
       assert.ok(tagBox.isPill, "tag renders as a pill");
       // A checklist note, written from outside like the agent
       // CLI would: the live-follow watcher reloads it.
@@ -431,7 +431,7 @@ async function main() {
       }, String(id));
       assert.ok(progBox, "progress decoration found");
       assert.ok(progBox.cardRight - progBox.decRight < 16, "progress at the card's right edge");
-      assert.ok(progBox.decBottom <= progBox.cardBottom && progBox.cardBottom - progBox.decBottom < 16, "progress inside the card's bottom edge");
+      assert.ok(progBox.decBottom <= progBox.cardBottom && progBox.cardBottom - progBox.decBottom < 24, "progress inside the card's bottom edge");
       assert.ok(!progBox.isPill, "progress is plain text, not a pill");
     });
   } catch (error) {
