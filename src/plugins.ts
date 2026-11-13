@@ -24,7 +24,7 @@
 // v1 does not pretend otherwise.
 
 import type { Anchor, ArrangeOptions, Board, Camera, Item, Kind, Pt, Size } from "./model";
-import { anchorPoint, arrangeItems, boardGet, centre, clippedEnds, domainOf, elide, escapeHtml, itemRotation, rectCrossing, renderMarkdownHtml, segmentIntersectsRect, tileColorFor, tint } from "./model";
+import { anchorPoint, arrangeItems, boardGet, centre, checklistProgress, clippedEnds, domainOf, elide, escapeHtml, itemRotation, rectCrossing, renderMarkdownHtml, segmentIntersectsRect, setChecklistDone, tileColorFor, tint } from "./model";
 
 // ---------------------------------------------------------------- types
 
@@ -725,10 +725,41 @@ export interface PluginContext {
     // the built-in kinds; a user plugin could replace one.
     registerBuiltin: (def: PluginBuiltinCardDef) => void;
     // Register a decoration renderer: HTML shown under a
-    // card (tags, checklist progress). The core calls it for
-    // every card on every render; it must be pure and fast,
-    // and it must escape any text it puts in the HTML.
+    // card, at its bottom edge — tags bottom-left
+    // (`{ id, side?, render(item) }`, `side` "left" by
+    // default, "right" for the other corner; returning HTML
+    // or null). The checklist progress is core, not a
+    // decorator: a Text card with task lines always shows
+    // n/m at the bottom right. The core calls each
+    // decorator for every card on every render, so it must
+    // be pure and fast, and it must escape any text it puts
+    // in the HTML; the decoration never takes clicks.
     registerDecorator: (def: PluginCardDecoratorDef) => void;
+    // Read the checklist progress of a Text card: how many
+    // task lines are done over how many there are. Null when
+    // the card is not a Text card or holds no task lines.
+    // The progress is derived from the card's text, so this
+    // is a pure read.
+    getChecklistProgress: (item: Item) => { done: number; total: number } | null;
+    // Set the checklist progress of a Text card: the first
+    // `done` task lines are checked, the rest unchecked.
+    // One undo step. Returns false when the card is not a
+    // Text card or holds no task lines. Needs board:write.
+    setChecklistProgress: (id: number, done: number) => boolean;
+  };
+  tags: {
+    // Every tag used on the board, sorted.
+    list: () => string[];
+    // The tags on one card, in the order they were added.
+    get: (id: number) => string[];
+    // Add a tag to one card. Validated the same way as an
+    // updateItem tags patch (trimmed, de-duplicated, at most
+    // 20); an empty tag or a duplicate adds nothing. One
+    // undo step. Needs board:write.
+    add: (id: number, tag: string) => boolean;
+    // Remove a tag from one card. One undo step. False when
+    // the card has no such tag. Needs board:write.
+    remove: (id: number, tag: string) => boolean;
   };
   files: {
     // Embed a file as a board-owned copy. A File (from a
@@ -1726,6 +1757,53 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       },
       registerDecorator: (def: PluginCardDecoratorDef) => {
         cardDecorators.set(`${pluginId}:${def.id}`, { ...def, pluginId });
+      },
+      getChecklistProgress: (item: Item) => {
+        if (!("Text" in item.kind)) return null;
+        return checklistProgress(item.kind.Text.text);
+      },
+      setChecklistProgress: (id: number, done: number) => {
+        require("board:write");
+        const board = host!.getBoard();
+        const it = boardGet(board, id);
+        if (!it || !("Text" in it.kind)) return false;
+        const next = setChecklistDone(it.kind.Text.text, done);
+        if (next === null) return false;
+        return host!.setTextContent(id, next);
+      },
+    },
+    tags: {
+      list: () => {
+        const tags = new Set<string>();
+        for (const it of host!.getBoard().items) {
+          for (const t of it.tags ?? []) tags.add(t);
+        }
+        return Array.from(tags).sort((a, b) => a.localeCompare(b));
+      },
+      get: (id: number) => {
+        const it = host!.getBoard().items.find((i) => i.id === id);
+        return it ? [...(it.tags ?? [])] : [];
+      },
+      add: (id: number, tag: string) => {
+        require("board:write");
+        const clean = tag.trim();
+        if (!clean) return false;
+        const board = host!.getBoard();
+        const it = boardGet(board, id);
+        if (!it) return false;
+        const tags = [...(it.tags ?? [])];
+        if (tags.includes(clean)) return false;
+        tags.push(clean);
+        return host!.updateItem(id, { tags });
+      },
+      remove: (id: number, tag: string) => {
+        require("board:write");
+        const board = host!.getBoard();
+        const it = boardGet(board, id);
+        if (!it) return false;
+        const tags = (it.tags ?? []).filter((t) => t !== tag);
+        if (tags.length === (it.tags ?? []).length) return false;
+        return host!.updateItem(id, { tags });
       },
     },
     media: {
