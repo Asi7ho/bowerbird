@@ -1,0 +1,41 @@
+/* Tags panel: same surface as every other panel — 13px
+   type, hairline separators, quiet grey meta. No pills,
+   no badges, no custom colours. */
+.plugin-panel[data-panel="tags"] .tags-form {
+  display: flex; gap: 8px; margin-bottom: 8px;
+}
+.plugin-panel[data-panel="tags"] .tags-input {
+  flex: 1 1 auto; min-width: 0; box-sizing: border-box;
+  font: inherit; font-size: 13px; color: var(--ink);
+  background: var(--bg-system); border: none; border-radius: 8px;
+  padding: 8px 12px;
+}
+.plugin-panel[data-panel="tags"] .tags-add {
+  flex: none; font: inherit; font-size: 13px; color: var(--ink);
+  background: var(--fill); border: none; border-radius: 8px;
+  padding: 8px 12px; cursor: pointer;
+}
+.plugin-panel[data-panel="tags"] .tags-status {
+  color: var(--grey); font-size: 12px; line-height: 1.45; margin: 0 0 8px;
+}
+.plugin-panel[data-panel="tags"] .tags-list {
+  display: flex; flex-direction: column;
+}
+.plugin-panel[data-panel="tags"] .tags-row {
+  display: flex; align-items: baseline; gap: 8px;
+  width: 100%; border-bottom: 1px solid var(--separator);
+  padding: 8px 12px;
+}
+.plugin-panel[data-panel="tags"] .tags-name {
+  flex: 1 1 auto; min-width: 0; font-size: 13px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.plugin-panel[data-panel="tags"] .tags-remove {
+  flex: none; font: inherit; font-size: 15px; line-height: 1;
+  color: var(--grey); background: none; border: none;
+  padding: 0 2px; cursor: pointer;
+}
+.plugin-panel[data-panel="tags"] .tags-remove:hover { color: var(--ink); }
+.plugin-panel[data-panel="tags"] .tags-empty {
+  color: var(--grey); font-size: 13px; padding: 8px 12px;
+}
