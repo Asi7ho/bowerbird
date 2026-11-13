@@ -105,7 +105,7 @@ async function finishRecording(api: PluginContext, mime: string): Promise<void> 
     const file = new File([blob], fileName(mime), { type: blob.type });
     const path = await api.files.embedFile(file);
     const cam = api.view.getCamera();
-    const el = api.boardEl;
+    const el = api.ui.boardEl;
     const centre = { x: cam.x + el.clientWidth / 2 / cam.zoom, y: cam.y + el.clientHeight / 2 / cam.zoom };
     const id = api.board.addItem({ Audio: { path } }, { x: centre.x - 150, y: centre.y - 52 }, { w: 300, h: 104 });
     api.board.setSelected([id]);
