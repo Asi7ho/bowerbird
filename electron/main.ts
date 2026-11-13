@@ -1178,6 +1178,16 @@ function registerIpc(): void {
     if (!pcm || pcm.length > 16000 * 60) throw new Error("audio too long for classification");
     return context.classifyAudio(app, pcm);
   });
+  // Speech transcription (local Whisper, see electron/context.ts):
+  // the renderer decodes the recording to 16kHz mono samples
+  // (Node has no AudioContext to decode with) and the main
+  // process runs the model on them. Ten minutes bounds a
+  // runaway recording; longer ones keep the audio, just
+  // without a transcript.
+  ipcMain.handle("bowerbird:transcribe-audio", async (_event, pcm: Float32Array | number[]) => {
+    if (!pcm || pcm.length > 16000 * 600) throw new Error("audio too long for transcription");
+    return context.transcribeAudio(app, pcm);
+  });
   // Context index persistence: one JSON file next to the
   // board, keyed by media path, so a board that is already
   // indexed does not re-run the models on every launch.

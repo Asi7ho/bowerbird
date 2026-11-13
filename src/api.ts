@@ -26,6 +26,7 @@ export interface BowerbirdAPI {
   contextEmbedFrame(dataUrl: string): Promise<number[]>;
   contextEmbedText(text: string): Promise<number[]>;
   contextClassifyAudio(pcm: Float32Array): Promise<{ label: string; score: number }[]>;
+  transcribeAudio(pcm: Float32Array): Promise<string | null>;
   contextIndexLoad(): Promise<Record<string, unknown>>;
   contextIndexSave(index: Record<string, unknown>): Promise<boolean>;
   contextIndexSaveSync(index: Record<string, unknown>): boolean;
