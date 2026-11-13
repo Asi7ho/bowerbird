@@ -389,15 +389,16 @@ async function main() {
         return (text ?? "").includes("#urgent");
       });
       // Tags sit at the bottom left of the card, as a pill:
-      // the decoration's left edge is near the card's, and it
-      // ends well inside the card's right edge.
+      // the pill's left edge is near the card's, and it ends
+      // well inside the card's right edge. (The row div spans
+      // the card, so the pill itself is what is measured.)
       const tagBox = await page.evaluate((cid) => {
         const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
-        const dec = document.querySelector(`.card-decorations[data-for="${cid}"]`);
-        if (!card || !dec) return null;
+        const pill = document.querySelector(`.card-decorations[data-for="${cid}"] .card-tag`);
+        if (!card || !pill) return null;
         const c = card.getBoundingClientRect();
-        const d = dec.getBoundingClientRect();
-        return { cardLeft: c.left, cardRight: c.right, cardBottom: c.bottom, decLeft: d.left, decRight: d.right, decBottom: d.bottom, isPill: getComputedStyle(dec.firstElementChild).borderRadius === "999px" };
+        const d = pill.getBoundingClientRect();
+        return { cardLeft: c.left, cardRight: c.right, cardBottom: c.bottom, decLeft: d.left, decRight: d.right, decBottom: d.bottom, isPill: getComputedStyle(pill).borderRadius === "999px" };
       }, helloId);
       assert.ok(tagBox, "tag decoration found");
       assert.ok(tagBox.decLeft - tagBox.cardLeft < 16, "tag pill at the card's left edge");
@@ -422,11 +423,11 @@ async function main() {
       // not a pill — with its right edge near the card's.
       const progBox = await page.evaluate((cid) => {
         const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
-        const dec = document.querySelector(`.card-decorations-right[data-for="${cid}"]`);
-        if (!card || !dec) return null;
+        const span = document.querySelector(`.card-decorations-right[data-for="${cid}"] .card-progress`);
+        if (!card || !span) return null;
         const c = card.getBoundingClientRect();
-        const d = dec.getBoundingClientRect();
-        return { cardRight: c.right, cardBottom: c.bottom, decRight: d.right, decBottom: d.bottom, isPill: getComputedStyle(dec.firstElementChild).borderRadius === "999px" };
+        const d = span.getBoundingClientRect();
+        return { cardRight: c.right, cardBottom: c.bottom, decRight: d.right, decBottom: d.bottom, isPill: getComputedStyle(span).borderRadius === "999px" };
       }, String(id));
       assert.ok(progBox, "progress decoration found");
       assert.ok(progBox.cardRight - progBox.decRight < 16, "progress at the card's right edge");
