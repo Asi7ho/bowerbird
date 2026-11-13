@@ -83,6 +83,7 @@ export async function activate(api: PluginContext): Promise<void> {
   apiRef = api;
   api.cards.registerDecorator({
     id: "tags",
+    side: "left",
     render: (item) => {
       if (!item.tags || item.tags.length === 0) return null;
       return item.tags

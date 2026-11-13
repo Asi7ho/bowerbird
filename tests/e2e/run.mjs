@@ -366,7 +366,7 @@ async function main() {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       assert.equal(textCards().some((it) => it.kind.Text.text === "From the outside"), true);
     });
-    await check("tags and checklist progress show under cards", async () => {
+    await check("tags and checklist progress show inside cards", async () => {
       assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("tags", true)), true);
       assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("checklist-progress", true)), true);
       await page.reload();
@@ -384,10 +384,26 @@ async function main() {
       await page.locator(".tags-input").fill("urgent");
       await page.keyboard.press("Enter");
       const helloId = await page.locator("#cards .card.selected").first().getAttribute("data-id");
-      await waitFor("tag shows under the card", async () => {
+      await waitFor("tag shows inside the card", async () => {
         const text = await page.locator(`.card-decorations[data-for="${helloId}"]`).first().textContent().catch(() => "");
         return (text ?? "").includes("#urgent");
       });
+      // Tags sit at the bottom left of the card, as a pill:
+      // the decoration's left edge is near the card's, and it
+      // ends well inside the card's right edge.
+      const tagBox = await page.evaluate((cid) => {
+        const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
+        const dec = document.querySelector(`.card-decorations[data-for="${cid}"]`);
+        if (!card || !dec) return null;
+        const c = card.getBoundingClientRect();
+        const d = dec.getBoundingClientRect();
+        return { cardLeft: c.left, cardRight: c.right, cardBottom: c.bottom, decLeft: d.left, decRight: d.right, decBottom: d.bottom, isPill: getComputedStyle(dec.firstElementChild).borderRadius === "999px" };
+      }, helloId);
+      assert.ok(tagBox, "tag decoration found");
+      assert.ok(tagBox.decLeft - tagBox.cardLeft < 16, "tag pill at the card's left edge");
+      assert.ok(tagBox.decRight < tagBox.cardRight - 40, "tag pill ends inside the card");
+      assert.ok(tagBox.decBottom <= tagBox.cardBottom && tagBox.cardBottom - tagBox.decBottom < 16, "tag pill inside the card's bottom edge");
+      assert.ok(tagBox.isPill, "tag renders as a pill");
       // A checklist note, written from outside like the agent
       // CLI would: the live-follow watcher reloads it.
       const board = readBoard();
@@ -398,10 +414,24 @@ async function main() {
       fs.writeFileSync(tmp, JSON.stringify(board));
       fs.renameSync(tmp, boardPath);
       await page.locator("text=Checklist card").first().waitFor({ timeout: 15000 });
-      await waitFor("checklist progress shows under the card", async () => {
+      await waitFor("checklist progress shows inside the card", async () => {
         const text = await page.locator(`.card-decorations[data-for="${id}"]`).first().textContent().catch(() => "");
         return (text ?? "").includes("1/2");
       });
+      // Progress sits at the bottom right, as plain text —
+      // not a pill — with its right edge near the card's.
+      const progBox = await page.evaluate((cid) => {
+        const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
+        const dec = document.querySelector(`.card-decorations-right[data-for="${cid}"]`);
+        if (!card || !dec) return null;
+        const c = card.getBoundingClientRect();
+        const d = dec.getBoundingClientRect();
+        return { cardRight: c.right, cardBottom: c.bottom, decRight: d.right, decBottom: d.bottom, isPill: getComputedStyle(dec.firstElementChild).borderRadius === "999px" };
+      }, String(id));
+      assert.ok(progBox, "progress decoration found");
+      assert.ok(progBox.cardRight - progBox.decRight < 16, "progress at the card's right edge");
+      assert.ok(progBox.decBottom <= progBox.cardBottom && progBox.cardBottom - progBox.decBottom < 16, "progress inside the card's bottom edge");
+      assert.ok(!progBox.isPill, "progress is plain text, not a pill");
     });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });

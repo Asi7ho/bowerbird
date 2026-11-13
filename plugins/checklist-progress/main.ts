@@ -13,6 +13,7 @@ const TASK_LINE = /^([-*]\s+)\[([ xX])\](\s+.*|)$/;
 export async function activate(api: PluginContext): Promise<void> {
   api.cards.registerDecorator({
     id: "checklist",
+    side: "right",
     render: (item) => {
       if (!("Text" in item.kind)) return null;
       let total = 0;
