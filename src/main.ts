@@ -388,6 +388,18 @@ window.addEventListener("drop", (e) => {
 window.addEventListener("paste", (e: ClipboardEvent) => {
   const active = document.activeElement;
   if (active && active.tagName === "TEXTAREA") return;
+  const files = e.clipboardData?.files;
+  if (files && files.length > 0) {
+    // An image on the clipboard (a screenshot, a copied
+    // picture), or a file copied in Finder: the same flow
+    // as a drop, landing at the centre of the view. Never
+    // steal a paste meant for a text field.
+    if (active && (active.tagName === "INPUT" || (active as HTMLElement).isContentEditable)) return;
+    e.preventDefault();
+    const bs = boardSize();
+    void drops.dropPaths(Array.from(files), { x: bs.x / 2, y: bs.y / 2 });
+    return;
+  }
   const text = e.clipboardData?.getData("text")?.trim() ?? "";
   if (/^https?:\/\//.test(text)) {
     e.preventDefault();

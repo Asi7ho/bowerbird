@@ -1,5 +1,6 @@
-// Drops and pastes: files dropped from the OS, links dragged
-// from a browser, links pasted from the clipboard, and the
+// Drops and pastes: files dropped from the OS or pasted from
+// the clipboard, links dragged from a browser, links pasted
+// from the clipboard, and the
 // background fill of link previews for cards that never got
 // one. Dropped files are embedded as board-owned copies in
 // the board folder (see the main process), so deleting the

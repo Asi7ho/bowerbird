@@ -224,6 +224,22 @@ async function main() {
       );
       await page.locator("text=CI plugin card").first().waitFor({ timeout: 15000 });
     });
+
+    await check("pasting an image from the clipboard adds an image card", async () => {
+      // A synthetic paste carrying a 1x1 PNG, the way a
+      // copied screenshot arrives on the clipboard.
+      await page.evaluate(() => {
+        const dt = new DataTransfer();
+        const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAwMCAO+ip1sAAAAASUVORK5CYII="), (c) => c.charCodeAt(0));
+        dt.items.add(new File([bytes], "pasted.png", { type: "image/png" }));
+        document.body.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, cancelable: true, clipboardData: dt }));
+      });
+      const image = await waitFor("pasted image in board.json", () => {
+        const found = readBoard().items.filter((it) => "Image" in it.kind);
+        return found.length === 1 ? found[0] : null;
+      });
+      assert.ok(fs.existsSync(image.kind.Image.path), "embedded asset file exists on disk");
+    });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
     console.log(`  FAIL  setup: ${String(error.message).split("\n")[0]}`);
