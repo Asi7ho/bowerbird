@@ -566,6 +566,51 @@ async function main() {
       await page.locator("textarea.note-edit").waitFor({ timeout: 10000 });
       await page.keyboard.press("Escape");
     });
+
+    await check("an audio card's transcript is hidden until expanded", async () => {
+      // A voice-note audio card, written from outside: the
+      // live-follow watcher reloads it. It reuses the recorded
+      // file, so the card does not flip to "File missing".
+      const board = readBoard();
+      const id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
+      const audio = board.items.find((it) => "Audio" in it.kind);
+      const transcript = "The quick brown fox jumps over the lazy dog.";
+      board.items.push({ id, pos: { x: 100, y: 650 }, size: { w: 300, h: 128 }, group: null, kind: { Audio: { path: audio.kind.Audio.path, transcript } } });
+      board.next_id = id;
+      const tmp = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(board));
+      fs.renameSync(tmp, boardPath);
+      await page.locator(".audio-transcript-toggle", { hasText: "Transcript" }).first().waitFor({ timeout: 15000 });
+      // Hidden by default: the card is short and the text is not there.
+      const hidden = await page.evaluate((cid) => {
+        const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
+        if (!card) return null;
+        return { h: card.getBoundingClientRect().height, hasText: card.textContent.includes("quick brown fox") };
+      }, String(id));
+      assert.ok(hidden, "transcript card found");
+      assert.ok(Math.abs(hidden.h - 128) < 2, "card starts short");
+      assert.equal(hidden.hasText, false, "transcript hidden by default");
+      // Expand: the card grows and the text appears.
+      await page.locator(`.audio-transcript-toggle[data-id="${id}"]`).click();
+      await waitFor("transcript shows after expanding", async () => {
+        const t = await page.evaluate((cid) => {
+          const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
+          if (!card) return false;
+          return card.textContent.includes("quick brown fox") && Math.abs(card.getBoundingClientRect().height - 240) < 2;
+        }, String(id));
+        return t;
+      });
+      // Collapse: back to short, text gone.
+      await page.locator(`.audio-transcript-toggle[data-id="${id}"]`).click();
+      await waitFor("transcript hides after collapsing", async () => {
+        const t = await page.evaluate((cid) => {
+          const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
+          if (!card) return false;
+          return !card.textContent.includes("quick brown fox") && Math.abs(card.getBoundingClientRect().height - 128) < 2;
+        }, String(id));
+        return t;
+      });
+    });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
     console.log(`  FAIL  setup: ${String(error.message).split("\n")[0]}`);

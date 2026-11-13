@@ -38,6 +38,7 @@ import {
 } from "../plugins";
 import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
+  AUDIO_TRANSCRIPT_HIDDEN_H, AUDIO_TRANSCRIPT_SHOWN_H,
   boardGet, centre, clippedEnds, fitCamera,
   itemBounds, itemRotation, parseHex, pressureWidth, rotatePoint, select,
   strokeMaxWidth, strokePressuresVary, toggleTaskLine,
@@ -1187,6 +1188,14 @@ cardsEl.addEventListener("click", (e: MouseEvent) => {
   if (!it) return;
   if (action === "open-link" && "UrlCard" in it.kind) openExternal(it.kind.UrlCard.url);
   if (action === "play-audio" && "Audio" in it.kind) api.media.toggleAudio(id, it.kind.Audio.path);
+  if (action === "toggle-transcript" && "Audio" in it.kind) {
+    // The card's height is the state: taller than the hidden
+    // height, the transcript shows; at it or below, only the
+    // toggle does. A normal resize, so one undo step.
+    const expanded = it.size.h > AUDIO_TRANSCRIPT_HIDDEN_H;
+    const h = expanded ? AUDIO_TRANSCRIPT_HIDDEN_H : AUDIO_TRANSCRIPT_SHOWN_H;
+    api.board.updateItem(id, { size: { w: it.size.w, h } });
+  }
   if ((action === "pdf-prev" || action === "pdf-next") && "PdfCard" in it.kind) {
     const pdfPath = it.kind.PdfCard.path;
     const cur = api.media.getPdfPage(id);
