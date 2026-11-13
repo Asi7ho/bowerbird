@@ -16,7 +16,7 @@ export type Kind =
   | { UrlCard: { url: string; title: string | null; description: string | null; image?: string | null; icon?: string | null; embed?: boolean } }
   | { PdfCard: { path: string; size_bytes: number } }
   | { Swatch: { hex: string } }
-  | { Audio: { path: string } }
+  | { Audio: { path: string; transcript?: string } }
   | { Video: { source: string; remote: boolean; size_bytes: number } }
   | { Stroke: { points: Pt[]; color: string; width: number; marker: boolean; pressures?: number[] } }
   | { Connector: { from: Anchor; to: Anchor; color: string } }

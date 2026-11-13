@@ -42,7 +42,7 @@ type ImageData = { path: string };
 type UrlCardData = { url: string; title: string | null; description: string | null; image?: string | null; icon?: string | null; embed?: boolean };
 type PdfCardData = { path: string; size_bytes: number };
 type SwatchData = { hex: string };
-type AudioData = { path: string };
+type AudioData = { path: string; transcript?: string };
 type VideoData = { source: string; remote: boolean; size_bytes: number };
 
 // Link cards are previews only: clicking one opens it in the browser.
@@ -252,7 +252,8 @@ export function activate(api: PluginContext): void {
     title: "Audio",
     render: (item, data, plain = false) => {
       const c = chrome(item, plain);
-      const { path } = data as AudioData;
+      const { path, transcript } = data as AudioData;
+      const text = typeof transcript === "string" ? transcript.trim() : "";
       const name = path.split("/").pop() ?? path;
       if (api.media.audioFailed(path)) {
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px"><div class="missing-media" style="flex:1 1 auto">File missing: ${api.text.escapeHtml(name)}</div></div></div>`;
@@ -270,12 +271,19 @@ export function activate(api: PluginContext): void {
       // "1 KB". The seek control is a thin track in the tile's own
       // purple, not a chunky browser slider in blue.
       const tile = c.hh >= 104 ? 56 : 48;
+      // A voice recording carries its transcript under the
+      // player, when it has one — the text fills the card
+      // and scrolls, so a long note does not grow the card.
+      const transcriptHtml = text.length > 0
+        ? `<div class="audio-transcript"><div class="audio-transcript-label">Transcript</div><div class="audio-transcript-text">${api.text.escapeHtml(text)}</div></div>`
+        : "";
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
         <div style="display:flex;align-items:center;gap:12px">
           <div class="audio-tile clickable" data-action="play-audio" data-id="${c.id}" style="width:${tile}px;height:${tile}px;background:${api.text.tint("#6A4C93", 0.88)};color:#6a4c93;font-size:${tile === 56 ? 18 : 16}px">${playing ? "❚❚" : "▶"}</div>
           <div class="col"><div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, c.ww - 92, 14, true))}</div><div class="sub" style="font-size:12px"><span data-audio-time="${c.id}">${api.media.formatAudioTime(cur)}</span> / <span data-audio-dur="${c.id}">${api.media.formatAudioTime(dur)}</span></div></div>
         </div>
         <input class="audio-seek" type="range" min="0" max="1000" value="${seekVal}" style="--seek-pct:${seekPct}%" data-audio-seek="${c.id}" aria-label="Seek">
+        ${transcriptHtml}
       </div></div>`;
     },
   });

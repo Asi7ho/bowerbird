@@ -508,6 +508,18 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   background: #fff; border: 1px solid rgba(0, 0, 0, 0.12);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
 }
+/* Voice-note transcript: a quiet label over the text, which
+   fills the rest of the card and scrolls, so a long note
+   does not grow the card. */
+.card .audio-transcript {
+  flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 2px;
+  border-top: 1px solid var(--hairline); padding-top: 8px;
+}
+.card .audio-transcript-label { font-size: 12px; font-weight: 600; color: var(--grey); }
+.card .audio-transcript-text {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  font-size: 13px; line-height: 1.45; color: var(--ink);
+}
 .card .audio-seek:hover::-webkit-slider-thumb { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22); }
 .card .audio-seek::-moz-range-track {
   height: 4px; border-radius: 2px;
