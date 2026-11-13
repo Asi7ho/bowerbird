@@ -101,7 +101,7 @@ An item:
 | `UrlCard` | `url`, `title` (null), `description` (null), `image?`, `icon?`, `embed?` |
 | `PdfCard` | `path`, `size_bytes` |
 | `Swatch` | `hex` |
-| `Audio` | `path` |
+| `Audio` | `path`, `transcript?` (the on-device speech-to-text of a voice recording, when it has one) |
 | `Video` | `source`, `remote` (bool), `size_bytes` |
 | `Stroke` | `points` (`[{x, y}]`), `color`, `width`, `marker` (bool), `pressures?` |
 | `Connector` | `from`, `to` (each `{"Item": id}` or `{"Point": {"x","y"}}`), `color` |
