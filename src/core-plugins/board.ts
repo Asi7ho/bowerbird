@@ -1515,6 +1515,12 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   // Tab cycles elements, unless Settings is open, where Tab keeps
   // its normal job of moving focus around the sheet.
   if (e.key === "Tab" && !isSettingsUIOpen()) {
+    // Tab in a text input keeps its normal focus job too: a
+    // panel input (a section rename, a tag box, a search)
+    // commits on blur, and Tab is how the user leaves it.
+    // Cycling here would steal the blur — the rename would
+    // never commit — and the selection with it.
+    if (active && active.tagName === "INPUT") return;
     e.preventDefault();
     navigateElements(e.shiftKey ? -1 : 1);
     return;
