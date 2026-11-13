@@ -6,6 +6,7 @@ import { createUndoStore, type UndoStore } from "./undo";
 import { createDrops, type Drops } from "./drops";
 import * as coreBoard from "./core-plugins/board";
 import * as coreCards from "./core-plugins/cards";
+import * as coreChecklist from "./core-plugins/checklist-progress";
 import * as coreSearch from "./core-plugins/search";
 import * as coreSettings from "./core-plugins/settings";
 import * as coreTags from "./core-plugins/tags";
@@ -883,9 +884,10 @@ async function init(): Promise<void> {
     // its box into the container the title bar builds.
     { manifest: coreTitlebar.manifest, module: coreTitlebar },
     { manifest: coreSearch.manifest, module: coreSearch },
-    // Tags last: it only decorates cards, so it needs
+    // Tags last: they only decorate cards, so they need
     // nothing from the other core plugins.
     { manifest: coreTags.manifest, module: coreTags },
+    { manifest: coreChecklist.manifest, module: coreChecklist },
   ]);
   // The board DOM is built by the core-board plugin, so the
   // core reads its elements from the shell now, after the

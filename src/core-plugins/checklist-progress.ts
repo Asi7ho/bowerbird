@@ -1,14 +1,25 @@
-// Checklist Progress — bundled Bowerbird plugin (see
-// PLUGIN_API.md).
+// Checklist Progress is a first-party plugin
+// (core-checklist-progress).
 //
 // A decorator only: no panel, no storage, no writes. For a
-// Text card containing checklist lines, it shows `n/m` as a
-// pill inside the card — done over total. The task-line shape is
-// the app's own (see toggleTaskLine in src/model.ts), so
-// the count always agrees with what a click toggles.
-import type { PluginContext } from "../../src/plugins";
+// Text card containing checklist lines, it shows `n/m` as
+// plain text at the card's bottom right — done over total.
+// The task-line shape is the app's own (see toggleTaskLine
+// in src/model.ts), so the count always agrees with what a
+// click toggles. It uses only the public API.
+import type { PluginContext, PluginManifest } from "../plugins";
 
 const TASK_LINE = /^([-*]\s+)\[([ xX])\](\s+.*|)$/;
+
+export const manifest: PluginManifest = {
+  id: "core-checklist-progress",
+  name: "Checklist Progress",
+  description: "Shows n/m under a note with a checklist.",
+  version: "1.0.0",
+  apiVersion: "2",
+  main: "checklist-progress.js",
+  permissions: ["board:read"],
+};
 
 export async function activate(api: PluginContext): Promise<void> {
   api.cards.registerDecorator({
