@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   allocId,
   arrangeItems,
+  checklistProgress,
   clippedEnds,
   domainOf,
   escapeHtml,
@@ -23,6 +24,7 @@ import {
   resizeItem,
   segmentIntersectsRect,
   select,
+  setChecklistDone,
   strokeMaxWidth,
   strokePressuresVary,
   strokesWithin,
@@ -244,6 +246,20 @@ describe("text cards: markdown, checklists, height", () => {
     expect(toggleTaskLine("- [x] Buy milk")).toBe("- [ ] Buy milk");
     expect(toggleTaskLine("- [X] Buy milk")).toBe("- [ ] Buy milk");
     expect(toggleTaskLine("Just a line")).toBeNull();
+  });
+  it("checklistProgress counts done over total, null without tasks", () => {
+    expect(checklistProgress("Buy milk\n- [ ] first\n- [x] second")).toEqual({ done: 1, total: 2 });
+    expect(checklistProgress("- [X] Done\n* [ ] Todo")).toEqual({ done: 1, total: 2 });
+    expect(checklistProgress("No tasks here")).toBeNull();
+    expect(checklistProgress("")).toBeNull();
+  });
+  it("setChecklistDone checks the first n tasks and clamps", () => {
+    const text = "- [ ] first\n- [ ] second\n- [x] third";
+    expect(setChecklistDone(text, 2)).toBe("- [x] first\n- [x] second\n- [ ] third");
+    expect(setChecklistDone(text, 0)).toBe("- [ ] first\n- [ ] second\n- [ ] third");
+    expect(setChecklistDone(text, 99)).toBe("- [x] first\n- [x] second\n- [x] third");
+    expect(setChecklistDone(text, -1)).toBe("- [ ] first\n- [ ] second\n- [ ] third");
+    expect(setChecklistDone("No tasks here", 1)).toBeNull();
   });
   it("estimateTextHeight never goes below 48 and grows with text", () => {
     expect(estimateTextHeight("", 16, 260)).toBe(48);
