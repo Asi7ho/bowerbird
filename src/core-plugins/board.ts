@@ -711,6 +711,11 @@ function startTextEdit(id: number): void {
     // the edit and re-renders, destroying the button before
     // its click ever fires.
     mic.addEventListener("pointerdown", (e) => e.stopPropagation());
+    // And without this the click moves focus off the text
+    // box, whose blur commits the edit and re-renders —
+    // again destroying the button before its click fires.
+    // The button never takes focus; the click still runs.
+    mic.addEventListener("mousedown", (e) => e.preventDefault());
     mic.addEventListener("click", () => {
       const b = api.board.get();
       const it = boardGet(b, id);
