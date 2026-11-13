@@ -1,0 +1,14 @@
+/* Voice Notes panel: same surface as every other panel —
+   13px type, quiet grey status. The button is the only
+   control; the status line is live state. */
+.plugin-panel[data-panel="voice-notes"] .vn-record {
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--ink);
+  background: #fff; border: 1px solid var(--separator); border-radius: 9px;
+  padding: 8px 14px; cursor: pointer;
+}
+.plugin-panel[data-panel="voice-notes"] .vn-record:hover { background: var(--fill); }
+.plugin-panel[data-panel="voice-notes"] .vn-record.recording { color: var(--accent); border-color: var(--accent); }
+.plugin-panel[data-panel="voice-notes"] .vn-record:disabled { opacity: 0.5; cursor: default; }
+.plugin-panel[data-panel="voice-notes"] .vn-status {
+  color: var(--grey); font-size: 12px; line-height: 1.45; margin: 8px 0 0;
+}
