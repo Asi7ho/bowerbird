@@ -163,15 +163,6 @@ export function activate(api: PluginContext): void {
   });
   toolbar.appendChild(settingsBtn);
 
-  // Whether the board file holds the latest content, as live
-  // state at the bottom of the toolbar. The core drives it
-  // through the saving / saved / save-failed events.
-  const savedLabel = document.createElement("div");
-  savedLabel.id = "saved-label";
-  savedLabel.className = "saved-label";
-  savedLabel.textContent = "Saved";
-  toolbar.appendChild(savedLabel);
-
   // The toolbar lives in the board area, beside the cards
   // layer. The core's shell mounts it here; the plugin
   // appends it to the board area element the API provides.
@@ -343,11 +334,8 @@ export function activate(api: PluginContext): void {
   api.events.on("tool", update);
   api.events.on("selection", update);
   api.events.on("pen", update);
-  // Follow the camera (zoom level) and the save state.
+  // Follow the camera (zoom level).
   api.events.on("camera", update);
-  api.events.on("saving", () => { savedLabel.textContent = "Saving…"; });
-  api.events.on("saved", () => { savedLabel.textContent = "Saved"; });
-  api.events.on("save-failed", () => { savedLabel.textContent = "Not saved"; });
   update();
 }
 

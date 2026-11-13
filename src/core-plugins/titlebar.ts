@@ -65,6 +65,7 @@ export function activate(api: PluginContext): void {
         <button id="btn-undo" title="Undo (Ctrl / Cmd + Z)" aria-label="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5 3.5 8.5 7 12" /><path d="M3.5 8.5H13a5.5 5.5 0 0 1 0 11H10" /></svg></button>
         <button id="btn-redo" title="Redo (Ctrl / Cmd + Shift + Z)" aria-label="Redo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 5l3.5 3.5L17 12" /><path d="M20.5 8.5H11a5.5 5.5 0 0 0 0 11h3" /></svg></button>
       </div>
+      <span id="saved-label" class="saved-label">Saved</span>
     </div>
     <div id="search-box"></div>
     <div id="title-bar-actions">
@@ -104,6 +105,16 @@ export function activate(api: PluginContext): void {
 
   bar.querySelector<HTMLButtonElement>("#btn-undo")?.addEventListener("click", () => { api.board.undo(); });
   bar.querySelector<HTMLButtonElement>("#btn-redo")?.addEventListener("click", () => { api.board.redo(); });
+
+  // Whether the board file holds the latest content, as live
+  // state next to the name. The core drives it through the
+  // saving / saved / save-failed events.
+  const savedLabel = bar.querySelector<HTMLElement>("#saved-label");
+  if (savedLabel) {
+    api.events.on("saving", () => { savedLabel.textContent = "Saving…"; });
+    api.events.on("saved", () => { savedLabel.textContent = "Saved"; });
+    api.events.on("save-failed", () => { savedLabel.textContent = "Not saved"; });
+  }
 
   bar.querySelector<HTMLButtonElement>("#win-close")?.addEventListener("click", async () => {
     api.board.commitEditing();
