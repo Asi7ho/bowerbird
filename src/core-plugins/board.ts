@@ -660,10 +660,10 @@ function createTextNoteAt(world: Pt): void {
   // No save here: the commit saves the typed text, or
   // removes the note if it is empty, so an empty note
   // leaves no board change and no undo step behind.
-  startTextEdit(id);
+  startTextEdit(id, true);
 }
 
-function startTextEdit(id: number): void {
+function startTextEdit(id: number, isNew = false): void {
   const board = api.board.get();
   const item = boardGet(board, id);
   if (!item || !("Text" in item.kind)) return;
@@ -684,17 +684,19 @@ function startTextEdit(id: number): void {
   ta.style.fontSize = `${size}px`;
   ta.style.color = item.kind.Text.color;
   // A creation action is offered on the left of the text
-  // box, as its icon: the user types, or clicks the icon
-  // instead. The first registered action is the one shown
-  // (today that is the voice plugin's mic). Clicking it
-  // commits the note first — an empty note is removed,
-  // typed text is kept — then runs the action at the
-  // note's position (the double-click point for a new
-  // note).
+  // box, as its icon — but only on a new note. Editing an
+  // existing note is for typing, not for starting a
+  // recording, so the mic never appears there. The user
+  // types, or clicks the icon instead. The first
+  // registered action is the one shown (today that is the
+  // voice plugin's mic). Clicking it commits the note
+  // first — an empty note is removed, typed text is kept —
+  // then runs the action at the note's position (the
+  // double-click point for a new note).
   const row = document.createElement("div");
   row.className = "note-edit-row";
   const actions = getCreateActions();
-  if (actions.length > 0) {
+  if (isNew && actions.length > 0) {
     const a = actions[0];
     const mic = document.createElement("button");
     mic.type = "button";
