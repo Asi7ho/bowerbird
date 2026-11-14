@@ -231,7 +231,7 @@ export function activate(api: PluginContext): void {
         // ends 36px above the bottom (plus a 12px gap) so the
         // tag pills do not sit on it.
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px" data-pdf-wrap="${c.id}">
-          <div style="width:56px;height:${Math.max(c.hh - 60, 24)}px;flex:none;background:var(--bg-system);border-radius:6px;overflow:hidden"><canvas data-pdf-canvas="${c.id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
+          <div style="width:56px;height:${Math.max(c.hh - 60, 24)}px;flex:none;align-self:flex-start;background:var(--bg-system);border-radius:6px;overflow:hidden"><canvas data-pdf-canvas="${c.id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
           <div class="col"><div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, c.ww - 92, 14, true))}</div><div class="sub" style="font-size:12px">${kb} KB · <span data-pdf-count="${c.id}">…</span></div></div></div></div>`;
       }
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px 12px 48px;display:flex;flex-direction:column;gap:8px" data-pdf-wrap="${c.id}">
