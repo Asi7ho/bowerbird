@@ -824,9 +824,24 @@ async function secureStorageAvailable(): Promise<boolean> {
 //    so, and only trusted plugins should be installed.
 function isBoardLocal(filePath: string): boolean {
   try {
-    const resolved = path.resolve(filePath);
+    // Resolve symlinks first: a symlink inside the board
+    // folder pointing outside (e.g. assets/x -> ~/.ssh) would
+    // otherwise pass the lexical check and let a board-local
+    // reader follow it out. realpathSync throws for a path
+    // that does not exist yet, so fall back to the lexical
+    // check then — a missing file cannot be read anyway.
+    // The roots are resolved the same way, so a board dir
+    // reached through a symlink still matches.
+    const real = (p: string): string => {
+      try {
+        return fs.realpathSync(p);
+      } catch {
+        return path.resolve(p);
+      }
+    };
+    const resolved = real(filePath);
     for (const root of [boardDir(), assetsDir()]) {
-      const r = path.resolve(root);
+      const r = real(root);
       if (resolved === r || resolved.startsWith(r + path.sep)) return true;
     }
   } catch { /* not a path: not board-local */ }
