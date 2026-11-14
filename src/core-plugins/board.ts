@@ -36,8 +36,8 @@ import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
   AUDIO_TRANSCRIPT_HIDDEN_H, AUDIO_TRANSCRIPT_SHOWN_H,
   centre, clippedEnds, fitCamera,
-  itemBounds, itemRotation, parseHex, pressureWidth, rotatePoint, select,
-  strokeMaxWidth, strokePressuresVary, toggleTaskLine,
+  itemBounds, itemRotation, pressureWidth, rotatePoint, select,
+  strokeMaxWidth, strokePressuresVary,
 } from "../model";
 
 export const manifest: PluginManifest = {
@@ -240,7 +240,7 @@ function applyGrid(): void {
   const bg = b?.bg ?? "#FFFFFF";
   const grid = b?.grid ?? "Dots";
   if (grid === "Off") { gridEl.style.backgroundImage = "none"; return; }
-  const rgb = parseHex(bg) ?? [247, 245, 240];
+  const rgb = api.text.parseHex(bg) ?? [247, 245, 240];
   const lum = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
   const color = lum > 140 ? "#d8d8de" : "#55555a";
   let step = GRID;
@@ -1157,7 +1157,7 @@ cardsEl.addEventListener("click", (e: MouseEvent) => {
     if (!it || !("Text" in it.kind)) return;
     const lineNo = Number(task.dataset.line);
     const lines = it.kind.Text.text.split("\n");
-    const next = toggleTaskLine(lines[lineNo] ?? "");
+    const next = api.text.toggleTaskLine(lines[lineNo] ?? "");
     if (next === null) return;
     lines[lineNo] = next;
     api.board.setTextContent(it.id, lines.join("\n"));
