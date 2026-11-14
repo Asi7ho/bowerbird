@@ -201,7 +201,7 @@ function boardPoint(clientX: number, clientY: number): Pt {
 }
 function zoomAt(screen: Pt, factor: number): void {
   const before = toWorld(screen);
-  board.camera.zoom = Math.max(0.1, Math.min(8, board.camera.zoom * factor));
+  board.camera.zoom = Math.max(0.01, Math.min(8, board.camera.zoom * factor));
   const after = toWorld(screen);
   board.camera.x += before.x - after.x;
   board.camera.y += before.y - after.y;
@@ -784,7 +784,10 @@ async function init(): Promise<void> {
     setCamera: (cam) => {
       if (!isFinite(cam.x) || !isFinite(cam.y) || !isFinite(cam.zoom)) return;
       const z = board.camera.zoom;
-      board.camera = { x: cam.x, y: cam.y, zoom: Math.max(0.1, Math.min(8, cam.zoom)) };
+      // The floor is 0.01, not 0.1: fit (F) must be able to
+      // reach a very wide board — a 0.1 floor silently crops
+      // anything wider than ~12,800 world units.
+      board.camera = { x: cam.x, y: cam.y, zoom: Math.max(0.01, Math.min(8, cam.zoom)) };
       if (board.camera.zoom !== z) emitPluginEvent("camera");
       undoStore.save(); boardRender();
     },
@@ -793,7 +796,7 @@ async function init(): Promise<void> {
     setCameraSilent: (cam) => {
       if (!isFinite(cam.x) || !isFinite(cam.y) || !isFinite(cam.zoom)) return;
       const z = board.camera.zoom;
-      board.camera = { x: cam.x, y: cam.y, zoom: Math.max(0.1, Math.min(8, cam.zoom)) };
+      board.camera = { x: cam.x, y: cam.y, zoom: Math.max(0.01, Math.min(8, cam.zoom)) };
       if (board.camera.zoom !== z) emitPluginEvent("camera");
     },
     setCanvas: (patch) => {
