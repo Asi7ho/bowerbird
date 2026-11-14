@@ -13,7 +13,7 @@ import * as coreToolbar from "./core-plugins/toolbar";
 import {
   Board, Camera, Item, Pt, ShapeKind,
   AUDIO_TRANSCRIPT_HIDDEN_H, boardGet, CARD_DECORATIONS_H, centre, clampZoom, elementPoint, elementSize,
-  estimateTextHeight, hitTest, itemBounds, lassoSelect, marquee, moveSelection,
+  estimateTextHeight, hitTest, itemsCentre, lassoSelect, marquee, moveSelection,
   resizeItem, screenToWorld, select, strokesWithin, zoomCamera,
 } from "./model";
 import { welcomeBoard } from "./welcome";
@@ -127,13 +127,7 @@ const search: BoardSearch = createBoardSearch({
     let c: Pt;
     if (target.group !== null) {
       const members = board.items.filter((it) => it.group === target.group);
-      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-      for (const m of members) {
-        const [p, s] = itemBounds(board, m);
-        minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
-        maxX = Math.max(maxX, p.x + s.w); maxY = Math.max(maxY, p.y + s.h);
-      }
-      c = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+      c = itemsCentre(board, members) ?? centre(target);
     } else {
       c = centre(target);
     }

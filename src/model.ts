@@ -119,24 +119,38 @@ export function itemBounds(board: Board, item: Item): [Pt, Size] {
   return [item.pos, item.size];
 }
 
+// The bounding box of a set of items, or null when empty.
+// Shared by fitCamera and the group-centring sites (main's
+// onJumpTo, and the board plugin's own copy that reads
+// through api.geometry.itemBounds).
+export function itemsBounds(board: Board, items: Item[]): { x: number; y: number; w: number; h: number } | null {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const it of items) {
+    const [p, s] = itemBounds(board, it);
+    minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x + s.w); maxY = Math.max(maxY, p.y + s.h);
+  }
+  if (!Number.isFinite(minX)) return null;
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+export function itemsCentre(board: Board, items: Item[]): Pt | null {
+  const b = itemsBounds(board, items);
+  return b ? { x: b.x + b.w / 2, y: b.y + b.h / 2 } : null;
+}
+
 // Zoom to fit: the camera that shows every item at once.
 // The zoom is capped at 1 — a small board is centred, not
 // blown up — and a margin keeps cards off the edges. An
 // empty board has nothing to fit, so there is no camera.
 export function fitCamera(board: Board, viewport: Size, padding = 48): Camera | null {
-  if (board.items.length === 0) return null;
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const it of board.items) {
-    const [p, s] = itemBounds(board, it);
-    minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
-    maxX = Math.max(maxX, p.x + s.w); maxY = Math.max(maxY, p.y + s.h);
-  }
-  const bw = Math.max(1, maxX - minX), bh = Math.max(1, maxY - minY);
+  const b = itemsBounds(board, board.items);
+  if (!b) return null;
+  const bw = Math.max(1, b.w), bh = Math.max(1, b.h);
   const availW = Math.max(1, viewport.w - padding * 2), availH = Math.max(1, viewport.h - padding * 2);
   const zoom = Math.min(1, availW / bw, availH / bh);
   return {
-    x: (minX + maxX) / 2 - viewport.w / 2 / zoom,
-    y: (minY + maxY) / 2 - viewport.h / 2 / zoom,
+    x: b.x + b.w / 2 - viewport.w / 2 / zoom,
+    y: b.y + b.h / 2 - viewport.h / 2 / zoom,
     zoom,
   };
 }
@@ -283,6 +297,27 @@ function distToSegment(p: Pt, a: Pt, b: Pt): number {
   return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
 }
 
+// A rotated stroke is hit in its own frame, like a rotated
+// card: rotate the point back by -rotation around the
+// bounding-box centre, then test the unrotated points.
+// Returns null when the point is outside the stroke's
+// bounding box (grown by the tolerance) — the old code
+// scanned every point of every stroke on every cursor
+// move, even for strokes far from the cursor.
+function strokePointInFrame(item: Item, world: Pt, tol: number): Pt | null {
+  const rot = itemRotation(item);
+  const p = rot !== 0 ? rotatePoint(world, centre(item), -rot) : world;
+  if (p.x < item.pos.x - tol || p.x > item.pos.x + item.size.w + tol ||
+      p.y < item.pos.y - tol || p.y > item.pos.y + item.size.h + tol) return null;
+  return p;
+}
+function strokeHitTest(points: Pt[], p: Pt, tol: number): boolean {
+  for (let i = 0; i + 1 < points.length; i++) {
+    if (distToSegment(p, points[i], points[i + 1]) <= tol) return true;
+  }
+  return points.some((q) => Math.hypot(q.x - p.x, q.y - p.y) <= tol);
+}
+
 export function rotatePoint(p: Pt, c: Pt, deg: number): Pt {
   const r = (deg * Math.PI) / 180;
   const cos = Math.cos(r), sin = Math.sin(r);
@@ -302,23 +337,8 @@ function itemHit(board: Board, item: Item, world: Pt): boolean {
   if ("Stroke" in item.kind) {
     const { points } = item.kind.Stroke;
     const tol = Math.max(strokeMaxWidth(item.kind.Stroke) / 2 + 6, 8);
-    // A rotated stroke is hit in its own frame, like a
-    // rotated card: rotate the point back by -rotation
-    // around the bounding-box centre, then test the
-    // unrotated points. Without this, a rotated stroke
-    // could only be selected in its old position.
-    const rot = itemRotation(item);
-    const p = rot !== 0 ? rotatePoint(world, centre(item), -rot) : world;
-    // Bounding-box reject first: the old code scanned
-    // every point of every stroke on every cursor move,
-    // even for strokes far from the cursor. Cards get
-    // a rect test; strokes did not.
-    if (p.x < item.pos.x - tol || p.x > item.pos.x + item.size.w + tol ||
-        p.y < item.pos.y - tol || p.y > item.pos.y + item.size.h + tol) return false;
-    for (let i = 0; i + 1 < points.length; i++) {
-      if (distToSegment(p, points[i], points[i + 1]) <= tol) return true;
-    }
-    return points.some((q) => Math.hypot(q.x - p.x, q.y - p.y) <= tol);
+    const p = strokePointInFrame(item, world, tol);
+    return p !== null && strokeHitTest(points, p, tol);
   }
   // A rotated card is hit in its own frame: rotate the point
   // back by -rotation around the centre, then test the
@@ -398,18 +418,9 @@ export function strokesWithin(board: Board, world: Pt, radius: number): number[]
   const out: number[] = [];
   for (const it of board.items) {
     if (!("Stroke" in it.kind)) continue;
-    const { points } = it.kind.Stroke;
     const tol = radius + strokeMaxWidth(it.kind.Stroke) / 2;
-    const rot = itemRotation(it);
-    const p = rot !== 0 ? rotatePoint(world, centre(it), -rot) : world;
-    if (p.x < it.pos.x - tol || p.x > it.pos.x + it.size.w + tol ||
-        p.y < it.pos.y - tol || p.y > it.pos.y + it.size.h + tol) continue;
-    let hit = false;
-    for (let i = 0; i + 1 < points.length; i++) {
-      if (distToSegment(p, points[i], points[i + 1]) <= tol) { hit = true; break; }
-    }
-    if (!hit) hit = points.some((q) => Math.hypot(q.x - p.x, q.y - p.y) <= tol);
-    if (hit) out.push(it.id);
+    const p = strokePointInFrame(it, world, tol);
+    if (p !== null && strokeHitTest(it.kind.Stroke.points, p, tol)) out.push(it.id);
   }
   return out;
 }
@@ -870,19 +881,10 @@ export function rectCrossing(from: Pt, to: Pt, pos: Pt, w: number, h: number, en
 // inside, still counts as entering — the clipped interval
 // is a single point, and t0 <= t1 still holds.
 export function segmentIntersectsRect(a: Pt, b: Pt, rect: { x: number; y: number; w: number; h: number }): boolean {
-  const dx = b.x - a.x, dy = b.y - a.y;
-  let t0 = 0, t1 = 1;
-  for (const [o, d, lo, hi] of [[a.x, dx, rect.x, rect.x + rect.w], [a.y, dy, rect.y, rect.y + rect.h]] as const) {
-    if (Math.abs(d) < 1e-9) {
-      if (o < lo || o > hi) return false;
-    } else {
-      let ta = (lo - o) / d, tb = (hi - o) / d;
-      if (ta > tb) [ta, tb] = [tb, ta];
-      t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
-      if (t0 > t1) return false;
-    }
-  }
-  return t0 <= t1;
+  // The same interval test as rectCrossing: the segment
+  // crosses the rect exactly when rectCrossing finds a
+  // point on it (its t0 is already in [0, 1] when it does).
+  return rectCrossing(a, b, { x: rect.x, y: rect.y }, rect.w, rect.h, true) !== null;
 }
 
 export function clippedEnds(board: Board, from: Anchor, to: Anchor): [Pt, Pt] | null {

@@ -418,20 +418,25 @@ function renderStrokesAndConnectors(board: Board): void {
 // dashed border never touches them.
 const GROUP_PAD = 24;
 
-function groupBounds(members: Item[]): { x: number; y: number; w: number; h: number } | null {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
+// The bounding box of a set of items, or null when empty.
+// The board plugin reads bounds through api.geometry
+// (the live board); model.itemsBounds needs the board
+// object, which the plugin only gets as a deep copy.
+function membersBounds(members: Item[]): { x: number; y: number; w: number; h: number } | null {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const it of members) {
     const [p, s] = api.geometry.itemBounds(it);
-    minX = Math.min(minX, p.x);
-    minY = Math.min(minY, p.y);
-    maxX = Math.max(maxX, p.x + s.w);
-    maxY = Math.max(maxY, p.y + s.h);
+    minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x + s.w); maxY = Math.max(maxY, p.y + s.h);
   }
   if (!Number.isFinite(minX)) return null;
-  return { x: minX - GROUP_PAD, y: minY - GROUP_PAD, w: maxX - minX + GROUP_PAD * 2, h: maxY - minY + GROUP_PAD * 2 };
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+
+function groupBounds(members: Item[]): { x: number; y: number; w: number; h: number } | null {
+  const b = membersBounds(members);
+  if (!b) return null;
+  return { x: b.x - GROUP_PAD, y: b.y - GROUP_PAD, w: b.w + GROUP_PAD * 2, h: b.h + GROUP_PAD * 2 };
 }
 
 function renderGroupFrames(board: Board): void {
@@ -1064,13 +1069,8 @@ function navigateElements(dir: 1 | -1): void {
   let c: Pt;
   if (target.group !== null) {
     const members = board.items.filter((it) => it.group === target.group);
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const m of members) {
-      const [p, s] = api.geometry.itemBounds(m);
-      minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
-      maxX = Math.max(maxX, p.x + s.w); maxY = Math.max(maxY, p.y + s.h);
-    }
-    c = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+    const b = membersBounds(members);
+    c = b ? { x: b.x + b.w / 2, y: b.y + b.h / 2 } : api.geometry.centre(target);
   } else {
     c = api.geometry.centre(target);
   }
