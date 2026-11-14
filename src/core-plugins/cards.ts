@@ -164,7 +164,7 @@ export function activate(api: PluginContext): void {
       // The image ends 36px above the card's bottom, so the
       // tag pills in the bottom row sit on the card's own
       // background, not on the photo.
-      return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="background:var(--bg-system)"><img src="${api.files.fileUrl(path)}" data-name="${api.text.escapeHtml(name)}" data-path="${api.text.escapeHtml(path)}" draggable="false" style="width:100%;height:calc(100% - 36px);object-fit:${fit};border-radius:12px" alt="" /></div></div>`;
+      return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="background:var(--bg-system)"><img src="${api.files.fileUrl(path)}" data-name="${api.text.escapeHtml(name)}" data-path="${api.text.escapeHtml(path)}" draggable="false" style="display:block;width:100%;height:calc(100% - 36px);object-fit:${fit};border-radius:12px" alt="" /></div></div>`;
     },
   });
 
