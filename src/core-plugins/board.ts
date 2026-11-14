@@ -27,7 +27,7 @@
 import type { PluginContext, PluginManifest } from "../plugins";
 import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
-  elementPoint, elementSize, pressureWidth, screenToWorld, strokeMaxWidth, strokePressuresVary,
+  elementPoint, elementSize, pressureWidth, rectFromPoints, screenToWorld, strokeMaxWidth, strokePressuresVary,
   worldToScreen, zoomCamera,
 } from "../model";
 import { syncModel3DViews, disposeAllModel3DViewers } from "../model3d";
@@ -1067,6 +1067,16 @@ function navigateElements(dir: 1 | -1): void {
 
 // ---------------------------------------------------------------- input
 
+// The rotation for a rotate drag or release: the angle
+// from the card's centre to the pointer, +90 so the
+// handle sits at the top, snapped to 15° with Shift.
+function rotateAngleFor(world: Pt, it: Item, shiftKey: boolean): number {
+  const c = api.geometry.centre(it);
+  let deg = Math.atan2(world.y - c.y, world.x - c.x) * 180 / Math.PI + 90;
+  if (shiftKey) deg = Math.round(deg / 15) * 15;
+  return normAngle(deg);
+}
+
 function attachBoardListeners(): void {
 boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
   const target = e.target as HTMLElement;
@@ -1528,10 +1538,7 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
   } else if (drag.kind === "rotate") {
     const it = api.board.getItem(drag.id);
     if (it) {
-      const c = api.geometry.centre(it);
-      let deg = Math.atan2(world.y - c.y, world.x - c.x) * 180 / Math.PI + 90;
-      if (e.shiftKey) deg = Math.round(deg / 15) * 15;
-      const rot = normAngle(deg);
+      const rot = rotateAngleFor(world, it, e.shiftKey);
       if (Math.abs(rot - drag.origRot) > 1) drag.moved = true;
       api.board.setItemRotation(drag.id, rot);
       const el = cardsEl.querySelector(`[data-id="${drag.id}"]`) as HTMLElement | null;
@@ -1606,9 +1613,10 @@ window.addEventListener("pointerup", (e: PointerEvent) => {
     const selfConnector = "Item" in d.from && "Item" in toAnchor && d.from.Item === toAnchor.Item;
     if (!degenerate && !selfConnector) {
       const aPt = a ?? { x: 0, y: 0 };
-      const bPt = "Point" in toAnchor ? toAnchor.Point : (api.board.getItem(toAnchor.Item) ? api.geometry.centre(api.board.getItem(toAnchor.Item) as Item) : { x: 0, y: 0 });
-      const pos = { x: Math.min(aPt.x, bPt.x), y: Math.min(aPt.y, bPt.y) };
-      const size = { w: Math.max(1, Math.abs(bPt.x - aPt.x)), h: Math.max(1, Math.abs(bPt.y - aPt.y)) };
+      // toAnchor is an Item exactly when toItem exists, so
+      // its centre comes from toItem — no second lookup.
+      const bPt = "Point" in toAnchor ? toAnchor.Point : (toItem ? api.geometry.centre(toItem) : { x: 0, y: 0 });
+      const { pos, size } = rectFromPoints(aPt, bPt);
       api.board.addItem({ Connector: { from: d.from, to: toAnchor, color: "#333333" } }, pos, size);
     }
   } else if (d.kind === "shape") {
@@ -1624,10 +1632,7 @@ window.addEventListener("pointerup", (e: PointerEvent) => {
     // user actually released.
     const it = api.board.getItem(d.id);
     if (it) {
-      const c = api.geometry.centre(it);
-      let deg = Math.atan2(world.y - c.y, world.x - c.x) * 180 / Math.PI + 90;
-      if (e.shiftKey) deg = Math.round(deg / 15) * 15;
-      const rot = normAngle(deg);
+      const rot = rotateAngleFor(world, it, e.shiftKey);
       if (Math.abs(rot - d.origRot) > 1) d.moved = true;
       api.board.setItemRotation(d.id, rot);
     }

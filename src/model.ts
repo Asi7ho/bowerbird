@@ -138,6 +138,17 @@ export function itemsCentre(board: Board, items: Item[]): Pt | null {
   return b ? { x: b.x + b.w / 2, y: b.y + b.h / 2 } : null;
 }
 
+// The bounding box of the segment between two points:
+// the connector's pos/size, at both the API and the
+// board tool. Floored at 1 so a degenerate line still
+// has a size.
+export function rectFromPoints(a: Pt, b: Pt): { pos: Pt; size: Size } {
+  return {
+    pos: { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) },
+    size: { w: Math.max(1, Math.abs(b.x - a.x)), h: Math.max(1, Math.abs(b.y - a.y)) },
+  };
+}
+
 // Zoom to fit: the camera that shows every item at once.
 // The zoom is capped at 1 — a small board is centred, not
 // blown up — and a margin keeps cards off the edges. An

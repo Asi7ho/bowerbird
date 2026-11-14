@@ -156,10 +156,9 @@ export function activate(api: PluginContext): void {
   // one found), or null when no text note is selected.
   // The note-colours flyout shows only then.
   function noteBgOfSelected(): string | null {
-    const items = api.board.getItems();
     const selected = api.board.getSelected();
     for (const id of selected) {
-      const it = items.find((i) => i.id === id);
+      const it = api.board.getItem(id);
       if (it && "Text" in it.kind) return (it.kind as { Text: { bg?: string } }).Text.bg ?? "#FFFFFF";
     }
     return null;
