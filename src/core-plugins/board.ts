@@ -22,9 +22,7 @@
 import type { PluginContext, PluginManifest } from "../plugins";
 import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
-  centre, clippedEnds, fitCamera,
-  itemBounds, itemRotation, pressureWidth, rotatePoint, select,
-  strokeMaxWidth, strokePressuresVary,
+  pressureWidth, strokeMaxWidth, strokePressuresVary,
 } from "../model";
 
 export const manifest: PluginManifest = {
@@ -164,7 +162,7 @@ function zoomCentre(factor: number): void {
 // it does not save.
 function zoomToFit(): void {
   const bs = boardSize();
-  const cam = fitCamera(api.board.get(), { w: bs.x, h: bs.y });
+  const cam = api.geometry.fitCamera({ w: bs.x, h: bs.y });
   if (cam) api.view.setCamera(cam);
 }
 
@@ -269,8 +267,8 @@ function visibleRect(): { x0: number; y0: number; x1: number; y1: number } {
     y1: cam.y + boardSize().y / cam.zoom + m,
   };
 }
-function isVisibleItem(item: Item, v: { x0: number; y0: number; x1: number; y1: number }, board: Board): boolean {
-  const [p, s] = itemBounds(board, item);
+function isVisibleItem(item: Item, v: { x0: number; y0: number; x1: number; y1: number }): boolean {
+  const [p, s] = api.geometry.itemBounds(item);
   return p.x < v.x1 && p.x + s.w > v.x0 && p.y < v.y1 && p.y + s.h > v.y0;
 }
 
@@ -294,7 +292,7 @@ function visibleKey(): number {
     h ^= n & 0xffffffff;
     h = Math.imul(h, 16777619);
   };
-  for (const item of b.items) if (isVisibleItem(item, v, b)) mix(item.id);
+  for (const item of b.items) if (isVisibleItem(item, v)) mix(item.id);
   mix(0x9e3779b9);
   for (const id of api.board.getSelected()) mix(id);
   mix(editingId ?? -1);
@@ -349,7 +347,7 @@ function renderStrokesAndConnectors(board: Board): void {
     // bounding box, so culling it by that box would hide
     // it at the viewport edge: rotated strokes are always
     // drawn. The count is small, so this costs nothing.
-    if (!("Stroke" in item.kind && itemRotation(item) !== 0) && !isVisibleItem(item, v, board)) continue;
+    if (!("Stroke" in item.kind && api.geometry.itemRotation(item) !== 0) && !isVisibleItem(item, v)) continue;
     if ("Stroke" in item.kind) {
       const { points, color, width, marker, pressures } = item.kind.Stroke;
       if (points.length < 2) continue;
@@ -360,8 +358,8 @@ function renderStrokesAndConnectors(board: Board): void {
       // themselves are never rewritten, so undo, resize
       // and hit-testing all keep working in the local
       // frame, and rotation is just item.rotation.
-      const rot = itemRotation(item);
-      const c = centre(item);
+      const rot = api.geometry.itemRotation(item);
+      const c = api.geometry.centre(item);
       const transform = rot !== 0 ? `rotate(${rot} ${c.x} ${c.y})` : undefined;
       if (sel) {
         const selPath = svgEl2("path", { d, fill: "none", stroke: ACCENT, "stroke-width": String(strokeMaxWidth(item.kind.Stroke) + 6), "stroke-linecap": "round", "stroke-linejoin": "round" });
@@ -387,7 +385,7 @@ function renderStrokesAndConnectors(board: Board): void {
       }
     }
     if ("Connector" in item.kind) {
-      const ends = clippedEnds(board, item.kind.Connector.from, item.kind.Connector.to);
+      const ends = api.geometry.clippedEnds(item.kind.Connector.from, item.kind.Connector.to);
       if (!ends) continue;
       const [a, b] = ends;
       const sel = selected.includes(item.id);
@@ -424,7 +422,7 @@ function groupBounds(board: Board, group: number): { x: number; y: number; w: nu
   let maxY = -Infinity;
   for (const it of board.items) {
     if (it.group !== group) continue;
-    const [p, s] = itemBounds(board, it);
+    const [p, s] = api.geometry.itemBounds(it);
     minX = Math.min(minX, p.x);
     minY = Math.min(minY, p.y);
     maxX = Math.max(maxX, p.x + s.w);
@@ -485,7 +483,7 @@ function render(): void {
   for (const item of board.items) {
     if ("Stroke" in item.kind || "Connector" in item.kind) continue;
     if (editingId === item.id) continue;
-    if (!isVisibleItem(item, v, board)) continue;
+    if (!isVisibleItem(item, v)) continue;
     html += api.board.renderCardAt(item.id) ?? "";
   }
   cardsEl.innerHTML = html;
@@ -512,10 +510,10 @@ function isRotatable(it: Item | undefined): boolean {
   return !isFrameCard(it);
 }
 function rotateHandleWorld(it: Item): Pt {
-  const c = centre(it);
+  const c = api.geometry.centre(it);
   const cam = api.view.getCamera();
   const top = { x: c.x, y: it.pos.y - 28 / cam.zoom };
-  return rotatePoint(top, c, itemRotation(it));
+  return api.geometry.rotatePoint(top, c, api.geometry.itemRotation(it));
 }
 function updateResizeHandle(): void {
   const el = document.getElementById("resize-handle") as HTMLDivElement;
@@ -531,19 +529,18 @@ function updateResizeHandle(): void {
   }
   // The board, fresh: the selected item's position is what
   // the handle follows, and it moves during a drag.
-  const board = api.board.get();
   const it = api.board.getItem(selected[0]);
   if (!it || "Connector" in it.kind) {
     el.style.display = "none";
     if (rotEl) rotEl.style.display = "none";
     return;
   }
-  const [p, s] = itemBounds(board, it);
-  const c = centre(it);
-  const rot = itemRotation(it);
+  const [p, s] = api.geometry.itemBounds(it);
+  const c = api.geometry.centre(it);
+  const rot = api.geometry.itemRotation(it);
   // Corners follow the rotation, so the handles sit on the
   // card as drawn, not on its unrotated bounding box.
-  const corner = rotatePoint({ x: p.x + s.w, y: p.y + s.h }, c, rot);
+  const corner = api.geometry.rotatePoint({ x: p.x + s.w, y: p.y + s.h }, c, rot);
   const screen = toScreen(corner);
   const bs = boardSize();
   if (screen.x < 0 || screen.y < 0 || screen.x > bs.x || screen.y > bs.y) {
@@ -909,11 +906,10 @@ function deleteSelected(): boolean {
 
 function cornerHit(id: number, world: Pt): boolean {
   const cam = api.view.getCamera();
-  const board = api.board.get();
   const it = api.board.getItem(id);
   if (!it || "Connector" in it.kind) return false;
-  const [p, s] = itemBounds(board, it);
-  const corner = rotatePoint({ x: p.x + s.w, y: p.y + s.h }, centre(it), itemRotation(it));
+  const [p, s] = api.geometry.itemBounds(it);
+  const corner = api.geometry.rotatePoint({ x: p.x + s.w, y: p.y + s.h }, api.geometry.centre(it), api.geometry.itemRotation(it));
   const tol = 16 / cam.zoom;
   return Math.hypot(world.x - corner.x, world.y - corner.y) <= tol;
 }
@@ -937,7 +933,7 @@ function rotateSelected(delta: number): boolean {
   for (const id of selected) {
     const it = api.board.getItem(id);
     if (!it || !isRotatable(it)) continue;
-    api.board.setItemRotation(id, normAngle(itemRotation(it) + delta));
+    api.board.setItemRotation(id, normAngle(api.geometry.itemRotation(it) + delta));
     changed = true;
   }
   if (!changed) return false;
@@ -968,19 +964,19 @@ function navigateElements(dir: 1 | -1): void {
     ? (dir === 1 ? 0 : navigable.length - 1)
     : (idx + dir + navigable.length) % navigable.length;
   const target = navigable[next];
-  api.board.setSelected(select(board, [], target.id, false));
+  api.board.setSelected(api.board.selectCard([], target.id, false));
   let c: Pt;
   if (target.group !== null) {
     const members = board.items.filter((it) => it.group === target.group);
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const m of members) {
-      const [p, s] = itemBounds(board, m);
+      const [p, s] = api.geometry.itemBounds(m);
       minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
       maxX = Math.max(maxX, p.x + s.w); maxY = Math.max(maxY, p.y + s.h);
     }
     c = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
   } else {
-    c = centre(target);
+    c = api.geometry.centre(target);
   }
   const bs = boardSize();
   const cam = api.view.getCamera();
@@ -1083,7 +1079,7 @@ boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
   const selected = api.board.getSelected();
   if (selected.length === 1 && rotateHit(selected[0], world)) {
     const it = api.board.getItem(selected[0]);
-    drag = { kind: "rotate", id: selected[0], origRot: it ? itemRotation(it) : 0, moved: false };
+    drag = { kind: "rotate", id: selected[0], origRot: it ? api.geometry.itemRotation(it) : 0, moved: false };
     return;
   }
   if (selected.length === 1 && cornerHit(selected[0], world)) {
@@ -1093,8 +1089,7 @@ boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
     return;
   }
   if (clicked !== null && cornerHit(clicked, world)) {
-    const board = api.board.get();
-    api.board.setSelected(select(board, api.board.getSelected(), clicked, false));
+    api.board.setSelected(api.board.selectCard(api.board.getSelected(), clicked, false));
     api.board.bringToFront(api.board.getSelected());
     applyStacking();
     updateSelection();
@@ -1103,8 +1098,7 @@ boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
     return;
   }
   if (clicked !== null) {
-    const board = api.board.get();
-    api.board.setSelected(select(board, api.board.getSelected(), clicked, e.shiftKey));
+    api.board.setSelected(api.board.selectCard(api.board.getSelected(), clicked, e.shiftKey));
     api.board.bringToFront(api.board.getSelected());
     applyStacking();
     updateSelection();
@@ -1420,7 +1414,7 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
   } else if (drag.kind === "rotate") {
     const it = api.board.getItem(drag.id);
     if (it) {
-      const c = centre(it);
+      const c = api.geometry.centre(it);
       let deg = Math.atan2(world.y - c.y, world.x - c.x) * 180 / Math.PI + 90;
       if (e.shiftKey) deg = Math.round(deg / 15) * 15;
       const rot = normAngle(deg);
@@ -1498,7 +1492,7 @@ window.addEventListener("pointerup", (e: PointerEvent) => {
     const selfConnector = "Item" in d.from && "Item" in toAnchor && d.from.Item === toAnchor.Item;
     if (!degenerate && !selfConnector) {
       const aPt = a ?? { x: 0, y: 0 };
-      const bPt = "Point" in toAnchor ? toAnchor.Point : (api.board.getItem(toAnchor.Item) ? centre(api.board.getItem(toAnchor.Item) as Item) : { x: 0, y: 0 });
+      const bPt = "Point" in toAnchor ? toAnchor.Point : (api.board.getItem(toAnchor.Item) ? api.geometry.centre(api.board.getItem(toAnchor.Item) as Item) : { x: 0, y: 0 });
       const pos = { x: Math.min(aPt.x, bPt.x), y: Math.min(aPt.y, bPt.y) };
       const size = { w: Math.max(1, Math.abs(bPt.x - aPt.x)), h: Math.max(1, Math.abs(bPt.y - aPt.y)) };
       api.board.addItem({ Connector: { from: d.from, to: toAnchor, color: "#333333" } }, pos, size);
@@ -1516,7 +1510,7 @@ window.addEventListener("pointerup", (e: PointerEvent) => {
     // user actually released.
     const it = api.board.getItem(d.id);
     if (it) {
-      const c = centre(it);
+      const c = api.geometry.centre(it);
       let deg = Math.atan2(world.y - c.y, world.x - c.x) * 180 / Math.PI + 90;
       if (e.shiftKey) deg = Math.round(deg / 15) * 15;
       const rot = normAngle(deg);
