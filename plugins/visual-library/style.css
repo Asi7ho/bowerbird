@@ -115,6 +115,10 @@
 .vl-arrow { width: 12px; flex: none; text-align: center; color: var(--grey); }
 .vl-category-name { flex: 1 1 auto; min-width: 0; }
 .vl-count { color: var(--grey); font-weight: 400; }
+/* Capped section: how many of the section are shown, at the
+   bottom of the masonry. Absolutely positioned like the
+   thumbnails, so it does not disturb the column heights. */
+.vl-more { position: absolute; left: 0; color: var(--grey); font-size: 12px; }
 /* Delete a user category: a quiet grey cross at the end of
    the header, next to the count. Only user categories get
    one — Uncategorized has nothing to delete. */

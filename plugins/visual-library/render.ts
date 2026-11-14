@@ -150,7 +150,13 @@ export function layoutMasonry(api: PluginContext, container: HTMLElement, items:
   const colCount = Math.max(1, Math.floor((containerWidth + gap) / (smallTarget + gap)));
   const colWidth = (containerWidth - gap * (colCount - 1)) / colCount;
   const colHeights: number[] = new Array(colCount).fill(0);
-  for (const item of items) {
+  // A board with thousands of cards used to render a
+  // thumbnail for every one, which froze the panel. Cap
+  // the render per section and say how many are hidden;
+  // the search box still reaches the whole board.
+  const VL_MAX_PER_SECTION = 200;
+  const shown = items.slice(0, VL_MAX_PER_SECTION);
+  for (const item of shown) {
     const html = api.board.renderCard(item.id);
     if (!html) continue;
     const span = Math.min(colCount, item.size.w <= colWidth * 1.5 ? 1 : 2);
@@ -191,7 +197,16 @@ export function layoutMasonry(api: PluginContext, container: HTMLElement, items:
     container.appendChild(wrap);
     for (let c = start; c < start + span; c++) colHeights[c] = best + h + gap;
   }
-  container.style.height = `${Math.max(0, Math.max(...colHeights) - gap)}px`;
+  const contentH = Math.max(0, Math.max(...colHeights) - gap);
+  container.style.height = `${contentH}px`;
+  if (items.length > VL_MAX_PER_SECTION) {
+    const more = document.createElement("div");
+    more.className = "vl-more";
+    more.textContent = `${VL_MAX_PER_SECTION} of ${items.length}`;
+    more.style.top = `${contentH + 8}px`;
+    container.appendChild(more);
+    container.style.height = `${contentH + 28}px`;
+  }
 }
 
 export function renderSections(api: PluginContext, container: HTMLElement, mode: LibraryMode): void {
