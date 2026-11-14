@@ -131,4 +131,4 @@ Use the core tokens, not hard-coded copies: SF type, ink `#1D1D1F`, grey `#86868
 
 ## Bundled and first-party plugins
 
-Plugins in `plugins/` ship inside the app and use exactly this API, no backdoors. See `plugins/README.md`. The built-in UI in `src/core-plugins/` is built on the same API, loaded the same way, under a manifest with the same permissions — the only difference is loading. See `ARCHITECTURE.md`.
+Plugins in `plugins/` ship inside the app and use exactly this API, no backdoors. See `plugins/README.md`. The built-in UI in `src/ui/` is built on the same API, loaded the same way, under a manifest with the same permissions — the only difference is loading. See `ARCHITECTURE.md`.

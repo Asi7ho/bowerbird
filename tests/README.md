@@ -6,7 +6,7 @@ main (`.github/workflows/test.yml`, Ubuntu only).
 ## Unit — `npm run test:unit`
 
 Vitest, no DOM, no Electron. Covers the pure core in
-`src/model.ts`: stylus pressure, hit-testing, marquee and
+`src/backend/model.ts`: stylus pressure, hit-testing, marquee and
 lasso selection, arranging, selection and mutation, text
 cards (markdown, checklists, height) and the small helpers.
 Add a test next to the behaviour it pins down; keep the
