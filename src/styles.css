@@ -520,6 +520,10 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 .card .audio-transcript-text {
   flex: 1 1 auto; min-height: 0; overflow-y: auto;
   font-size: 13px; line-height: 1.45; color: var(--ink);
+  /* The bottom row sits over the card's bottom edge, so
+     the text ends 36px up — 12 of padding above the row —
+     instead of running underneath it. */
+  padding-bottom: 36px; box-sizing: border-box;
 }
 .card .audio-seek:hover::-webkit-slider-thumb { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22); }
 .card .audio-seek::-moz-range-track {
