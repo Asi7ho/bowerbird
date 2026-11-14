@@ -4,7 +4,9 @@
 import { describe, expect, it } from "vitest";
 import {
   allocId,
+  anchorPoint,
   arrangeItems,
+  centre,
   checklistProgress,
   clippedEnds,
   domainOf,
@@ -12,16 +14,21 @@ import {
   estimateTextHeight,
   fitCamera,
   hitTest,
+  itemBounds,
+  itemRotation,
   lassoSelect,
   marquee,
   moveSelection,
   normaliseHex,
   parseHex,
+  parseInline,
   parseMarkdown,
   pointInPolygon,
   pressureWidth,
+  rectCrossing,
   renderMarkdownHtml,
   resizeItem,
+  rotatePoint,
   segmentIntersectsRect,
   select,
   setChecklistDone,
@@ -325,5 +332,78 @@ describe("helpers", () => {
     expect(a.x).toBeGreaterThanOrEqual(100);
     expect(c.x).toBeLessThanOrEqual(660);
     expect(c.x).toBeGreaterThan(a.x);
+  });
+});
+
+describe("geometry helpers", () => {
+  it("centre is the middle of the card", () => {
+    expect(centre(textCard(1, 100, 100, 260, 48))).toEqual({ x: 230, y: 124 });
+  });
+  it("anchorPoint returns a Point anchor as-is", () => {
+    expect(anchorPoint(board([]), { Point: { x: 5, y: 6 } })).toEqual({ x: 5, y: 6 });
+  });
+  it("anchorPoint returns an Item anchor's centre, null when missing", () => {
+    const b = board([textCard(1, 100, 100, 260, 48)]);
+    expect(anchorPoint(b, { Item: 1 })).toEqual({ x: 230, y: 124 });
+    expect(anchorPoint(b, { Item: 99 })).toBeNull();
+  });
+  it("itemBounds is pos and size for a plain card", () => {
+    const card = textCard(1, 100, 100, 260, 48);
+    expect(itemBounds(board([card]), card)).toEqual([{ x: 100, y: 100 }, { w: 260, h: 48 }]);
+  });
+  it("itemBounds spans a connector's anchors with an 8px margin", () => {
+    const conn: Item = {
+      id: 3, pos: { x: 0, y: 0 }, size: { w: 0, h: 0 }, group: null,
+      kind: { Connector: { from: { Point: { x: 10, y: 20 } }, to: { Point: { x: 110, y: 60 } }, color: "#333333" } },
+    };
+    expect(itemBounds(board([conn]), conn)).toEqual([{ x: 2, y: 12 }, { w: 116, h: 56 }]);
+  });
+  it("itemBounds follows a connector's item anchors", () => {
+    const a = textCard(1, 100, 100, 260, 48);
+    const b = textCard(2, 400, 100, 260, 48);
+    const conn: Item = {
+      id: 3, pos: { x: 0, y: 0 }, size: { w: 0, h: 0 }, group: null,
+      kind: { Connector: { from: { Item: 1 }, to: { Item: 2 }, color: "#333333" } },
+    };
+    // Centres are (230,124) and (530,124); margin 8 each side.
+    expect(itemBounds(board([a, b, conn]), conn)).toEqual([{ x: 222, y: 116 }, { w: 316, h: 16 }]);
+  });
+  it("itemBounds falls back to pos and size when a connector anchor is missing", () => {
+    const conn: Item = {
+      id: 3, pos: { x: 40, y: 50 }, size: { w: 10, h: 10 }, group: null,
+      kind: { Connector: { from: { Item: 99 }, to: { Point: { x: 1, y: 2 } }, color: "#333333" } },
+    };
+    expect(itemBounds(board([conn]), conn)).toEqual([{ x: 40, y: 50 }, { w: 10, h: 10 }]);
+  });
+  it("rotatePoint turns around the centre", () => {
+    expect(rotatePoint({ x: 10, y: 0 }, { x: 0, y: 0 }, 0)).toEqual({ x: 10, y: 0 });
+    const q = rotatePoint({ x: 10, y: 0 }, { x: 0, y: 0 }, 90);
+    expect(q.x).toBeCloseTo(0, 9);
+    expect(q.y).toBeCloseTo(10, 9);
+    expect(rotatePoint({ x: 10, y: 0 }, { x: 0, y: 0 }, 180).x).toBeCloseTo(-10, 9);
+    const m = rotatePoint({ x: 10, y: 0 }, { x: 0, y: 0 }, -90);
+    expect(m.x).toBeCloseTo(0, 9);
+    expect(m.y).toBeCloseTo(-10, 9);
+    // Around a non-origin centre: (12,10) about (10,10) by 90 is (10,12).
+    const c = rotatePoint({ x: 12, y: 10 }, { x: 10, y: 10 }, 90);
+    expect(c.x).toBeCloseTo(10, 9);
+    expect(c.y).toBeCloseTo(12, 9);
+  });
+  it("itemRotation is 0 by default, the angle when set, 0 when invalid", () => {
+    expect(itemRotation(textCard(1, 0, 0))).toBe(0);
+    expect(itemRotation({ ...textCard(1, 0, 0), rotation: 45 })).toBe(45);
+    expect(itemRotation({ ...textCard(1, 0, 0), rotation: NaN })).toBe(0);
+  });
+  it("rectCrossing finds where a segment enters and leaves a rect", () => {
+    expect(rectCrossing({ x: 0, y: 50 }, { x: 200, y: 50 }, { x: 100, y: 0 }, 50, 100, true)).toEqual({ x: 100, y: 50 });
+    expect(rectCrossing({ x: 0, y: 50 }, { x: 200, y: 50 }, { x: 100, y: 0 }, 50, 100, false)).toEqual({ x: 150, y: 50 });
+    expect(rectCrossing({ x: 0, y: 200 }, { x: 200, y: 200 }, { x: 100, y: 0 }, 50, 100, true)).toBeNull();
+  });
+  it("parseInline keeps plain text, bold and code, and leaves unclosed markers literal", () => {
+    expect(parseInline("hello")).toEqual([{ text: "hello" }]);
+    expect(parseInline("a **bold** b")).toEqual([{ text: "a " }, { text: "bold", bold: true }, { text: " b" }]);
+    expect(parseInline("a `code` b")).toEqual([{ text: "a " }, { text: "code", code: true }, { text: " b" }]);
+    expect(parseInline("2*3*4")).toEqual([{ text: "2*3*4" }]);
+    expect(parseInline("a *b* c")).toEqual([{ text: "a " }, { text: "b", italic: true }, { text: " c" }]);
   });
 });
