@@ -43,7 +43,7 @@ type UrlCardData = { url: string; title: string | null; description: string | nu
 type PdfCardData = { path: string; size_bytes: number };
 type SwatchData = { hex: string };
 type AudioData = { path: string; title?: string; transcript?: string };
-type VideoData = { source: string; remote: boolean; size_bytes: number };
+type VideoData = { source: string; remote: boolean; size_bytes: number; poster?: string; duration?: number };
 type Model3DData = { path: string; size_bytes: number };
 
 // Link cards are previews only: clicking one opens it in the browser.
