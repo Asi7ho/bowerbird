@@ -24,7 +24,7 @@
 // v1 does not pretend otherwise.
 
 import type { Anchor, ArrangeOptions, Board, Camera, Item, Kind, Pt, Size } from "./model";
-import { anchorPoint, arrangeItems, boardGet, centre, checklistProgress, clippedEnds, domainOf, elide, escapeHtml, itemRotation, rectCrossing, renderMarkdownHtml, segmentIntersectsRect, setChecklistDone, tileColorFor, tint } from "./model";
+import { anchorPoint, arrangeItems, boardGet, centre, checklistProgress, clippedEnds, domainOf, elide, escapeHtml, itemRotation, parseHex, rectCrossing, renderMarkdownHtml, segmentIntersectsRect, setChecklistDone, tileColorFor, tint, toggleTaskLine } from "./model";
 
 // ---------------------------------------------------------------- types
 
@@ -922,6 +922,15 @@ export interface PluginContext {
     elide: (s: string, widthPx: number, textPx: number, bold: boolean) => string;
     tileColorFor: (domain: string) => string;
     tint: (hex: string, whiteMix: number) => string;
+    // A hex colour to its RGB triple, or null when it is not
+    // a valid 3- or 6-digit hex. The board view parses the
+    // canvas background with it.
+    parseHex: (hex: string) => [number, number, number] | null;
+    // Toggle one task line ("- [ ]" to "- [x]" and back), or
+    // null when the line is not a task line. The board view
+    // toggles the line a click landed on, then writes the
+    // text back through setTextContent.
+    toggleTaskLine: (line: string) => string | null;
   };
 }
 
@@ -1819,6 +1828,8 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       elide,
       tileColorFor,
       tint,
+      parseHex,
+      toggleTaskLine,
     },
     files: {
       embedFile: async (file: File | string) => {
