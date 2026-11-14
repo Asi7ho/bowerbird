@@ -10,7 +10,6 @@
 // never trusted from the board.
 import type { Media } from "./media";
 import {
-  AUDIO_TRANSCRIPT_HIDDEN_H,
   itemRotation, type Item, type ShapeKind, checklistProgress,
 } from "./model";
 import { getBuiltinCardHtml, getCardDecorations, getCardHtml, getCardRenderer, hasCardDecorator } from "./plugins";
@@ -117,20 +116,6 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
       const rightHtml = right + (progress ? `<span class="card-progress">${progress.done}/${progress.total}</span>` : "");
       const top = Math.max(y + 4, y + h - 36);
       let out = "";
-      // A voice note's transcript toggle, first in the
-      // bottom row while the transcript is hidden: a right
-      // chevron icon and "Transcript". Once the card is
-      // grown, the toggle heads the transcript inside the
-      // card instead (see the Audio renderer), so the row
-      // shows nothing for it. It is always clickable —
-      // unlike the "+ tag" button, which only takes clicks
-      // once its card is selected — so it can never be
-      // covered by that button.
-      const transcript = "Audio" in item.kind && typeof item.kind.Audio.transcript === "string" && item.kind.Audio.transcript.trim().length > 0;
-      const expanded = transcript && h > AUDIO_TRANSCRIPT_HIDDEN_H;
-      const transcriptToggle = transcript && !expanded
-        ? `<button type="button" class="audio-transcript-toggle" data-action="toggle-transcript" data-id="${id}" aria-expanded="false"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg> Transcript</button>`
-        : "";
       // The "+ tag" button lives at the end of the tag row:
       // it shows only while the core Tags plugin is enabled,
       // and never on a frame (frames are containers, not
@@ -138,7 +123,7 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
       const tagAdd = hasCardDecorator("core-tags:tags") && getCardRenderer(item)?.frame !== true
         ? `<button type="button" class="tag-add" data-action="add-tag" data-id="${id}" title="Add tag" aria-label="Add tag">+ <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4h7l9 9-7 7-9-9V4z"/><circle cx="9" cy="9" r="1.6"/></svg></button>`
         : "";
-      if (left || tagAdd || transcriptToggle) out += `<div class="card-decorations" data-for="${id}" style="left:${x + 8}px;top:${top}px;width:${Math.max(w - 16, 0)}px">${transcriptToggle}${left}${tagAdd}</div>`;
+      if (left || tagAdd) out += `<div class="card-decorations" data-for="${id}" style="left:${x + 8}px;top:${top}px;width:${Math.max(w - 16, 0)}px">${left}${tagAdd}</div>`;
       if (rightHtml) out += `<div class="card-decorations card-decorations-right" data-for="${id}" style="left:${x + w - 8}px;top:${top}px;transform:translateX(-100%)">${rightHtml}</div>`;
       return out;
     };

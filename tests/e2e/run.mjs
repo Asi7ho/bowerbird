@@ -593,7 +593,7 @@ async function main() {
       const id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
       const audio = board.items.find((it) => "Audio" in it.kind);
       const transcript = "The quick brown fox jumps over the lazy dog.";
-      board.items.push({ id, pos: { x: 100, y: 650 }, size: { w: 300, h: 128 }, group: null, kind: { Audio: { path: audio.kind.Audio.path, transcript } } });
+      board.items.push({ id, pos: { x: 100, y: 650 }, size: { w: 300, h: 164 }, group: null, kind: { Audio: { path: audio.kind.Audio.path, transcript } } });
       board.next_id = id;
       const tmp = `${boardPath}.tmp`;
       fs.writeFileSync(tmp, JSON.stringify(board));
@@ -606,7 +606,7 @@ async function main() {
         return { h: card.getBoundingClientRect().height, hasText: card.textContent.includes("quick brown fox") };
       }, String(id));
       assert.ok(hidden, "transcript card found");
-      assert.ok(Math.abs(hidden.h - 128) < 2, "card starts short");
+      assert.ok(Math.abs(hidden.h - 164) < 2, "card starts short");
       assert.equal(hidden.hasText, false, "transcript hidden by default");
       // Expand: the card grows and the text appears.
       await page.locator(`.audio-transcript-toggle[data-id="${id}"]`).click();
@@ -624,7 +624,7 @@ async function main() {
         const t = await page.evaluate((cid) => {
           const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
           if (!card) return false;
-          return !card.textContent.includes("quick brown fox") && Math.abs(card.getBoundingClientRect().height - 128) < 2;
+          return !card.textContent.includes("quick brown fox") && Math.abs(card.getBoundingClientRect().height - 164) < 2;
         }, String(id));
         return t;
       });

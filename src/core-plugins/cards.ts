@@ -273,15 +273,19 @@ export function activate(api: PluginContext): void {
       // purple, not a chunky browser slider in blue.
       const tile = c.hh >= 104 ? 56 : 48;
       // A voice recording carries its transcript under the
-      // player, hidden by default: the toggle lives in the
-      // card's bottom row while hidden (see cards.ts), and
-      // once the card is grown it heads the transcript
-      // here, above the text, so the label is never below
-      // what it labels. The text fills the card and
-      // scrolls, so a long note does not grow the card.
+      // player, hidden by default. The toggle lives in the
+      // card, below the seek — in both states — and the tag
+      // pills live in the card's bottom row, so the two are
+      // never on the same level. Once the card is grown the
+      // toggle heads the transcript, above the text, and the
+      // text fills the card and scrolls, so a long note does
+      // not grow the card.
       const expanded = text.length > 0 && c.hh > AUDIO_TRANSCRIPT_HIDDEN_H;
+      const toggleHtml = text.length > 0
+        ? `<button type="button" class="audio-transcript-toggle" data-action="toggle-transcript" data-id="${c.id}" aria-expanded="${expanded}"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${expanded ? "M6 9l6 6 6-6" : "M9 6l6 6-6 6"}"/></svg> Transcript</button>`
+        : "";
       const transcriptHtml = expanded
-        ? `<button type="button" class="audio-transcript-toggle" data-action="toggle-transcript" data-id="${c.id}" aria-expanded="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg> Transcript</button><div class="audio-transcript-text">${api.text.escapeHtml(text)}</div>`
+        ? `<div class="audio-transcript-text">${api.text.escapeHtml(text)}</div>`
         : "";
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
         <div style="display:flex;align-items:center;gap:12px">
@@ -289,7 +293,7 @@ export function activate(api: PluginContext): void {
           <div class="col"><div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, c.ww - 92, 14, true))}</div><div class="sub" style="font-size:12px"><span data-audio-time="${c.id}">${api.media.formatAudioTime(cur)}</span> / <span data-audio-dur="${c.id}">${api.media.formatAudioTime(dur)}</span></div></div>
         </div>
         <input class="audio-seek" type="range" min="0" max="1000" value="${seekVal}" style="--seek-pct:${seekPct}%" data-audio-seek="${c.id}" aria-label="Seek">
-        ${transcriptHtml}
+        ${toggleHtml}${transcriptHtml}
       </div></div>`;
     },
   });
