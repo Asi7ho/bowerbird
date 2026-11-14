@@ -457,7 +457,7 @@ export function activate(context: PluginContext): void {
   backdrop = document.createElement("div");
   backdrop.id = "settings-backdrop";
   backdrop.innerHTML = `
-    <div id="settings">
+    <div id="settings" role="dialog" aria-modal="true" aria-label="Settings">
       <div id="settings-header">
         <h2>Settings</h2>
         <button class="close" id="settings-close" title="Close (Esc)">×</button>
@@ -518,6 +518,24 @@ export function activate(context: PluginContext): void {
   el("settings-close")?.addEventListener("click", () => setSettings(false));
   backdrop.addEventListener("click", (e) => {
     if ((e.target as HTMLElement).id === "settings-backdrop") setSettings(false);
+  });
+  // Focus trap: the sheet is a modal, so Tab must not escape
+  // behind it to the board. Wrap focus from the last control
+  // back to the first (and back again with Shift+Tab).
+  const sheet = backdrop;
+  backdrop.addEventListener("keydown", (e) => {
+    if (e.key !== "Tab" || !settingsOpen) return;
+    const focusable = Array.from(sheet.querySelectorAll<HTMLElement>("button, input, textarea, select, [tabindex]:not([tabindex='-1'])")).filter((el) => !el.hasAttribute("disabled") && el.offsetParent !== null);
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
   });
   for (const btn of Array.from(backdrop.querySelectorAll("[data-settings-tab]"))) {
     (btn as HTMLElement).addEventListener("click", () => setSettingsTab((btn as HTMLElement).dataset.settingsTab ?? "general"));

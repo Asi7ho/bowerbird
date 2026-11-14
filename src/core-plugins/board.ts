@@ -498,6 +498,19 @@ function render(): void {
     html += api.board.renderCardAt(item.id) ?? "";
   }
   cardsEl.innerHTML = html;
+  // Cards are options in the board's listbox: give them the
+  // role and the selected state here, since render rebuilds
+  // them. updateSelectionInner keeps aria-selected in sync
+  // on a plain click, which does not re-render.
+  {
+    const selected = api.board.getSelected();
+    for (const child of Array.from(cardsEl.children)) {
+      const el = child as HTMLElement;
+      if (!el.classList.contains("card")) continue;
+      el.setAttribute("role", "option");
+      el.setAttribute("aria-selected", String(selected.includes(Number(el.dataset.id))));
+    }
+  }
   applyStacking();
   // Re-insert the preserved 3D card nodes (their canvases
   // keep their WebGL contexts) and mount viewers on any
@@ -601,6 +614,7 @@ function updateSelectionInner(): void {
     const el = child as HTMLElement;
     const isSel = selected.includes(Number(el.dataset.id));
     el.classList.toggle("selected", isSel);
+    el.setAttribute("aria-selected", String(isSel));
     // A selected image or video shows whole (contain), not
     // cropped (cover): cardHtml sets this at render time,
     // but a plain click only toggles the class here, without
@@ -625,10 +639,49 @@ function updateSelectionInner(): void {
 
 function updateSelection(): void {
   updateSelectionInner();
+  announceSelection();
   // The toolbar plugin follows the selection through the
   // "selection" plugin event, so its note-colours flyout
   // appears when a text note is selected.
   api.events.emit("selection");
+}
+
+// Announce the selection to a screen reader through the
+// live region. Only when it changed: updateSelection runs
+// on every click and drag, and repeating the same line
+// would spam the reader.
+let lastAnnouncedSelection = "";
+function announceSelection(): void {
+  const announcer = document.getElementById("sr-announcer");
+  if (!announcer) return;
+  const selected = api.board.getSelected();
+  let text: string;
+  if (selected.length === 0) {
+    text = "";
+  } else if (selected.length === 1) {
+    const it = api.board.getItem(selected[0]);
+    if (!it) text = "1 card selected";
+    else if ("Text" in it.kind) text = "Text card selected";
+    else if ("Image" in it.kind) text = "Image card selected";
+    else if ("Audio" in it.kind) text = "Audio card selected";
+    else if ("Video" in it.kind) text = "Video card selected";
+    else if ("PdfCard" in it.kind) text = "PDF card selected";
+    else if ("UrlCard" in it.kind) text = "Link card selected";
+    else if ("Swatch" in it.kind) text = "Colour swatch selected";
+    else if ("Stroke" in it.kind) text = "Stroke selected";
+    else if ("Connector" in it.kind) text = "Connector selected";
+    else text = "Card selected";
+    if (it && it.group !== null) {
+      const board = api.board.get();
+      const label = board.groups?.[it.group]?.label;
+      if (label) text += `, in group ${label}`;
+    }
+  } else {
+    text = `${selected.length} cards selected`;
+  }
+  if (text === lastAnnouncedSelection) return;
+  lastAnnouncedSelection = text;
+  announcer.textContent = text;
 }
 
 function applyStacking(): void {
@@ -1923,16 +1976,23 @@ export function activate(a: PluginContext): void {
   api = a;
   boardEl = document.createElement("div");
   boardEl.id = "board";
+  // The board is a region a screen reader can name, and
+  // selection changes are announced through a live region:
+  // without these, a screen-reader user hears nothing when
+  // the selection changes, and the board itself is unlabelled.
+  boardEl.setAttribute("role", "region");
+  boardEl.setAttribute("aria-label", "Board");
   boardEl.innerHTML = `
     <div id="grid"></div>
     <svg id="canvas-svg"><g id="world"></g></svg>
-    <div id="cards"></div>
+    <div id="cards" role="listbox" aria-label="Board cards"></div>
     <div id="groups"></div>
     <div id="plugin-view" style="display:none"></div>
     <div id="plugin-overlays"></div>
     <div id="view-switcher" style="display:none"></div>
     <div id="resize-handle" aria-hidden="true"></div>
     <div id="rotate-handle" aria-hidden="true"></div>
+    <div id="sr-announcer" class="sr-only" aria-live="polite"></div>
     <div id="toast"></div>`;
   // The board sits inside the main column, below the title
   // bar (which the core-titlebar plugin inserts before it).
