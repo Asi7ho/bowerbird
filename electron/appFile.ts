@@ -16,7 +16,7 @@ export const MIME: Record<string, string> = {
   ".pdf": "application/pdf", ".mp3": "audio/mpeg", ".wav": "audio/wav",
   ".ogg": "audio/ogg", ".ogv": "video/ogg", ".m4a": "audio/mp4", ".mp4": "video/mp4",
   ".mov": "video/quicktime", ".webm": "video/webm", ".txt": "text/plain",
-  ".md": "text/markdown",
+  ".md": "text/markdown", ".glb": "model/gltf-binary",
 };
 
 export interface AppFileDeps {
