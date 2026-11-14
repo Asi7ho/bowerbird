@@ -40,6 +40,13 @@ export interface Media {
   toggleAudio(id: number, path: string): void;
   stopAudio(): void;
   getAudioState(): { el: HTMLAudioElement | null; id: number | null };
+  // The video card currently showing a live <video> element,
+  // if any. At most one: a video card is a poster until its
+  // play button is pressed, and pressing another card's play
+  // button moves the live element there. Null means every
+  // video card is a poster.
+  playVideo(id: number): void;
+  getVideoState(): { id: number | null };
   // Transcribe a recorded audio blob to text, on-device
   // (Whisper in the main process). Null when the audio
   // cannot be decoded or the model cannot run — the caller
@@ -72,6 +79,19 @@ export function createMedia(host: MediaContext): Media {
   }
   let audioEl: HTMLAudioElement | null = null;
   let audioId: number | null = null;
+  // The video card showing a live <video> element, if any.
+  // The element itself lives in the card's DOM (the picture
+  // has to), so this is just the id; the card renders a
+  // <video> for this id and a poster for every other video.
+  // Cleared on board switch with the rest of the caches.
+  let videoId: number | null = null;
+  function playVideo(id: number): void {
+    videoId = id;
+    host.requestRender();
+  }
+  function getVideoState(): { id: number | null } {
+    return { id: videoId };
+  }
   const audioDurations = new Map<string, number>();
   const audioProbing = new Set<string>();
   // PDF rendering, like audio durations: a PDF card is built as
@@ -322,6 +342,9 @@ export function createMedia(host: MediaContext): Media {
     pdfSearchText.clear();
     pdfSearchIndexing.clear();
     pdfPages.clear();
+    // A video playing on the outgoing board must not stay
+    // the live card on the incoming one.
+    videoId = null;
   }
 
   function getAudioState(): { el: HTMLAudioElement | null; id: number | null } {
@@ -356,6 +379,8 @@ export function createMedia(host: MediaContext): Media {
     toggleAudio,
     stopAudio,
     getAudioState,
+    playVideo,
+    getVideoState,
     transcribeAudio,
     clearBoardCaches,
   };

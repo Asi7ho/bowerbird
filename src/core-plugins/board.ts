@@ -27,7 +27,7 @@
 import type { PluginContext, PluginManifest } from "../plugins";
 import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
-  elementPoint, elementSize, pressureWidth, rectFromPoints, screenToWorld, smoothStrokePath, smoothStrokePressures, smoothStrokeSamples, strokeMaxWidth, strokePressuresVary,
+  elementPoint, elementSize, isInlineVideo, pressureWidth, rectFromPoints, screenToWorld, smoothStrokePath, smoothStrokePressures, smoothStrokeSamples, strokeMaxWidth, strokePressuresVary,
   worldToScreen, zoomCamera,
 } from "../model";
 import { syncModel3DViews, disposeAllModel3DViewers } from "../model3d";
@@ -538,6 +538,15 @@ function render(): void {
     };
     if (v.readyState >= 1) restore();
     else v.addEventListener("loadedmetadata", restore, { once: true });
+  }
+  // A video whose play button was just pressed has no prior
+  // element to restore from: start it. (No autoplay attribute
+  // on the element: that would restart a video the user
+  // paused with the native controls on every render.)
+  const activeVideo = api.media.getVideoState().id;
+  if (activeVideo !== null && !videoState.has(activeVideo)) {
+    const v = cardsEl.querySelector(`[data-id="${activeVideo}"] video`) as HTMLVideoElement | null;
+    if (v) v.play().catch(() => undefined);
   }
   if (editingHtml) cardsEl.insertAdjacentHTML("beforeend", editingHtml);
   // Drag path cache: updateDraggedCards runs on every
@@ -1256,7 +1265,14 @@ cardsEl.addEventListener("click", (e: MouseEvent) => {
     const nextPage = action === "pdf-prev" ? cur - 1 : cur + 1;
     void api.media.setPdfPage(id, pdfPath, nextPage);
   }
-  if (action === "play-video" && "Video" in it.kind) openExternal(it.kind.Video.source);
+  if (action === "play-video" && "Video" in it.kind) {
+    // A local video plays on the board (its poster becomes
+    // the live element); a remote link or an unplayable
+    // format opens outside the app, as before.
+    const v = it.kind.Video;
+    if (isInlineVideo(v.source, v.remote)) api.media.playVideo(id);
+    else openExternal(v.source);
+  }
 });
 
 cardsEl.addEventListener("input", (e: Event) => {
