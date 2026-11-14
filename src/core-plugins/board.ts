@@ -19,11 +19,17 @@
 // lives here, because the board view owns text editing;
 // the core clears it through the board controller below
 // (undo, board switch, reset).
+//
+// The 3D viewer (src/model3d.ts) is a renderer-side helper
+// like the model geometry above: the board preserves
+// Model3D card nodes across renders so their WebGL contexts
+// survive, and mounts viewers on new ones.
 import type { PluginContext, PluginManifest } from "../plugins";
 import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
   pressureWidth, strokeMaxWidth, strokePressuresVary,
 } from "../model";
+import { detachModel3DNodes, restoreModel3DNodes, disposeAllModel3DViewers } from "../model3d";
 
 export const manifest: PluginManifest = {
   id: "core-board",
@@ -478,6 +484,11 @@ function render(): void {
   // Only visible cards are built (see visibleRect).
   const editingEl = editingId !== null ? cardsEl.querySelector(`[data-id="${editingId}"]`) : null;
   const editingHtml = editingEl ? editingEl.outerHTML : null;
+  // A 3D model card's canvas holds a WebGL context, which
+  // dies if the DOM is rebuilt — so its node is detached
+  // here and re-inserted below, instead of rebuilt like
+  // the other cards.
+  const keptModel3D = detachModel3DNodes(cardsEl);
   const v = visibleRect();
   let html = "";
   for (const item of board.items) {
@@ -488,6 +499,13 @@ function render(): void {
   }
   cardsEl.innerHTML = html;
   applyStacking();
+  // Re-insert the preserved 3D card nodes (their canvases
+  // keep their WebGL contexts) and mount viewers on any
+  // new Model3D canvases.
+  restoreModel3DNodes(cardsEl, keptModel3D, board.items, {
+    fileUrl: (p) => api.files.fileUrl(p),
+    onSelect: (id, additive) => api.board.setSelected(api.board.selectCard(api.board.getSelected(), id, additive)),
+  });
   for (const [id, st] of videoState) {
     const v = cardsEl.querySelector(`[data-id="${id}"] video`) as HTMLVideoElement | null;
     if (!v) continue;
@@ -988,7 +1006,7 @@ function navigateElements(dir: 1 | -1): void {
 function attachBoardListeners(): void {
 boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
   const target = e.target as HTMLElement;
-  if (target.closest("#toolbar, #settings-backdrop, #toast, #plugin-overlays, #search-box, #title-bar, video, input")) return;
+  if (target.closest("#toolbar, #settings-backdrop, #toast, #plugin-overlays, #search-box, #title-bar, video, input, canvas.model3d")) return;
   // A board click or drag must never start a native text selection
   // across the cards (bug: clicking anywhere highlighted all text).
   if (!target.closest("textarea.note-edit")) window.getSelection()?.removeAllRanges();
@@ -1912,5 +1930,6 @@ export function activate(a: PluginContext): void {
 }
 
 export function deactivate(): void {
+  disposeAllModel3DViewers();
   boardEl?.remove();
 }
