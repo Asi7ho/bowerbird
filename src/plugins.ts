@@ -260,8 +260,8 @@ export interface PluginHost {
   // cards — adds them all here, so undoing it takes one undo,
   // not one per card. addItem saves after every item.
   addItems: (items: Array<{ kind: Kind; pos: Pt; size: Size }>) => number[];
-  updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown; tags?: string[] }) => boolean;
-  updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; data?: unknown; tags?: string[] }>) => boolean;
+  updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown }) => boolean;
+  updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; data?: unknown }>) => boolean;
   moveItem: (id: number, toIndex: number) => boolean;
   removeItem: (id: number) => boolean;
   renderBoardCard: (id: number) => string | null;
@@ -510,8 +510,8 @@ export interface PluginContext {
     // the new connector's id, or null when either card does
     // not exist.
     connect: (fromId: number, toId: number, options?: { color?: string }) => number | null;
-    updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown; tags?: string[] }) => boolean;
-    updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; data?: unknown; tags?: string[] }>) => boolean;
+    updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown }) => boolean;
+    updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; data?: unknown }>) => boolean;
     moveItem: (id: number, toIndex: number) => boolean;
     removeItem: (id: number) => boolean;
     save: () => void;
@@ -773,20 +773,6 @@ export interface PluginContext {
     // One undo step. Returns false when the card is not a
     // Text card or holds no task lines. Needs board:write.
     setChecklistProgress: (id: number, done: number) => boolean;
-  };
-  tags: {
-    // Every tag used on the board, sorted.
-    list: () => string[];
-    // The tags on one card, in the order they were added.
-    get: (id: number) => string[];
-    // Add a tag to one card. Validated the same way as an
-    // updateItem tags patch (trimmed, de-duplicated, at most
-    // 20); an empty tag or a duplicate adds nothing. One
-    // undo step. Needs board:write.
-    add: (id: number, tag: string) => boolean;
-    // Remove a tag from one card. One undo step. False when
-    // the card has no such tag. Needs board:write.
-    remove: (id: number, tag: string) => boolean;
   };
   files: {
     // Embed a file as a board-owned copy. A File (from a
@@ -1492,7 +1478,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
           size
         );
       },
-      updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown; tags?: string[] }) => {
+      updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown }) => {
         require("board:write");
         // A plugin may only rewrite its own plugin card data. Core
         // pos/size/group edits are allowed for any card, because
@@ -1506,7 +1492,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         const ok = host!.updateItem(id, patch);
         return ok;
       },
-      updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; data?: unknown; tags?: string[] }>) => {
+      updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; data?: unknown }>) => {
         require("board:write");
         // Same data rule as updateItem, per patch: a plugin
         // may only rewrite its own plugin card data.
@@ -1803,40 +1789,6 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         const next = setChecklistDone(it.kind.Text.text, done);
         if (next === null) return false;
         return host!.setTextContent(id, next);
-      },
-    },
-    tags: {
-      list: () => {
-        const tags = new Set<string>();
-        for (const it of host!.getBoard().items) {
-          for (const t of it.tags ?? []) tags.add(t);
-        }
-        return Array.from(tags).sort((a, b) => a.localeCompare(b));
-      },
-      get: (id: number) => {
-        const it = host!.getBoard().items.find((i) => i.id === id);
-        return it ? [...(it.tags ?? [])] : [];
-      },
-      add: (id: number, tag: string) => {
-        require("board:write");
-        const clean = tag.trim();
-        if (!clean) return false;
-        const board = host!.getBoard();
-        const it = boardGet(board, id);
-        if (!it) return false;
-        const tags = [...(it.tags ?? [])];
-        if (tags.includes(clean)) return false;
-        tags.push(clean);
-        return host!.updateItem(id, { tags });
-      },
-      remove: (id: number, tag: string) => {
-        require("board:write");
-        const board = host!.getBoard();
-        const it = boardGet(board, id);
-        if (!it) return false;
-        const tags = (it.tags ?? []).filter((t) => t !== tag);
-        if (tags.length === (it.tags ?? []).length) return false;
-        return host!.updateItem(id, { tags });
       },
     },
     media: {
