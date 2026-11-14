@@ -913,21 +913,30 @@ async function main() {
       await new Promise((r) => setTimeout(r, 500));
       const canvas = page.locator(`#cards .card[data-id="${modelId}"] canvas.model3d`).first();
       await canvas.waitFor({ timeout: 15000 });
-      // Read the canvas through a 2D canvas (the viewer sets
-      // preserveDrawingBuffer so this is reliable). The cube
-      // is blue; the card background is light grey, where
-      // the channels are nearly equal.
+      // The model is drawn by the one shared WebGL layer
+      // (#model3d-layer), not the card's own canvas, so
+      // sample the layer at the card's screen rect. Read
+      // the layer through a 2D canvas (it sets
+      // preserveDrawingBuffer so this is reliable). The
+      // cube is blue; the card background is light grey,
+      // where the channels are nearly equal.
       const sample = () => page.evaluate((mid) => {
+        const layer = document.querySelector("#model3d-layer");
         const cv = document.querySelector(`#cards .card[data-id="${mid}"] canvas.model3d`);
-        if (!cv) return null;
+        if (!layer || !cv) return null;
+        const r = cv.getBoundingClientRect();
+        const lr = layer.getBoundingClientRect();
+        const dpr = layer.width / lr.width;
         const c = document.createElement("canvas");
-        c.width = cv.width; c.height = cv.height;
+        c.width = layer.width; c.height = layer.height;
         const x = c.getContext("2d");
         if (!x) return null;
-        x.drawImage(cv, 0, 0);
+        x.drawImage(layer, 0, 0);
         const pts = [];
         for (const [fx, fy] of [[0.5, 0.5], [0.25, 0.5], [0.75, 0.5], [0.5, 0.25], [0.5, 0.75]]) {
-          const d = x.getImageData(Math.floor(c.width * fx), Math.floor(c.height * fy), 1, 1).data;
+          const bx = Math.floor((r.x - lr.x + r.width * fx) * dpr);
+          const by = Math.floor((r.y - lr.y + r.height * fy) * dpr);
+          const d = x.getImageData(bx, by, 1, 1).data;
           pts.push([d[0], d[1], d[2]]);
         }
         return pts;
@@ -958,6 +967,90 @@ async function main() {
         return Math.abs(p[0] - q[0]) + Math.abs(p[1] - q[1]) + Math.abs(p[2] - q[2]) > 30;
       });
       assert.ok(changed, "dragging the model rotated the view (pixels changed)");
+    });
+
+    await check("more than 16 3D models all render (shared renderer)", async () => {
+      // The old per-card renderer capped at 16 visible
+      // models (Chromium's context limit); the 17th went
+      // blank. The shared renderer has one context, so 20
+      // must all show the cube.
+      const assetsDir = path.join(tmp, "assets");
+      fs.mkdirSync(assetsDir, { recursive: true });
+      fs.copyFileSync(path.join(repoRoot, "tests/e2e/fixtures/cube.glb"), path.join(assetsDir, "cube.glb"));
+      const board = readBoard();
+      let id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
+      const ids = [];
+      for (let i = 0; i < 20; i++) {
+        const col = i % 5, row = Math.floor(i / 5);
+        board.items.push({ id, pos: { x: 100 + col * 400, y: 100 + row * 340 }, size: { w: 360, h: 300 }, group: null, kind: { Model3D: { path: path.join(assetsDir, "cube.glb"), size_bytes: 1472 } } });
+        ids.push(id);
+        id++;
+      }
+      board.next_id = id;
+      const tmp2 = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp2, JSON.stringify(board));
+      fs.renameSync(tmp2, boardPath);
+      await new Promise((r) => setTimeout(r, 1500));
+      await page.keyboard.press("f");
+      await new Promise((r) => setTimeout(r, 500));
+      const count = await page.evaluate(() => document.querySelectorAll("#model3d-layer").length);
+      assert.strictEqual(count, 1, "exactly one shared WebGL layer");
+      // Poll until every model's centre pixel is the cube's
+      // blue (or time out): SwiftShader renders slowly.
+      let rendered = 0;
+      for (let i = 0; i < 60; i++) {
+        rendered = await page.evaluate((mids) => {
+          const layer = document.querySelector("#model3d-layer");
+          if (!layer) return 0;
+          const lr = layer.getBoundingClientRect();
+          const dpr = layer.width / lr.width;
+          const c = document.createElement("canvas");
+          c.width = layer.width; c.height = layer.height;
+          const x = c.getContext("2d");
+          if (!x) return 0;
+          x.drawImage(layer, 0, 0);
+          let n = 0;
+          for (const mid of mids) {
+            const cv = document.querySelector(`#cards .card[data-id="${mid}"] canvas.model3d`);
+            if (!cv) continue;
+            const r = cv.getBoundingClientRect();
+            const bx = Math.floor((r.x - lr.x + r.width / 2) * dpr);
+            const by = Math.floor((r.y - lr.y + r.height / 2) * dpr);
+            const d = x.getImageData(bx, by, 1, 1).data;
+            if (d[2] > d[0] + 30 && d[2] > 80) n++;
+          }
+          return n;
+        }, ids.map(String));
+        if (rendered === ids.length) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      assert.strictEqual(rendered, ids.length, `${rendered}/${ids.length} models rendered, expected all ${ids.length}`);
+    });
+
+    await check("fit reaches a very wide board (zoom floor)", async () => {
+      // A 0.1 zoom floor silently cropped any board wider
+      // than ~12,800 world units. 500 cards in a 45-column
+      // grid is ~16,200 wide; F must show all of them.
+      const board = readBoard();
+      let id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
+      const cols = 45;
+      for (let i = 0; i < 500; i++) {
+        const col = i % cols, row = Math.floor(i / cols);
+        board.items.push({ id: id++, pos: { x: 100 + col * 360, y: 100 + row * 120 }, size: { w: 320, h: 80 }, group: null, kind: { Text: { text: `card ${i}`, bold: false, size: 16, color: "#1A1A1A" } } });
+      }
+      board.next_id = id;
+      const tmp2 = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp2, JSON.stringify(board));
+      fs.renameSync(tmp2, boardPath);
+      await new Promise((r) => setTimeout(r, 1500));
+      await page.keyboard.press("f");
+      let shown = 0;
+      for (let i = 0; i < 20; i++) {
+        shown = await page.evaluate(() => document.querySelectorAll("#cards .card").length);
+        if (shown >= 500) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      assert.ok(shown >= 500, `${shown} cards in the DOM after fit, expected at least 500`);
     });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
