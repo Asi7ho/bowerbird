@@ -795,6 +795,73 @@ async function main() {
       assert.ok(mic.x - row.x >= 7, `mic ${Math.round(mic.x - row.x)}px from the row's left edge, expected at least 8`);
       await page.keyboard.press("Escape");
     });
+
+    await check("a GLB model renders on a card and drag rotates it", async () => {
+      // The model is a blue cube (tests/e2e/fixtures/cube.glb).
+      // It lands via an outside board write, like the
+      // all-types grid; the canvas must show the cube, and
+      // dragging it must rotate the view.
+      const assetsDir = path.join(tmp, "assets");
+      fs.mkdirSync(assetsDir, { recursive: true });
+      fs.copyFileSync(path.join(repoRoot, "tests/e2e/fixtures/cube.glb"), path.join(assetsDir, "cube.glb"));
+      const board = readBoard();
+      let id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
+      const modelId = id;
+      board.items.push({ id, pos: { x: 100, y: 850 }, size: { w: 360, h: 300 }, group: null, kind: { Model3D: { path: path.join(assetsDir, "cube.glb"), size_bytes: 1472 } } });
+      board.next_id = id + 1;
+      const tmp2 = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp2, JSON.stringify(board));
+      fs.renameSync(tmp2, boardPath);
+      const canvas = page.locator(`#cards .card[data-id="${modelId}"] canvas.model3d`).first();
+      await canvas.waitFor({ timeout: 15000 });
+      await page.keyboard.press("f");
+      await new Promise((r) => setTimeout(r, 500));
+      // Read the canvas through a 2D canvas (the viewer sets
+      // preserveDrawingBuffer so this is reliable). The cube
+      // is blue; the card background is light grey, where
+      // the channels are nearly equal.
+      const sample = () => page.evaluate((mid) => {
+        const cv = document.querySelector(`#cards .card[data-id="${mid}"] canvas.model3d`);
+        if (!cv) return null;
+        const c = document.createElement("canvas");
+        c.width = cv.width; c.height = cv.height;
+        const x = c.getContext("2d");
+        if (!x) return null;
+        x.drawImage(cv, 0, 0);
+        const pts = [];
+        for (const [fx, fy] of [[0.5, 0.5], [0.25, 0.5], [0.75, 0.5], [0.5, 0.25], [0.5, 0.75]]) {
+          const d = x.getImageData(Math.floor(c.width * fx), Math.floor(c.height * fy), 1, 1).data;
+          pts.push([d[0], d[1], d[2]]);
+        }
+        return pts;
+      }, String(modelId));
+      let before = null;
+      for (let i = 0; i < 30; i++) {
+        const s = await sample();
+        if (s && s[0][2] > s[0][0] + 30 && s[0][2] > 80) { before = s; break; }
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      assert.ok(before, "the model rendered (centre pixel is the cube's blue)");
+      // Drag on the canvas to rotate, then confirm the view
+      // changed. The drag is quick, inside the 3s idle
+      // window, so auto-rotate cannot explain a change.
+      const box = await canvas.boundingBox();
+      assert.ok(box, "model canvas on screen");
+      const cx = box.x + box.width / 2;
+      const cy = box.y + box.height / 2;
+      await page.mouse.move(cx, cy);
+      await page.mouse.down();
+      await page.mouse.move(cx + 120, cy, { steps: 10 });
+      await page.mouse.up();
+      await new Promise((r) => setTimeout(r, 300));
+      const after = await sample();
+      assert.ok(after, "canvas still readable after the drag");
+      const changed = before.some((p, i) => {
+        const q = after[i];
+        return Math.abs(p[0] - q[0]) + Math.abs(p[1] - q[1]) + Math.abs(p[2] - q[2]) > 30;
+      });
+      assert.ok(changed, "dragging the model rotated the view (pixels changed)");
+    });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
     console.log(`  FAIL  setup: ${String(error.message).split("\n")[0]}`);
