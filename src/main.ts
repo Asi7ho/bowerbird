@@ -303,6 +303,11 @@ async function loadBoardFromJson(json: string, dir: string, preserveUndo = false
   undoStore.restoreUndoForBoard(dir, sameBoard || preserveUndo);
   boardRender();
   void search.loadContextIndex();
+  // Index the board's media in the background now, so the
+  // first search does not pay the model-load and embedding
+  // cost. It is async and guarded: nothing happens when
+  // everything is already indexed.
+  void search.startContextIndexing();
 }
 async function switchToBoard(name: string, preserveUndo = false): Promise<boolean> {
   try {
@@ -933,8 +938,10 @@ async function init(): Promise<void> {
   boardRender();
   // Preload the context index now, in the background,
   // so the first search does not pay the index-load
-  // cost on top of everything else.
+  // cost on top of everything else — and start indexing
+  // the board's media now, for the same reason.
   void search.loadContextIndex();
+  void search.startContextIndexing();
   // Fill in previews for cards that never got one (welcome card, old
   // boards): title, description, image and icon, in the background.
   void drops.refreshLinkPreviews();
