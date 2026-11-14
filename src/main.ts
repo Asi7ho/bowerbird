@@ -13,7 +13,7 @@ import * as coreTitlebar from "./core-plugins/titlebar";
 import * as coreToolbar from "./core-plugins/toolbar";
 import {
   Board, Item, Pt, ShapeKind,
-  boardGet, centre, estimateTextHeight,
+  boardGet, CARD_DECORATIONS_H, centre, estimateTextHeight,
   hitTest, itemBounds, lassoSelect, marquee, moveSelection,
   resizeItem, select, strokesWithin,
 } from "./model";
@@ -670,7 +670,10 @@ async function init(): Promise<void> {
       const it = boardGet(board, id);
       if (!it || !("Text" in it.kind)) return false;
       it.kind.Text.text = text;
-      it.size.h = Math.max(40, estimateTextHeight(text, it.kind.Text.size, it.size.w));
+      // The card keeps room for its bottom row (tag pills,
+      // the "+ tag" button) below the text, so the row never
+      // covers the last line.
+      it.size.h = Math.max(40, estimateTextHeight(text, it.kind.Text.size, it.size.w) + CARD_DECORATIONS_H);
       return true;
     },
     // Rename a group's section label. One save, one undo
