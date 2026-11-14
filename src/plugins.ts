@@ -557,6 +557,13 @@ export interface PluginContext {
     // The board's folder on disk, for display (the settings
     // "Board folder" line). Read-only.
     getDir: () => string;
+    // Register this plugin as the board controller: the
+    // render, selection, editing and tool functions the core
+    // delegates to. The board plugin provides this; other
+    // plugins do not call it. This is how a UI plugin
+    // becomes the thing the core delegates to, the same
+    // shape as registerSettingsUI.
+    registerController: (controller: BoardController) => void;
   };
   boards: {
     list: () => Promise<Array<{ name: string; current: boolean; items: number }>>;
@@ -1624,6 +1631,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         return host!.resetBoard();
       },
       getDir: () => host!.getBoardDir(),
+      registerController: (controller: BoardController) => registerBoardController(controller),
     },
     boards: {
       list: async () => bridge!.listBoards(),
