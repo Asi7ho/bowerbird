@@ -13,7 +13,7 @@ import * as coreTitlebar from "./core-plugins/titlebar";
 import * as coreToolbar from "./core-plugins/toolbar";
 import {
   Board, Item, Pt, ShapeKind,
-  boardGet, CARD_DECORATIONS_H, centre, estimateTextHeight,
+  AUDIO_TRANSCRIPT_HIDDEN_H, boardGet, CARD_DECORATIONS_H, centre, estimateTextHeight,
   hitTest, itemBounds, lassoSelect, marquee, moveSelection,
   resizeItem, select, strokesWithin,
 } from "./model";
@@ -274,6 +274,13 @@ async function loadBoardFromJson(json: string, dir: string, preserveUndo = false
       const need = estimateTextHeight(it.kind.Text.text, it.kind.Text.size, it.size.w) + CARD_DECORATIONS_H;
       if (it.size.h < need) it.size.h = need;
     }
+    // A voice note with a transcript keeps room for its
+    // toggle below the seek: a card saved at the old
+    // hidden height is grown on load, so the toggle never
+    // sits on the tag pills.
+    if ("Audio" in it.kind && typeof it.kind.Audio.transcript === "string" && it.kind.Audio.transcript.trim().length > 0) {
+      if (it.size.h < AUDIO_TRANSCRIPT_HIDDEN_H) it.size.h = AUDIO_TRANSCRIPT_HIDDEN_H;
+    }
   }
   // Groups are sections: give every group its label, and
   // drop labels for groups that no longer have members.
@@ -490,6 +497,11 @@ async function init(): Promise<void> {
         if ("Text" in it.kind) {
           const need = estimateTextHeight(it.kind.Text.text, it.kind.Text.size, it.size.w) + CARD_DECORATIONS_H;
           if (it.size.h < need) it.size.h = need;
+        }
+        // A voice note with a transcript keeps room for its
+        // toggle below the seek; see loadBoardFromJson.
+        if ("Audio" in it.kind && typeof it.kind.Audio.transcript === "string" && it.kind.Audio.transcript.trim().length > 0) {
+          if (it.size.h < AUDIO_TRANSCRIPT_HIDDEN_H) it.size.h = AUDIO_TRANSCRIPT_HIDDEN_H;
         }
       }
     } else {
