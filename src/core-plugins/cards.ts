@@ -24,7 +24,7 @@
 // renderMarkdownHtml; image/video sources go through
 // fileUrl(), which encodes each path segment.
 import type { PluginContext, PluginManifest } from "../plugins";
-import { isInlineVideo, type Item } from "../model";
+import { isInlineVideo, type Item } from "../backend/model";
 
 export const manifest: PluginManifest = {
   apiVersion: "2",

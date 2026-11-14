@@ -12,7 +12,7 @@ import { shapeLabel } from "./cards";
 import type { Media } from "./media";
 import { boardGet, escapeHtml, type Board, type Item } from "./model";
 import MiniSearch from "minisearch";
-import { getPluginCardSearchText } from "./plugins";
+import { getPluginCardSearchText } from "../plugins";
 
 export interface SearchContext {
   getBoard(): Board;
