@@ -3,7 +3,7 @@
 // HTML itself, navigation by the buttons or arrow keys, media
 // embedded as data URLs where it fits. Files over the cap are
 // skipped, not read, and shown as a placeholder instead.
-import type { Item } from "../../src/model";
+import type { Item } from "../../plugin-api";
 import { getApi, state } from "./state.js";
 import type { Slide } from "./state.js";
 import { drawingPrimitives } from "./geometry.js";

@@ -11,7 +11,7 @@
 // rectCrossing and clipped ends by hand; those copies
 // are gone, so there is one implementation to keep
 // correct, and this file only says what a slide contains.
-import type { Item, Pt } from "../../src/model";
+import type { Item, Pt } from "../../plugin-api";
 import { getApi } from "./state.js";
 import type { Slide } from "./state.js";
 

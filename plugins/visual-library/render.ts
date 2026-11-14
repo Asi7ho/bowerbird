@@ -4,8 +4,7 @@
 // plus the shared search row and the selection highlight.
 // Owns the panel and view element refs, and the panel's
 // layout observers.
-import type { PluginContext } from "../../src/plugins";
-import type { Item } from "../../src/model";
+import type { Item, PluginContext } from "../../plugin-api";
 import { createCategory, deleteCategory, getBoardItems, getCategories, getQuery, isSectionCollapsed, renameCategory, sectionsList, setQuery, setSectionCollapsed, syncFromBoard } from "./items.js";
 import type { LibraryMode } from "./items.js";
 import { attachCardInteractions } from "./interactions.js";

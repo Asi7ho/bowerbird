@@ -16,7 +16,7 @@
 // owns the corner state, button.ts the floating button, settings.ts
 // the corner picker. main.ts is the entry point that wires them
 // together.
-import type { PluginContext } from "../../src/plugins";
+import type { PluginContext } from "../../plugin-api";
 import { loadCorner } from "./corner.js";
 import { clearButton, createButton } from "./button.js";
 import { renderSettings } from "./settings.js";

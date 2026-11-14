@@ -4,8 +4,7 @@
 // and the core actions the API can reach. Group, Ungroup, Delete,
 // Undo and Redo only appear when they can actually do something,
 // so the palette never lists an action that silently does nothing.
-import type { PluginContext } from "../../src/plugins";
-import type { Item } from "../../src/model";
+import type { Item, PluginContext } from "../../plugin-api";
 
 export interface Entry {
   title: string;

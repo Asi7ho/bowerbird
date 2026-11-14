@@ -25,7 +25,7 @@
 // the picked colour and its persistence, place.ts placing
 // swatches on the board, panel.ts the wheel panel. main.ts
 // is the entry point that wires them together.
-import type { PluginContext } from "../../src/plugins";
+import type { PluginContext } from "../../plugin-api";
 import { hexToHsl } from "./color.js";
 import { clearState, initState, isSettingPen, savePicked, setBase } from "./state.js";
 import { clearPanel, initPanel, renderPanel, updateAll } from "./panel.js";

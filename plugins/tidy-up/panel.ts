@@ -2,8 +2,7 @@
 // Distribute button grids, and the apply step that writes
 // the patches in one undo step. The maths lives in ops.ts;
 // this file owns the panel DOM and the API calls.
-import type { PluginContext } from "../../src/plugins";
-import type { Item } from "../../src/model";
+import type { Item, PluginContext } from "../../plugin-api";
 import { alignPatches, distributePatches, isCard } from "./ops.js";
 import type { Axis, Edge, PositionPatch } from "./ops.js";
 

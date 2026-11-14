@@ -10,7 +10,7 @@
 // switcher at the top lists past chats, and "New chat" starts
 // a fresh one. The previous chats are kept, so starting new
 // never loses an old conversation.
-import type { PluginContext } from "../../src/plugins";
+import type { PluginContext } from "../../plugin-api";
 import { hasKey } from "./settings.js";
 import { sendChat } from "./client.js";
 import { buildMessages, parseGenerated } from "./generate.js";

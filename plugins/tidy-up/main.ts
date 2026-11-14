@@ -11,7 +11,7 @@
 // align and distribute maths, panel.ts the panel DOM and
 // the apply step, main.ts the entry point that wires them
 // together.
-import type { PluginContext } from "../../src/plugins";
+import type { PluginContext } from "../../plugin-api";
 import { clearPanel, refresh, renderPanel } from "./panel.js";
 
 let apiRef: PluginContext | null = null;

@@ -49,7 +49,7 @@
 // audio preview, interactions.ts what happens to a card,
 // render.ts the panel and view surfaces. main.ts is the
 // entry point that wires them together.
-import type { PluginContext } from "../../src/plugins";
+import type { PluginContext } from "../../plugin-api";
 import { loadCategories, syncFromBoard } from "./items.js";
 import { stopLibraryAudio } from "./audio.js";
 import { buildView, clearPanelRefs, disconnectPanelObservers, getViewSections, initPanel, isViewBuilt, renderSections, updateAllDynamic, updateSelectionHighlight, viewContainerClear } from "./render.js";

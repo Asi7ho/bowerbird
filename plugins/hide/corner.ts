@@ -2,7 +2,7 @@
 // by the floating button and the Settings picker. The stored value
 // comes from the main process (api.window); the default is the
 // bottom-left corner.
-import type { PluginContext } from "../../src/plugins";
+import type { PluginContext } from "../../plugin-api";
 
 export const CORNERS = ["bottom-left", "bottom-right", "top-left", "top-right", "off"] as const;
 export type Corner = (typeof CORNERS)[number];
