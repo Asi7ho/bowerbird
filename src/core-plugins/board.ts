@@ -683,16 +683,16 @@ function startTextEdit(id: number): void {
   ta.value = item.kind.Text.text;
   ta.style.fontSize = `${size}px`;
   ta.style.color = item.kind.Text.color;
-  // A creation action is offered beside the text box, as
-  // its icon: the user types, or clicks the icon instead.
-  // The first registered action is the one shown (today
-  // that is the voice plugin's mic). Clicking it commits
-  // the note first — an empty note is removed, typed text
-  // is kept — then runs the action at the note's position
-  // (the double-click point for a new note).
+  // A creation action is offered on the left of the text
+  // box, as its icon: the user types, or clicks the icon
+  // instead. The first registered action is the one shown
+  // (today that is the voice plugin's mic). Clicking it
+  // commits the note first — an empty note is removed,
+  // typed text is kept — then runs the action at the
+  // note's position (the double-click point for a new
+  // note).
   const row = document.createElement("div");
   row.className = "note-edit-row";
-  row.appendChild(ta);
   const actions = getCreateActions();
   if (actions.length > 0) {
     const a = actions[0];
@@ -730,6 +730,7 @@ function startTextEdit(id: number): void {
     });
     row.appendChild(mic);
   }
+  row.appendChild(ta);
   card.innerHTML = "";
   card.appendChild(row);
   card.classList.add("selected");
