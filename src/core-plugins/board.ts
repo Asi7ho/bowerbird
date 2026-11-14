@@ -21,11 +21,8 @@
 // (undo, board switch, reset).
 import type { PluginContext, PluginManifest } from "../plugins";
 import {
-  getCardRenderer,
   getCreateActions,
   getPluginTool,
-  handlePluginCardAction,
-  handlePluginCardDoubleClick,
   handlePluginShortcut,
   registerBoardController,
   syncPluginToolButtons,
@@ -210,14 +207,8 @@ function eraseAt(world: Pt): boolean {
 }
 
 function isFrameCard(it: Item | undefined): boolean {
-  if (!it || !("Plugin" in it.kind)) return false;
-  // A slide is a frame by its stored kind, not only by its
-  // renderer: frames must never rotate, even if the
-  // Presentation plugin is disabled and no renderer is
-  // registered for them. Other frame kinds still come
-  // from their renderer.
-  if (it.kind.Plugin.plugin === "presentation" && it.kind.Plugin.kind === "slide") return true;
-  return getCardRenderer(it)?.frame === true;
+  if (!it) return false;
+  return api.cards.isFrame(it);
 }
 
 // ---------------------------------------------------------------- rendering
@@ -1083,7 +1074,7 @@ boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
     const hit = api.board.hitTest(world);
     if (hit !== null) {
       const it = api.board.getItem(hit);
-      if (it && "Plugin" in it.kind && handlePluginCardDoubleClick(it)) return;
+      if (it && "Plugin" in it.kind && api.cards.dispatchDoubleClick(it)) return;
       if (it && "Text" in it.kind) { startTextEdit(hit); return; }
       // Double-clicking a voice note's name renames it,
       // like a section label renames its group. Anywhere
@@ -1142,7 +1133,7 @@ cardsEl.addEventListener("click", (e: MouseEvent) => {
   if (pbtn) {
     const pid = Number(pbtn.dataset.id);
     const pit = api.board.getItem(pid);
-    if (pit && handlePluginCardAction(pbtn.dataset.pluginAction ?? "", pit)) return;
+    if (pit && api.cards.dispatchAction(pbtn.dataset.pluginAction ?? "", pit)) return;
   }
   const task = target.closest("[data-action=\"toggle-task\"]") as HTMLElement | null;
   if (task) {
