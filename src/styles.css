@@ -504,17 +504,21 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
 }
 /* Voice-note transcript: the toggle lives in the card's
-   bottom row (beside the tag pills), and the text fills
-   the rest of the card and scrolls, so a long note does
-   not grow the card. The toggle is always clickable —
-   unlike the "+ tag" button, which only takes clicks once
-   its card is selected. */
-.card-decorations .audio-transcript-toggle {
+   bottom row while hidden, and heads the transcript
+   inside the card once grown. One rule serves both: an
+   icon and a label, quiet grey, always clickable — unlike
+   the "+ tag" button, which only takes clicks once its
+   card is selected. In the card's column it hugs the
+   left edge instead of stretching full width. */
+.audio-transcript-toggle {
+  display: inline-flex; align-items: center; gap: 4px;
   font: inherit; font-size: 12px; font-weight: 600; color: var(--grey);
   background: transparent; border: 0; padding: 3px 0; cursor: pointer;
-  white-space: nowrap; pointer-events: auto;
+  white-space: nowrap; pointer-events: auto; text-align: left;
 }
-.card-decorations .audio-transcript-toggle:hover { color: var(--ink); }
+.audio-transcript-toggle:hover { color: var(--ink); }
+.audio-transcript-toggle svg { width: 12px; height: 12px; flex: none; }
+.card .audio-transcript-toggle { align-self: flex-start; }
 .card .audio-transcript-text {
   flex: 1 1 auto; min-height: 0; overflow-y: auto;
   font-size: 13px; line-height: 1.45; color: var(--ink);

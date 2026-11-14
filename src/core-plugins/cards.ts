@@ -274,13 +274,14 @@ export function activate(api: PluginContext): void {
       const tile = c.hh >= 104 ? 56 : 48;
       // A voice recording carries its transcript under the
       // player, hidden by default: the toggle lives in the
-      // card's bottom row (see cards.ts), and the text shows
-      // only when the card is taller than the hidden height.
-      // The text fills the card and scrolls, so a long note
-      // does not grow the card.
+      // card's bottom row while hidden (see cards.ts), and
+      // once the card is grown it heads the transcript
+      // here, above the text, so the label is never below
+      // what it labels. The text fills the card and
+      // scrolls, so a long note does not grow the card.
       const expanded = text.length > 0 && c.hh > AUDIO_TRANSCRIPT_HIDDEN_H;
       const transcriptHtml = expanded
-        ? `<div class="audio-transcript-text">${api.text.escapeHtml(text)}</div>`
+        ? `<button type="button" class="audio-transcript-toggle" data-action="toggle-transcript" data-id="${c.id}" aria-expanded="true"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg> Transcript</button><div class="audio-transcript-text">${api.text.escapeHtml(text)}</div>`
         : "";
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
         <div style="display:flex;align-items:center;gap:12px">
