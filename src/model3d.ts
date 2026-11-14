@@ -1,18 +1,31 @@
 // model3d.ts — the 3D model viewer for Model3D cards.
 //
 // A Model3D card holds one GLB file (embedded in the board's
-// assets). The viewer renders it with Three.js on a <canvas>
-// inside the card: drag rotates, wheel zooms, and it turns
-// slowly on its own after a few seconds idle.
+// assets). Drag rotates it, wheel zooms, and it turns slowly
+// on its own after a few seconds idle.
 //
-// The viewer owns one WebGL context per visible card. A
-// render() rebuilds the card DOM, which would destroy that
-// context — so the board preserves Model3D card nodes across
-// renders (detach/restore below) instead of rebuilding them.
-// A viewer is disposed only when its card leaves the board
-// or scrolls out of view. The loaded model is cached by URL
-// and the view angle is kept per card, so coming back is
-// fast and the angle is where the user left it.
+// One WebGL context serves every model on the board. A
+// per-card renderer caps out at ~16 visible models
+// (Chromium's context limit) — the 17th gets a lost context
+// and renders blank. So there is one renderer and one canvas
+// covering the board viewport; each visible model is drawn
+// into its card's screen rect with a scissor. The layer
+// sits above #cards (a card's own background is opaque, so
+// a layer below it would be hidden) and is transparent
+// except where a model is drawn, so the card chrome and
+// pointer events stay on the card; the card's grey tile
+// underneath gives the model its rounded background. The
+// card keeps a <canvas> as its hit target (its grey tile
+// is the model's background; the model is drawn over it
+// by the shared layer).
+//
+// The shared canvas lives in #board, so a render() that
+// rebuilds #cards never touches it — there is nothing to
+// detach or restore. A view is mounted when its card is
+// rendered and dropped when the card leaves the viewport.
+// The loaded model is cached by URL and the view angle is
+// kept per card, so coming back is fast and the angle is
+// where the user left it.
 //
 // GLB only: a .gltf references external buffers and textures
 // that would not be embedded with it, so drops only accept
@@ -43,35 +56,22 @@ const viewState = new Map<number, ViewState>();
 // a re-fetch and re-parse. A failed load drops out of the
 // cache so a retry fetches again.
 const modelCache = new Map<string, Promise<THREE.Group>>();
-// Live viewers, keyed by card id.
-const viewers = new Map<number, Model3DViewer>();
 
 const loader = new GLTFLoader();
 const IDLE_MS = 3000;
 const AUTO_ROTATE = 0.005;
 
-function loadModel(url: string): Promise<THREE.Group> {
-  let p = modelCache.get(url);
-  if (!p) {
-    p = loader.loadAsync(url).then((gltf) => gltf.scene);
-    modelCache.set(url, p);
-    p.catch(() => {
-      modelCache.delete(url);
-    });
-  }
-  return p;
-}
-
-class Model3DViewer {
-  private renderer: THREE.WebGLRenderer;
+// One view per visible Model3D card: its scene, camera and
+// view angle. No renderer, no loop of its own — the shared
+// renderer below draws all views in one pass.
+class Model3DView {
   private scene = new THREE.Scene();
   private camera: THREE.PerspectiveCamera;
   // The model, centred at the origin, inside a root the
   // camera orbits. The cached template is never mutated:
-  // each viewer clones it.
+  // each view clones it.
   private root = new THREE.Group();
   private modelRadius = 1;
-  private raf = 0;
   private azimuth: number;
   private elevation: number;
   private distance: number;
@@ -80,24 +80,22 @@ class Model3DViewer {
   private lastY = 0;
   private lastInteract = 0;
   private disposed = false;
-  private ro: ResizeObserver;
-  private pmrem: THREE.PMREMGenerator | null = null;
+  private loaded = false;
+  // The placeholder canvas this view is currently listening
+  // on. render() rebuilds the card DOM, so the element
+  // changes and the listeners move with it (see sync).
+  private canvas: HTMLCanvasElement | null = null;
 
   constructor(
-    private canvas: HTMLCanvasElement,
     private cardId: number,
     private url: string,
     private deps: Model3DDeps,
+    env: THREE.Texture | null,
   ) {
     const saved = viewState.get(cardId);
     this.azimuth = saved?.azimuth ?? 0;
     this.elevation = saved?.elevation ?? 0.35;
     this.distance = saved?.distance ?? 3;
-    // preserveDrawingBuffer so the canvas can be read back
-    // (tests, and a future export): without it toDataURL
-    // returns blank once the frame is composited.
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100);
     this.scene.add(this.root);
     this.scene.add(new THREE.AmbientLight(0xffffff, 0.6));
@@ -106,18 +104,11 @@ class Model3DViewer {
     this.scene.add(key);
     // A room environment so PBR materials (metalness and
     // roughness) read instead of going black — a plain
-    // directional light alone leaves them flat.
-    this.pmrem = new THREE.PMREMGenerator(this.renderer);
-    const env = this.pmrem.fromScene(new RoomEnvironment(), 0.04);
-    this.scene.environment = env.texture;
-    this.resize();
-    this.ro = new ResizeObserver(() => this.resize());
-    this.ro.observe(canvas);
-    canvas.addEventListener("pointerdown", this.onPointerDown);
-    canvas.addEventListener("wheel", this.onWheel, { passive: false });
+    // directional light alone leaves them flat. One texture
+    // shared by every view.
+    if (env) this.scene.environment = env;
     this.lastInteract = performance.now();
     this.load();
-    this.loop();
   }
 
   private async load(): Promise<void> {
@@ -145,26 +136,32 @@ class Model3DViewer {
       this.distance = this.modelRadius * 2.4;
     }
     this.distance = THREE.MathUtils.clamp(this.distance, this.modelRadius * 1.1, this.modelRadius * 6);
+    this.loaded = true;
   }
 
   private showError(message: string): void {
+    // The placeholder becomes the error tile. The view is
+    // dropped by sync (its canvas is gone), so this only
+    // has to swap the element.
+    if (!this.canvas) return;
     const el = document.createElement("div");
     el.className = "model3d-error";
     el.textContent = message;
     this.canvas.replaceWith(el);
+    this.canvas = null;
   }
 
-  private resize(): void {
-    const w = this.canvas.clientWidth;
-    const h = this.canvas.clientHeight;
-    if (w <= 0 || h <= 0) return;
-    this.renderer.setSize(w, h, false);
-    this.camera.aspect = w / h;
-    this.camera.updateProjectionMatrix();
+  // (Re)attach the pointer handlers to the card's current
+  // placeholder canvas. Called by sync after every render.
+  attach(canvas: HTMLCanvasElement): void {
+    if (this.canvas === canvas) return;
+    this.canvas = canvas;
+    canvas.addEventListener("pointerdown", this.onPointerDown);
+    canvas.addEventListener("wheel", this.onWheel, { passive: false });
   }
 
   private onPointerDown = (e: PointerEvent): void => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || !this.canvas) return;
     // Select the card, then keep the board from starting a
     // move drag: the drag belongs to the model.
     this.deps.onSelect(this.cardId, e.shiftKey);
@@ -197,6 +194,7 @@ class Model3DViewer {
   private onPointerUp = (): void => {
     this.dragging = false;
     this.lastInteract = performance.now();
+    if (!this.canvas) return;
     this.canvas.removeEventListener("pointermove", this.onPointerMove);
     this.canvas.removeEventListener("pointerup", this.onPointerUp);
     this.canvas.removeEventListener("pointercancel", this.onPointerUp);
@@ -214,12 +212,24 @@ class Model3DViewer {
     this.lastInteract = performance.now();
   };
 
-  private loop = (): void => {
-    if (this.disposed) return;
-    this.raf = requestAnimationFrame(this.loop);
-    if (!this.dragging && performance.now() - this.lastInteract > IDLE_MS) {
+  // The placeholder's screen rect, in CSS pixels relative
+  // to the shared canvas. Null when the card is gone or
+  // has no size (not visible).
+  rectRelativeTo(boardRect: DOMRect): { x: number; y: number; w: number; h: number } | null {
+    if (!this.canvas || !this.canvas.isConnected) return null;
+    const r = this.canvas.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return null;
+    return { x: r.x - boardRect.x, y: r.y - boardRect.y, w: r.width, h: r.height };
+  }
+
+  // Advance the idle auto-rotate and place the camera for
+  // this frame. Returns false when the view has nothing to
+  // draw yet (model still loading).
+  step(now: number): boolean {
+    if (!this.dragging && now - this.lastInteract > IDLE_MS) {
       this.azimuth += AUTO_ROTATE;
     }
+    if (!this.loaded) return false;
     const { azimuth, elevation, distance } = this;
     this.camera.position.set(
       distance * Math.cos(elevation) * Math.sin(azimuth),
@@ -227,106 +237,206 @@ class Model3DViewer {
       distance * Math.cos(elevation) * Math.cos(azimuth),
     );
     this.camera.lookAt(0, 0, 0);
-    this.renderer.render(this.scene, this.camera);
-  };
+    return true;
+  }
 
-  resizeViewer(): void {
-    this.resize();
+  setAspect(w: number, h: number): void {
+    if (w <= 0 || h <= 0) return;
+    this.camera.aspect = w / h;
+    this.camera.updateProjectionMatrix();
   }
 
   get isConnected(): boolean {
-    return this.canvas.isConnected;
+    return !!this.canvas && this.canvas.isConnected;
   }
 
   dispose(): void {
     this.disposed = true;
-    cancelAnimationFrame(this.raf);
-    this.ro.disconnect();
-    this.canvas.removeEventListener("pointerdown", this.onPointerDown);
-    this.canvas.removeEventListener("wheel", this.onWheel);
-    this.canvas.removeEventListener("pointermove", this.onPointerMove);
-    this.canvas.removeEventListener("pointerup", this.onPointerUp);
-    this.canvas.removeEventListener("pointercancel", this.onPointerUp);
+    if (this.canvas) {
+      this.canvas.removeEventListener("pointerdown", this.onPointerDown);
+      this.canvas.removeEventListener("wheel", this.onWheel);
+      this.canvas.removeEventListener("pointermove", this.onPointerMove);
+      this.canvas.removeEventListener("pointerup", this.onPointerUp);
+      this.canvas.removeEventListener("pointercancel", this.onPointerUp);
+      this.canvas = null;
+    }
     viewState.set(this.cardId, {
       azimuth: this.azimuth,
       elevation: this.elevation,
       distance: this.distance,
     });
-    this.pmrem?.dispose();
-    this.renderer.dispose();
+  }
+
+  // For the shared renderer: the scene and camera to draw.
+  get drawScene(): THREE.Scene {
+    return this.scene;
+  }
+  get drawCamera(): THREE.PerspectiveCamera {
+    return this.camera;
   }
 }
 
-function disposeViewer(id: number): void {
-  const v = viewers.get(id);
-  if (!v) return;
-  v.dispose();
-  viewers.delete(id);
-}
-
-// Detach the Model3D card nodes from the card layer before a
-// render rebuilds it, so their WebGL contexts survive. Called
-// before `cardsEl.innerHTML = html` in board.ts render().
-// Returns the nodes keyed by card id.
-export function detachModel3DNodes(cardsEl: HTMLElement): Map<number, HTMLElement> {
-  const kept = new Map<number, HTMLElement>();
-  for (const el of Array.from(cardsEl.querySelectorAll<HTMLElement>(".card[data-id]"))) {
-    if (!el.querySelector("canvas.model3d")) continue;
-    const id = Number(el.dataset.id);
-    if (!Number.isFinite(id)) continue;
-    kept.set(id, el);
-    el.remove();
+function loadModel(url: string): Promise<THREE.Group> {
+  let p = modelCache.get(url);
+  if (!p) {
+    p = loader.loadAsync(url).then((gltf) => gltf.scene);
+    modelCache.set(url, p);
+    p.catch(() => {
+      modelCache.delete(url);
+    });
   }
-  return kept;
+  return p;
 }
 
-// Re-insert the preserved nodes into the freshly rendered card
-// layer, dispose viewers whose card is gone or off-screen, and
-// mount viewers on any new Model3D canvases. Called after
-// `cardsEl.innerHTML = html` in board.ts render().
-export function restoreModel3DNodes(
+// ---------------------------------------------------------------- shared renderer
+
+// Live views, keyed by card id.
+const views = new Map<number, Model3DView>();
+// The single renderer and its canvas, created lazily on
+// the first Model3D card. One context, however many models.
+let renderer: THREE.WebGLRenderer | null = null;
+let sharedCanvas: HTMLCanvasElement | null = null;
+let envTexture: THREE.Texture | null = null;
+let pmrem: THREE.PMREMGenerator | null = null;
+let raf = 0;
+let boardEl: HTMLElement | null = null;
+
+function ensureSharedCanvas(board: HTMLElement): void {
+  boardEl = board;
+  if (sharedCanvas && sharedCanvas.isConnected) return;
+  sharedCanvas = document.createElement("canvas");
+  sharedCanvas.id = "model3d-layer";
+  sharedCanvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:block;";
+  // Above #cards, below the group frames and overlays: the
+  // card's own background is opaque, so a layer below it
+  // would be hidden. The layer is transparent except where
+  // a model is drawn, so the card chrome (title, sub,
+  // border) shows through untouched, and the card's grey
+  // tile underneath gives the model its rounded background.
+  const cards = board.querySelector("#cards");
+  if (cards && cards.nextSibling) board.insertBefore(sharedCanvas, cards.nextSibling);
+  else board.appendChild(sharedCanvas);
+  // preserveDrawingBuffer so the layer can be read back
+  // (tests, and a future export): without it toDataURL
+  // returns blank once the frame is composited.
+  renderer = new THREE.WebGLRenderer({ canvas: sharedCanvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearColor(0x000000, 0);
+  pmrem = new THREE.PMREMGenerator(renderer);
+  envTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+}
+
+function loop(): void {
+  raf = 0;
+  if (!renderer || !sharedCanvas || !boardEl) return;
+  if (views.size === 0) return;
+  const now = performance.now();
+  const dpr = Math.min(window.devicePixelRatio, 2);
+  const bw = boardEl.clientWidth;
+  const bh = boardEl.clientHeight;
+  if (bw <= 0 || bh <= 0) {
+    raf = requestAnimationFrame(loop);
+    return;
+  }
+  // Size the drawing buffer to the board, in device pixels.
+  const wantW = Math.round(bw * dpr);
+  const wantH = Math.round(bh * dpr);
+  if (sharedCanvas.width !== wantW || sharedCanvas.height !== wantH) {
+    renderer.setSize(bw, bh, false);
+  }
+  const boardRect = sharedCanvas.getBoundingClientRect();
+  renderer.setScissorTest(false);
+  renderer.setViewport(0, 0, wantW, wantH);
+  renderer.clear();
+  // One pass over the views: each gets its card's screen
+  // rect as a scissored viewport.
+  renderer.setScissorTest(true);
+  for (const view of views.values()) {
+    const rect = view.rectRelativeTo(boardRect);
+    if (!rect) continue;
+    // WebGL y is from the bottom; DOM y is from the top.
+    const x = Math.round(rect.x * dpr);
+    const y = Math.round((bh - rect.y - rect.h) * dpr);
+    const w = Math.round(rect.w * dpr);
+    const h = Math.round(rect.h * dpr);
+    if (w <= 0 || h <= 0) continue;
+    view.setAspect(rect.w, rect.h);
+    if (!view.step(now)) continue;
+    renderer.setViewport(x, y, w, h);
+    renderer.setScissor(x, y, w, h);
+    // No per-view clear: the tile's grey background comes
+    // from the card's own placeholder underneath, and the
+    // model draws over it with a transparent background.
+    renderer.render(view.drawScene, view.drawCamera);
+  }
+  renderer.setScissorTest(false);
+  raf = requestAnimationFrame(loop);
+}
+
+function kickLoop(): void {
+  if (raf === 0 && views.size > 0) raf = requestAnimationFrame(loop);
+}
+
+// Mount views for the Model3D cards currently in the DOM
+// and drop views whose card is gone or off-screen. Called
+// after render() in board.ts. The shared canvas survives
+// renders (it lives in #board, not #cards), so there is
+// nothing to detach or restore.
+export function syncModel3DViews(
+  board: HTMLElement,
   cardsEl: HTMLElement,
-  kept: Map<number, HTMLElement>,
   items: Item[],
   deps: Model3DDeps,
 ): void {
-  for (const [id, node] of kept) {
-    const item = items.find((it) => it.id === id);
-    const placeholder = cardsEl.querySelector<HTMLElement>(`.card[data-id="${id}"]`);
-    if (!item || !("Model3D" in item.kind) || !placeholder) {
-      // Card removed or off-screen: free its context.
-      disposeViewer(id);
-      continue;
-    }
-    // The placeholder has the fresh style (pos/size/rotation)
-    // and selection class; the kept node keeps its live canvas.
-    node.setAttribute("style", placeholder.getAttribute("style") ?? "");
-    node.className = placeholder.className;
-    placeholder.replaceWith(node);
-    viewers.get(id)?.resizeViewer();
-  }
-  // Mount viewers on Model3D canvases that have none yet.
+  ensureSharedCanvas(board);
+  const seen = new Set<number>();
   for (const canvas of Array.from(cardsEl.querySelectorAll<HTMLCanvasElement>("canvas.model3d"))) {
     const card = canvas.closest<HTMLElement>(".card[data-id]");
     if (!card) continue;
     const id = Number(card.dataset.id);
-    if (!Number.isFinite(id) || viewers.has(id)) continue;
-    const path = canvas.dataset.path;
-    if (!path) continue;
-    const viewer = new Model3DViewer(canvas, id, deps.fileUrl(path), deps);
-    viewers.set(id, viewer);
+    if (!Number.isFinite(id)) continue;
+    const item = items.find((it) => it.id === id);
+    if (!item || !("Model3D" in item.kind)) continue;
+    seen.add(id);
+    let view = views.get(id);
+    if (!view) {
+      view = new Model3DView(id, deps.fileUrl(item.kind.Model3D.path), deps, envTexture);
+      views.set(id, view);
+    }
+    // render() rebuilds the card DOM, so the placeholder
+    // element changes; the listeners move with it.
+    view.attach(canvas);
   }
-  // Safety net: a viewer whose canvas is no longer connected
-  // (its node was destroyed without going through restore)
-  // would leak a context and a loop.
-  for (const [id, viewer] of viewers) {
-    if (!viewer.isConnected) {
-      disposeViewer(id);
+  for (const [id, view] of Array.from(views)) {
+    if (!seen.has(id) || !view.isConnected) {
+      view.dispose();
+      views.delete(id);
     }
   }
+  kickLoop();
 }
 
-// Dispose every viewer (board switch / teardown).
+// Dispose every view (board switch / teardown) and remove
+// the shared layer.
 export function disposeAllModel3DViewers(): void {
-  for (const id of Array.from(viewers.keys())) disposeViewer(id);
+  for (const [id, view] of Array.from(views)) {
+    view.dispose();
+    views.delete(id);
+  }
+  if (raf !== 0) {
+    cancelAnimationFrame(raf);
+    raf = 0;
+  }
+  if (renderer) {
+    pmrem?.dispose();
+    renderer.dispose();
+    renderer = null;
+    pmrem = null;
+    envTexture = null;
+  }
+  if (sharedCanvas) {
+    sharedCanvas.remove();
+    sharedCanvas = null;
+  }
+  boardEl = null;
 }

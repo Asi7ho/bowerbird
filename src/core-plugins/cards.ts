@@ -353,9 +353,13 @@ export function activate(api: PluginContext): void {
           <div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, c.ww - 24, 14, true))}</div><div class="sub" style="font-size:12px">${sub}</div></div></div>`;
       }
       // The canvas is the viewport: drag rotates, wheel
-      // zooms. The title row below it is the grab area —
-      // it takes no pointer events, so pressing there hits
-      // the board and moves the card.
+      // zooms. It is transparent — the model is drawn by
+      // the one shared WebGL layer above the cards, into
+      // this canvas's screen rect (see model3d.ts), and
+      // shows through it onto this grey tile. The title
+      // row below it is the grab area — it takes no pointer
+      // events, so pressing there hits the board and moves
+      // the card.
       const canvasH = Math.max(80, c.hh - 70);
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
         <canvas class="model3d clickable" data-id="${c.id}" data-path="${api.text.escapeHtml(path)}" style="width:${c.ww - 24}px;height:${canvasH}px;border-radius:10px;background:var(--bg-system)"></canvas>

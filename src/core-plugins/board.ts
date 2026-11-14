@@ -29,7 +29,7 @@ import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
   pressureWidth, strokeMaxWidth, strokePressuresVary,
 } from "../model";
-import { detachModel3DNodes, restoreModel3DNodes, disposeAllModel3DViewers } from "../model3d";
+import { syncModel3DViews, disposeAllModel3DViewers } from "../model3d";
 
 export const manifest: PluginManifest = {
   id: "core-board",
@@ -495,11 +495,6 @@ function render(): void {
   // Only visible cards are built (see visibleRect).
   const editingEl = editingId !== null ? cardsEl.querySelector(`[data-id="${editingId}"]`) : null;
   const editingHtml = editingEl ? editingEl.outerHTML : null;
-  // A 3D model card's canvas holds a WebGL context, which
-  // dies if the DOM is rebuilt — so its node is detached
-  // here and re-inserted below, instead of rebuilt like
-  // the other cards.
-  const keptModel3D = detachModel3DNodes(cardsEl);
   const v = visibleRect();
   let html = "";
   for (const item of board.items) {
@@ -523,10 +518,11 @@ function render(): void {
     }
   }
   applyStacking();
-  // Re-insert the preserved 3D card nodes (their canvases
-  // keep their WebGL contexts) and mount viewers on any
-  // new Model3D canvases.
-  restoreModel3DNodes(cardsEl, keptModel3D, board.items, {
+  // Mount 3D views for the Model3D cards in the DOM and
+  // drop views whose card is gone or off-screen. The shared
+  // WebGL layer lives in #board, not #cards, so a render
+  // never touches it.
+  syncModel3DViews(boardEl, cardsEl, board.items, {
     fileUrl: (p) => api.files.fileUrl(p),
     onSelect: (id, additive) => api.board.setSelected(api.board.selectCard(api.board.getSelected(), id, additive)),
   });
