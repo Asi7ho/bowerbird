@@ -628,6 +628,11 @@ export interface PluginContext {
     getView: () => string;
     setView: (id: string) => void;
     listViews: () => Array<{ id: string; title: string; plugin: string | null }>;
+    // Re-render the active plugin view, as after the board
+    // changes. No-op when the board itself is the active
+    // view. The board view calls this after a render, so a
+    // plugin view showing the board stays in sync.
+    refresh: () => void;
   };
   // The shape table (kind, label, key, SVG icon) for the
   // shape picker's flyout. Read-only UI data, no permission
@@ -862,6 +867,11 @@ export interface PluginContext {
   events: {
     on: (event: string, handler: () => void) => void;
     off: (event: string, handler: () => void) => void;
+    // Fire a plugin event for every listener. The board view
+    // emits "selection" and "tool" when they change, so the
+    // toolbar and other UI can follow without polling. A
+    // plugin may emit its own custom event the same way.
+    emit: (event: string) => void;
   };
   // Pure geometry, from src/model.ts — no permission needed,
   // because these read nothing and write nothing. Plugins
@@ -1683,6 +1693,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         for (const v of views.values()) out.push({ id: v.id, title: v.title, plugin: v.pluginId });
         return out;
       },
+      refresh: () => refreshActiveView(),
     },
     shapes: {
       list: () => host!.listShapes(),
@@ -1977,6 +1988,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
     events: {
       on: (event: string, handler: () => void) => onEvent(event, handler),
       off: (event: string, handler: () => void) => offEvent(event, handler),
+      emit: (event: string) => emitPluginEvent(event),
     },
     geometry: {
       centre: (item: Item) => centre(item),
