@@ -15,6 +15,12 @@ export interface Size { w: number; h: number }
 // card renderer and the toggle use these, so they agree.
 export const AUDIO_TRANSCRIPT_HIDDEN_H = 164;
 export const AUDIO_TRANSCRIPT_SHOWN_H = 240;
+// An audio card without a transcript is 136 tall: the
+// player (56) + seek (12) + padding end at 100, and the
+// tag row starts at h - 36, so 136 leaves the same 12px
+// gap the transcript card has. At the old 104 the row sat
+// on the seek bar.
+export const AUDIO_NO_TRANSCRIPT_H = 136;
 export type Anchor = { Point: Pt } | { Item: number };
 export type ShapeKind = "rect" | "ellipse" | "triangle" | "diamond" | "hexagon" | "star" | "arrow";
 

@@ -21,6 +21,9 @@ import type { Pt } from "../../src/model";
 // app's src/ — the loader only serves the plugin's own
 // folder — so the number is repeated here, not imported.
 const AUDIO_TRANSCRIPT_HIDDEN_H = 164;
+// The no-transcript height, matching AUDIO_NO_TRANSCRIPT_H
+// in src/model.ts: at 104 the tag row sat on the seek bar.
+const AUDIO_NO_TRANSCRIPT_H = 136;
 
 const MIC_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
 
@@ -134,7 +137,7 @@ async function finishRecording(api: PluginContext, world: Pt, mime: string): Pro
     ]);
     // Short by default: the transcript stays hidden behind
     // its toggle until the user expands the card.
-    const h = transcript ? AUDIO_TRANSCRIPT_HIDDEN_H : 104;
+    const h = transcript ? AUDIO_TRANSCRIPT_HIDDEN_H : AUDIO_NO_TRANSCRIPT_H;
     const id = api.board.addItem({ Audio: { path, ...(transcript ? { transcript } : {}) } }, { x: world.x - 150, y: world.y - h / 2 }, { w: 300, h });
     api.board.setSelected([id]);
   } catch {

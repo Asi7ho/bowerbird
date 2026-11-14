@@ -13,7 +13,7 @@ import * as coreTitlebar from "./core-plugins/titlebar";
 import * as coreToolbar from "./core-plugins/toolbar";
 import {
   Board, Item, Pt, ShapeKind,
-  AUDIO_TRANSCRIPT_HIDDEN_H, boardGet, CARD_DECORATIONS_H, centre, estimateTextHeight,
+  AUDIO_NO_TRANSCRIPT_H, AUDIO_TRANSCRIPT_HIDDEN_H, boardGet, CARD_DECORATIONS_H, centre, estimateTextHeight,
   hitTest, itemBounds, lassoSelect, marquee, moveSelection,
   resizeItem, select, strokesWithin,
 } from "./model";
@@ -277,9 +277,13 @@ async function loadBoardFromJson(json: string, dir: string, preserveUndo = false
     // A voice note with a transcript keeps room for its
     // toggle below the seek: a card saved at the old
     // hidden height is grown on load, so the toggle never
-    // sits on the tag pills.
-    if ("Audio" in it.kind && typeof it.kind.Audio.transcript === "string" && it.kind.Audio.transcript.trim().length > 0) {
-      if (it.size.h < AUDIO_TRANSCRIPT_HIDDEN_H) it.size.h = AUDIO_TRANSCRIPT_HIDDEN_H;
+    // sits on the tag pills. One without a transcript
+    // keeps the same room below the seek, so the pills
+    // never sit on the seek bar.
+    if ("Audio" in it.kind) {
+      const hasTranscript = typeof it.kind.Audio.transcript === "string" && it.kind.Audio.transcript.trim().length > 0;
+      const need = hasTranscript ? AUDIO_TRANSCRIPT_HIDDEN_H : AUDIO_NO_TRANSCRIPT_H;
+      if (it.size.h < need) it.size.h = need;
     }
   }
   // Groups are sections: give every group its label, and
@@ -499,9 +503,13 @@ async function init(): Promise<void> {
           if (it.size.h < need) it.size.h = need;
         }
         // A voice note with a transcript keeps room for its
-        // toggle below the seek; see loadBoardFromJson.
-        if ("Audio" in it.kind && typeof it.kind.Audio.transcript === "string" && it.kind.Audio.transcript.trim().length > 0) {
-          if (it.size.h < AUDIO_TRANSCRIPT_HIDDEN_H) it.size.h = AUDIO_TRANSCRIPT_HIDDEN_H;
+        // toggle below the seek; see loadBoardFromJson. One
+        // without a transcript keeps the same room below the
+        // seek, so the pills never sit on the seek bar.
+        if ("Audio" in it.kind) {
+          const hasTranscript = typeof it.kind.Audio.transcript === "string" && it.kind.Audio.transcript.trim().length > 0;
+          const need = hasTranscript ? AUDIO_TRANSCRIPT_HIDDEN_H : AUDIO_NO_TRANSCRIPT_H;
+          if (it.size.h < need) it.size.h = need;
         }
       }
     } else {
