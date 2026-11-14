@@ -8,6 +8,7 @@
 // work, not user changes: they save without an undo step.
 import { api } from "./api";
 import { boardGet, domainOf, estimateTextHeight, normaliseHex, type Board, type Kind, type Pt, type Size } from "./model";
+import { ensureVideoPoster } from "./poster";
 
 export interface DropsContext {
   getBoard(): Board;
@@ -115,6 +116,25 @@ export function createDrops(ctx: DropsContext): Drops {
     } catch { /* domain-only card is fine */ }
   }
 
+  // Capture a dropped video's poster frame and duration, and
+  // fill them into the card. Background work, not a user
+  // change: it saves without an undo step, like a link
+  // preview fill. A video whose poster cannot be captured
+  // keeps the dark tile.
+  async function fillVideoPoster(board: Board, id: number, source: string): Promise<void> {
+    const filled = await ensureVideoPoster(source);
+    if (!filled) return;
+    // The board may have switched while the frame was
+    // captured: only fill the same video on the same board.
+    if (ctx.getBoard() !== board) return;
+    const it = boardGet(board, id);
+    if (!it || !("Video" in it.kind) || it.kind.Video.source !== source) return;
+    it.kind.Video.poster = filled.poster;
+    it.kind.Video.duration = filled.duration;
+    ctx.saveWithoutUndo();
+    ctx.requestRender();
+  }
+
   async function dropPaths(files: File[], atScreen: Pt): Promise<void> {
     // The board the drop started on. Every branch awaits
     // file work, and the user may switch boards while it
@@ -154,6 +174,13 @@ export function createDrops(ctx: DropsContext): Drops {
           const id = ctx.allocId();
           ctx.getBoard().items.push({ id, pos: at, size: desc.size, group: null, kind: desc.kind(stored, size) });
           added++;
+          if (kind === "video") {
+            // The poster is background work, not the drop
+            // itself: the card lands at once and the poster
+            // fills in when the frame is captured, like a
+            // link preview.
+            void fillVideoPoster(board, id, stored);
+          }
         } else if (kind === "text") {
           const text = await file.text();
           if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
