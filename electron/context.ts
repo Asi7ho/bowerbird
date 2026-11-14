@@ -76,6 +76,11 @@ async function loadTransformers(app: App): Promise<TransformersModule> {
     transformers.env.backends = transformers.env.backends || {};
     if (transformers.env.backends.onnx) {
       transformers.env.backends.onnx.wasm = transformers.env.backends.onnx.wasm || {};
+      // ONNX Runtime logs a warning per unused initializer
+      // when it optimises a model graph — a flood of lines
+      // in the terminal every time a model loads. Errors
+      // only; a real failure still shows.
+      transformers.env.backends.onnx.logLevel = "error";
     }
   }
   return transformers;
