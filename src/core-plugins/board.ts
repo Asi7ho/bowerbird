@@ -158,7 +158,7 @@ function boardPoint(clientX: number, clientY: number): Pt {
 function zoomAt(screen: Pt, factor: number): void {
   const before = toWorld(screen);
   const cam = api.view.getCamera();
-  const zoom = Math.max(0.1, Math.min(8, cam.zoom * factor));
+  const zoom = Math.max(0.01, Math.min(8, cam.zoom * factor));
   const after = { x: screen.x / zoom + cam.x, y: screen.y / zoom + cam.y };
   api.view.setCameraSilent({ x: cam.x + before.x - after.x, y: cam.y + before.y - after.y, zoom });
 }
