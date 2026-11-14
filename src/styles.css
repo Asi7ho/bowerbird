@@ -402,7 +402,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 .card .note-edit-row .note-edit { width: auto; flex: 1 1 auto; min-width: 0; }
 .card .note-edit-mic {
   flex: none; align-self: center; border: none; background: transparent;
-  color: var(--grey); cursor: pointer; padding: 6px; margin-right: 6px;
+  color: var(--grey); cursor: pointer; padding: 6px; margin-left: 8px; margin-right: 6px;
   border-radius: 6px; line-height: 0;
 }
 .card .note-edit-mic:hover { color: var(--ink); background: var(--fill); }

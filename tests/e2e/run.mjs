@@ -227,6 +227,9 @@ async function main() {
       const editor = page.locator("textarea.note-edit");
       await editor.waitFor({ timeout: 10000 });
       assert.equal(await editor.inputValue(), "Hello CI");
+      // The mic is only for new notes: editing an existing
+      // note shows the text box alone.
+      assert.equal(await page.locator(".note-edit-mic").count(), 0);
       await page.keyboard.type("!");
       await page.keyboard.press("Escape");
       await waitFor("edited text in board.json", () =>
