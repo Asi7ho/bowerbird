@@ -2465,6 +2465,7 @@ export function builtinKindName(item: Item): string | null {
   if ("PdfCard" in item.kind) return "PdfCard";
   if ("Audio" in item.kind) return "Audio";
   if ("Video" in item.kind) return "Video";
+  if ("Model3D" in item.kind) return "Model3D";
   if ("Shape" in item.kind) return "Shape";
   return null;
 }
