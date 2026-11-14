@@ -4,6 +4,7 @@ import { createCardRenderer, SHAPES, shapePreviewPoints, type CardRenderer } fro
 import { createBoardSearch, type BoardSearch } from "./search";
 import { createUndoStore, type UndoStore } from "./undo";
 import { createDrops, type Drops } from "./drops";
+import { ensureVideoPoster } from "./poster";
 import * as coreBoard from "./core-plugins/board";
 import * as coreCards from "./core-plugins/cards";
 import * as coreSearch from "./core-plugins/search";
@@ -263,6 +264,67 @@ function startBackgroundIndexing(): void {
     setTimeout(start, 2000);
   }
 }
+
+// Fill in poster frames for videos that predate them — old
+// boards, and the welcome board — so every video card shows
+// its frame instead of a dark tile. One video at a time, in
+// the background once the renderer is idle, like the context
+// indexing: a capture loads a decoder briefly, and doing
+// them all at once would compete with the board's first
+// render. A board switch stops the run: the guard compares
+// the board object, which a load replaces.
+function startPosterBackfill(): void {
+  const start = () => { void runPosterBackfill(); };
+  if (typeof requestIdleCallback === "function") {
+    requestIdleCallback(start, { timeout: 10000 });
+  } else {
+    setTimeout(start, 2000);
+  }
+}
+
+async function runPosterBackfill(): Promise<void> {
+  const boardAtStart = board;
+  const pending: Array<{ id: number; source: string }> = [];
+  for (const it of boardAtStart.items) {
+    if ("Video" in it.kind && !it.kind.Video.remote && !it.kind.Video.poster) {
+      pending.push({ id: it.id, source: it.kind.Video.source });
+    }
+  }
+  if (pending.length === 0) return;
+  let filledAny = false;
+  let flushTimer: ReturnType<typeof setTimeout> | null = null;
+  // Save and re-render at most once every two seconds while
+  // posters land, so a board of many videos is not saved
+  // and rebuilt once per poster.
+  const flushSoon = () => {
+    if (flushTimer) return;
+    flushTimer = setTimeout(() => {
+      flushTimer = null;
+      if (board !== boardAtStart) return;
+      undoStore.saveWithoutUndo();
+      boardRender();
+    }, 2000);
+  };
+  for (const { id, source } of pending) {
+    if (board !== boardAtStart) return;
+    const filled = await ensureVideoPoster(source);
+    if (!filled) continue;
+    if (board !== boardAtStart) return;
+    // The item may have been deleted or replaced while the
+    // frame was captured: only fill the same video.
+    const current = boardGet(boardAtStart, id);
+    if (!current || !("Video" in current.kind) || current.kind.Video.source !== source || current.kind.Video.poster) continue;
+    current.kind.Video.poster = filled.poster;
+    current.kind.Video.duration = filled.duration;
+    filledAny = true;
+    flushSoon();
+  }
+  if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+  if (filledAny && board === boardAtStart) {
+    undoStore.saveWithoutUndo();
+    boardRender();
+  }
+}
 async function loadBoardFromJson(json: string, dir: string, preserveUndo = false): Promise<void> {
   // Discard an in-progress edit, do not commit it: the incoming
   // board replaces the outgoing one, and committing would save
@@ -324,6 +386,9 @@ async function loadBoardFromJson(json: string, dir: string, preserveUndo = false
   // cost. It is async and guarded: nothing happens when
   // everything is already indexed.
   startBackgroundIndexing();
+  // Fill in poster frames for videos that predate them
+  // (old boards, the welcome board), in the background.
+  startPosterBackfill();
 }
 async function switchToBoard(name: string, preserveUndo = false): Promise<boolean> {
   try {
@@ -963,6 +1028,7 @@ async function init(): Promise<void> {
   // the board's media once idle, for the same reason.
   void search.loadContextIndex();
   startBackgroundIndexing();
+  startPosterBackfill();
   // Fill in previews for cards that never got one (welcome card, old
   // boards): title, description, image and icon, in the background.
   void drops.refreshLinkPreviews();
