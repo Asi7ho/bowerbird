@@ -11,7 +11,7 @@ import * as coreSettings from "./core-plugins/settings";
 import * as coreTitlebar from "./core-plugins/titlebar";
 import * as coreToolbar from "./core-plugins/toolbar";
 import {
-  Board, Camera, Item, Pt, ShapeKind,
+  Board, Camera, Item, Pt, ShapeKind, Size,
   AUDIO_TRANSCRIPT_HIDDEN_H, boardGet, CARD_DECORATIONS_H, centre, clampZoom, elementPoint, elementSize,
   estimateTextHeight, hitTest, itemsCentre, lassoSelect, marquee, moveSelection,
   resizeItem, screenToWorld, select, strokesWithin, zoomCamera,
@@ -198,6 +198,25 @@ function zoomAt(screen: Pt, factor: number): void {
 function zoomCentre(factor: number): void {
   const s = boardSize();
   zoomAt({ x: s.x / 2, y: s.y / 2 }, factor);
+}
+// Apply one item patch: position, size, group, and — for
+// plugin cards only — data. Shared by updateItem and
+// updateItems.
+function applyPatch(it: Item, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown }): void {
+  if (patch.pos) it.pos = patch.pos;
+  if (patch.size) it.size = patch.size;
+  if (patch.group !== undefined) it.group = patch.group;
+  if (patch.data !== undefined && "Plugin" in it.kind) it.kind.Plugin.data = patch.data;
+}
+// Render one card as HTML, or null when it has none.
+// plain renders at the origin (for embedding in a panel
+// or view); the board position renders as it appears.
+function renderCardHtml(id: number, plain: boolean): string | null {
+  const it = boardGet(board, id);
+  if (!it) return null;
+  if ("Stroke" in it.kind || "Connector" in it.kind) return null;
+  const html = cards.cardHtml(plain ? { ...it, pos: { x: 0, y: 0 } } : it, plain);
+  return html === "" ? null : html;
 }
 // Validate and apply a camera, clamping the zoom. The
 // floor is 0.01, not 0.1: fit (F) must be able to reach a
@@ -586,10 +605,7 @@ async function init(): Promise<void> {
     updateItem: (id, patch) => {
       const it = boardGet(board, id);
       if (!it) return false;
-      if (patch.pos) it.pos = patch.pos;
-      if (patch.size) it.size = patch.size;
-      if (patch.group !== undefined) it.group = patch.group;
-      if (patch.data !== undefined && "Plugin" in it.kind) it.kind.Plugin.data = patch.data;
+      applyPatch(it, patch);
       syncGroupLabels(board);
       undoStore.save(); boardRender();
       return true;
@@ -603,10 +619,7 @@ async function init(): Promise<void> {
       for (const { id, ...patch } of patches) {
         const it = boardGet(board, id);
         if (!it) continue;
-        if (patch.pos) it.pos = patch.pos;
-        if (patch.size) it.size = patch.size;
-        if (patch.group !== undefined) it.group = patch.group;
-        if (patch.data !== undefined && "Plugin" in it.kind) it.kind.Plugin.data = patch.data;
+        applyPatch(it, patch);
         changed = true;
       }
       if (!changed) return false;
@@ -636,23 +649,11 @@ async function init(): Promise<void> {
       undoStore.save(); boardRender();
       return true;
     },
-    renderBoardCard: (id) => {
-      const it = boardGet(board, id);
-      if (!it) return null;
-      if ("Stroke" in it.kind || "Connector" in it.kind) return null;
-      const html = cards.cardHtml({ ...it, pos: { x: 0, y: 0 } }, true);
-      return html === "" ? null : html;
-    },
+    renderBoardCard: (id) => renderCardHtml(id, true),
     // The same card as it appears on the board: real
     // position, selection state and editing exclusion.
     // The board view builds the card DOM from this.
-    renderBoardCardAt: (id) => {
-      const it = boardGet(board, id);
-      if (!it) return null;
-      if ("Stroke" in it.kind || "Connector" in it.kind) return null;
-      const html = cards.cardHtml(it);
-      return html === "" ? null : html;
-    },
+    renderBoardCardAt: (id) => renderCardHtml(id, false),
     hitTest: (world: Pt) => hitTestWithFrames(board, world),
     // Selection queries for the board view's drags. Pure
     // reads over the live board, no save, no render.

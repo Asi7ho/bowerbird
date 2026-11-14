@@ -402,10 +402,6 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 .card .pdf-nav:hover { background: rgba(0, 0, 0, 0.05); }
 .card .pdf-nav:disabled { opacity: 0.35; cursor: default; }
 .card .pdf-nav:disabled:hover { background: transparent; }
-.card .desc {
-  color: var(--grey); display: -webkit-box; -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical; overflow: hidden; font-size: 12px; line-height: 1.45;
-}
 /* Link preview card: the site's own image on top when it has one,
    otherwise a clean text card. Title, description and domain all
    link out to the site; the whole card is never a fake embed. */

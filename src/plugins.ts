@@ -24,7 +24,7 @@
 // v1 does not pretend otherwise.
 
 import type { Anchor, ArrangeOptions, Board, Camera, Item, Kind, Pt, Size } from "./model";
-import { anchorPoint, arrangeItems, AUDIO_H, AUDIO_TRANSCRIPT_HIDDEN_H, AUDIO_TRANSCRIPT_SHOWN_H, boardGet, centre, checklistProgress, clippedEnds, domainOf, elide, escapeHtml, fitCamera, itemBounds, itemRotation, parseHex, rectCrossing, renderMarkdownHtml, rotatePoint, segmentIntersectsRect, select, setChecklistDone, tileColorFor, tint, toggleTaskLine } from "./model";
+import { anchorPoint, arrangeItems, AUDIO_H, AUDIO_TRANSCRIPT_HIDDEN_H, AUDIO_TRANSCRIPT_SHOWN_H, boardGet, centre, checklistProgress, clippedEnds, domainOf, elide, escapeHtml, fitCamera, itemBounds, itemRotation, parseHex, rectCrossing, rectFromPoints, renderMarkdownHtml, rotatePoint, segmentIntersectsRect, select, setChecklistDone, tileColorFor, tint, toggleTaskLine } from "./model";
 
 // ---------------------------------------------------------------- types
 
@@ -1554,8 +1554,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         // connector tool uses when it draws one by hand.
         const a = centre(from);
         const b = centre(to);
-        const pos = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y) };
-        const size = { w: Math.max(1, Math.abs(b.x - a.x)), h: Math.max(1, Math.abs(b.y - a.y)) };
+        const { pos, size } = rectFromPoints(a, b);
         return host!.addItem(
           { Connector: { from: { Item: fromId }, to: { Item: toId }, color: options?.color ?? "#333333" } },
           pos,
