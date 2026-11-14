@@ -170,6 +170,21 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
     };
   }
 
+  // The same state, built from an existing serialisation
+  // instead of re-copying the live board. Used where a
+  // save already produced the items JSON.
+  function stateFromJson(itemsJson: string): UndoState {
+    return {
+      items: JSON.parse(itemsJson) as Item[],
+      next_id: ctx.getBoard().next_id,
+      next_group: ctx.getBoard().next_group,
+      groups: JSON.parse(JSON.stringify(ctx.getBoard().groups ?? {})) as Record<number, { label: string }>,
+      bg: ctx.getBoard().bg,
+      grid: ctx.getBoard().grid,
+      selected: [...ctx.getSelected()],
+    };
+  }
+
   function contentKey(s: UndoState): string {
     // Selection is restored by undo, but a selection change alone
     // is not a board change, so it is not part of the key.
@@ -191,7 +206,7 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
     const curKey = key ?? contentKeyFor(itemsJson ?? JSON.stringify(ctx.getBoard().items));
     if (lastSnapshot !== null && lastSnapshotKey === curKey) return;
     const cur: UndoState = itemsJson !== undefined
-      ? { items: JSON.parse(itemsJson) as Item[], next_id: ctx.getBoard().next_id, next_group: ctx.getBoard().next_group, groups: JSON.parse(JSON.stringify(ctx.getBoard().groups ?? {})) as Record<number, { label: string }>, bg: ctx.getBoard().bg, grid: ctx.getBoard().grid, selected: [...ctx.getSelected()] }
+      ? stateFromJson(itemsJson)
       : contentSnapshot();
     if (lastSnapshot !== null) {
       undoStack.push(lastSnapshot);
@@ -226,7 +241,7 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
     // Move lastSnapshot to the new content, reusing save()'s
     // serialisation instead of snapshotting the board again.
     if (ser.contentKey !== lastSnapshotKey) {
-      lastSnapshot = { items: JSON.parse(ser.itemsJson) as Item[], next_id: ctx.getBoard().next_id, next_group: ctx.getBoard().next_group, groups: JSON.parse(JSON.stringify(ctx.getBoard().groups ?? {})) as Record<number, { label: string }>, bg: ctx.getBoard().bg, grid: ctx.getBoard().grid, selected: [...ctx.getSelected()] };
+      lastSnapshot = stateFromJson(ser.itemsJson);
       lastSnapshotKey = ser.contentKey;
     }
     updateUndoButtons();
@@ -247,11 +262,15 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
     ctx.clearEditing();
   }
 
-  function undo(): boolean {
-    if (undoStack.length === 0) return false;
-    redoStack.push(contentSnapshot());
-    const prev = undoStack.pop() as UndoState;
-    restoreUndoState(prev);
+  // One undo/redo step: move the current state onto the
+  // other stack, restore the popped state, and save. Undo
+  // and redo are mirror images — only which stack is source
+  // and which is destination swaps.
+  function step(from: UndoState[], to: UndoState[]): boolean {
+    if (from.length === 0) return false;
+    to.push(contentSnapshot());
+    const s = from.pop() as UndoState;
+    restoreUndoState(s);
     // Set lastSnapshot before save, so save's capture sees the
     // restored content as already known and does not push a step
     // or clear the redo chain we just built.
@@ -262,16 +281,12 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
     return true;
   }
 
+  function undo(): boolean {
+    return step(undoStack, redoStack);
+  }
+
   function redo(): boolean {
-    if (redoStack.length === 0) return false;
-    undoStack.push(contentSnapshot());
-    const next = redoStack.pop() as UndoState;
-    restoreUndoState(next);
-    setLastSnapshot(contentSnapshot());
-    save(); ctx.requestRender();
-    ctx.refreshSettings();
-    updateUndoButtons();
-    return true;
+    return step(redoStack, undoStack);
   }
 
   function resetUndo(): void {
