@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("bowerbird", {
   platform: process.platform,
   loadBoard: () => ipcRenderer.invoke("bowerbird:load-board"),
   saveBoard: (json: string) => ipcRenderer.invoke("bowerbird:save-board", json),
+  saveBoardSync: (json: string) => ipcRenderer.sendSync("bowerbird:save-board-sync", json),
   onExternalBoardChange: (cb: () => void) => { ipcRenderer.on("bowerbird:board-changed-external", () => cb()); },
   listBoards: () => ipcRenderer.invoke("bowerbird:list-boards"),
   createBoard: (name: string) => ipcRenderer.invoke("bowerbird:create-board", name),

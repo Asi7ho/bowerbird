@@ -192,6 +192,7 @@ export interface PluginShortcutDef {
 export interface PluginBridge {
   platform: string;
   fileUrl(path: string): string;
+  saveBoardSync(json: string): boolean;
   embedFile(path: string): Promise<string>;
   embedFileBytes(name: string, data: ArrayBuffer | Uint8Array): Promise<string>;
   readTextFile(path: string): Promise<string>;
@@ -541,6 +542,10 @@ export interface PluginContext {
     // filling in. The file still saves, so closing the
     // window keeps the change; undo never steps to it.
     saveWithoutUndo: () => void;
+    // Synchronous save, for the unload flush only: an async
+    // save may not complete before the window closes. Writes
+    // the live board as-is (no undo step, no change check).
+    saveSync: () => void;
     render: () => void;
     commitEditing: () => void;
     groupSelected: () => boolean;
@@ -1615,6 +1620,10 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       saveWithoutUndo: () => {
         require("board:write");
         host!.saveWithoutUndo();
+      },
+      saveSync: () => {
+        require("board:write");
+        bridge!.saveBoardSync(JSON.stringify(host!.getBoard()));
       },
       render: () => host!.render(),
       commitEditing: () => {

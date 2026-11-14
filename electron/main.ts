@@ -937,7 +937,13 @@ function registerIpc(): void {
     return { json, board_path: file, board_dir: dir, panelOrder: [...panelOrder], buildId: buildId(), ...showcase };
   });
 
-  ipcMain.handle("bowerbird:save-board", (_event, json: string) => {
+  // Write the board JSON to disk (tmp + rename), with the
+  // live-follow guard. Returns false when an external
+  // writer changed the file since the app last read or
+  // wrote it — the caller's board is stale and must reload
+  // instead of overwriting. Shared by the async save and
+  // the synchronous unload flush.
+  function saveBoardJson(json: string): boolean {
     const file = boardPath();
     // Live-follow guard: if the file on disk changed since the
     // app last read or wrote it, an external writer (the CLI
@@ -955,7 +961,7 @@ function registerIpc(): void {
         lastSavedJson = onDisk;
         if (boardWatchTimer) { clearTimeout(boardWatchTimer); boardWatchTimer = null; }
         boardView?.webContents.send("bowerbird:board-changed-external");
-        return;
+        return false;
       }
     } catch { /* no file yet: first save proceeds */ }
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -968,6 +974,19 @@ function registerIpc(): void {
     // it now that the folder exists.
     if (!boardWatcher) startBoardWatcher();
     maybeBackup(path.dirname(file), json);
+    return true;
+  }
+
+  ipcMain.handle("bowerbird:save-board", (_event, json: string) => {
+    saveBoardJson(json);
+  });
+
+  // Unload flush: an async invoke may not complete before
+  // the window closes, so a camera move made just before
+  // quitting would be lost. Only the unload flush uses
+  // this; ordinary saves stay async.
+  ipcMain.on("bowerbird:save-board-sync", (event, json: string) => {
+    event.returnValue = saveBoardJson(json);
   });
 
   // Delete/reset: remove everything saved in the whiteboard — the

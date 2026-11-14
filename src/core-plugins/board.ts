@@ -1666,6 +1666,18 @@ window.addEventListener("wheel", (e: WheelEvent) => {
 }, { passive: false });
 
 window.addEventListener("resize", () => { applyCamera(); refreshContentIfVisibleChanged(); });
+// Quitting inside a camera-save debounce (400 ms wheel,
+// 120 ms zoom settle) used to lose the camera: the async
+// save never ran. Flush it synchronously on unload, so a
+// pan or zoom made just before quitting is kept. Only
+// when a save is actually pending — an idle window writes
+// nothing.
+window.addEventListener("beforeunload", () => {
+  if (!wheelSaveTimer && !zoomSettleTimer) return;
+  if (wheelSaveTimer) { clearTimeout(wheelSaveTimer); wheelSaveTimer = null; }
+  if (zoomSettleTimer) { clearTimeout(zoomSettleTimer); zoomSettleTimer = null; }
+  try { api.board.saveSync(); } catch { /* the board is gone; nothing to flush */ }
+});
 // A media file that is missing shows as a blank card, which
 // looks like a rendering bug and tells the user nothing.
 // Catch load errors in the capture phase (img/video errors
