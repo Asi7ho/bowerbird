@@ -273,14 +273,14 @@ export function activate(api: PluginContext): void {
       // purple, not a chunky browser slider in blue.
       const tile = c.hh >= 104 ? 56 : 48;
       // A voice recording carries its transcript under the
-      // player, hidden by default: a Transcript toggle, and
-      // the text only when the card is taller than the
-      // hidden height (the toggle grows it to the shown
-      // height, and back). The text fills the card and
-      // scrolls, so a long note does not grow the card.
+      // player, hidden by default: the toggle lives in the
+      // card's bottom row (see cards.ts), and the text shows
+      // only when the card is taller than the hidden height.
+      // The text fills the card and scrolls, so a long note
+      // does not grow the card.
       const expanded = text.length > 0 && c.hh > AUDIO_TRANSCRIPT_HIDDEN_H;
-      const transcriptHtml = text.length > 0
-        ? `<button type="button" class="audio-transcript-toggle" data-action="toggle-transcript" data-id="${c.id}" aria-expanded="${expanded}">Transcript ${expanded ? "▴" : "▾"}</button>${expanded ? `<div class="audio-transcript-text">${api.text.escapeHtml(text)}</div>` : ""}`
+      const transcriptHtml = expanded
+        ? `<div class="audio-transcript-text">${api.text.escapeHtml(text)}</div>`
         : "";
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
         <div style="display:flex;align-items:center;gap:12px">
