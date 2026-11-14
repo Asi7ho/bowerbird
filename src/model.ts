@@ -418,6 +418,89 @@ export function strokePressuresVary(stroke: { pressures?: number[] }): boolean {
   return max - min > 0.02;
 }
 
+// Smoothing a freehand stroke: fast drawing leaves sparse
+// points, and a polyline through them has visible corners.
+// A Catmull-Rom spline through the same points is smooth
+// and passes through every point, so the line goes where
+// the user drew it. Only the rendering changes — the stored
+// points, hit-testing, the eraser and undo all keep the raw
+// polyline, and the spline follows it closely enough that
+// the hit test still matches what is drawn.
+
+// One Catmull-Rom segment as a cubic Bézier: p1→p2, with
+// control points from the neighbours p0 and p3.
+function catmullRomBezier(p0: Pt, p1: Pt, p2: Pt, p3: Pt): [Pt, Pt] {
+  return [
+    { x: p1.x + (p2.x - p0.x) / 6, y: p1.y + (p2.y - p0.y) / 6 },
+    { x: p2.x - (p3.x - p1.x) / 6, y: p2.y - (p3.y - p1.y) / 6 },
+  ];
+}
+const round2 = (v: number): number => Math.round(v * 100) / 100;
+
+// The smooth path through the points, as an SVG path
+// string. Two points is a straight line; fewer is empty.
+export function smoothStrokePath(points: Pt[]): string {
+  if (points.length < 2) return "";
+  if (points.length === 2) return `M${points[0].x},${points[0].y} L${points[1].x},${points[1].y}`;
+  const n = points.length;
+  let d = `M${points[0].x},${points[0].y}`;
+  for (let i = 0; i + 1 < n; i++) {
+    const p0 = points[Math.max(i - 1, 0)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(i + 2, n - 1)];
+    const [c1, c2] = catmullRomBezier(p0, p1, p2, p3);
+    d += ` C${round2(c1.x)},${round2(c1.y)} ${round2(c2.x)},${round2(c2.y)} ${p2.x},${p2.y}`;
+  }
+  return d;
+}
+
+// A point on the Catmull-Rom segment p1→p2 at t in [0,1].
+function catmullRomPoint(p0: Pt, p1: Pt, p2: Pt, p3: Pt, t: number): Pt {
+  const t2 = t * t, t3 = t2 * t;
+  return {
+    x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
+    y: 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3),
+  };
+}
+
+// Sample the smooth curve through the points, so a stroke
+// whose width varies can be drawn as short straight lines
+// between close samples instead of long ones between the
+// sparse raw points — the kinks disappear. Each original
+// segment contributes `steps` samples; the shared endpoint
+// is emitted once, so the result is (n−1)·steps + 1 points.
+export function smoothStrokeSamples(points: Pt[], steps = 4): Pt[] {
+  const n = points.length;
+  if (n < 2 || steps <= 1) return [...points];
+  const out: Pt[] = [points[0]];
+  for (let i = 0; i + 1 < n; i++) {
+    const p0 = points[Math.max(i - 1, 0)];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[Math.min(i + 2, n - 1)];
+    for (let s = 1; s <= steps; s++) out.push(catmullRomPoint(p0, p1, p2, p3, s / steps));
+  }
+  return out;
+}
+
+// The pressures at the sampled points: linear between the
+// pressures of the segment's endpoints, so a sample's
+// width matches the curve's position along the stroke.
+// Same length as smoothStrokeSamples with the same steps.
+export function smoothStrokePressures(pressures: number[], steps = 4): number[] {
+  const n = pressures.length;
+  if (n < 2 || steps <= 1) return [...pressures];
+  const out: number[] = [pressures[0]];
+  for (let i = 0; i + 1 < n; i++) {
+    for (let s = 1; s <= steps; s++) {
+      const t = s / steps;
+      out.push(pressures[i] + (pressures[i + 1] - pressures[i]) * t);
+    }
+  }
+  return out;
+}
+
 // Every stroke the eraser touches: all stroke ids whose
 // segments come within `radius` of the point, in world
 // units. The test is the same as the stroke branch of
