@@ -2,6 +2,7 @@
   "devDependencies": {
     "@types/node": "^24.19.2",
     "@types/three": "^0.180.0",
+    "bowerbird-plugin-api": "file:./plugin-api",
     "electron": "^45.2.1",
     "esbuild": "^0.28.2",
     "playwright-core": "^1.65.0",

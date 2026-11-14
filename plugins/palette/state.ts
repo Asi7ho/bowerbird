@@ -9,7 +9,7 @@
 // Default: the welcome board's blue, #007AFF (hue 211.3,
 // saturation 100%, lightness 50% — the hue is fractional
 // because #007AFF does not sit on an integer hue).
-import type { PluginContext } from "../../plugin-api";
+import type { PluginContext } from "bowerbird-plugin-api";
 import { hslToHex } from "./color.js";
 
 let api: PluginContext | null = null;

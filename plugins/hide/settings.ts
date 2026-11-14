@@ -2,7 +2,7 @@
 // text buttons (see style.css): the active corner is a white pill
 // on the grey track, the rest dimmed labels, so which corner is
 // active is obvious at a glance.
-import type { PluginContext } from "../../plugin-api";
+import type { PluginContext } from "bowerbird-plugin-api";
 import { CORNERS, OPTIONS, getCorner, setCorner } from "./corner.js";
 import type { Corner } from "./corner.js";
 import { positionButton } from "./button.js";

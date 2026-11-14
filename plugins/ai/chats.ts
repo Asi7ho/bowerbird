@@ -4,7 +4,7 @@
 // once it has a message; an empty "New chat" lives in memory
 // until the first message is sent, so the list never fills
 // with blank entries.
-import type { PluginContext } from "../../plugin-api";
+import type { PluginContext } from "bowerbird-plugin-api";
 
 export interface ChatMessage {
   role: "user" | "assistant";

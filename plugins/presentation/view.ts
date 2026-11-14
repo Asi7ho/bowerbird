@@ -3,7 +3,7 @@
 // and the audio that plays in place inside a slide through a
 // plain Audio element (the core's audio player belongs to the
 // board, which is hidden).
-import type { Item } from "../../plugin-api";
+import type { Item } from "bowerbird-plugin-api";
 import { getApi, state } from "./state.js";
 import { computeSlides, drawingPrimitives, signature } from "./geometry.js";
 import { updatePanel } from "./panel.js";

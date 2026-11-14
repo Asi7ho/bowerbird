@@ -2,7 +2,7 @@
 // runs in the main process (not the renderer). The only error
 // handling here is turning a provider failure into a short,
 // human sentence for the chat.
-import type { PluginContext } from "../../plugin-api";
+import type { PluginContext } from "bowerbird-plugin-api";
 import { getConfig } from "./settings.js";
 
 export interface ChatMessage {

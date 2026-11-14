@@ -10,7 +10,7 @@
 // the board's origin in client coordinates. Centre and drop
 // points go through it, never window size or raw client
 // coordinates, or a swatch lands 48px low.
-import type { PluginContext, Pt } from "../../plugin-api";
+import type { PluginContext, Pt } from "bowerbird-plugin-api";
 
 export function boardGeometry(): { w: number; h: number; left: number; top: number } {
   const el = document.getElementById("board");

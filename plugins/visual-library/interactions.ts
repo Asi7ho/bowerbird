@@ -3,7 +3,7 @@
 // at the drop point; media previews play in place and do
 // neither. Also the board geometry the drop point goes
 // through, so a duplicate never lands 48px low.
-import type { Item, PluginContext, Pt } from "../../plugin-api";
+import type { Item, PluginContext, Pt } from "bowerbird-plugin-api";
 import { KIND_SINGULAR, kindKey, moveItemToCategory } from "./items.js";
 import { updateAllDynamic } from "./render.js";
 import type { LibraryMode } from "./items.js";

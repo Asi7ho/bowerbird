@@ -7,7 +7,7 @@
 // The board model types live in plugin-api.d.ts (outside src/) so
 // plugins import them without reaching into the core. This module
 // re-exports them, so existing core imports from "./model" keep working.
-import type { Anchor, ArrangeOptions, Block, Board, Camera, Item, Kind, Pt, Segment, ShapeKind, Size } from "../../plugin-api";
+import type { Anchor, ArrangeOptions, Block, Board, Camera, Item, Kind, Pt, Segment, ShapeKind, Size } from "bowerbird-plugin-api";
 export type { Anchor, ArrangeOptions, Block, Board, Camera, Item, Kind, Pt, Segment, ShapeKind, Size };
 
 

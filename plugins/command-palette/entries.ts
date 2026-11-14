@@ -4,7 +4,7 @@
 // and the core actions the API can reach. Group, Ungroup, Delete,
 // Undo and Redo only appear when they can actually do something,
 // so the palette never lists an action that silently does nothing.
-import type { Item, PluginContext } from "../../plugin-api";
+import type { Item, PluginContext } from "bowerbird-plugin-api";
 
 export interface Entry {
   title: string;

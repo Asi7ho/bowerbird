@@ -18,7 +18,7 @@
 // entries.ts owns the command registry, ui.ts the modal overlay
 // and its keyboard handling. main.ts is the entry point that
 // wires them together.
-import type { PluginContext } from "../../plugin-api";
+import type { PluginContext } from "bowerbird-plugin-api";
 import { clearPalette, initOverlay, initPalette, onKeyDown, onPointerDown } from "./ui.js";
 
 export function activate(api: PluginContext): void {

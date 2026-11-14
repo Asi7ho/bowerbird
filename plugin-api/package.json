@@ -1,0 +1,1 @@
+{"description":"Public plugin API types for Bowerbird. Plugins import the types from this module — never from the core's source.","name":"bowerbird-plugin-api","private":true,"types":"./index.d.ts","version":"0.2.1"}
