@@ -84,6 +84,13 @@ export function activate(api: PluginContext): void {
   };
   const safeColor = (v: unknown, fallback: string): string =>
     typeof v === "string" && /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(v) ? v : fallback;
+  // The escaped, elided title line, and the title+sub
+  // column it sits in. Shared by the media card renderers.
+  const titleHtml = (name: string, width: number): string =>
+    `<div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, width, 14, true))}</div>`;
+  const titleSubCol = (name: string, width: number, sub: string): string =>
+    `<div class="col">${titleHtml(name, width)}<div class="sub" style="font-size:12px">${sub}</div></div>`;
+  const formatKB = (size_bytes: number): number => Math.round(num(size_bytes, 0) / 1024);
 
   // Markdown is a per-character regex walk, so re-parsing every note
   // on every render is the most expensive part of a rebuild for a
@@ -177,21 +184,20 @@ export function activate(api: PluginContext): void {
       const initial = (domain[0] ?? "?").toUpperCase();
       const img = safeHttpUrl(image);
       const ico = safeHttpUrl(icon);
-      const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-      const footer = `<div class="link-footer"><a class="link-domain" data-action="open-link" data-id="${c.id}">${ico ? `<img class="favicon" src="${esc(ico)}" alt="" onerror="this.style.display='none';var f=this.nextElementSibling;if(f)f.style.display='flex'" /><span class="favicon-fallback" style="display:none;background:${api.text.tint(tile, 0.85)};color:${tile}">${esc(initial)}</span>` : `<span class="favicon-fallback" style="background:${api.text.tint(tile, 0.85)};color:${tile}">${esc(initial)}</span>`}<span>${esc(domain)}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" /></svg></a></div>`;
+      const footer = `<div class="link-footer"><a class="link-domain" data-action="open-link" data-id="${c.id}">${ico ? `<img class="favicon" src="${api.text.escapeHtml(ico)}" alt="" onerror="this.style.display='none';var f=this.nextElementSibling;if(f)f.style.display='flex'" /><span class="favicon-fallback" style="display:none;background:${api.text.tint(tile, 0.85)};color:${tile}">${api.text.escapeHtml(initial)}</span>` : `<span class="favicon-fallback" style="background:${api.text.tint(tile, 0.85)};color:${tile}">${api.text.escapeHtml(initial)}</span>`}<span>${api.text.escapeHtml(domain)}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" /></svg></a></div>`;
       if (img) {
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner link-card">
-          <a class="link-image" data-action="open-link" data-id="${c.id}"><img src="${esc(img)}" draggable="false" alt="" onerror="this.closest('.link-image').style.display='none'" /></a>
+          <a class="link-image" data-action="open-link" data-id="${c.id}"><img src="${api.text.escapeHtml(img)}" draggable="false" alt="" onerror="this.closest('.link-image').style.display='none'" /></a>
           <div class="link-body">
-            <a class="link-title" data-action="open-link" data-id="${c.id}">${esc(head)}</a>
-            ${description ? `<div class="link-desc">${esc(description)}</div>` : ""}
+            <a class="link-title" data-action="open-link" data-id="${c.id}">${api.text.escapeHtml(head)}</a>
+            ${description ? `<div class="link-desc">${api.text.escapeHtml(description)}</div>` : ""}
             ${footer}
           </div></div></div>`;
       }
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner link-card no-image">
         <div class="link-body">
-          <a class="link-title" data-action="open-link" data-id="${c.id}">${esc(head)}</a>
-          ${description ? `<div class="link-desc">${esc(description)}</div>` : ""}
+          <a class="link-title" data-action="open-link" data-id="${c.id}">${api.text.escapeHtml(head)}</a>
+          ${description ? `<div class="link-desc">${api.text.escapeHtml(description)}</div>` : ""}
           ${footer}
         </div></div></div>`;
     },
@@ -207,16 +213,14 @@ export function activate(api: PluginContext): void {
       const c = chrome(item, plain);
       const { path, size_bytes } = data as PdfCardData;
       const name = path.split("/").pop() ?? path;
-      const kb = Math.round(num(size_bytes, 0) / 1024);
+      const kb = formatKB(size_bytes);
       const tile = `<div class="tile" style="background:${api.text.tint("#E63946", 0.88)};color:#E63946;font-size:13px">PDF</div>
-        <div class="col"><div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, c.ww - 92, 14, true))}</div><div class="sub" style="font-size:12px">${kb} KB</div></div>`;
+        ${titleSubCol(name, c.ww - 92, `${kb} KB`)}`;
       // Plain rendering (slides, library, export) stays a tile:
       // a canvas drawn by PDF.js does not survive as HTML, so
       // a rendered page there would export as a blank box.
-      if (plain) {
-        return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px">${tile}</div></div>`;
-      }
-      if (api.media.pdfFailed(path)) {
+      // A failed PDF renders the same tile row.
+      if (plain || api.media.pdfFailed(path)) {
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px">${tile}</div></div>`;
       }
       api.media.loadPdfPage(c.id, path);
@@ -227,7 +231,7 @@ export function activate(api: PluginContext): void {
         // the same row shape as audio and video cards.
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px" data-pdf-wrap="${c.id}">
           <div style="width:56px;height:${c.hh - 24}px;flex:none;background:var(--bg-system);border-radius:6px;overflow:hidden"><canvas data-pdf-canvas="${c.id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
-          <div class="col"><div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, c.ww - 92, 14, true))}</div><div class="sub" style="font-size:12px">${kb} KB · <span data-pdf-count="${c.id}">…</span></div></div></div></div>`;
+          ${titleSubCol(name, c.ww - 92, `${kb} KB · <span data-pdf-count="${c.id}">…</span>`)}</div></div>`;
       }
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px" data-pdf-wrap="${c.id}">
         <div style="flex:1 1 auto;min-height:0;background:var(--bg-system);border-radius:8px;overflow:hidden"><canvas data-pdf-canvas="${c.id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
@@ -290,7 +294,7 @@ export function activate(api: PluginContext): void {
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
         <div style="display:flex;align-items:center;gap:12px">
           <div class="audio-tile clickable" data-action="play-audio" data-id="${c.id}" style="width:${tile}px;height:${tile}px;background:${api.text.tint("#6A4C93", 0.88)};color:#6a4c93;font-size:${tile === 56 ? 18 : 16}px">${playing ? "❚❚" : "▶"}</div>
-          <div class="col"><div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, c.ww - 92, 14, true))}</div><div class="sub" style="font-size:12px"><span data-audio-time="${c.id}">${api.media.formatAudioTime(cur)}</span> / <span data-audio-dur="${c.id}">${api.media.formatAudioTime(dur)}</span></div></div>
+          ${titleSubCol(name, c.ww - 92, `<span data-audio-time="${c.id}">${api.media.formatAudioTime(cur)}</span> / <span data-audio-dur="${c.id}">${api.media.formatAudioTime(dur)}</span>`)}
         </div>
         <input class="audio-seek" type="range" min="0" max="1000" value="${seekVal}" style="--seek-pct:${seekPct}%" data-audio-seek="${c.id}" aria-label="Seek">
         ${toggleHtml}${transcriptHtml}
@@ -305,7 +309,7 @@ export function activate(api: PluginContext): void {
       const c = chrome(item, plain);
       const { source, remote, size_bytes } = data as VideoData;
       const name = remote ? api.text.domainOf(source) : (source.split("/").pop() ?? source);
-      const sub = remote ? "Video link" : `${Math.round(num(size_bytes, 0) / 1024)} KB`;
+      const sub = remote ? "Video link" : `${formatKB(size_bytes)} KB`;
       const thumbH = (c.ww - 24) * 9 / 16;
       // A local video in a format Chromium can play plays right here
       // in the board, with its real first frame as the thumbnail —
@@ -319,20 +323,20 @@ export function activate(api: PluginContext): void {
         if (c.hh >= thumbH + 70) {
           return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
             <video controls preload="metadata" playsinline src="${src}" data-name="${api.text.escapeHtml(name)}" data-path="${api.text.escapeHtml(source)}" style="width:${c.ww - 24}px;height:${thumbH}px;object-fit:${c.sel ? "contain" : "cover"};border-radius:10px;background:#1d1d1f;pointer-events:auto"></video>
-            <div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, c.ww - 24, 14, true))}</div><div class="sub" style="font-size:12px">${sub}</div></div></div>`;
+            ${titleHtml(name, c.ww - 24)}<div class="sub" style="font-size:12px">${sub}</div></div></div>`;
         }
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px">
           <video controls preload="metadata" playsinline src="${src}" data-name="${api.text.escapeHtml(name)}" data-path="${api.text.escapeHtml(source)}" style="width:96px;height:56px;object-fit:${c.sel ? "contain" : "cover"};border-radius:10px;background:#1d1d1f;pointer-events:auto"></video>
-          <div class="col"><div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, c.ww - 132, 14, true))}</div><div class="sub" style="font-size:12px">${sub}</div></div></div></div>`;
+          ${titleSubCol(name, c.ww - 132, sub)}</div></div>`;
       }
       if (c.hh >= thumbH + 70) {
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
           <div class="video-thumb clickable" data-action="play-video" data-id="${c.id}" style="width:${c.ww - 24}px;height:${thumbH}px;font-size:28px">▶</div>
-          <div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, c.ww - 24, 14, true))}</div><div class="sub" style="font-size:12px">${sub}</div></div></div>`;
+          ${titleHtml(name, c.ww - 24)}<div class="sub" style="font-size:12px">${sub}</div></div></div>`;
       }
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px">
         <div class="video-thumb clickable" data-action="play-video" data-id="${c.id}" style="width:96px;height:56px;font-size:20px">▶</div>
-        <div class="col"><div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, c.ww - 132, 14, true))}</div><div class="sub" style="font-size:12px">${sub}</div></div></div></div>`;
+        ${titleSubCol(name, c.ww - 132, sub)}</div></div>`;
     },
   });
 
@@ -343,14 +347,14 @@ export function activate(api: PluginContext): void {
       const c = chrome(item, plain);
       const { path, size_bytes } = data as Model3DData;
       const name = path.split("/").pop() ?? path;
-      const sub = `${Math.round(num(size_bytes, 0) / 1024)} KB · GLB`;
+      const sub = `${formatKB(size_bytes)} KB · GLB`;
       // A plain render (a preview outside the board) has no
       // viewer to mount, so it gets a static tile instead
       // of an empty canvas.
       if (plain) {
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
           <div class="model3d-tile" style="flex:1 1 auto">3D</div>
-          <div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, c.ww - 24, 14, true))}</div><div class="sub" style="font-size:12px">${sub}</div></div></div>`;
+          ${titleHtml(name, c.ww - 24)}<div class="sub" style="font-size:12px">${sub}</div></div></div>`;
       }
       // The canvas is the viewport: drag rotates, wheel
       // zooms. It is transparent — the model is drawn by
@@ -363,7 +367,7 @@ export function activate(api: PluginContext): void {
       const canvasH = Math.max(80, c.hh - 70);
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
         <canvas class="model3d clickable" data-id="${c.id}" data-path="${api.text.escapeHtml(path)}" style="width:${c.ww - 24}px;height:${canvasH}px;border-radius:10px;background:var(--bg-system)"></canvas>
-        <div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, c.ww - 24, 14, true))}</div><div class="sub" style="font-size:12px">${sub}</div></div></div>`;
+        ${titleHtml(name, c.ww - 24)}<div class="sub" style="font-size:12px">${sub}</div></div></div>`;
     },
   });
 }
