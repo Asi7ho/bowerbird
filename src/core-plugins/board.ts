@@ -681,6 +681,20 @@ function updateSelection(): void {
 // on every click and drag, and repeating the same line
 // would spam the reader.
 let lastAnnouncedSelection = "";
+// Kind is a single-key externally-tagged enum, so the
+// first key is the discriminant. Shape, Model3D and
+// Plugin have no entry and fall to "Card selected".
+const KIND_SELECTION_LABELS: Record<string, string> = {
+  Text: "Text card selected",
+  Image: "Image card selected",
+  Audio: "Audio card selected",
+  Video: "Video card selected",
+  PdfCard: "PDF card selected",
+  UrlCard: "Link card selected",
+  Swatch: "Colour swatch selected",
+  Stroke: "Stroke selected",
+  Connector: "Connector selected",
+};
 function announceSelection(): void {
   const announcer = document.getElementById("sr-announcer");
   if (!announcer) return;
@@ -691,16 +705,7 @@ function announceSelection(): void {
   } else if (selected.length === 1) {
     const it = api.board.getItem(selected[0]);
     if (!it) text = "1 card selected";
-    else if ("Text" in it.kind) text = "Text card selected";
-    else if ("Image" in it.kind) text = "Image card selected";
-    else if ("Audio" in it.kind) text = "Audio card selected";
-    else if ("Video" in it.kind) text = "Video card selected";
-    else if ("PdfCard" in it.kind) text = "PDF card selected";
-    else if ("UrlCard" in it.kind) text = "Link card selected";
-    else if ("Swatch" in it.kind) text = "Colour swatch selected";
-    else if ("Stroke" in it.kind) text = "Stroke selected";
-    else if ("Connector" in it.kind) text = "Connector selected";
-    else text = "Card selected";
+    else text = KIND_SELECTION_LABELS[Object.keys(it.kind)[0]] ?? "Card selected";
     if (it && it.group !== null) {
       const board = api.board.get();
       const label = board.groups?.[it.group]?.label;
