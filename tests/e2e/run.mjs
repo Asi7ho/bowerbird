@@ -847,6 +847,59 @@ async function main() {
       }
     });
 
+    await check("a video card shows a poster, not a video element, until played", async () => {
+      // A video card is a still image until its play button is
+      // pressed: no <video> element in the DOM, so a board of
+      // videos costs no decoders. The poster is the captured
+      // frame, filled in by the backfill for boards that
+      // predate it; pressing play mounts the <video> and
+      // starts it. Reuses the video card the all-types check
+      // laid out, so no new card changes the board's extents
+      // (and the fit zoom the later checks rely on).
+      const board = readBoard();
+      const video = board.items.find((it) => "Video" in it.kind);
+      assert.ok(video, "video card on the board");
+      const id = video.id;
+      await page.locator(`#cards .card[data-id="${id}"]`).first().waitFor({ timeout: 15000 });
+      await page.keyboard.press("f");
+      await new Promise((r) => setTimeout(r, 500));
+      const state = () => page.evaluate((cid) => {
+        const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
+        if (!card) return null;
+        return {
+          video: !!card.querySelector("video"),
+          thumb: !!card.querySelector(".video-thumb"),
+          poster: !!card.querySelector(".video-thumb img"),
+          sub: card.querySelector(".sub")?.textContent ?? "",
+        };
+      }, String(id));
+      // No <video> element at rest, just the play tile.
+      const atRest = await state();
+      assert.ok(atRest, "video card on screen");
+      assert.equal(atRest.video, false, "no video element before play");
+      assert.equal(atRest.thumb, true, "play tile shown before play");
+      // The backfill captures the poster frame and writes it
+      // to the board: the tile becomes the captured frame,
+      // and the duration appears in the sub-line.
+      await waitFor("poster frame appears on the video card", async () => (await state())?.poster, 30000);
+      const afterPoster = await state();
+      assert.ok(afterPoster.sub.includes("0:10"), "duration shows in the sub-line");
+      const filled = readBoard().items.find((it) => it.id === id);
+      assert.ok(filled.kind.Video.poster, "poster path saved on the card");
+      assert.ok(typeof filled.kind.Video.duration === "number" && filled.kind.Video.duration > 0, "duration saved on the card");
+      // Pressing play mounts the <video> and starts it.
+      const box = await page.locator(`#cards .card[data-id="${id}"] .video-thumb`).first().boundingBox();
+      assert.ok(box, "play tile on screen");
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await waitFor("video element mounts and plays", async () => {
+        const s = await page.evaluate((cid) => {
+          const v = document.querySelector(`#cards .card[data-id="${cid}"] video`);
+          return v ? { paused: v.paused, t: v.currentTime } : null;
+        }, String(id));
+        return s && !s.paused && s.t > 0 ? s : null;
+      });
+    });
+
     await check("hovering a decoration does not change its style", async () => {
       // A tag pill lost its colour and became invisible on
       // hover. The checklist progress is the decoration left
