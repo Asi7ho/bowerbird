@@ -78,13 +78,15 @@ export function activate(api) {
   const after = api.cards.getChecklistProgress(api.board.getItem(id));
   // Frame, action and double-click: a frame kind, and a kind
   // whose renderer answers an action and a double-click.
+  // These are exercised on in-memory items, not cards on the
+  // board: adding cards here would widen the board and move
+  // the fit zoom the mic check below depends on.
   api.cards.register({
     kind: "APIFrame",
     title: "API frame",
     frame: true,
     render: () => '<div style="padding:12px">API frame</div>',
   });
-  const frameId = api.board.addPluginCard("APIFrame", {}, { x: 1300, y: 400 }, { w: 300, h: 200 });
   let actionSeen = null;
   let dblSeen = false;
   api.cards.register({
@@ -94,10 +96,9 @@ export function activate(api) {
     onAction: (action, item) => { actionSeen = action + ":" + item.id; },
     onDoubleClick: (item) => { dblSeen = item.id; },
   });
-  const actionId = api.board.addPluginCard("APIAction", {}, { x: 1300, y: 650 }, { w: 260, h: 96 });
-  const frameItem = api.board.getItem(frameId);
+  const frameItem = { id: 901, pos: { x: 0, y: 0 }, size: { w: 300, h: 200 }, group: null, kind: { Plugin: { plugin: "api-test-plugin", kind: "APIFrame", data: {} } } };
+  const actionItem = { id: 902, pos: { x: 0, y: 0 }, size: { w: 260, h: 96 }, group: null, kind: { Plugin: { plugin: "api-test-plugin", kind: "APIAction", data: {} } } };
   const textItem = api.board.getItem(id);
-  const actionItem = api.board.getItem(actionId);
   const isFrameFrame = api.cards.isFrame(frameItem);
   const isFrameText = api.cards.isFrame(textItem);
   const actionOk = api.cards.dispatchAction("ping", actionItem);
@@ -113,7 +114,7 @@ export function activate(api) {
   const toolMiss = api.ui.getToolDef("plugin:api-test-plugin:nope");
   const shortcutOk = api.ui.dispatchShortcut("j");
   const shortcutMiss = api.ui.dispatchShortcut("z");
-  window.__apiTest = { id, before, after, frameId, actionId, isFrameFrame, isFrameText, actionOk, dblOk, actionMiss, dblMiss, actionSeen, dblSeen, toolDef: toolDef ? { id: toolDef.id, title: toolDef.title, pluginId: toolDef.pluginId } : null, toolMiss, shortcutOk, shortcutMiss, shortcutSeen };
+  window.__apiTest = { id, before, after, isFrameFrame, isFrameText, actionOk, dblOk, actionMiss, dblMiss, actionSeen, dblSeen, toolDef: toolDef ? { id: toolDef.id, title: toolDef.title, pluginId: toolDef.pluginId } : null, toolMiss, shortcutOk, shortcutMiss, shortcutSeen };
 }
 export function deactivate() {}
 `;
@@ -559,9 +560,9 @@ async function main() {
       // handlers and return true; on a card with no handler
       // they return false and run nothing.
       assert.equal(result.actionOk, true);
-      assert.equal(result.actionSeen, `ping:${result.actionId}`);
+      assert.equal(result.actionSeen, "ping:902");
       assert.equal(result.dblOk, true);
-      assert.equal(result.dblSeen, result.actionId);
+      assert.equal(result.dblSeen, 902);
       assert.equal(result.actionMiss, false);
       assert.equal(result.dblMiss, false);
       // getToolDef reads a registered tool back by its full
