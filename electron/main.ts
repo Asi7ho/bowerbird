@@ -923,14 +923,41 @@ function registerIpc(): void {
         if (fs.existsSync(dest)) {
           json = json.split("welcome-video.ogv").join("welcome-video.mp4");
           fs.writeFileSync(file, json);
+          // The app wrote this, not an external writer: record
+          // it so the watcher does not treat it as one.
+          lastSavedJson = json;
         }
       } catch { /* old reference stays, video still opens outside */ }
     }
+    // Baseline for the live-follow guard in save-board: the
+    // content the app last read or wrote. A save that finds
+    // different content on disk knows an external writer
+    // changed it since.
+    if (json) lastSavedJson = json;
     return { json, board_path: file, board_dir: dir, panelOrder: [...panelOrder], buildId: buildId(), ...showcase };
   });
 
   ipcMain.handle("bowerbird:save-board", (_event, json: string) => {
     const file = boardPath();
+    // Live-follow guard: if the file on disk changed since the
+    // app last read or wrote it, an external writer (the CLI
+    // agent, a script) changed it. Overwriting would silently
+    // lose that edit — the race the 300 ms watcher debounce
+    // used to leave open. Do not write; record the disk
+    // content and tell the renderer an external change
+    // arrived, so it reloads like a normal live-follow
+    // instead of clobbering. The in-memory edit is lost, the
+    // same as a live-follow reload, but nothing is lost
+    // silently and the user sees the external board.
+    try {
+      const onDisk = fs.readFileSync(file, "utf8");
+      if (lastSavedJson !== null && onDisk !== lastSavedJson) {
+        lastSavedJson = onDisk;
+        if (boardWatchTimer) { clearTimeout(boardWatchTimer); boardWatchTimer = null; }
+        boardView?.webContents.send("bowerbird:board-changed-external");
+        return;
+      }
+    } catch { /* no file yet: first save proceeds */ }
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const tmp = file + ".tmp";
     fs.writeFileSync(tmp, json);
@@ -1356,7 +1383,7 @@ function registerIpc(): void {
     return listBoards();
   });
   ipcMain.handle("bowerbird:create-board", (_event, name: unknown) => createBoard(name));
-  ipcMain.handle("bowerbird:switch-board", (_event, name: unknown) => { const out = switchBoard(name); startBoardWatcher(); return out; });
+  ipcMain.handle("bowerbird:switch-board", (_event, name: unknown) => { const out = switchBoard(name); lastSavedJson = out.json; startBoardWatcher(); return out; });
   ipcMain.handle("bowerbird:rename-board", (_event, oldName: unknown, newName: unknown) => { const out = renameBoard(oldName, newName); startBoardWatcher(); return out; });
   ipcMain.handle("bowerbird:delete-board", (_event, name: unknown, opts?: { confirmed?: boolean }) => {
     // Destructive: the caller must pass { confirmed: true } after
@@ -1367,7 +1394,15 @@ function registerIpc(): void {
   ipcMain.handle("bowerbird:list-backups", () => {
     return listBackups(boardDir());
   });
-  ipcMain.handle("bowerbird:restore-backup", (_event, name: string) => restoreBackup(boardDir(), name));
+  ipcMain.handle("bowerbird:restore-backup", (_event, name: string) => {
+    const out = restoreBackup(boardDir(), name);
+    // The app wrote this, not an external writer: record it
+    // so the watcher does not fire a second reload (and a
+    // misleading "Board updated on disk" toast) right after
+    // "Backup restored".
+    lastSavedJson = out.json;
+    return out;
+  });
   ipcMain.handle("bowerbird:open-backups-folder", () => {
     // The Settings UI lists only the newest backup, so the
     // folder is how a user reaches an older one. It is
