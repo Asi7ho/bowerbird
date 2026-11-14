@@ -368,6 +368,30 @@ async function main() {
         return found.length === 1 ? found[0] : null;
       });
       assert.ok(fs.existsSync(image.kind.Image.path), "embedded asset file exists on disk");
+      // The image ends above the bottom row: the photo is
+      // 36px shorter than the card, so the "+ tag" button
+      // never sits on it. (The suite board can hold two
+      // items with one id, so the button is matched by
+      // position — the one in the image card's row — not by
+      // id alone.)
+      await waitFor("image ends above the tag row", async () => {
+        const found = await page.evaluate((id) => {
+          const img = document.querySelector(`#cards .card[data-id="${id}"] img`);
+          if (!img) return null;
+          const ib = img.getBoundingClientRect();
+          const adds = Array.from(document.querySelectorAll(`.card-decorations[data-for="${id}"] .tag-add`));
+          let best = null;
+          let bestGap = Infinity;
+          for (const a of adds) {
+            const ab = a.getBoundingClientRect();
+            const gap = Math.abs(ab.top - ib.top);
+            if (gap < bestGap) { bestGap = gap; best = ab; }
+          }
+          if (!best) return null;
+          return { imgBottom: ib.bottom, addTop: best.top };
+        }, image.id);
+        return found && found.imgBottom <= found.addTop + 1 ? true : null;
+      });
     });
 
     await check("F zooms to fit the whole board", async () => {
@@ -613,11 +637,25 @@ async function main() {
       assert.equal(audios.length, 1);
       assert.ok(fs.existsSync(audios[0].kind.Audio.path));
       assert.ok(fs.statSync(audios[0].kind.Audio.path).size > 0);
-      // The card is centred on the double-click point.
-      const audioBox = await page.locator("#cards .card", { hasText: "voice-note" }).first().boundingBox();
+      // A voice note without a transcript is 136 tall, and
+      // its seek ends above the bottom row, so the "+ tag"
+      // button never sits on the seek bar.
+      const audioBox = await page.locator(`#cards .card[data-id="${audios[0].id}"]`).first().boundingBox();
       assert.ok(audioBox);
-      assert.ok(Math.abs(audioBox.x + audioBox.width / 2 - cx) < 5);
-      assert.ok(Math.abs(audioBox.y + audioBox.height / 2 - cy) < 5);
+      assert.equal(Math.round(audioBox.height), 136);
+      await waitFor("seek ends above the tag row", async () => {
+        const seek = await page.$(`#cards .card[data-id="${audios[0].id}"] input[type="range"]`);
+        const add = await page.$(`.card-decorations[data-for="${audios[0].id}"] .tag-add`);
+        if (!seek || !add) return null;
+        const sb = await seek.boundingBox();
+        const ab = await add.boundingBox();
+        return sb && ab && sb.y + sb.height <= ab.y + 1 ? true : null;
+      });
+      // The card is centred on the double-click point.
+      const audioBox2 = await page.locator("#cards .card", { hasText: "voice-note" }).first().boundingBox();
+      assert.ok(audioBox2);
+      assert.ok(Math.abs(audioBox2.x + audioBox2.width / 2 - cx) < 5);
+      assert.ok(Math.abs(audioBox2.y + audioBox2.height / 2 - cy) < 5);
       // And typing still works: double-clicking opens the
       // text box directly, with the mic beside it. Left of
       // the Hello note, inside the group frame but on empty

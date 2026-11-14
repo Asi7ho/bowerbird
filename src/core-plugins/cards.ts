@@ -161,10 +161,10 @@ export function activate(api: PluginContext): void {
       // selected. Selecting switches to contain, so the full
       // image is visible; deselecting goes back to cover.
       const fit = c.sel ? "contain" : "cover";
-      // The image ends 36px above the card's bottom, so the
-      // tag pills in the bottom row sit on the card's own
-      // background, not on the photo.
-      return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="background:var(--bg-system)"><img src="${api.files.fileUrl(path)}" data-name="${api.text.escapeHtml(name)}" data-path="${api.text.escapeHtml(path)}" draggable="false" style="display:block;width:100%;height:calc(100% - 36px);object-fit:${fit};border-radius:12px" alt="" /></div></div>`;
+      // The image ends 48px above the card's bottom (the
+      // 36px row plus a 12px gap), so the tag pills sit on
+      // the card's own background, not on the photo.
+      return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="background:var(--bg-system)"><img src="${api.files.fileUrl(path)}" data-name="${api.text.escapeHtml(name)}" data-path="${api.text.escapeHtml(path)}" draggable="false" style="display:block;width:100%;height:calc(100% - 48px);object-fit:${fit};border-radius:12px" alt="" /></div></div>`;
     },
   });
 
@@ -249,11 +249,12 @@ export function activate(api: PluginContext): void {
       const c = chrome(item, plain);
       const { hex } = data as SwatchData;
       const safeHex = safeColor(hex, "#1A1A1A");
-      // The colour ends 36px above the card's bottom, so the
-      // tag pills in the bottom row sit on the card's white
-      // background, not on the colour. The hex pill rides
-      // 10px above the colour's bottom edge (see styles.css).
-      return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div style="position:absolute;inset:0 0 36px 0;background:${safeHex};border-radius:12px 12px 0 0"></div><div class="swatch-pill">${api.text.escapeHtml(safeHex)}</div></div>`;
+      // The colour ends 48px above the card's bottom (the
+      // 36px row plus a 12px gap), so the tag pills sit on
+      // the card's white background, not on the colour. The
+      // hex pill rides 10px above the colour's bottom edge
+      // (see styles.css).
+      return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div style="position:absolute;inset:0 0 48px 0;background:${safeHex};border-radius:12px 12px 0 0"></div><div class="swatch-pill">${api.text.escapeHtml(safeHex)}</div></div>`;
     },
   });
 

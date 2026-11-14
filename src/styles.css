@@ -472,7 +472,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
 }
 .card .swatch-pill {
-  position: absolute; right: 10px; bottom: 46px;
+  position: absolute; right: 10px; bottom: 58px;
   background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(8px);
   border: 1px solid var(--hairline); border-radius: 8px; padding: 4px 8px;
   font-weight: 600; font-size: 12px; box-shadow: var(--shadow-sm);
