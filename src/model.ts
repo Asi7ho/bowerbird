@@ -70,10 +70,6 @@ export interface Board {
 
 export const GRID = 100;
 
-export function kindName(item: Item): string {
-  return Object.keys(item.kind)[0];
-}
-
 // Id lookup is the hot path for hit-testing: every
 // connector hit-test used to call boardGet per endpoint,
 // which is a linear scan, so a connector-heavy board
@@ -92,10 +88,6 @@ function indexFor(board: Board): Map<number, Item> {
   for (const it of board.items) byId.set(it.id, it);
   indexByBoard.set(board, { items: board.items, byId });
   return byId;
-}
-
-export function get(item: Item, board: Board): Item | undefined {
-  return indexFor(board).get(item.id);
 }
 
 export function boardGet(board: Board, id: number): Item | undefined {
