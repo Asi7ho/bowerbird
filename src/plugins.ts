@@ -213,10 +213,10 @@ export interface PluginBridge {
   pluginStorageSet(pluginId: string, key: string, value: unknown): Promise<void>;
   pluginStorageDelete(pluginId: string, key: string): Promise<void>;
   listBoards: () => Promise<Array<{ name: string; current: boolean; items: number }>>;
-  factoryReset(): Promise<{ ok: boolean }>;
+  factoryReset(opts?: { confirmed?: boolean }): Promise<{ ok: boolean }>;
   createBoard: (name: string) => Promise<{ name: string }>;
   renameBoard: (oldName: string, newName: string) => Promise<{ name: string }>;
-  deleteBoard: (name: string) => Promise<{ wasCurrent: boolean }>;
+  deleteBoard: (name: string, opts?: { confirmed?: boolean }) => Promise<{ wasCurrent: boolean }>;
   secureStorageAvailable(): Promise<boolean>;
   secureStorageGet(pluginId: string, key: string): Promise<string | null>;
   secureStorageSet(pluginId: string, key: string, value: string): Promise<boolean>;
@@ -407,7 +407,7 @@ export interface PluginHost {
   // Reset the board to a fresh welcome board (the settings
   // "Delete all board data" flow). A board write, and not
   // available to a trial plugin.
-  resetBoard: () => Promise<boolean>;
+  resetBoard: (opts?: { confirmed?: boolean }) => Promise<boolean>;
   getBoardDir: () => string;
   // Board canvas (background + grid): the settings UI writes
   // these. A board-level write, so it needs board:write on
@@ -561,7 +561,7 @@ export interface PluginContext {
     setNoteBackground: (ids: number[], hex: string) => void;
     // Reset the board to a fresh welcome board. A board write,
     // and not available to a trial plugin.
-    reset: () => Promise<boolean>;
+    reset: (opts?: { confirmed?: boolean }) => Promise<boolean>;
     // The board's folder on disk, for display (the settings
     // "Board folder" line). Read-only.
     getDir: () => string;
@@ -579,7 +579,7 @@ export interface PluginContext {
     create: (name: string) => Promise<{ name: string }>;
     switch: (name: string, preserveUndo?: boolean) => Promise<boolean>;
     rename: (oldName: string, newName: string) => Promise<{ name: string }>;
-    delete: (name: string) => Promise<{ wasCurrent: boolean }>;
+    delete: (name: string, opts?: { confirmed?: boolean }) => Promise<{ wasCurrent: boolean }>;
   };
   // The app itself: build id and platform. Read-only; a plugin
   // that shows a version uses these.
@@ -590,7 +590,7 @@ export interface PluginContext {
   app: {
     getBuildId: () => string;
     getPlatform: () => string;
-    factoryReset: () => Promise<{ ok: boolean }>;
+    factoryReset: (opts?: { confirmed?: boolean }) => Promise<{ ok: boolean }>;
   };
   // Backups: list them (newest first) and restore one. A
   // restore loads the backup's board into the app, like
@@ -1653,10 +1653,10 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         require("board:write");
         host!.setNoteBackground(ids, hex);
       },
-      reset: async () => {
+      reset: async (opts?: { confirmed?: boolean }) => {
         require("board:write");
         requireNotTrial("reset the board");
-        return host!.resetBoard();
+        return host!.resetBoard(opts);
       },
       getDir: () => host!.getBoardDir(),
       registerController: (controller: BoardController) => registerBoardController(controller),
@@ -1682,19 +1682,19 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         requireNotTrial("rename a board");
         return bridge!.renameBoard(oldName, newName);
       },
-      delete: async (name: string) => {
+      delete: async (name: string, opts?: { confirmed?: boolean }) => {
         require("board:write");
         requireNotTrial("delete a board");
-        return bridge!.deleteBoard(name);
+        return bridge!.deleteBoard(name, opts);
       },
     },
     app: {
       getBuildId: () => host!.getBuildId(),
       getPlatform: () => bridge!.platform,
-      factoryReset: async () => {
+      factoryReset: async (opts?: { confirmed?: boolean }) => {
         require("board:write");
         requireNotTrial("factory reset");
-        return bridge!.factoryReset();
+        return bridge!.factoryReset(opts);
       },
     },
     backups: {

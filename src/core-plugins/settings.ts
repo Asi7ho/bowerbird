@@ -529,7 +529,7 @@ export function activate(context: PluginContext): void {
     if (btn) btn.style.display = "none";
   });
   el("btn-factory-reset-confirm")?.addEventListener("click", async () => {
-    const result = await context.app.factoryReset();
+    const result = await context.app.factoryReset({ confirmed: true });
     if (result?.ok) {
       window.location.reload();
     } else {

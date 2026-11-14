@@ -78,7 +78,7 @@ export async function refresh(api: PluginContext, listEl: HTMLDivElement): Promi
             const ok = await api.boards.switch("Main");
             if (!ok) { api.ui.toast("Could not switch to Main"); return; }
           }
-          await api.boards.delete(b.name);
+          await api.boards.delete(b.name, { confirmed: true });
           api.ui.toast(b.current ? `Deleted ${b.name}; back to Main` : `Deleted ${b.name}`);
           void refresh(api, listEl);
         } catch (err) { api.ui.toast(`Could not delete: ${String((err as { message?: unknown })?.message || err)}`); }
