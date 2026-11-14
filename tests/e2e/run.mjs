@@ -582,7 +582,7 @@ async function main() {
       const tmp = `${boardPath}.tmp`;
       fs.writeFileSync(tmp, JSON.stringify(board));
       fs.renameSync(tmp, boardPath);
-      await page.locator(".audio-transcript-toggle", { hasText: "Transcript" }).first().waitFor({ timeout: 15000 });
+      await page.locator(`.audio-transcript-toggle[data-id="${id}"]`).first().waitFor({ timeout: 15000 });
       // Hidden by default: the card is short and the text is not there.
       const hidden = await page.evaluate((cid) => {
         const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
@@ -621,12 +621,18 @@ async function main() {
       const board = readBoard();
       const id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
       const audio = board.items.find((it) => "Audio" in it.kind);
-      board.items.push({ id, pos: { x: 100, y: 850 }, size: { w: 300, h: 136 }, group: null, kind: { Audio: { path: audio.kind.Audio.path } } });
+      board.items.push({ id, pos: { x: 850, y: 650 }, size: { w: 300, h: 136 }, group: null, kind: { Audio: { path: audio.kind.Audio.path } } });
       board.next_id = id;
       const tmp = `${boardPath}.tmp`;
       fs.writeFileSync(tmp, JSON.stringify(board));
       fs.renameSync(tmp, boardPath);
+      // Wait for the live-follow reload first: refitting the
+      // camera (F) saves the board, and a save before the
+      // reload would clobber this outside write.
       await page.locator(`#cards .card[data-id="${id}"] .title`).first().waitFor({ timeout: 15000 });
+      // Refit the camera: the board has grown since F, so the
+      // new card can sit below the visible area.
+      await page.keyboard.press("f");
       // Double-clicking the name swaps it for an input.
       const titleBox = await page.locator(`#cards .card[data-id="${id}"] .title`).first().boundingBox();
       assert.ok(titleBox, "audio title on screen");
