@@ -28,7 +28,7 @@ export type Kind =
   | { PdfCard: { path: string; size_bytes: number } }
   | { Swatch: { hex: string } }
   | { Audio: { path: string; title?: string; transcript?: string } }
-  | { Video: { source: string; remote: boolean; size_bytes: number } }
+  | { Video: { source: string; remote: boolean; size_bytes: number; poster?: string; duration?: number } }
   | { Model3D: { path: string; size_bytes: number } }
   | { Stroke: { points: Pt[]; color: string; width: number; marker: boolean; pressures?: number[] } }
   | { Connector: { from: Anchor; to: Anchor; color: string } }
@@ -38,6 +38,16 @@ export type Kind =
   // placeholder and carries `data` through load and save verbatim
   // — uninstalling a plugin never deletes its cards' data.
   | { Plugin: { plugin: string; kind: string; data: unknown } };
+
+// A local video in a format Chromium can play inline, so it
+// can be shown and played on the board itself. Remote links
+// and other formats open outside the app. Shared by the video
+// card (poster vs live element) and the play-video action.
+export function isInlineVideo(source: string, remote: boolean): boolean {
+  if (remote) return false;
+  const ext = source.toLowerCase().split("?")[0].split("#")[0].split(".").pop() ?? "";
+  return ["mp4", "webm", "m4v"].includes(ext);
+}
 
 export interface Item {
   id: number;

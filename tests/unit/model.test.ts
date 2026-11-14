@@ -14,6 +14,7 @@ import {
   estimateTextHeight,
   fitCamera,
   hitTest,
+  isInlineVideo,
   itemBounds,
   itemRotation,
   lassoSelect,
@@ -138,6 +139,20 @@ describe("stroke smoothing", () => {
     expect(prs[4]).toBe(0.4);
     expect(prs[1]).toBeCloseTo(0.5, 9);
     expect(prs[3]).toBeCloseTo(0.6, 9);
+  });
+});
+
+describe("isInlineVideo", () => {
+  it("plays local mp4, webm and m4v inline", () => {
+    expect(isInlineVideo("/b/clip.mp4", false)).toBe(true);
+    expect(isInlineVideo("/b/clip.WEBM", false)).toBe(true);
+    expect(isInlineVideo("/b/clip.m4v", false)).toBe(true);
+  });
+  it("rejects remote links, unplayable formats and query strings", () => {
+    expect(isInlineVideo("https://example.com/clip.mp4", true)).toBe(false);
+    expect(isInlineVideo("/b/clip.mov", false)).toBe(false);
+    expect(isInlineVideo("/b/clip.mkv", false)).toBe(false);
+    expect(isInlineVideo("/b/clip.mp4?x=1", false)).toBe(true);
   });
 });
 
