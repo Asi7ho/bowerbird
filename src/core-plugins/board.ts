@@ -68,6 +68,9 @@ let groupsEl!: HTMLDivElement;
 // while panning, only the camera does). It is refreshed by
 // render(), which is called after every board change.
 let cachedBoard: Board | null = null;
+// Drag path cache (see render): card element plus its two
+// decoration divs, keyed by card id, rebuilt on each render.
+const cardEls = new Map<number, { card: HTMLElement; left?: HTMLElement; right?: HTMLElement }>();
 // Key of the card/stroke content currently built in the DOM. Camera
 // moves that leave this key unchanged must not rebuild anything:
 // panning then is one GPU transform, not a DOM rebuild per frame.
@@ -415,13 +418,12 @@ function renderStrokesAndConnectors(board: Board): void {
 // dashed border never touches them.
 const GROUP_PAD = 24;
 
-function groupBounds(board: Board, group: number): { x: number; y: number; w: number; h: number } | null {
+function groupBounds(members: Item[]): { x: number; y: number; w: number; h: number } | null {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
   let maxY = -Infinity;
-  for (const it of board.items) {
-    if (it.group !== group) continue;
+  for (const it of members) {
     const [p, s] = api.geometry.itemBounds(it);
     minX = Math.min(minX, p.x);
     minY = Math.min(minY, p.y);
@@ -437,11 +439,20 @@ function renderGroupFrames(board: Board): void {
   const selected = api.board.getSelected();
   const v = visibleRect();
   let html = "";
-  const groups = [...new Set(board.items.map((it) => it.group).filter((g): g is number => g !== null))];
-  for (const g of groups) {
-    const members = board.items.filter((it) => it.group === g);
+  // One pass over the items, grouped by group id: the old
+  // version filtered the whole item list once per group
+  // (and groupBounds scanned it again), so a board with
+  // many groups paid O(groups x items) per render.
+  const byGroup = new Map<number, Item[]>();
+  for (const it of board.items) {
+    if (it.group === null) continue;
+    const list = byGroup.get(it.group);
+    if (list) list.push(it);
+    else byGroup.set(it.group, [it]);
+  }
+  for (const [g, members] of byGroup) {
     if (members.length < 2) continue;
-    const b = groupBounds(board, g);
+    const b = groupBounds(members);
     if (!b) continue;
     if (b.x > v.x1 || b.y > v.y1 || b.x + b.w < v.x0 || b.y + b.h < v.y0) continue;
     const isSel = members.some((it) => selected.includes(it.id));
@@ -512,6 +523,30 @@ function render(): void {
     else v.addEventListener("loadedmetadata", restore, { once: true });
   }
   if (editingHtml) cardsEl.insertAdjacentHTML("beforeend", editingHtml);
+  // Drag path cache: updateDraggedCards runs on every
+  // pointermove, and the old version did three
+  // attribute-selector queries per dragged card per move.
+  // Rebuild the map here (one pass per render) and read
+  // it during the drag instead. A card being edited has
+  // its decorations removed (see startTextEdit) and is
+  // never dragged, so a stale entry there is harmless;
+  // updateDraggedCards still checks isConnected.
+  cardEls.clear();
+  for (const child of Array.from(cardsEl.children)) {
+    const el = child as HTMLElement;
+    if (el.classList.contains("card") && el.dataset.id) {
+      const id = Number(el.dataset.id);
+      const entry = cardEls.get(id) ?? { card: el };
+      entry.card = el;
+      cardEls.set(id, entry);
+    } else if (el.classList.contains("card-decorations") && el.dataset.for) {
+      const id = Number(el.dataset.for);
+      const entry = cardEls.get(id);
+      if (!entry) continue;
+      if (el.classList.contains("card-decorations-right")) entry.right = el;
+      else entry.left = el;
+    }
+  }
   api.view.refresh();
   lastContentKey = visibleKey();
   applyCamera();
@@ -1280,10 +1315,19 @@ function updateLassoPreview(points: Pt[]): void {
 function updateDraggedCards(ids: number[]): void {
   // Cards are world-space now, so moving one is a style change on
   // its own node — no markdown, no image re-parse, no rebuild.
+  // Element lookups come from the render-built cardEls map, not
+  // from three attribute-selector queries per card per move.
+  // A cached element that left the DOM (a card edited since the
+  // last render had its decorations removed) falls back to a
+  // live query, so the drag never moves a detached node.
   for (const id of ids) {
     const it = api.board.getItem(id);
-    const el = cardsEl.querySelector(`[data-id="${id}"]`) as HTMLElement | null;
-    if (!it || !el) continue;
+    if (!it) continue;
+    const cached = cardEls.get(id);
+    const el = cached?.card.isConnected
+      ? cached.card
+      : (cardsEl.querySelector(`[data-id="${id}"]`) as HTMLElement | null);
+    if (!el) continue;
     el.style.left = `${it.pos.x}px`;
     el.style.top = `${it.pos.y}px`;
     el.style.width = `${it.size.w}px`;
@@ -1295,13 +1339,17 @@ function updateDraggedCards(ids: number[]): void {
     // A resize moves it too (its top and the right side follow
     // the card's height and width), so this covers both.
     const top = Math.max(it.pos.y + 4, it.pos.y + it.size.h - 36);
-    const leftDeco = cardsEl.querySelector(`.card-decorations:not(.card-decorations-right)[data-for="${id}"]`) as HTMLElement | null;
+    const leftDeco = cached?.left?.isConnected
+      ? cached.left
+      : (cardsEl.querySelector(`.card-decorations:not(.card-decorations-right)[data-for="${id}"]`) as HTMLElement | null);
     if (leftDeco) {
       leftDeco.style.left = `${it.pos.x + 8}px`;
       leftDeco.style.top = `${top}px`;
       leftDeco.style.width = `${Math.max(it.size.w - 16, 0)}px`;
     }
-    const rightDeco = cardsEl.querySelector(`.card-decorations-right[data-for="${id}"]`) as HTMLElement | null;
+    const rightDeco = cached?.right?.isConnected
+      ? cached.right
+      : (cardsEl.querySelector(`.card-decorations-right[data-for="${id}"]`) as HTMLElement | null);
     if (rightDeco) {
       rightDeco.style.left = `${it.pos.x + it.size.w - 8}px`;
       rightDeco.style.top = `${top}px`;
@@ -1318,16 +1366,29 @@ function updateDraggedCards(ids: number[]): void {
 // changes the union), so this covers both.
 function updateDraggedGroupFrames(ids: number[]): void {
   if (!groupsEl) return;
-  const board = api.board.get();
   const groups = new Set<number>();
   for (const id of ids) {
     const it = api.board.getItem(id);
     if (it && it.group !== null) groups.add(it.group);
   }
+  if (groups.size === 0) return;
+  // Membership comes from the last render's board: group
+  // membership does not change mid-drag, and scanning it is
+  // a plain array pass, not a JSON round-trip. Positions
+  // come from getItem, so they reflect the drag move. The
+  // old version called api.board.get() — a full deep copy
+  // of the board — on every pointermove, and then scanned
+  // that copy once per group inside groupBounds.
+  const source = cachedBoard ?? api.board.get();
   for (const g of groups) {
-    const members = board.items.filter((it) => it.group === g);
-    if (members.length < 2) continue;
-    const b = groupBounds(board, g);
+    const memberIds = source.items.filter((it) => it.group === g).map((it) => it.id);
+    if (memberIds.length < 2) continue;
+    const members: Item[] = [];
+    for (const id of memberIds) {
+      const it = api.board.getItem(id);
+      if (it) members.push(it);
+    }
+    const b = groupBounds(members);
     if (!b) continue;
     const frame = groupsEl.querySelector(`.group-frame[data-group="${g}"]`) as HTMLElement | null;
     if (!frame) continue;
@@ -1401,7 +1462,13 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
     api.board.moveItems(api.board.getSelected(), dx, dy);
     drag.lastWorld = world;
     updateDraggedCards(api.board.getSelected());
-    renderSvgOnly();
+    // Strokes do not move when a card moves, so the SVG layer
+    // only changes when a connector follows a dragged card.
+    // Skipping the redraw on a board with no connectors also
+    // skips the full api.board.get() deep copy renderSvgOnly
+    // does on every pointermove. (cachedBoard is set on every
+    // render; if it is somehow null, redraw as before.)
+    if (!cachedBoard || cachedBoard.items.some((it) => "Connector" in it.kind)) renderSvgOnly();
     updateResizeHandle();
   } else if (drag.kind === "resize") {
     const it = api.board.getItem(drag.id);
