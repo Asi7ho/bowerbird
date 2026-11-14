@@ -118,11 +118,14 @@ async function loadWhisper(app: App): Promise<WhisperPipeline> {
   if (!whisperLoading) {
     whisperLoading = (async () => {
       const t = await loadTransformers(app);
-      // The multilingual tiny model: it detects the language
+      // The multilingual base model: it detects the language
       // itself, so an English or a French note transcribes
-      // without the caller choosing. On-device, like the
-      // search models — no audio leaves the machine.
-      whisper = await t.pipeline("automatic-speech-recognition", "Xenova/whisper-tiny") as WhisperPipeline;
+      // without the caller choosing. Base is a step up from
+      // tiny in accuracy (tiny's transcripts were rough),
+      // still small and fast on-device — no audio leaves
+      // the machine. It downloads once (~145MB) on first
+      // transcription and is cached afterwards.
+      whisper = await t.pipeline("automatic-speech-recognition", "Xenova/whisper-base") as WhisperPipeline;
       return whisper;
     })().catch((e: unknown) => { whisperLoading = null; throw e; });
   }
