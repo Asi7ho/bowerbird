@@ -52,6 +52,12 @@ export interface BoardSearch {
   clearSearch(): void;
   jumpToSearchIndex(idx: number): void;
   loadContextIndex(): Promise<void>;
+  // Index unindexed media in the background. Safe to call
+  // at any time: it returns early when nothing is unindexed
+  // or indexing is already running, and a board switch
+  // restarts it for the new board. Called at board load so
+  // the first search does not pay the model-load cost.
+  startContextIndexing(): Promise<void>;
   flushContextIndex(sync?: boolean): void;
   cancelContextIndexSave(): void;
   clearBoardCaches(): void;
@@ -93,7 +99,12 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
   // restart does not need the CLIP model at all.
   type ContextEntry = { embedding?: number[]; frames?: number[][]; labels?: string[] };
   const contextIndex = new Map<string, ContextEntry>();
-  let contextIndexLoaded = false;
+  // The in-flight index load, shared so a second caller
+  // waits for the map to be populated instead of racing
+  // ahead with an empty index and re-embedding media that
+  // is already indexed on disk. A board switch clears it
+  // (see clearBoardCaches), so the new board loads fresh.
+  let contextIndexLoadPromise: Promise<void> | null = null;
   let contextIndexing = false;
   // Generation: bumped whenever the board changes
   // (clearBoardCaches). In-flight indexing workers capture
@@ -109,20 +120,27 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
   let contextQueryEmbedding: { query: string; embedding: number[] } | null = null;
   const contextQueryCache = new Map<string, number[]>();
   async function loadContextIndex(): Promise<void> {
-    if (contextIndexLoaded) return;
-    contextIndexLoaded = true;
-    try {
-      const raw = await api.contextIndexLoad();
-      for (const [k, v] of Object.entries(raw)) {
-        if (k.startsWith("__query:")) {
+    if (contextIndexLoadPromise) return contextIndexLoadPromise;
+    const gen = contextIndexGeneration;
+    contextIndexLoadPromise = (async () => {
+      try {
+        const raw = await api.contextIndexLoad();
+        // A board switch mid-load: the map was cleared for
+        // the new board, so the old board's entries must not
+        // land in it.
+        if (gen !== contextIndexGeneration) return;
+        for (const [k, v] of Object.entries(raw)) {
+          if (k.startsWith("__query:")) {
+            const e = v as ContextEntry;
+            if (e && Array.isArray(e.embedding)) contextQueryCache.set(k.slice("__query:".length), e.embedding);
+            continue;
+          }
           const e = v as ContextEntry;
-          if (e && Array.isArray(e.embedding)) contextQueryCache.set(k.slice("__query:".length), e.embedding);
-          continue;
+          if (e && (Array.isArray(e.embedding) || Array.isArray(e.frames) || Array.isArray(e.labels))) contextIndex.set(k, e);
         }
-        const e = v as ContextEntry;
-        if (e && (Array.isArray(e.embedding) || Array.isArray(e.frames) || Array.isArray(e.labels))) contextIndex.set(k, e);
-      }
-    } catch { /* no saved index yet */ }
+      } catch { /* no saved index yet */ }
+    })();
+    return contextIndexLoadPromise;
   }
   // Context-index saves used to rewrite the whole index
   // (every 512-float CLIP embedding) after every single
@@ -846,7 +864,7 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
 
   function clearBoardCaches(): void {
     contextIndex.clear();
-    contextIndexLoaded = false;
+    contextIndexLoadPromise = null;
     contextIndexFailed = false;
     contextIndexGeneration++;
     contextQueryCache.clear();
@@ -868,6 +886,7 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
     clearSearch,
     jumpToSearchIndex,
     loadContextIndex,
+    startContextIndexing,
     flushContextIndex,
     cancelContextIndexSave,
     clearBoardCaches,
