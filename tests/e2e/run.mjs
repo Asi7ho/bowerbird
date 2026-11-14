@@ -468,6 +468,40 @@ async function main() {
       assert.ok(tagBox.decRight < tagBox.cardRight - 40, "tag pill ends inside the card");
       assert.ok(tagBox.decBottom <= tagBox.cardBottom && tagBox.cardBottom - tagBox.decBottom < 24, "tag pill inside the card's bottom edge");
       assert.ok(tagBox.isPill, "tag renders as a pill");
+      // Dragging the card moves its tag pills with it: the
+      // decorations are sibling divs, so the drag path moves
+      // them by the same rule that placed them — the pill must
+      // follow mid-drag, not only after release.
+      const before = await page.evaluate((cid) => {
+        const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
+        const pill = document.querySelector(`.card-decorations[data-for="${cid}"] .card-tag`);
+        if (!card || !pill) return null;
+        return { cardLeft: card.getBoundingClientRect().left, pillLeft: pill.getBoundingClientRect().left };
+      }, helloId);
+      assert.ok(before, "pill and card found before drag");
+      await page.mouse.move(centre.x, centre.y);
+      await page.mouse.down();
+      await page.mouse.move(centre.x + 100, centre.y, { steps: 10 });
+      await waitFor("pill follows the card mid-drag", async () => {
+        const after = await page.evaluate((cid) => {
+          const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
+          const pill = document.querySelector(`.card-decorations[data-for="${cid}"] .card-tag`);
+          if (!card || !pill) return null;
+          return { cardLeft: card.getBoundingClientRect().left, pillLeft: pill.getBoundingClientRect().left };
+        }, helloId);
+        return !!after && Math.abs(after.cardLeft - before.cardLeft - 100) < 5 && Math.abs(after.pillLeft - before.pillLeft - 100) < 5;
+      });
+      await page.mouse.up();
+      // The drag is undone, so the note is back where the
+      // checks after this one expect it.
+      await page.keyboard.press("Control+z");
+      await waitFor("note back after undoing the drag", async () => {
+        const back = await page.evaluate((cid) => {
+          const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
+          return card ? card.getBoundingClientRect().left : null;
+        }, helloId);
+        return back !== null && Math.abs(back - before.cardLeft) < 5;
+      });
       // A checklist note, written from outside like the agent
       // CLI would: the live-follow watcher reloads it.
       const board = readBoard();

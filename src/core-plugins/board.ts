@@ -1265,6 +1265,24 @@ function updateDraggedCards(ids: number[]): void {
     el.style.top = `${it.pos.y}px`;
     el.style.width = `${it.size.w}px`;
     el.style.height = `${it.size.h}px`;
+    // The card's bottom row is a sibling div, not part of the
+    // card node, so it does not move with it: move it by the
+    // same rule that placed it (see decorations() in cards.ts),
+    // or the tag pills stay behind while the card is dragged.
+    // A resize moves it too (its top and the right side follow
+    // the card's height and width), so this covers both.
+    const top = Math.max(it.pos.y + 4, it.pos.y + it.size.h - 36);
+    const leftDeco = cardsEl.querySelector(`.card-decorations:not(.card-decorations-right)[data-for="${id}"]`) as HTMLElement | null;
+    if (leftDeco) {
+      leftDeco.style.left = `${it.pos.x + 8}px`;
+      leftDeco.style.top = `${top}px`;
+      leftDeco.style.width = `${Math.max(it.size.w - 16, 0)}px`;
+    }
+    const rightDeco = cardsEl.querySelector(`.card-decorations-right[data-for="${id}"]`) as HTMLElement | null;
+    if (rightDeco) {
+      rightDeco.style.left = `${it.pos.x + it.size.w - 8}px`;
+      rightDeco.style.top = `${top}px`;
+    }
   }
 }
 
