@@ -485,6 +485,12 @@ async function init(): Promise<void> {
         }
         // Frames never rotate; see loadBoardFromJson.
         if (isFrameCard(it)) delete (it as { rotation?: number }).rotation;
+        // Text cards keep room for their bottom row below the
+        // text; see loadBoardFromJson.
+        if ("Text" in it.kind) {
+          const need = estimateTextHeight(it.kind.Text.text, it.kind.Text.size, it.size.w) + CARD_DECORATIONS_H;
+          if (it.size.h < need) it.size.h = need;
+        }
       }
     } else {
       board = welcomeBoard(boardDir, loaded.pdf_size_bytes, loaded.video_size_bytes ?? 0);
