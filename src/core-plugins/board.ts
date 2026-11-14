@@ -1768,6 +1768,12 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
     // would steal the blur — the rename would never commit —
     // and the selection with it.
     if (active && active.tagName === "INPUT") return;
+    // Focus is on a control — a toolbar or title-bar button,
+    // a panel — so Tab keeps its normal job of moving between
+    // controls. Without this, Tab could never reach the
+    // toolbar, the panels toggle or the title bar at all.
+    // Tab only cycles cards when focus is on the board itself.
+    if (active && (active.tagName === "BUTTON" || active.closest("#toolbar, #title-bar, #plugin-panels"))) return;
     e.preventDefault();
     navigateElements(e.shiftKey ? -1 : 1);
     return;
@@ -1789,6 +1795,9 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
     const searchInput = document.getElementById("search-input") as HTMLInputElement | null;
     if (searchInput && searchInput.value.trim() !== "") { api.search.clear(); return; }
     api.board.setSelected([]);
+    // Focus was on a control (a toolbar button, say): blur it
+    // so focus returns to the board and Tab cycles cards again.
+    if (active && active instanceof HTMLElement) active.blur();
     render();
     return;
   }
@@ -1834,6 +1843,52 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   else if (e.key === "-") { zoomCentre(1 / 1.2); api.board.save(); render(); }
   else if (e.key === "0") { api.view.setCamera({ x: 0, y: 0, zoom: 1 }); }
   else if (e.key.toLowerCase() === "f" && !ctrl) zoomToFit();
+  else if (e.key.toLowerCase() === "b" && ctrl) {
+    // Panels toggle: the only keyboard path to the panels.
+    e.preventDefault();
+    document.getElementById("panels-toggle")?.click();
+  }
+  else if (e.key.toLowerCase() === "t" && ctrl) {
+    // Focus the toolbar, so its buttons are reachable by
+    // keyboard: Tab then moves between them natively.
+    e.preventDefault();
+    const first = document.querySelector<HTMLElement>("#toolbar button");
+    if (first) first.focus();
+  }
+  else if (e.key === "Enter" && !ctrl) {
+    // Create, edit or rename from the keyboard: nothing
+    // selected makes a note at the viewport centre; a
+    // single text card edits it; a group selection renames
+    // the group.
+    e.preventDefault();
+    const selected = api.board.getSelected();
+    if (selected.length === 0) {
+      const cam = api.view.getCamera();
+      const rect = boardEl.getBoundingClientRect();
+      createTextNoteAt({ x: cam.x + rect.width / 2 / cam.zoom, y: cam.y + rect.height / 2 / cam.zoom });
+    } else if (selected.length === 1) {
+      const it = api.board.getItem(selected[0]);
+      if (it && "Text" in it.kind) startTextEdit(selected[0]);
+      else if (it && it.group !== null) startGroupRename(it.group);
+    } else {
+      const groups = new Set(selected.map((id) => api.board.getItem(id)?.group).filter((g): g is number => g !== null && g !== undefined));
+      if (groups.size === 1) startGroupRename(groups.values().next().value as number);
+    }
+  }
+  else if (e.key.startsWith("Arrow") && !ctrl) {
+    // Nudge the selection: 1 px, or 10 px with Shift.
+    e.preventDefault();
+    const selected = api.board.getSelected();
+    if (selected.length === 0) return;
+    const step = e.shiftKey ? 10 : 1;
+    const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+    const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+    const patches = selected.map((id) => {
+      const it = api.board.getItem(id);
+      return it ? { id, pos: { x: it.pos.x + dx, y: it.pos.y + dy } } : null;
+    }).filter((p): p is { id: number; pos: { x: number; y: number } } => p !== null);
+    if (patches.length > 0) api.board.updateItems(patches);
+  }
   // Plugin shortcuts, last: core keys above win, so a plugin cannot
   // steal V, P, A, Ctrl+G/U, Delete, zoom or reset. The core guards
   // above (textarea, search box, Settings open) already applied.
