@@ -21,7 +21,6 @@
 // (undo, board switch, reset).
 import type { PluginContext, PluginManifest } from "../plugins";
 import {
-  registerBoardController,
   syncPluginToolButtons,
 } from "../plugins";
 import {
@@ -1904,7 +1903,7 @@ export function activate(a: PluginContext): void {
   // src/plugins.ts). Registered now, so the core's host
   // methods and the undo store reach this plugin from the
   // first render after activation.
-  registerBoardController({
+  api.board.registerController({
     render,
     updateSelection,
     commitEditing: commitEditingIfAny,
