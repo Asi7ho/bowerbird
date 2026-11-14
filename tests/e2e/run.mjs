@@ -649,6 +649,152 @@ async function main() {
       const card = readBoard().items.find((it) => it.id === id);
       assert.equal(card.kind.Audio.title, "Morning idea");
     });
+
+    await check("every card type's content is fully visible inside its card", async () => {
+      // The video and PDF text were cut by the tag row, and the
+      // same class of bug — content reaching into the bottom
+      // row or past the card's bottom edge — can hit any type.
+      // One card of each kind, from the repo's own fixtures,
+      // laid out in a grid; each type's content must sit fully
+      // inside its card with clearance from the bottom edge.
+      const assetsDir = path.join(tmp, "assets");
+      fs.mkdirSync(assetsDir, { recursive: true });
+      const fixtures = {
+        image: "welcome-bower.jpg",
+        pdf: "sample.pdf",
+        video: "welcome-video.mp4",
+        audio: "welcome-birdsong.mp3",
+      };
+      for (const name of Object.values(fixtures)) {
+        fs.copyFileSync(path.join(repoRoot, "assets", name), path.join(assetsDir, name));
+      }
+      const board = readBoard();
+      let id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
+      const add = (item) => { board.items.push({ id, group: null, ...item }); board.next_id = id; return id++; };
+      const ids = {
+        text: add({ pos: { x: 100, y: 100 }, size: { w: 260, h: 120 }, kind: { Text: { text: "Layout text\n- [ ] one\n- [x] two", bold: false, size: 16, color: "#1A1A1A" } } }),
+        image: add({ pos: { x: 400, y: 100 }, size: { w: 260, h: 180 }, kind: { Image: { path: path.join(assetsDir, fixtures.image) } } }),
+        swatch: add({ pos: { x: 700, y: 100 }, size: { w: 200, h: 140 }, kind: { Swatch: { hex: "#2A6D09" } } }),
+        url: add({ pos: { x: 950, y: 100 }, size: { w: 300, h: 140 }, kind: { UrlCard: { url: "https://example.com", title: "Example Domain", description: "A sample link card", image: null, icon: null, embed: false } } }),
+        pdf: add({ pos: { x: 100, y: 320 }, size: { w: 260, h: 140 }, kind: { PdfCard: { path: path.join(assetsDir, fixtures.pdf), size_bytes: 729 } } }),
+        audio: add({ pos: { x: 400, y: 320 }, size: { w: 300, h: 164 }, kind: { Audio: { path: path.join(assetsDir, fixtures.audio), transcript: "The quick brown fox jumps over the lazy dog." } } }),
+        video: add({ pos: { x: 750, y: 320 }, size: { w: 360, h: 280 }, kind: { Video: { source: path.join(assetsDir, fixtures.video), remote: false, size_bytes: 458653 } } }),
+      };
+      const tmp2 = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp2, JSON.stringify(board));
+      fs.renameSync(tmp2, boardPath);
+      // Wait for the live-follow reload, then fit the camera
+      // so every card is on screen before measuring.
+      await page.locator(`#cards .card[data-id="${ids.video}"]`).first().waitFor({ timeout: 15000 });
+      await page.keyboard.press("f");
+      await new Promise((r) => setTimeout(r, 500));
+      // The content selector per kind: the element whose text
+      // or image must not be cut. The title/sub are the text
+      // that was cut on video and PDF.
+      const contentSel = {
+        text: ".note-body",
+        image: "img",
+        swatch: ".swatch-pill",
+        url: ".link-title",
+        pdf: ".title",
+        audio: ".title",
+        video: ".title",
+      };
+      const subSel = { url: ".link-desc", pdf: ".sub", audio: ".sub", video: ".sub" };
+      for (const [kind, cid] of Object.entries(ids)) {
+        const m = await page.evaluate(([cid2, sel, sub]) => {
+          const card = document.querySelector(`#cards .card[data-id="${cid2}"]`);
+          let content = card?.querySelector(sel);
+          const subEl = sub ? card?.querySelector(sub) : null;
+          if (!card || !content) return null;
+          // A text card's .note-body is a container that fills
+          // the card; the content that must clear the bottom
+          // row is its last line of text.
+          if (sel === ".note-body") {
+            const last = content.lastElementChild;
+            if (last) content = last;
+          }
+          const c = card.getBoundingClientRect();
+          const r = content.getBoundingClientRect();
+          const s = subEl ? subEl.getBoundingClientRect() : null;
+          return {
+            card: { top: c.top, left: c.left, right: c.right, bottom: c.bottom },
+            content: { top: r.top, left: r.left, right: r.right, bottom: r.bottom },
+            sub: s ? { top: s.top, left: s.left, right: s.right, bottom: s.bottom } : null,
+          };
+        }, [String(cid), contentSel[kind], subSel[kind] ?? null]);
+        assert.ok(m, `${kind} card and its content found`);
+        const tol = 1;
+        assert.ok(m.content.top >= m.card.top - tol, `${kind} content top inside the card`);
+        assert.ok(m.content.left >= m.card.left - tol, `${kind} content left inside the card`);
+        assert.ok(m.content.right <= m.card.right + tol, `${kind} content right inside the card`);
+        // An image fills its card by design (a photo fills
+        // its frame), so it has no bottom clearance to check;
+        // every other type's content must clear the bottom edge.
+        if (kind !== "image") {
+          assert.ok(m.content.bottom <= m.card.bottom - 4, `${kind} content clears the card's bottom edge`);
+        }
+        if (m.sub) {
+          assert.ok(m.sub.bottom <= m.card.bottom - 4, `${kind} sub text clears the card's bottom edge`);
+          assert.ok(m.sub.top >= m.card.top - tol, `${kind} sub text top inside the card`);
+        }
+      }
+    });
+
+    await check("hovering a decoration does not change its style", async () => {
+      // A tag pill lost its colour and became invisible on
+      // hover. The checklist progress is the decoration left
+      // in the bottom row; hovering it must not change how it
+      // looks.
+      const board = readBoard();
+      const text = board.items.find((it) => "Text" in it.kind && it.kind.Text.text.includes("Checklist card"));
+      assert.ok(text, "checklist card on the board");
+      const sel = `.card-decorations-right[data-for="${text.id}"] .card-progress`;
+      await page.locator(sel).first().waitFor({ timeout: 15000 });
+      const before = await page.evaluate((s) => {
+        const el = document.querySelector(s);
+        if (!el) return null;
+        const cs = getComputedStyle(el);
+        return { opacity: cs.opacity, color: cs.color, visibility: cs.visibility };
+      }, sel);
+      assert.ok(before, "progress found");
+      const box = await page.locator(sel).first().boundingBox();
+      assert.ok(box, "progress on screen");
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await new Promise((r) => setTimeout(r, 300));
+      const after = await page.evaluate((s) => {
+        const el = document.querySelector(s);
+        if (!el) return null;
+        const cs = getComputedStyle(el);
+        return { opacity: cs.opacity, color: cs.color, visibility: cs.visibility };
+      }, sel);
+      assert.deepEqual(after, before, "hovering the progress changes nothing about it");
+    });
+
+    await check("the new-note mic sits clear of the left border", async () => {
+      // The mic was too close to the left border of a new
+      // note. It must sit 8px clear of the editor's left edge.
+      // (No mic on an existing note is already covered by the
+      // double-click-edits check.) Pick an empty world point
+      // in the strip below the all-types grid (which ends at
+      // y=600) and above the transcript card (which starts at
+      // y=650), and convert it to client coords from the
+      // saved camera.
+      await page.keyboard.press("f");
+      await new Promise((r) => setTimeout(r, 500));
+      const cam = readBoard().camera;
+      const cx = Math.round((200 - cam.x) * cam.zoom);
+      const cy = Math.round((625 - cam.y) * cam.zoom + 48);
+      await doubleClick(page, cx, cy);
+      await page.locator("textarea.note-edit").waitFor({ timeout: 10000 });
+      const mic = await page.locator(".note-edit-mic").first().boundingBox();
+      const row = await page.locator(".note-edit-row").first().boundingBox();
+      assert.ok(mic, "mic on a new note");
+      assert.ok(row, "editor row found");
+      // 8px by the stylesheet; 7px allows sub-pixel rounding.
+      assert.ok(mic.x - row.x >= 7, `mic ${Math.round(mic.x - row.x)}px from the row's left edge, expected at least 8`);
+      await page.keyboard.press("Escape");
+    });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
     console.log(`  FAIL  setup: ${String(error.message).split("\n")[0]}`);
