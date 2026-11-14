@@ -736,10 +736,10 @@ function startTextEdit(id: number, isNew = false): void {
   card.innerHTML = "";
   card.appendChild(row);
   card.classList.add("selected");
-  // The card's decorations (tag pills, "+ tag", progress)
-  // are from the render before editing started; they sit
-  // over the text box and would cover the mic on its left.
-  // They come back on the next render.
+  // The card's decorations (checklist progress) are from
+  // the render before editing started; they sit over the
+  // text box and would cover the mic on its left. They
+  // come back on the next render.
   cardsEl.querySelector(`.card-decorations[data-for="${id}"]`)?.remove();
   cardsEl.querySelector(`.card-decorations-right[data-for="${id}"]`)?.remove();
   ta.focus();
@@ -821,48 +821,6 @@ function commitEditingIfAny(): void {
   const ta = cardsEl.querySelector("textarea.note-edit") as HTMLTextAreaElement | null;
   if (ta) ta.blur();
   else { editingId = null; render(); }
-}
-
-// Add a tag to one card, from the "+ tag" button at its
-// bottom edge. Clicking the button swaps it for an input
-// in the same spot; Enter commits the tag (one undo step),
-// Escape or leaving the field cancels. The input is a real
-// input element, so the board's pointer and key handlers
-// leave it alone: the pointerdown guard ignores inputs,
-// and typing in one never triggers board shortcuts.
-function openTagInput(cardId: number): void {
-  const btn = cardsEl.querySelector(`[data-action="add-tag"][data-id="${cardId}"]`) as HTMLButtonElement | null;
-  if (!btn) return;
-  const input = document.createElement("input");
-  input.className = "tag-add-input";
-  input.type = "text";
-  input.placeholder = "Tag";
-  input.setAttribute("aria-label", "Add a tag");
-  input.maxLength = 24;
-  btn.replaceWith(input);
-  input.focus();
-  let done = false;
-  const commit = () => {
-    if (done) return;
-    done = true;
-    const value = input.value.trim();
-    // The tags API validates and writes: a duplicate or an
-    // empty tag adds nothing. When it writes, the update
-    // renders the board, so there is nothing left to do.
-    if (value && api.tags.add(cardId, value)) return;
-    render();
-  };
-  const cancel = () => {
-    if (done) return;
-    done = true;
-    render();
-  };
-  input.addEventListener("keydown", (ev) => {
-    ev.stopPropagation();
-    if (ev.key === "Enter") { ev.preventDefault(); commit(); }
-    else if (ev.key === "Escape") { ev.preventDefault(); cancel(); }
-  });
-  input.addEventListener("blur", cancel);
 }
 
 // ---------------------------------------------------------------- tools
@@ -1163,11 +1121,6 @@ cardsEl.addEventListener("click", (e: MouseEvent) => {
     render();
     return;
   }
-  const tagAdd = target.closest("[data-action=\"add-tag\"]") as HTMLElement | null;
-  if (tagAdd) {
-    openTagInput(Number(tagAdd.dataset.id));
-    return;
-  }
   const btn = target.closest("[data-action]") as HTMLElement | null;
   if (!btn) return;
   const id = Number(btn.dataset.id);
@@ -1270,7 +1223,7 @@ function updateDraggedCards(ids: number[]): void {
     // The card's bottom row is a sibling div, not part of the
     // card node, so it does not move with it: move it by the
     // same rule that placed it (see decorations() in cards.ts),
-    // or the tag pills stay behind while the card is dragged.
+    // or the progress stays behind while the card is dragged.
     // A resize moves it too (its top and the right side follow
     // the card's height and width), so this covers both.
     const top = Math.max(it.pos.y + 4, it.pos.y + it.size.h - 36);
@@ -1787,10 +1740,10 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   // its normal job of moving focus around the sheet.
   if (e.key === "Tab" && !isSettingsUIOpen()) {
     // Tab in a text input keeps its normal focus job too: a
-    // panel input (a section rename, a tag box, a search)
-    // commits on blur, and Tab is how the user leaves it.
-    // Cycling here would steal the blur — the rename would
-    // never commit — and the selection with it.
+    // panel input (a section rename, a search) commits on
+    // blur, and Tab is how the user leaves it. Cycling here
+    // would steal the blur — the rename would never commit —
+    // and the selection with it.
     if (active && active.tagName === "INPUT") return;
     e.preventDefault();
     navigateElements(e.shiftKey ? -1 : 1);

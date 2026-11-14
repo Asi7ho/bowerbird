@@ -71,25 +71,6 @@ let toastEl: HTMLDivElement = null as unknown as HTMLDivElement;
 
 // ---------------------------------------------------------------- helpers
 
-// Tags come in through updateItem(s), from any plugin. The
-// plugin sanitises; the core only trusts the shape: strings,
-// trimmed, de-duplicated, at most 20. An empty set removes
-// the field, so a card that loses its last tag carries no
-// empty array in board.json.
-function applyTags(it: Item, tags: unknown): void {
-  if (!Array.isArray(tags)) return;
-  const clean: string[] = [];
-  for (const t of tags) {
-    if (typeof t !== "string") continue;
-    const tag = t.trim();
-    if (tag.length === 0 || clean.includes(tag)) continue;
-    clean.push(tag);
-    if (clean.length >= 20) break;
-  }
-  if (clean.length > 0) it.tags = clean;
-  else delete it.tags;
-}
-
 function toast(msg: string): void {
   toastEl.textContent = msg;
   toastEl.classList.add("show");
@@ -601,7 +582,6 @@ async function init(): Promise<void> {
       if (patch.size) it.size = patch.size;
       if (patch.group !== undefined) it.group = patch.group;
       if (patch.data !== undefined && "Plugin" in it.kind) it.kind.Plugin.data = patch.data;
-      if (patch.tags !== undefined) applyTags(it, patch.tags);
       syncGroupLabels(board);
       undoStore.save(); boardRender();
       return true;
@@ -619,7 +599,6 @@ async function init(): Promise<void> {
         if (patch.size) it.size = patch.size;
         if (patch.group !== undefined) it.group = patch.group;
         if (patch.data !== undefined && "Plugin" in it.kind) it.kind.Plugin.data = patch.data;
-        if (patch.tags !== undefined) applyTags(it, patch.tags);
         changed = true;
       }
       if (!changed) return false;
