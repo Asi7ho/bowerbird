@@ -133,11 +133,14 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
   // in-memory maps are the source of truth during the
   // session, so a delayed write loses nothing.
   let contextIndexSaveTimer: ReturnType<typeof setTimeout> | undefined;
-  function doSaveContextIndex(): void {
+  function buildContextIndexObj(): Record<string, ContextEntry> {
     const obj: Record<string, ContextEntry> = {};
     for (const [k, v] of contextIndex.entries()) obj[k] = v;
     for (const [q, embedding] of contextQueryCache.entries()) obj[`__query:${q}`] = { embedding };
-    void api.contextIndexSave(obj).catch(() => undefined);
+    return obj;
+  }
+  function doSaveContextIndex(): void {
+    void api.contextIndexSave(buildContextIndexObj()).catch(() => undefined);
   }
   function saveContextIndex(): void {
     if (contextIndexSaveTimer) return;
@@ -152,10 +155,7 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
     // use the synchronous channel there. Every other
     // flush stays async and non-blocking.
     if (sync) {
-      const obj: Record<string, ContextEntry> = {};
-      for (const [k, v] of contextIndex.entries()) obj[k] = v;
-      for (const [q, embedding] of contextQueryCache.entries()) obj[`__query:${q}`] = { embedding };
-      try { api.contextIndexSaveSync(obj); } catch { /* the async save already ran, or the index is lost */ }
+      try { api.contextIndexSaveSync(buildContextIndexObj()); } catch { /* the async save already ran, or the index is lost */ }
       return;
     }
     doSaveContextIndex();
@@ -298,16 +298,18 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
       contextIndexFailed = true;
     }
   }
+  function isUnindexed(it: Item): boolean {
+    const k = it.kind;
+    if ("Image" in k) return !contextIndex.get(k.Image.path)?.embedding;
+    if ("Audio" in k) return !contextIndex.get(k.Audio.path)?.labels;
+    if ("Video" in k && !k.Video.remote) {
+      const e = contextIndex.get(k.Video.source);
+      return !(e?.frames || e?.labels);
+    }
+    return false;
+  }
   function hasUnindexedMedia(): boolean {
-    return ctx.getBoard().items.some((it) => {
-      if ("Image" in it.kind) return !contextIndex.get(it.kind.Image.path)?.embedding;
-      if ("Audio" in it.kind) return !contextIndex.get(it.kind.Audio.path)?.labels;
-      if ("Video" in it.kind && !it.kind.Video.remote) {
-        const e = contextIndex.get(it.kind.Video.source);
-        return !(e?.frames || e?.labels);
-      }
-      return false;
-    });
+    return ctx.getBoard().items.some(isUnindexed);
   }
   async function startContextIndexing(): Promise<void> {
     if (contextIndexing) return;
@@ -329,16 +331,6 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
       if (input && input.value.trim() !== "") updateSearch();
     }
     contextIndexFailed = false;
-    const isUnindexed = (it: Item): boolean => {
-      const k = it.kind;
-      if ("Image" in k) return !contextIndex.get(k.Image.path)?.embedding;
-      if ("Audio" in k) return !contextIndex.get(k.Audio.path)?.labels;
-      if ("Video" in k && !k.Video.remote) {
-        const e = contextIndex.get(k.Video.source);
-        return !(e?.frames || e?.labels);
-      }
-      return false;
-    };
     const items = ctx.getBoard().items.filter(isUnindexed);
     contextIndexTotal = items.length;
     contextIndexDone = 0;
@@ -402,7 +394,10 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
     }
     if ("Video" in k && !k.Video.remote) {
       const entry = contextIndex.get(k.Video.source);
-      if (entry?.labels && words.every((w) => entry.labels!.join(" ").includes(w))) return true;
+      if (entry?.labels) {
+        const joined = entry.labels.join(" ");
+        if (words.every((w) => joined.includes(w))) return true;
+      }
       if (!entry?.frames || entry.frames.length === 0) return false;
       const qe = await getQueryEmbedding(query);
       if (!qe) return false;
@@ -491,9 +486,10 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
       return { id: item.id, title, headings, body: `${k.Text.text} ${bgName}`, typeLabel: "Note", excerptText, ext: "md" };
     }
     if ("Shape" in k) {
-      const name = colorNameForHex(k.Shape.fill).split(" ")[0];
+      const colorName = colorNameForHex(k.Shape.fill);
+      const name = colorName.split(" ")[0];
       const label = shapeLabel(k.Shape.shape);
-      return { id: item.id, title: `${name} ${label}`, headings: "", body: `${k.Shape.shape} ${label} shape ${k.Shape.fill} ${colorNameForHex(k.Shape.fill)} color colour`, typeLabel: "Shape", excerptText: `${name} ${label}`, ext: "" };
+      return { id: item.id, title: `${name} ${label}`, headings: "", body: `${k.Shape.shape} ${label} shape ${k.Shape.fill} ${colorName} color colour`, typeLabel: "Shape", excerptText: `${name} ${label}`, ext: "" };
     }
     if ("UrlCard" in k) {
       let domain = "";
@@ -520,8 +516,9 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
       return { id: item.id, title: fileName(k.Video.source), headings: "", body: `${fileName(k.Video.source)} video ${lab}`, typeLabel: "Video", excerptText: lab, ext: extOf(k.Video.source) };
     }
     if ("Swatch" in k) {
-      const name = colorNameForHex(k.Swatch.hex).split(" ")[0];
-      return { id: item.id, title: name, headings: "", body: `${k.Swatch.hex} ${colorNameForHex(k.Swatch.hex)} color colour swatch`, typeLabel: "Colour", excerptText: `${name} ${k.Swatch.hex}`, ext: "" };
+      const colorName = colorNameForHex(k.Swatch.hex);
+      const name = colorName.split(" ")[0];
+      return { id: item.id, title: name, headings: "", body: `${k.Swatch.hex} ${colorName} color colour swatch`, typeLabel: "Colour", excerptText: `${name} ${k.Swatch.hex}`, ext: "" };
     }
     if ("Plugin" in k) {
       const pt = getPluginCardSearchText(item);
@@ -739,9 +736,8 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
       if (gen !== searchGeneration) return;
       if (extra.length > 0) {
         searchMatches = [...searchMatches, ...extra];
-        const byId2 = new Map(docs.map((d) => [d.id, d]));
         for (const id of extra) {
-          const d = byId2.get(id);
+          const d = byId.get(id);
           if (!d) continue;
           searchRows.push({ id, title: d.title, typeLabel: d.typeLabel, excerptHtml: excerptFor(d, parsed.terms), isContext: true });
         }
