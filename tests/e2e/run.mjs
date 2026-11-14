@@ -53,12 +53,12 @@ const API_TEST_PLUGIN_MANIFEST = {
   name: "API Test Plugin",
   version: "0.1.0",
   apiVersion: "2",
-  description: "Test plugin for the e2e suite: exercises the tags and checklist APIs on a card of its own.",
+  description: "Test plugin for the e2e suite: exercises the checklist API on a card of its own.",
   permissions: ["board:write"],
   main: "main.ts",
 };
 
-// Exercises the new APIs on a card it creates, and leaves
+// Exercises the new API on a card it creates, and leaves
 // the results on the window for the suite to read. The
 // plugin is off by default and only the final check enables
 // it, so its card cannot disturb the earlier checks.
@@ -71,9 +71,7 @@ export function activate(api) {
   const before = api.cards.getChecklistProgress(api.board.getItem(id));
   api.cards.setChecklistProgress(id, 1);
   const after = api.cards.getChecklistProgress(api.board.getItem(id));
-  api.tags.add(id, "api");
-  api.tags.add(id, "api");
-  window.__apiTest = { id, before, after, tags: api.tags.get(id), all: api.tags.list() };
+  window.__apiTest = { id, before, after };
 }
 export function deactivate() {}
 `;
@@ -413,105 +411,12 @@ async function main() {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       assert.equal(textCards().some((it) => it.kind.Text.text === "From the outside"), true);
     });
-    await check("tags and checklist progress show inside cards", async () => {
-      // Tags is a core plugin and the checklist progress is
-      // core rendering: both on by default, no enabling
-      // needed — the reload below proves they survive a fresh
-      // load.
+    await check("checklist progress shows inside cards", async () => {
+      // Checklist progress is core rendering: on by default,
+      // no enabling needed — the reload below proves it
+      // survives a fresh load.
       await page.reload();
       await page.waitForSelector("#board", { timeout: 15000 });
-      // Select the Hello CI! note by clicking it at its
-      // on-screen centre: a synthetic click does not select
-      // board cards, and the note is on screen after F
-      // (zoom to fit) whatever the camera was doing. The
-      // Library panel used to jump here, but it lives in
-      // its own PR, not this one.
-      const hello = readBoard().items.find((it) => "Text" in it.kind && it.kind.Text.text === "Hello CI!");
-      // The "+ tag" button is on every card, even one with
-      // no tags and not selected: it is visible before the
-      // note is clicked at all.
-      const addVisible = await page.evaluate((id) => {
-        const btn = document.querySelector(`.card-decorations[data-for="${id}"] .tag-add`);
-        if (!btn) return null;
-        const r = btn.getBoundingClientRect();
-        const cs = getComputedStyle(btn);
-        return { w: r.width, h: r.height, opacity: cs.opacity, pointerEvents: cs.pointerEvents };
-      }, hello.id);
-      assert.ok(addVisible, "tag button present on an untagged card");
-      assert.ok(addVisible.w > 0 && addVisible.h > 0, "tag button has size");
-      assert.equal(addVisible.opacity, "1", "tag button visible without selection");
-      assert.equal(addVisible.pointerEvents, "auto", "tag button clickable without selection");
-      const centre = await page.evaluate((id) => {
-        const el = document.querySelector(`#cards .card[data-id="${id}"]`);
-        if (!el) return null;
-        const r = el.getBoundingClientRect();
-        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
-      }, hello.id);
-      assert.ok(centre, "Hello note on screen");
-      await page.mouse.click(centre.x, centre.y);
-      await page.locator("#cards .card.selected", { hasText: "Hello CI!" }).waitFor({ timeout: 10000 });
-      // Tag it from the card itself: the "+ tag" button at
-      // the card's bottom edge opens an input in the same
-      // spot; Enter commits the tag.
-      const helloId = String(hello.id);
-      await page.locator(`.card-decorations[data-for="${helloId}"] .tag-add`).click();
-      await page.locator(`.card-decorations[data-for="${helloId}"] .tag-add-input`).fill("urgent");
-      await page.keyboard.press("Enter");
-      await waitFor("tag shows inside the card", async () => {
-        const text = await page.locator(`.card-decorations[data-for="${helloId}"]`).first().textContent().catch(() => "");
-        return (text ?? "").includes("#urgent");
-      });
-      // Tags sit at the bottom left of the card, as a pill:
-      // the pill's left edge is near the card's, and it ends
-      // well inside the card's right edge. (The row div spans
-      // the card, so the pill itself is what is measured.)
-      const tagBox = await page.evaluate((cid) => {
-        const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
-        const pill = document.querySelector(`.card-decorations[data-for="${cid}"] .card-tag`);
-        if (!card || !pill) return null;
-        const c = card.getBoundingClientRect();
-        const d = pill.getBoundingClientRect();
-        return { cardLeft: c.left, cardRight: c.right, cardBottom: c.bottom, decLeft: d.left, decRight: d.right, decBottom: d.bottom, isPill: getComputedStyle(pill).borderRadius === "999px" };
-      }, helloId);
-      assert.ok(tagBox, "tag decoration found");
-      assert.ok(tagBox.decLeft - tagBox.cardLeft < 16, "tag pill at the card's left edge");
-      assert.ok(tagBox.decRight < tagBox.cardRight - 40, "tag pill ends inside the card");
-      assert.ok(tagBox.decBottom <= tagBox.cardBottom && tagBox.cardBottom - tagBox.decBottom < 24, "tag pill inside the card's bottom edge");
-      assert.ok(tagBox.isPill, "tag renders as a pill");
-      // Dragging the card moves its tag pills with it: the
-      // decorations are sibling divs, so the drag path moves
-      // them by the same rule that placed them — the pill must
-      // follow mid-drag, not only after release.
-      const before = await page.evaluate((cid) => {
-        const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
-        const pill = document.querySelector(`.card-decorations[data-for="${cid}"] .card-tag`);
-        if (!card || !pill) return null;
-        return { cardLeft: card.getBoundingClientRect().left, pillLeft: pill.getBoundingClientRect().left };
-      }, helloId);
-      assert.ok(before, "pill and card found before drag");
-      await page.mouse.move(centre.x, centre.y);
-      await page.mouse.down();
-      await page.mouse.move(centre.x + 100, centre.y, { steps: 10 });
-      await waitFor("pill follows the card mid-drag", async () => {
-        const after = await page.evaluate((cid) => {
-          const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
-          const pill = document.querySelector(`.card-decorations[data-for="${cid}"] .card-tag`);
-          if (!card || !pill) return null;
-          return { cardLeft: card.getBoundingClientRect().left, pillLeft: pill.getBoundingClientRect().left };
-        }, helloId);
-        return !!after && Math.abs(after.cardLeft - before.cardLeft - 100) < 5 && Math.abs(after.pillLeft - before.pillLeft - 100) < 5;
-      });
-      await page.mouse.up();
-      // The drag is undone, so the note is back where the
-      // checks after this one expect it.
-      await page.keyboard.press("Control+z");
-      await waitFor("note back after undoing the drag", async () => {
-        const back = await page.evaluate((cid) => {
-          const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
-          return card ? card.getBoundingClientRect().left : null;
-        }, helloId);
-        return back !== null && Math.abs(back - before.cardLeft) < 5;
-      });
       // A checklist note, written from outside like the agent
       // CLI would: the live-follow watcher reloads it.
       const board = readBoard();
@@ -523,9 +428,6 @@ async function main() {
       fs.renameSync(tmp, boardPath);
       await page.locator("text=Checklist card").first().waitFor({ timeout: 15000 });
       await waitFor("checklist progress shows inside the card", async () => {
-        // Progress is the right-hand decoration: the left
-        // div now exists even on a tag-less card (it holds
-        // the "+ tag" button), so .first() would read it.
         const text = await page.locator(`.card-decorations-right[data-for="${id}"]`).first().textContent().catch(() => "");
         return (text ?? "").includes("1/2");
       });
@@ -543,9 +445,50 @@ async function main() {
       assert.ok(progBox.cardRight - progBox.decRight < 16, "progress at the card's right edge");
       assert.ok(progBox.decBottom <= progBox.cardBottom && progBox.cardBottom - progBox.decBottom < 24, "progress inside the card's bottom edge");
       assert.ok(!progBox.isPill, "progress is plain text, not a pill");
+      // Dragging the card moves its decorations with it: the
+      // progress is a sibling div, so the drag path moves it
+      // by the same rule that placed it — it must follow
+      // mid-drag, not only after release.
+      const centre = await page.evaluate((cid) => {
+        const el = document.querySelector(`#cards .card[data-id="${cid}"]`);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      }, String(id));
+      assert.ok(centre, "checklist card on screen");
+      const before = await page.evaluate((cid) => {
+        const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
+        const span = document.querySelector(`.card-decorations-right[data-for="${cid}"] .card-progress`);
+        if (!card || !span) return null;
+        return { cardLeft: card.getBoundingClientRect().left, progLeft: span.getBoundingClientRect().left };
+      }, String(id));
+      assert.ok(before, "progress and card found before drag");
+      await page.mouse.move(centre.x, centre.y);
+      await page.mouse.down();
+      await page.mouse.move(centre.x + 100, centre.y, { steps: 10 });
+      await waitFor("progress follows the card mid-drag", async () => {
+        const after = await page.evaluate((cid) => {
+          const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
+          const span = document.querySelector(`.card-decorations-right[data-for="${cid}"] .card-progress`);
+          if (!card || !span) return null;
+          return { cardLeft: card.getBoundingClientRect().left, progLeft: span.getBoundingClientRect().left };
+        }, String(id));
+        return !!after && Math.abs(after.cardLeft - before.cardLeft - 100) < 5 && Math.abs(after.progLeft - before.progLeft - 100) < 5;
+      });
+      await page.mouse.up();
+      // The drag is undone, so the card is back where the
+      // checks after this one expect it.
+      await page.keyboard.press("Control+z");
+      await waitFor("card back after undoing the drag", async () => {
+        const back = await page.evaluate((cid) => {
+          const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
+          return card ? card.getBoundingClientRect().left : null;
+        }, String(id));
+        return back !== null && Math.abs(back - before.cardLeft) < 5;
+      });
     });
 
-    await check("the tags and checklist APIs work from a plugin", async () => {
+    await check("the checklist API works from a plugin", async () => {
       // The API test plugin is off by default and only this
       // check enables it, so its card cannot disturb the
       // earlier checks.
@@ -557,12 +500,9 @@ async function main() {
       assert.equal(result.before.total, 2);
       assert.equal(result.after.done, 1);
       assert.equal(result.after.total, 2);
-      assert.deepEqual(result.tags, ["api"]);
-      assert.ok(result.all.includes("api"));
-      // The writes landed on disk: the tag is on the card
-      // and the first task line is checked.
+      // The write landed on disk: the first task line is
+      // checked.
       const card = readBoard().items.find((it) => it.id === result.id);
-      assert.deepEqual(card.tags, ["api"]);
       assert.ok(card.kind.Text.text.includes("- [x] one"));
       assert.ok(card.kind.Text.text.includes("- [ ] two"));
       // And the core's rendered progress agrees with the API.
