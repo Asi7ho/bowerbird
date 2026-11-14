@@ -323,13 +323,13 @@ async function restoreBoardBackup(name: string): Promise<boolean> {
 // or it would come straight back. The corner setting is
 // untouched: reset-board only deletes board data, not app
 // settings.
-async function resetBoardToWelcome(): Promise<boolean> {
+async function resetBoardToWelcome(opts?: { confirmed?: boolean }): Promise<boolean> {
   boardCommitEditing();
   media.stopAudio();
   selected = [];
   boardClearEditing();
   try {
-    const showcase = await api.resetBoard();
+    const showcase = await api.resetBoard(opts);
     board = welcomeBoard(boardDir, showcase.pdf_size_bytes, showcase.video_size_bytes);
     board.camera = { x: 0, y: 0, zoom: 1 };
     closeSettingsUI();
@@ -872,7 +872,7 @@ async function init(): Promise<void> {
       return true;
     },
     pdfFailed: (path) => media.pdfFailed.has(path),
-    resetBoard: () => resetBoardToWelcome(),
+    resetBoard: (opts?: { confirmed?: boolean }) => resetBoardToWelcome(opts),
     getBoardDir: () => boardDir,
     getPanelOrder: () => [...panelOrderList],
     setPanelOrder: (order: string[]) => {

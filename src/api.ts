@@ -14,12 +14,12 @@ export interface BowerbirdAPI {
   createBoard(name: string): Promise<{ name: string }>;
   switchBoard(name: string): Promise<{ json: string; board_path: string; board_dir: string }>;
   renameBoard(oldName: string, newName: string): Promise<{ name: string }>;
-  deleteBoard(name: string): Promise<{ wasCurrent: boolean }>;
+  deleteBoard(name: string, opts?: { confirmed?: boolean }): Promise<{ wasCurrent: boolean }>;
   listBackups(): Promise<Array<{ name: string; items: number; size: number }>>;
   restoreBackup(name: string): Promise<{ json: string; board_path: string; board_dir: string }>;
   openBackupsFolder(): Promise<string>;
-  resetBoard(): Promise<{ pdf_size_bytes: number; video_size_bytes: number }>;
-  factoryReset(): Promise<{ ok: boolean }>;
+  resetBoard(opts?: { confirmed?: boolean }): Promise<{ pdf_size_bytes: number; video_size_bytes: number }>;
+  factoryReset(opts?: { confirmed?: boolean }): Promise<{ ok: boolean }>;
   checkFile(filePath: string): Promise<{ path: string; exists: boolean; size: number; bundlePath: string; bundleExists: boolean; bundleSize: number }>;
   readFileBase64(filePath: string): Promise<{ mime: string; base64: string }>;
   contextEmbedImage(filePath: string): Promise<number[]>;

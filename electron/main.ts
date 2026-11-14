@@ -934,7 +934,11 @@ function registerIpc(): void {
   // showcase assets so a fresh welcome board can be built.
   // App settings (e.g. the corner) are NOT touched: they are not
   // board data. Returns the PDF size for the fresh welcome board.
-  ipcMain.handle("bowerbird:reset-board", () => {
+  // Destructive: the caller must pass { confirmed: true } after
+  // its own two-click confirmation. A bare bridge call without
+  // it is refused, so no plugin can wipe the board silently.
+  ipcMain.handle("bowerbird:reset-board", (_event, opts?: { confirmed?: boolean }) => {
+    if (opts?.confirmed !== true) throw new Error("reset-board needs confirmation");
     const file = boardPath();
     const dir = path.dirname(file);
     try { makeBackup(dir, fs.readFileSync(file, "utf8")); } catch { /* reset still proceeds */ }
@@ -951,7 +955,10 @@ function registerIpc(): void {
   // they are untouched. The showcase assets are reinstalled so a
   // fresh welcome board can be built. The renderer reloads after
   // this returns, so the fresh defaults load.
-  ipcMain.handle("bowerbird:factory-reset", () => {
+  // Destructive: the caller must pass { confirmed: true } after
+  // its own two-click confirmation (see reset-board above).
+  ipcMain.handle("bowerbird:factory-reset", (_event, opts?: { confirmed?: boolean }) => {
+    if (opts?.confirmed !== true) throw new Error("factory reset needs confirmation");
     const base = defaultBaseDir();
     try { fs.rmSync(base, { recursive: true, force: true }); } catch { /* already gone */ }
     const userPlugins = process.env.BOWERBIRD_PLUGINS_DIR
@@ -1336,7 +1343,12 @@ function registerIpc(): void {
   ipcMain.handle("bowerbird:create-board", (_event, name: unknown) => createBoard(name));
   ipcMain.handle("bowerbird:switch-board", (_event, name: unknown) => { const out = switchBoard(name); startBoardWatcher(); return out; });
   ipcMain.handle("bowerbird:rename-board", (_event, oldName: unknown, newName: unknown) => { const out = renameBoard(oldName, newName); startBoardWatcher(); return out; });
-  ipcMain.handle("bowerbird:delete-board", (_event, name: unknown) => deleteBoard(name));
+  ipcMain.handle("bowerbird:delete-board", (_event, name: unknown, opts?: { confirmed?: boolean }) => {
+    // Destructive: the caller must pass { confirmed: true } after
+    // its own two-click confirmation (see reset-board above).
+    if (opts?.confirmed !== true) throw new Error("delete-board needs confirmation");
+    return deleteBoard(name);
+  });
   ipcMain.handle("bowerbird:list-backups", () => {
     return listBackups(boardDir());
   });
