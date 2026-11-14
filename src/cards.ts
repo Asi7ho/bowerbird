@@ -12,7 +12,7 @@ import type { Media } from "./media";
 import {
   itemRotation, type Item, type ShapeKind, checklistProgress,
 } from "./model";
-import { getBuiltinCardHtml, getCardDecorations, getCardHtml, getCardRenderer, hasCardDecorator } from "./plugins";
+import { getBuiltinCardHtml, getCardDecorations, getCardHtml, getCardRenderer } from "./plugins";
 
 export interface CardContext {
   media: Media;
@@ -102,11 +102,12 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
     const sel = plain ? false : ctx.isSelected(id);
     const cls = sel ? "card selected" : "card";
     // Decorations sit inside the card, at its bottom edge:
-    // tags as a pill row at the bottom left, checklist
-    // progress as plain text at the bottom right. They are
-    // siblings in the same layer — never inside the card's
-    // own HTML, which belongs to the renderer. A card being
-    // edited renders nothing, so it gets none.
+    // checklist progress as plain text at the bottom right,
+    // and any decoration a plugin registered, at the bottom
+    // left or right. They are siblings in the same layer —
+    // never inside the card's own HTML, which belongs to
+    // the renderer. A card being edited renders nothing,
+    // so it gets none.
     const decorations = (x: number, y: number, w: number, h: number): string => {
       const { left, right } = getCardDecorations(item);
       // Checklist progress is core, not a decorator: a Text
@@ -116,14 +117,7 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
       const rightHtml = right + (progress ? `<span class="card-progress">${progress.done}/${progress.total}</span>` : "");
       const top = Math.max(y + 4, y + h - 36);
       let out = "";
-      // The "+ tag" button lives at the end of the tag row:
-      // it shows only while the core Tags plugin is enabled,
-      // and never on a frame (frames are containers, not
-      // content).
-      const tagAdd = hasCardDecorator("core-tags:tags") && getCardRenderer(item)?.frame !== true
-        ? `<button type="button" class="tag-add" data-action="add-tag" data-id="${id}" title="Add tag" aria-label="Add tag">+ <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4h7l9 9-7 7-9-9V4z"/><circle cx="9" cy="9" r="1.6"/></svg></button>`
-        : "";
-      if (left || tagAdd) out += `<div class="card-decorations" data-for="${id}" style="left:${x + 8}px;top:${top}px;width:${Math.max(w - 16, 0)}px">${left}${tagAdd}</div>`;
+      if (left) out += `<div class="card-decorations" data-for="${id}" style="left:${x + 8}px;top:${top}px;width:${Math.max(w - 16, 0)}px">${left}</div>`;
       if (rightHtml) out += `<div class="card-decorations card-decorations-right" data-for="${id}" style="left:${x + w - 8}px;top:${top}px;transform:translateX(-100%)">${rightHtml}</div>`;
       return out;
     };

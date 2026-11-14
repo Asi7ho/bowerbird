@@ -274,12 +274,10 @@ export function activate(api: PluginContext): void {
       const tile = c.hh >= 104 ? 56 : 48;
       // A voice recording carries its transcript under the
       // player, hidden by default. The toggle lives in the
-      // card, below the seek — in both states — and the tag
-      // pills live in the card's bottom row, so the two are
-      // never on the same level. Once the card is grown the
-      // toggle heads the transcript, above the text, and the
-      // text fills the card and scrolls, so a long note does
-      // not grow the card.
+      // card, below the seek — in both states. Once the card
+      // is grown the toggle heads the transcript, above the
+      // text, and the text fills the card and scrolls, so a
+      // long note does not grow the card.
       const expanded = text.length > 0 && c.hh > AUDIO_TRANSCRIPT_HIDDEN_H;
       const toggleHtml = text.length > 0
         ? `<button type="button" class="audio-transcript-toggle" data-action="toggle-transcript" data-id="${c.id}" aria-expanded="${expanded}"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${expanded ? "M6 9l6 6 6-6" : "M9 6l6 6-6 6"}"/></svg> Transcript</button>`

@@ -318,45 +318,16 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 }
 .card .inner { width: 100%; height: 100%; overflow: hidden; }
 /* Card decorations: inside the card, at its bottom edge.
-   Tags are a pill row at the bottom left — a white pill
-   with ink text, the app's own chip treatment, the same
-   as the section label — and checklist progress is plain
-   grey text at the bottom right. The row itself never
-   takes clicks, so it cannot steal a drag or a marquee
-   selection — except the "+ tag" button, which is the one
-   control in the row. */
+   Checklist progress is plain grey text at the bottom
+   right, and any decoration a plugin registered sits at
+   the bottom left or right. The row itself never takes
+   clicks, so it cannot steal a drag or a marquee
+   selection. */
 .card-decorations {
   position: absolute; display: flex; flex-wrap: wrap; gap: 6px;
   font-size: 12px; line-height: 1.4; color: var(--ink);
   pointer-events: none; overflow: hidden;
 }
-.card-decorations .card-tag {
-  background: #fff; border: 1px solid var(--hairline);
-  border-radius: 999px; padding: 3px 9px;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
-}
-/* The "+ tag" button: a white pill at the end of the
-   tag row, on every card — even one with no tags yet —
-   so tagging is always one click away. It is opaque
-   like the tag pills, so it never shows the card's text
-   through it where the row sits over the card's bottom
-   edge. */
-.card-decorations .tag-add {
-  display: inline-flex; align-items: center; gap: 3px;
-  font: inherit; font-size: 12px; color: var(--grey);
-  background: #fff; border: 1px solid var(--hairline);
-  border-radius: 999px; padding: 3px 9px; cursor: pointer;
-  white-space: nowrap; pointer-events: auto;
-}
-.card-decorations .tag-add svg { width: 13px; height: 13px; }
-.card-decorations .tag-add:hover { color: var(--ink); background: var(--fill); }
-.card-decorations .tag-add-input {
-  font: inherit; font-size: 12px; color: var(--ink);
-  background: #fff; border: 1px solid var(--hairline);
-  border-radius: 999px; padding: 3px 9px; width: 110px; max-width: 100%;
-  box-sizing: border-box; outline: none; pointer-events: auto;
-}
-.card-decorations .tag-add-input:focus { border-color: rgba(0, 122, 255, 0.5); }
 .card-decorations-right .card-progress {
   color: var(--grey); white-space: nowrap;
 }
@@ -502,11 +473,9 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
 }
 /* Voice-note transcript: the toggle lives in the card,
-   below the seek (and above the text once grown), while
-   the tag pills live in the card's bottom row — the two
-   are never on the same level. The text fills the rest of
-   the card and scrolls, so a long note does not grow the
-   card. */
+   below the seek (and above the text once grown). The
+   text fills the rest of the card and scrolls, so a long
+   note does not grow the card. */
 .audio-transcript-toggle {
   display: inline-flex; align-items: center; gap: 4px;
   font: inherit; font-size: 12px; font-weight: 600; color: var(--grey);
