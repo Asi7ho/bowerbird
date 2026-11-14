@@ -49,6 +49,24 @@ export function isInlineVideo(source: string, remote: boolean): boolean {
   return ["mp4", "webm", "m4v"].includes(ext);
 }
 
+// The frame to capture for a video's poster: one second in,
+// so a black first frame never becomes the poster's face;
+// for a very short clip, a quarter of the way in instead.
+export function posterTime(duration: number): number {
+  if (!isFinite(duration) || duration <= 0) return 0;
+  return Math.min(1, duration * 0.25);
+}
+
+// The poster file name for a video source: the video's own
+// name with -poster.jpg. embedFileBytes dedups on collision,
+// so a second capture of the same video gets -poster-1.jpg —
+// fine, the item points at the path it got back.
+export function posterNameFor(source: string): string {
+  const base = source.split("?")[0].split("#")[0].split("/").pop() ?? "video";
+  const stem = base.replace(/\.[^.]*$/, "");
+  return `${stem || "video"}-poster.jpg`;
+}
+
 export interface Item {
   id: number;
   pos: Pt;

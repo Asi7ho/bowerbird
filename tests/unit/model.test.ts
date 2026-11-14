@@ -16,6 +16,8 @@ import {
   hitTest,
   isInlineVideo,
   itemBounds,
+  posterNameFor,
+  posterTime,
   itemRotation,
   lassoSelect,
   marquee,
@@ -153,6 +155,20 @@ describe("isInlineVideo", () => {
     expect(isInlineVideo("/b/clip.mov", false)).toBe(false);
     expect(isInlineVideo("/b/clip.mkv", false)).toBe(false);
     expect(isInlineVideo("/b/clip.mp4?x=1", false)).toBe(true);
+  });
+});
+
+describe("video poster helpers", () => {
+  it("posterTime is one second in, or a quarter in for short clips", () => {
+    expect(posterTime(10)).toBe(1);
+    expect(posterTime(2)).toBe(0.5);
+    expect(posterTime(0)).toBe(0);
+    expect(posterTime(NaN)).toBe(0);
+  });
+  it("posterNameFor keeps the video's name with a -poster.jpg suffix", () => {
+    expect(posterNameFor("/b/welcome-video.mp4")).toBe("welcome-video-poster.jpg");
+    expect(posterNameFor("/b/clip.webm?x=1")).toBe("clip-poster.jpg");
+    expect(posterNameFor("/b/noext")).toBe("noext-poster.jpg");
   });
 });
 
