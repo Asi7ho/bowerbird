@@ -10,5 +10,6 @@ Plugins in this folder ship inside the app. They are listed in Settings → Plug
 - **Command Palette** (`command-palette/`) — Cmd or Ctrl + K for one place to run anything: plugin commands, jumping to a board card, switching views, picking a tool, and core actions.
 - **Tidy Up** (`tidy-up/`) — align and distribute the selected cards, from a panel. Cards only, 2 or more to align, 3 or more to distribute.
 - **AI Chat** (`ai/`) — a general AI chat panel. Ask anything; when you ask for a plugin, the AI writes it and you install it from the reply. Paste your API key in Settings → Plugin settings → AI Chat (OpenAI, Ollama Cloud, Gemini, Grok, DeepSeek, Mistral or OpenRouter). The key lives in secure storage; the chat call runs in the main process.
+- **Voice Notes** (`voice-notes/`) — record a voice note straight onto the board: double-click the board, type a note, and use the mic beside the text box. Transcribed on-device with Whisper; the transcript hides behind a toggle on the audio card, and the note can be renamed by double-clicking its name.
 
 Packaging: the `scripts/package-*.sh` scripts copy this folder into the app bundle (`Contents/Resources/app/plugins/` on Mac, `resources/app/plugins/` on Windows and Linux). Running from source finds this folder via the current working directory.

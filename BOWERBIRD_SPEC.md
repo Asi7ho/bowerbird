@@ -59,7 +59,8 @@ unless `display-name.txt` says otherwise.
   "next_id": 1,
   "next_group": 1,
   "bg": "#FFFFFF",
-  "grid": "Dots"
+  "grid": "Dots",
+  "groups": { "1": { "label": "Section 1" } }
 }
 ```
 
@@ -73,6 +74,9 @@ unless `display-name.txt` says otherwise.
   `max(next_id, highest item id) + 1` as the new id and set
   `next_id` to it; a writer that groups takes `next_group + 1`
   and sets `next_group` to it.
+- `groups` — the label for each group id: `{ "<groupId>": { "label": "Section 1" } }`.
+  A group is a section: grouping cards draws a labelled frame
+  around them. Absent when the board has no groups.
 - `bg` — the canvas background colour. `grid` is `Dots`, `Lines`
   or `None`.
 - Unknown top-level fields are carried through load and save
@@ -99,7 +103,7 @@ An item:
 | `UrlCard` | `url`, `title` (null), `description` (null), `image?`, `icon?`, `embed?` |
 | `PdfCard` | `path`, `size_bytes` |
 | `Swatch` | `hex` |
-| `Audio` | `path`, `transcript?` (the on-device speech-to-text of a voice recording, when it has one) |
+| `Audio` | `path`, `title?`, `transcript?` (the on-device speech-to-text of a voice recording, when it has one) |
 | `Video` | `source`, `remote` (bool), `size_bytes` |
 | `Stroke` | `points` (`[{x, y}]`), `color`, `width`, `marker` (bool), `pressures?` |
 | `Connector` | `from`, `to` (each `{"Item": id}` or `{"Point": {"x","y"}}`), `color` |

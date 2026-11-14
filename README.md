@@ -43,8 +43,10 @@ assets/            welcome media and icon
 Checks:
 
 ```sh
-npx tsc --noEmit
+npm run typecheck
+npm run test:unit
 npm run build
+npm run test:e2e
 ```
 
 ## License
