@@ -789,6 +789,23 @@ export interface PluginContext {
     // One undo step. Returns false when the card is not a
     // Text card or holds no task lines. Needs board:write.
     setChecklistProgress: (id: number, done: number) => boolean;
+    // Is this card a frame (a transparent dashed border, not
+    // a card)? True for a plugin card whose kind is declared
+    // a frame in its manifest, or whose registered renderer
+    // has frame: true. The manifest check holds even when
+    // the plugin is disabled and no renderer is registered,
+    // so a frame never rotates. False for built-in kinds.
+    isFrame: (item: Item) => boolean;
+    // Route a card action (a click on [data-plugin-action])
+    // to the plugin that rendered the card. True when a
+    // plugin card handled it. The board view calls this for
+    // clicks on a plugin card's action button.
+    dispatchAction: (action: string, item: Item) => boolean;
+    // Route a double-click on a plugin card to the plugin
+    // that rendered it. True when a plugin card handled it.
+    // The board view calls this for double-clicks on a
+    // plugin card.
+    dispatchDoubleClick: (item: Item) => boolean;
   };
   files: {
     // Embed a file as a board-owned copy. A File (from a
@@ -1817,6 +1834,20 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         if (next === null) return false;
         return host!.setTextContent(id, next);
       },
+      isFrame: (item: Item) => {
+        if (!isPluginCard(item)) return false;
+        const { plugin, kind } = item.kind.Plugin;
+        // A frame by its stored kind: the manifest declares
+        // it, so it holds even when the plugin is disabled
+        // and no renderer is registered. A slide must never
+        // rotate.
+        const lp = loaded.get(plugin);
+        const declared = (lp?.manifest.contributions?.cards ?? []).some((c) => c.kind === kind && c.frame === true);
+        if (declared) return true;
+        return getCardRenderer(item)?.frame === true;
+      },
+      dispatchAction: (action: string, item: Item) => handlePluginCardAction(action, item),
+      dispatchDoubleClick: (item: Item) => handlePluginCardDoubleClick(item),
     },
     media: {
       audioFailed: (path: string) => host!.audioFailed(path),
