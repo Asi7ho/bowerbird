@@ -252,6 +252,20 @@ async function main() {
       assert.ok(stroke.kind.Stroke.points.length >= 2);
     });
 
+    await check("a fast stroke renders as a smooth curve, not a polyline", async () => {
+      // The stroke above was drawn in one fast drag, so its
+      // stored points are sparse and a polyline through them
+      // would show corners. The rendered path is a
+      // Catmull-Rom spline: cubic segments, no straight L
+      // segments — the same path the selection halo uses.
+      const d = await waitFor("smooth stroke path in the DOM", async () => {
+        const ds = await page.evaluate(() => [...document.querySelectorAll("#world path")].map((p) => p.getAttribute("d") ?? ""));
+        const curved = ds.find((x) => x.includes(" C"));
+        return curved ?? null;
+      });
+      assert.ok(!d.includes(" L"), `stroke path should have no straight segments: ${d.slice(0, 80)}`);
+    });
+
     await check("undo removes the stroke", async () => {
       await page.keyboard.press("Control+z");
       await waitFor("empty board after undo", () => readBoard().items.length === 0);

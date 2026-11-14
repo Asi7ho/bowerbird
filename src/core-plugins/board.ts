@@ -27,7 +27,7 @@
 import type { PluginContext, PluginManifest } from "../plugins";
 import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
-  elementPoint, elementSize, pressureWidth, rectFromPoints, screenToWorld, strokeMaxWidth, strokePressuresVary,
+  elementPoint, elementSize, pressureWidth, rectFromPoints, screenToWorld, smoothStrokePath, smoothStrokePressures, smoothStrokeSamples, strokeMaxWidth, strokePressuresVary,
   worldToScreen, zoomCamera,
 } from "../model";
 import { syncModel3DViews, disposeAllModel3DViewers } from "../model3d";
@@ -336,7 +336,7 @@ function strokePath(item: Item, points: Pt[], color: string, width: number): str
   const key = `${points.length}:${first.x},${first.y}:${last.x},${last.y}:${color}:${width}`;
   const hit = strokePathCache.get(item.id);
   if (hit && hit.key === key) return hit.d;
-  const d = points.map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`).join(" ");
+  const d = smoothStrokePath(points);
   strokePathCache.set(item.id, { key, d });
   return d;
 }
@@ -370,12 +370,16 @@ function renderStrokesAndConnectors(board: Board): void {
         worldEl.appendChild(selPath);
       }
       if (pressures && strokePressuresVary(item.kind.Stroke)) {
-        // A pen stroke is one line per segment, each at
-        // the width its pressure makes; a uniform stroke
-        // stays a single path, as before.
-        for (let i = 0; i + 1 < points.length; i++) {
-          const w = pressureWidth(width, (pressures[i] + pressures[i + 1]) / 2);
-          const line = svgEl2("line", { x1: String(points[i].x), y1: String(points[i].y), x2: String(points[i + 1].x), y2: String(points[i + 1].y), stroke: color, "stroke-width": String(w), "stroke-linecap": "round" });
+        // A pen stroke is one line per short sample along
+        // the smooth curve, each at the width its pressure
+        // makes; a uniform stroke stays a single path, as
+        // before. Lines between the sparse raw points would
+        // kink at every joint when drawn fast.
+        const pts = smoothStrokeSamples(points);
+        const prs = smoothStrokePressures(pressures);
+        for (let i = 0; i + 1 < pts.length; i++) {
+          const w = pressureWidth(width, (prs[i] + prs[i + 1]) / 2);
+          const line = svgEl2("line", { x1: String(pts[i].x), y1: String(pts[i].y), x2: String(pts[i + 1].x), y2: String(pts[i + 1].y), stroke: color, "stroke-width": String(w), "stroke-linecap": "round" });
           if (transform) line.setAttribute("transform", transform);
           if (marker) line.setAttribute("opacity", "0.45");
           worldEl.appendChild(line);
@@ -1291,19 +1295,22 @@ function dragPreview(id: string, tag: string): SVGElement {
   return el;
 }
 // The live stroke, drawn while the pen is down. A uniform
-// stroke is one path; a pen stroke whose pressure varies is
-// one line per segment, each at the width its pressure makes,
-// so the stroke visibly thickens as it is drawn.
+// stroke is one smooth path; a pen stroke whose pressure
+// varies is one line per short sample along the smooth
+// curve, each at the width its pressure makes, so the
+// stroke visibly thickens as it is drawn.
 function updateLiveStroke(points: Pt[], pressures: number[]): void {
   const el = dragPreview("live-stroke", "g");
   while (el.firstChild) el.removeChild(el.firstChild);
   if (pressures.length === points.length && strokePressuresVary({ pressures })) {
-    for (let i = 0; i + 1 < points.length; i++) {
-      const w = pressureWidth(3, (pressures[i] + pressures[i + 1]) / 2);
-      el.appendChild(svgEl2("line", { x1: String(points[i].x), y1: String(points[i].y), x2: String(points[i + 1].x), y2: String(points[i + 1].y), stroke: api.pen.getColor(), "stroke-width": String(w), "stroke-linecap": "round" }));
+    const pts = smoothStrokeSamples(points);
+    const prs = smoothStrokePressures(pressures);
+    for (let i = 0; i + 1 < pts.length; i++) {
+      const w = pressureWidth(3, (prs[i] + prs[i + 1]) / 2);
+      el.appendChild(svgEl2("line", { x1: String(pts[i].x), y1: String(pts[i].y), x2: String(pts[i + 1].x), y2: String(pts[i + 1].y), stroke: api.pen.getColor(), "stroke-width": String(w), "stroke-linecap": "round" }));
     }
   } else {
-    el.appendChild(svgEl2("path", { d: points.map((pt, i) => `${i === 0 ? "M" : "L"}${pt.x},${pt.y}`).join(" "), fill: "none", stroke: api.pen.getColor(), "stroke-width": "3", "stroke-linecap": "round", "stroke-linejoin": "round" }));
+    el.appendChild(svgEl2("path", { d: smoothStrokePath(points), fill: "none", stroke: api.pen.getColor(), "stroke-width": "3", "stroke-linecap": "round", "stroke-linejoin": "round" }));
   }
 }
 // The lasso loop, drawn live while dragging. The path is

@@ -32,6 +32,9 @@ import {
   segmentIntersectsRect,
   select,
   setChecklistDone,
+  smoothStrokePath,
+  smoothStrokePressures,
+  smoothStrokeSamples,
   strokeMaxWidth,
   strokePressuresVary,
   strokesWithin,
@@ -87,6 +90,54 @@ describe("stylus pressure", () => {
     expect(strokePressuresVary({ pressures: [0.5] })).toBe(false);
     expect(strokePressuresVary({ pressures: [0.5, 0.5, 0.51] })).toBe(false);
     expect(strokePressuresVary({ pressures: [0.1, 0.5, 1] })).toBe(true);
+  });
+});
+
+describe("stroke smoothing", () => {
+  const zigzag = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 200, y: 100 }];
+  it("smoothStrokePath is empty below two points and a line for two", () => {
+    expect(smoothStrokePath([])).toBe("");
+    expect(smoothStrokePath([{ x: 0, y: 0 }])).toBe("");
+    expect(smoothStrokePath([{ x: 0, y: 0 }, { x: 10, y: 10 }])).toBe("M0,0 L10,10");
+  });
+  it("smoothStrokePath draws curves through every point, not a polyline", () => {
+    const d = smoothStrokePath(zigzag);
+    expect(d.startsWith("M0,0")).toBe(true);
+    expect(d).toContain(" C");
+    expect(d).not.toContain(" L");
+    expect(d.endsWith("200,100")).toBe(true);
+    expect(d.split(" C").length).toBe(4);
+  });
+  it("smoothStrokePath is a straight line for collinear points", () => {
+    const d = smoothStrokePath([{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 100, y: 0 }]);
+    // A Catmull-Rom spline through collinear points is the
+    // line itself: every y in the path is 0.
+    const nums = d.replace(/[MLC]/g, " ").split(/[\s,]+/).filter(Boolean).map(Number);
+    for (let i = 1; i < nums.length; i += 2) expect(nums[i]).toBe(0);
+    expect(d).toContain("100,0");
+  });
+  it("smoothStrokeSamples densifies each segment and keeps the endpoints", () => {
+    const pts = smoothStrokeSamples(zigzag);
+    expect(pts.length).toBe(3 * 4 + 1);
+    expect(pts[0]).toEqual({ x: 0, y: 0 });
+    expect(pts[pts.length - 1]).toEqual({ x: 200, y: 100 });
+    // Every raw point is one of the samples.
+    for (const p of zigzag) expect(pts).toContainEqual(p);
+    // Samples on a straight run stay on the line, just denser.
+    const straight = smoothStrokeSamples([{ x: 0, y: 0 }, { x: 100, y: 0 }]);
+    expect(straight.length).toBe(5);
+    expect(straight[0]).toEqual({ x: 0, y: 0 });
+    expect(straight[4]).toEqual({ x: 100, y: 0 });
+    for (const p of straight) expect(p.y).toBe(0);
+  });
+  it("smoothStrokePressures matches the samples and lerps between endpoints", () => {
+    const prs = smoothStrokePressures([0.2, 0.8, 0.4], 2);
+    expect(prs.length).toBe(2 * 2 + 1);
+    expect(prs[0]).toBe(0.2);
+    expect(prs[2]).toBe(0.8);
+    expect(prs[4]).toBe(0.4);
+    expect(prs[1]).toBeCloseTo(0.5, 9);
+    expect(prs[3]).toBeCloseTo(0.6, 9);
   });
 });
 
