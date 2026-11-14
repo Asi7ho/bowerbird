@@ -161,7 +161,10 @@ export function activate(api: PluginContext): void {
       // selected. Selecting switches to contain, so the full
       // image is visible; deselecting goes back to cover.
       const fit = c.sel ? "contain" : "cover";
-      return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="background:var(--bg-system)"><img src="${api.files.fileUrl(path)}" data-name="${api.text.escapeHtml(name)}" data-path="${api.text.escapeHtml(path)}" draggable="false" style="width:100%;height:100%;object-fit:${fit};border-radius:12px" alt="" /></div></div>`;
+      // The image ends 36px above the card's bottom, so the
+      // tag pills in the bottom row sit on the card's own
+      // background, not on the photo.
+      return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="background:var(--bg-system)"><img src="${api.files.fileUrl(path)}" data-name="${api.text.escapeHtml(name)}" data-path="${api.text.escapeHtml(path)}" draggable="false" style="width:100%;height:calc(100% - 36px);object-fit:${fit};border-radius:12px" alt="" /></div></div>`;
     },
   });
 
@@ -224,12 +227,14 @@ export function activate(api: PluginContext): void {
       if (c.hh < 200) {
         // A short card, like the old 96px tile: a small page
         // preview on the left, name and page count on the right,
-        // the same row shape as audio and video cards.
+        // the same row shape as audio and video cards. The tile
+        // ends 36px above the bottom (plus a 12px gap) so the
+        // tag pills do not sit on it.
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px" data-pdf-wrap="${c.id}">
-          <div style="width:56px;height:${c.hh - 24}px;flex:none;background:var(--bg-system);border-radius:6px;overflow:hidden"><canvas data-pdf-canvas="${c.id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
+          <div style="width:56px;height:${Math.max(c.hh - 60, 24)}px;flex:none;background:var(--bg-system);border-radius:6px;overflow:hidden"><canvas data-pdf-canvas="${c.id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
           <div class="col"><div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, c.ww - 92, 14, true))}</div><div class="sub" style="font-size:12px">${kb} KB · <span data-pdf-count="${c.id}">…</span></div></div></div></div>`;
       }
-      return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px" data-pdf-wrap="${c.id}">
+      return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px 12px 48px;display:flex;flex-direction:column;gap:8px" data-pdf-wrap="${c.id}">
         <div style="flex:1 1 auto;min-height:0;background:var(--bg-system);border-radius:8px;overflow:hidden"><canvas data-pdf-canvas="${c.id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
         <div style="display:flex;align-items:center;gap:8px"><div class="title" style="font-size:14px;flex:1 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${api.text.escapeHtml(name)}</div>
         <button class="pdf-nav" data-action="pdf-prev" data-id="${c.id}" title="Previous page" aria-label="Previous page" ${pageNum <= 1 ? "disabled" : ""}>‹</button><span class="sub" data-pdf-count="${c.id}">…</span><button class="pdf-nav" data-action="pdf-next" data-id="${c.id}" title="Next page" aria-label="Next page">›</button></div>
@@ -244,7 +249,11 @@ export function activate(api: PluginContext): void {
       const c = chrome(item, plain);
       const { hex } = data as SwatchData;
       const safeHex = safeColor(hex, "#1A1A1A");
-      return `<div class="${c.cls}" data-id="${c.id}" style="${c.style};background:${safeHex}"><div class="swatch-pill">${api.text.escapeHtml(safeHex)}</div></div>`;
+      // The colour ends 36px above the card's bottom, so the
+      // tag pills in the bottom row sit on the card's white
+      // background, not on the colour. The hex pill rides
+      // 10px above the colour's bottom edge (see styles.css).
+      return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div style="position:absolute;inset:0 0 36px 0;background:${safeHex};border-radius:12px 12px 0 0"></div><div class="swatch-pill">${api.text.escapeHtml(safeHex)}</div></div>`;
     },
   });
 
@@ -317,8 +326,8 @@ export function activate(api: PluginContext): void {
       if (inline) {
         const src = api.files.fileUrl(source);
         if (c.hh >= thumbH + 70) {
-          return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
-            <video controls preload="metadata" playsinline src="${src}" data-name="${api.text.escapeHtml(name)}" data-path="${api.text.escapeHtml(source)}" style="width:${c.ww - 24}px;height:${thumbH}px;object-fit:${c.sel ? "contain" : "cover"};border-radius:10px;background:#1d1d1f;pointer-events:auto"></video>
+          return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px 12px 48px;display:flex;flex-direction:column;gap:8px">
+            <video controls preload="metadata" playsinline src="${src}" data-name="${api.text.escapeHtml(name)}" data-path="${api.text.escapeHtml(source)}" style="width:${c.ww - 24}px;flex:1 1 auto;min-height:0;max-height:${thumbH}px;object-fit:${c.sel ? "contain" : "cover"};border-radius:10px;background:#1d1d1f;pointer-events:auto"></video>
             <div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, c.ww - 24, 14, true))}</div><div class="sub" style="font-size:12px">${sub}</div></div></div>`;
         }
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px">
@@ -326,8 +335,8 @@ export function activate(api: PluginContext): void {
           <div class="col"><div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, c.ww - 132, 14, true))}</div><div class="sub" style="font-size:12px">${sub}</div></div></div></div>`;
       }
       if (c.hh >= thumbH + 70) {
-        return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
-          <div class="video-thumb clickable" data-action="play-video" data-id="${c.id}" style="width:${c.ww - 24}px;height:${thumbH}px;font-size:28px">▶</div>
+        return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px 12px 48px;display:flex;flex-direction:column;gap:8px">
+          <div class="video-thumb clickable" data-action="play-video" data-id="${c.id}" style="width:${c.ww - 24}px;flex:1 1 auto;min-height:0;max-height:${thumbH}px;font-size:28px">▶</div>
           <div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, c.ww - 24, 14, true))}</div><div class="sub" style="font-size:12px">${sub}</div></div></div>`;
       }
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px">
