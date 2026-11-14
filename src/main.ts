@@ -697,6 +697,22 @@ async function init(): Promise<void> {
       undoStore.save(); boardRender();
       return true;
     },
+    // Rename a voice note: the title is shown instead of
+    // the file's name. One save, one undo step. An empty
+    // title clears it, so the card falls back to the file's
+    // name. False when the card is not audio, or the title
+    // is unchanged.
+    setAudioTitle: (id: number, title: string) => {
+      const it = boardGet(board, id);
+      if (!it || !("Audio" in it.kind)) return false;
+      const trimmed = title.trim();
+      const current = it.kind.Audio.title ?? "";
+      if (trimmed === current) return false;
+      if (trimmed) it.kind.Audio.title = trimmed;
+      else delete it.kind.Audio.title;
+      undoStore.save(); boardRender();
+      return true;
+    },
     // Group a set of cards: a new group id comes from the
     // board's next_group, so a later group can never collide
     // with it. One save, one undo step.

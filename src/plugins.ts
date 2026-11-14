@@ -313,6 +313,12 @@ export interface PluginHost {
   // step. False when the group has fewer than two members
   // or the label is empty after trimming.
   setGroupLabel: (group: number, label: string) => boolean;
+  // Rename a voice note: the title is shown instead of the
+  // file's name. One save, one undo step. An empty title
+  // clears it, so the card falls back to the file's name.
+  // False when the card is not audio, or the title is
+  // unchanged.
+  setAudioTitle: (id: number, title: string) => boolean;
   save: () => void;
   // Save the board to disk without creating an undo step,
   // for changes the user did not make as edits: a pan's
@@ -479,6 +485,12 @@ export interface PluginContext {
     // step. False when the group has fewer than two members
     // or the label is empty after trimming.
     setGroupLabel: (group: number, label: string) => boolean;
+    // Rename a voice note: the title is shown instead of the
+    // file's name. One save, one undo step. An empty title
+    // clears it, so the card falls back to the file's name.
+    // False when the card is not audio, or the title is
+    // unchanged.
+    setAudioTitle: (id: number, title: string) => boolean;
     getSelected: () => number[];
     setSelected: (ids: number[]) => void;
     addItem: (kind: Kind, pos: Pt, size: Size) => number;
@@ -1423,6 +1435,10 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       setGroupLabel: (group: number, label: string) => {
         require("board:write");
         return host!.setGroupLabel(group, label);
+      },
+      setAudioTitle: (id: number, title: string) => {
+        require("board:write");
+        return host!.setAudioTitle(id, title);
       },
       getSelected: () => host!.getSelected(),
       setSelected: (ids: number[]) => host!.setSelected(ids),
