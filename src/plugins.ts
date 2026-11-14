@@ -24,7 +24,7 @@
 // v1 does not pretend otherwise.
 
 import type { Anchor, ArrangeOptions, Board, Camera, Item, Kind, Pt, Size } from "./model";
-import { anchorPoint, arrangeItems, AUDIO_H, AUDIO_TRANSCRIPT_HIDDEN_H, AUDIO_TRANSCRIPT_SHOWN_H, boardGet, centre, checklistProgress, clippedEnds, domainOf, elide, escapeHtml, itemRotation, parseHex, rectCrossing, renderMarkdownHtml, segmentIntersectsRect, setChecklistDone, tileColorFor, tint, toggleTaskLine } from "./model";
+import { anchorPoint, arrangeItems, AUDIO_H, AUDIO_TRANSCRIPT_HIDDEN_H, AUDIO_TRANSCRIPT_SHOWN_H, boardGet, centre, checklistProgress, clippedEnds, domainOf, elide, escapeHtml, fitCamera, itemBounds, itemRotation, parseHex, rectCrossing, renderMarkdownHtml, rotatePoint, segmentIntersectsRect, select, setChecklistDone, tileColorFor, tint, toggleTaskLine } from "./model";
 
 // ---------------------------------------------------------------- types
 
@@ -493,6 +493,14 @@ export interface PluginContext {
     setAudioTitle: (id: number, title: string) => boolean;
     getSelected: () => number[];
     setSelected: (ids: number[]) => void;
+    // The selection after clicking a card: the card and its
+    // whole group when it is grouped, or just the card.
+    // `selected` is the selection to start from (empty for a
+    // fresh selection); `additive` (Shift) keeps it and
+    // toggles. Returns the new selection; the caller sets it
+    // with setSelected. The board view calls this on a card
+    // click and on keyboard navigation between cards.
+    selectCard: (selected: number[], id: number, additive: boolean) => number[];
     addItem: (kind: Kind, pos: Pt, size: Size) => number;
     // Add an item without saving or rendering, for a text
     // note that is about to be edited: the edit commit saves
@@ -933,6 +941,17 @@ export interface PluginContext {
     rectsOverlap: (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) => boolean;
     // An item's rotation in degrees (0 when it has none).
     itemRotation: (item: Item) => number;
+    // An item's bounds on the board: its position and size,
+    // or for a connector the box around its two ends. The
+    // board view lays out and hit-tests from this.
+    itemBounds: (item: Item) => [Pt, Size];
+    // Rotate a point around a centre by degrees. The board
+    // view rotates resize handles and corners with this.
+    rotatePoint: (p: Pt, c: Pt, deg: number) => Pt;
+    // The camera that fits the whole board into a viewport
+    // (zoom capped at 1), or null on an empty board. The
+    // board view's zoom-to-fit (F) uses this.
+    fitCamera: (viewport: Size, padding?: number) => Camera | null;
   };
   // Media state, for the cards that play or preview media
   // (PdfCard, Audio). Read-only views of the core's media
@@ -1508,6 +1527,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       },
       getSelected: () => host!.getSelected(),
       setSelected: (ids: number[]) => host!.setSelected(ids),
+      selectCard: (selected: number[], id: number, additive: boolean) => select(host!.getBoard(), selected, id, additive),
       addItem: (kind: Kind, pos: Pt, size: Size) => {
         require("board:write");
         const id = host!.addItem(kind, pos, size);
@@ -2065,6 +2085,9 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       rectsOverlap: (a: { x: number; y: number; w: number; h: number }, b: { x: number; y: number; w: number; h: number }) =>
         a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y,
       itemRotation: (item: Item) => itemRotation(item),
+      itemBounds: (item: Item) => itemBounds(host!.getBoard(), item),
+      rotatePoint: (p: Pt, c: Pt, deg: number) => rotatePoint(p, c, deg),
+      fitCamera: (viewport: Size, padding?: number) => fitCamera(host!.getBoard(), viewport, padding),
     },
   };
 }
