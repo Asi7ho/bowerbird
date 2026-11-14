@@ -101,6 +101,16 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
     const id = num(item.id, 0);
     const sel = plain ? false : ctx.isSelected(id);
     const cls = sel ? "card selected" : "card";
+    // Cards live in world coordinates; the whole #cards layer is
+    // transformed once by the camera (see applyCamera). Per-card
+    // screen positions and per-card scale transforms used to force a
+    // full reposition of every card on every pan/zoom frame — that
+    // was the main source of lag. Content still scales with zoom,
+    // because the layer itself is scaled.
+    const x = num(item.pos.x, 0), y = num(item.pos.y, 0);
+    const ww = num(item.size.w, 0), hh = num(item.size.h, 0);
+    const rot = itemRotation(item);
+    const style = `left:${x}px;top:${y}px;width:${ww}px;height:${hh}px;${rot ? `transform:rotate(${rot}deg);` : ""}`;
     // Decorations sit inside the card, at its bottom edge:
     // checklist progress as plain text at the bottom right,
     // and any decoration a plugin registered, at the bottom
@@ -122,9 +132,6 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
       return out;
     };
     if ("Plugin" in item.kind) {
-      const ww0 = num(item.size.w, 0), hh0 = num(item.size.h, 0);
-      const rot0 = itemRotation(item);
-      const style0 = `left:${num(item.pos.x, 0)}px;top:${num(item.pos.y, 0)}px;width:${ww0}px;height:${hh0}px;${rot0 ? `transform:rotate(${rot0}deg);` : ""}`;
       // A renderer returning null hides the card entirely:
       // the core renders nothing for it, not even the frame
       // border. A plugin uses this to show a card only in
@@ -132,17 +139,8 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
       const inner = getCardHtml(item);
       if (inner === null) return "";
       const frameCls = getCardRenderer(item)?.frame === true ? " plugin-frame" : "";
-      return `<div class="${cls}${frameCls}" data-id="${id}" style="${style0}"><div class="inner">${inner}</div></div>` + decorations(num(item.pos.x, 0), num(item.pos.y, 0), ww0, hh0);
+      return `<div class="${cls}${frameCls}" data-id="${id}" style="${style}"><div class="inner">${inner}</div></div>` + decorations(x, y, ww, hh);
     }
-    // Cards live in world coordinates; the whole #cards layer is
-    // transformed once by the camera (see applyCamera). Per-card
-    // screen positions and per-card scale transforms used to force a
-    // full reposition of every card on every pan/zoom frame — that
-    // was the main source of lag. Content still scales with zoom,
-    // because the layer itself is scaled.
-    const ww = num(item.size.w, 0), hh = num(item.size.h, 0);
-    const rot = itemRotation(item);
-    const style = `left:${num(item.pos.x, 0)}px;top:${num(item.pos.y, 0)}px;width:${ww}px;height:${hh}px;${rot ? `transform:rotate(${rot}deg);` : ""}`;
     // A note being edited renders nothing: the editor DOM is
     // managed separately. This check stays in the core, so a
     // card plugin never has to know about editing state.
@@ -152,13 +150,13 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
     // with no registered renderer falls through to the
     // placeholder below — the core renders no card itself.
     const builtinHtml = getBuiltinCardHtml(item, plain);
-    if (builtinHtml !== null) return builtinHtml + decorations(num(item.pos.x, 0), num(item.pos.y, 0), ww, hh);
+    if (builtinHtml !== null) return builtinHtml + decorations(x, y, ww, hh);
     // No plugin registered a renderer for this kind. The
     // core renders no card itself anymore; this is a
     // placeholder so a board never shows a blank hole.
     // (The core-cards plugin provides all eight built-in
     // kinds, so this only fires when it is missing.)
-    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner" style="padding:12px"><div class="title" style="font-size:14px">Card</div><div class="sub" style="font-size:12px">No plugin provides this card kind.</div></div></div>` + decorations(num(item.pos.x, 0), num(item.pos.y, 0), ww, hh);
+    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner" style="padding:12px"><div class="title" style="font-size:14px">Card</div><div class="sub" style="font-size:12px">No plugin provides this card kind.</div></div></div>` + decorations(x, y, ww, hh);
   }
   return { cardHtml, shapeMeta, shapeLabel, isShapeTool, shapeClipPath, shapePreviewPoints };
 }
