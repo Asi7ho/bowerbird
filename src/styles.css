@@ -458,6 +458,21 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   position: relative; background: #1d1d1f; border-radius: 10px;
   display: flex; align-items: center; justify-content: center; color: #fff; cursor: pointer;
 }
+/* A 3D model card: the canvas is the viewport (drag rotates,
+   wheel zooms); a plain render gets a static tile, and a
+   failed load gets an error box in place of the canvas. */
+.card canvas.model3d { display: block; touch-action: none; cursor: grab; }
+.card canvas.model3d:active { cursor: grabbing; }
+.card .model3d-tile {
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-system); border-radius: 10px; color: var(--grey);
+  font-size: 28px; font-weight: 700;
+}
+.card .model3d-error {
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  background: var(--bg-system); border-radius: 10px; color: var(--grey);
+  font-size: 13px; padding: 12px;
+}
 .card .audio-tile {
   flex: none; width: 48px; height: 48px; border-radius: 10px;
   display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px;
