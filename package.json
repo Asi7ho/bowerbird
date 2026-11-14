@@ -12,6 +12,9 @@
   "main": "electron-dist/main.js",
   "name": "bowerbird",
   "private": true,
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "build": "tsc && tsc -p tsconfig.main.json && node scripts/bundle-sucrase.mjs && cp electron/peek.html electron-dist/peek.html && vite build",
     "dev": "tsc -p tsconfig.main.json && node scripts/bundle-sucrase.mjs && cp electron/peek.html electron-dist/peek.html && node electron-dist/dev.js",

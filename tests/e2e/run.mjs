@@ -23,6 +23,11 @@ const EMPTY_BOARD = {
   grid: "Dots",
 };
 
+// A short spoken sentence, so the voice-note check records
+// real speech and the transcript assertion proves Whisper
+// actually ran — a tone has no words to transcribe.
+const SPEECH_B64 = fs.readFileSync(path.join(repoRoot, "tests", "e2e", "fixtures", "speech.mp3")).toString("base64");
+
 const TEST_PLUGIN_MANIFEST = {
   id: "ci-test-plugin",
   name: "CI Test Plugin",
@@ -58,7 +63,7 @@ const API_TEST_PLUGIN_MANIFEST = {
   main: "main.ts",
 };
 
-// Exercises the new API on a card it creates, and leaves
+// Exercises the new API on cards it creates, and leaves
 // the results on the window for the suite to read. The
 // plugin is off by default and only the final check enables
 // it, so its card cannot disturb the earlier checks.
@@ -71,7 +76,44 @@ export function activate(api) {
   const before = api.cards.getChecklistProgress(api.board.getItem(id));
   api.cards.setChecklistProgress(id, 1);
   const after = api.cards.getChecklistProgress(api.board.getItem(id));
-  window.__apiTest = { id, before, after };
+  // Frame, action and double-click: a frame kind, and a kind
+  // whose renderer answers an action and a double-click.
+  api.cards.register({
+    kind: "APIFrame",
+    title: "API frame",
+    frame: true,
+    render: () => '<div style="padding:12px">API frame</div>',
+  });
+  const frameId = api.board.addPluginCard("APIFrame", {}, { x: 1300, y: 400 }, { w: 300, h: 200 });
+  let actionSeen = null;
+  let dblSeen = false;
+  api.cards.register({
+    kind: "APIAction",
+    title: "API action card",
+    render: () => '<div style="padding:12px">API action card</div>',
+    onAction: (action, item) => { actionSeen = action + ":" + item.id; },
+    onDoubleClick: (item) => { dblSeen = item.id; },
+  });
+  const actionId = api.board.addPluginCard("APIAction", {}, { x: 1300, y: 650 }, { w: 260, h: 96 });
+  const frameItem = api.board.getItem(frameId);
+  const textItem = api.board.getItem(id);
+  const actionItem = api.board.getItem(actionId);
+  const isFrameFrame = api.cards.isFrame(frameItem);
+  const isFrameText = api.cards.isFrame(textItem);
+  const actionOk = api.cards.dispatchAction("ping", actionItem);
+  const dblOk = api.cards.dispatchDoubleClick(actionItem);
+  const actionMiss = api.cards.dispatchAction("ping", textItem);
+  const dblMiss = api.cards.dispatchDoubleClick(textItem);
+  // Tool and shortcut: register both, then read the tool back
+  // and dispatch the shortcut through the API.
+  let shortcutSeen = false;
+  api.ui.registerTool({ id: "apitest", title: "API test tool" });
+  api.ui.registerShortcut({ key: "j", title: "API test shortcut", run: () => { shortcutSeen = true; } });
+  const toolDef = api.ui.getToolDef("plugin:api-test-plugin:apitest");
+  const toolMiss = api.ui.getToolDef("plugin:api-test-plugin:nope");
+  const shortcutOk = api.ui.dispatchShortcut("j");
+  const shortcutMiss = api.ui.dispatchShortcut("z");
+  window.__apiTest = { id, before, after, frameId, actionId, isFrameFrame, isFrameText, actionOk, dblOk, actionMiss, dblMiss, actionSeen, dblSeen, toolDef: toolDef ? { id: toolDef.id, title: toolDef.title, pluginId: toolDef.pluginId } : null, toolMiss, shortcutOk, shortcutMiss, shortcutSeen };
 }
 export function deactivate() {}
 `;
@@ -500,6 +542,28 @@ async function main() {
       assert.equal(result.before.total, 2);
       assert.equal(result.after.done, 1);
       assert.equal(result.after.total, 2);
+      // The PR #23 API methods with no direct test before:
+      // a frame card is a frame and a text card is not.
+      assert.equal(result.isFrameFrame, true);
+      assert.equal(result.isFrameText, false);
+      // dispatchAction / dispatchDoubleClick run the card's
+      // handlers and return true; on a card with no handler
+      // they return false and run nothing.
+      assert.equal(result.actionOk, true);
+      assert.equal(result.actionSeen, `ping:${result.actionId}`);
+      assert.equal(result.dblOk, true);
+      assert.equal(result.dblSeen, result.actionId);
+      assert.equal(result.actionMiss, false);
+      assert.equal(result.dblMiss, false);
+      // getToolDef reads a registered tool back by its full
+      // id and returns null for an unknown one; dispatchShortcut
+      // runs a registered shortcut and returns false for a key
+      // with none.
+      assert.deepEqual(result.toolDef, { id: "apitest", title: "API test tool", pluginId: "api-test-plugin" });
+      assert.equal(result.toolMiss, null);
+      assert.equal(result.shortcutOk, true);
+      assert.equal(result.shortcutSeen, true);
+      assert.equal(result.shortcutMiss, false);
       // The write landed on disk: the first task line is
       // checked.
       const card = readBoard().items.find((it) => it.id === result.id);
@@ -513,18 +577,29 @@ async function main() {
     });
 
     await check("a voice note records and lands as an audio card", async () => {
-      // No microphone in CI: stand in a tone generator for
-      // getUserMedia, so the real record → embed → card flow
-      // runs. The first real click resumes the context.
-      await page.addInitScript(() => {
+      // No microphone in CI: stand in a looped speech sample
+      // for getUserMedia, so the real record → embed →
+      // transcribe → card flow runs on words Whisper can
+      // recognise. The first real click resumes the context.
+      await page.addInitScript((speechB64) => {
         const ctx = new AudioContext();
-        const osc = ctx.createOscillator();
         const dest = ctx.createMediaStreamDestination();
-        osc.connect(dest);
-        osc.start();
+        const ready = (async () => {
+          const bytes = Uint8Array.from(atob(speechB64), (c) => c.charCodeAt(0));
+          const buf = await ctx.decodeAudioData(bytes.buffer);
+          const src = ctx.createBufferSource();
+          src.buffer = buf;
+          src.loop = true;
+          src.connect(dest);
+          src.start();
+          await ctx.resume();
+        })();
         window.addEventListener("pointerdown", () => void ctx.resume(), { once: true });
-        navigator.mediaDevices.getUserMedia = async () => dest.stream;
-      });
+        navigator.mediaDevices.getUserMedia = async () => {
+          await ready;
+          return dest.stream;
+        };
+      }, SPEECH_B64);
       assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("voice-notes", true)), true);
       await page.reload();
       await page.waitForSelector("#board", { timeout: 15000 });
@@ -542,17 +617,24 @@ async function main() {
       assert.equal(await mic.count(), 1);
       await mic.click();
       await page.locator(".vn-recording", { hasText: "Recording" }).waitFor({ timeout: 10000 });
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      // Three seconds of speech, so Whisper hears a whole
+      // sentence rather than a fragment.
+      await new Promise((resolve) => setTimeout(resolve, 3000));
       await page.locator(".vn-stop").click();
-      // The tone has no speech, so the card lands without a
-      // transcript — but the transcription still runs, and
-      // the first run downloads the model, so the wait is
-      // generous.
-      await page.locator("text=voice-note").first().waitFor({ timeout: 120000 });
+      // The card lands after transcription, and the first run
+      // downloads the model, so the wait is generous.
+      await page.locator("text=voice-note").first().waitFor({ timeout: 180000 });
       const audios = readBoard().items.filter((it) => "Audio" in it.kind);
       assert.equal(audios.length, 1);
       assert.ok(fs.existsSync(audios[0].kind.Audio.path));
       assert.ok(fs.statSync(audios[0].kind.Audio.path).size > 0);
+      // Transcription actually ran: the card carries words,
+      // not an empty transcript. This is what proves the
+      // Whisper path in CI — the card alone would land
+      // whether transcription succeeded or failed.
+      const transcript = (audios[0].kind.Audio.transcript ?? "").trim();
+      assert.ok(transcript.length > 0, "expected a non-empty transcript");
+      assert.ok(/hello|world|test|voice|transcription/i.test(transcript), `transcript did not contain the spoken words: ${transcript}`);
       // The card is centred on the double-click point.
       const audioBox = await page.locator("#cards .card", { hasText: "voice-note" }).first().boundingBox();
       assert.ok(audioBox);
