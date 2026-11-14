@@ -6,7 +6,7 @@ This is the VS Code / Obsidian shape, not a skin system: the built-in UI has no 
 
 ## Principles
 
-- **One API.** There is a single public surface (`PluginContext`, in `plugin-api.d.ts`). If the built-in UI needs something, that something is added to the API first, then the UI uses it. The core never reaches into a plugin's DOM and a plugin never reaches into the core's DOM or internals.
+- **One API.** There is a single public surface (`PluginContext`, in the `bowerbird-plugin-api` module). If the built-in UI needs something, that something is added to the API first, then the UI uses it. The core never reaches into a plugin's DOM and a plugin never reaches into the core's DOM or internals.
 - **Core renders nothing.** `index.html` is a bare mount point. The core creates no title bar, toolbar, search box, settings window or board DOM. A plugin builds each of those.
 - **First-party plugins are plugins.** The bundled UI is a set of first-party plugins in `src/ui/`. They use the same `PluginContext` as user plugins. The only difference is loading: first-party plugins are ES modules imported by the core; user plugins are ES modules loaded over the `plugin:` scheme, so they can be multiple files with relative imports.
 - **Board JSON is stable.** Moving a card kind or a UI piece into a plugin never changes the board format. Built-in kinds (`Text`, `Image`, `Swatch`, `UrlCard`, `PdfCard`, `Audio`, `Video`, `Shape`, `Stroke`, `Connector`) keep their shape in board JSON; only who renders them changes.
@@ -15,11 +15,10 @@ This is the VS Code / Obsidian shape, not a skin system: the built-in UI has no 
 
 ```
 index.html            bare mount: <div id="app"> + boot script
-plugin-api.d.ts       the public plugin API types (PluginContext,
-                      board model, all Plugin* types). Outside
-                      src/, so a plugin imports them from
-                      "../../plugin-api" and never reaches into
-                      the core. The core re-exports them.
+plugin-api/           the public plugin API as its own module
+                      (`bowerbird-plugin-api`, types in index.d.ts).
+                      Plugins import it by name and never reach
+                      into the core. The core imports it too.
 src/main.ts           core boot only: load board, create the
                       PluginHost + PluginContext factory, load
                       plugins. Renders no DOM.
