@@ -8,24 +8,31 @@ This is the VS Code / Obsidian shape, not a skin system: the built-in UI has no 
 
 - **One API.** There is a single public surface (`PluginContext`, in `plugin-api.d.ts`). If the built-in UI needs something, that something is added to the API first, then the UI uses it. The core never reaches into a plugin's DOM and a plugin never reaches into the core's DOM or internals.
 - **Core renders nothing.** `index.html` is a bare mount point. The core creates no title bar, toolbar, search box, settings window or board DOM. A plugin builds each of those.
-- **First-party plugins are plugins.** The bundled UI is a set of first-party plugins in `src/core-plugins/`. They use the same `PluginContext` as user plugins. The only difference is loading: first-party plugins are ES modules imported by the core; user plugins are ES modules loaded over the `plugin:` scheme, so they can be multiple files with relative imports.
+- **First-party plugins are plugins.** The bundled UI is a set of first-party plugins in `src/ui/`. They use the same `PluginContext` as user plugins. The only difference is loading: first-party plugins are ES modules imported by the core; user plugins are ES modules loaded over the `plugin:` scheme, so they can be multiple files with relative imports.
 - **Board JSON is stable.** Moving a card kind or a UI piece into a plugin never changes the board format. Built-in kinds (`Text`, `Image`, `Swatch`, `UrlCard`, `PdfCard`, `Audio`, `Video`, `Shape`, `Stroke`, `Connector`) keep their shape in board JSON; only who renders them changes.
 
 ## Layout
 
 ```
 index.html            bare mount: <div id="app"> + boot script
+plugin-api.d.ts       the public plugin API types (PluginContext,
+                      board model, all Plugin* types). Outside
+                      src/, so a plugin imports them from
+                      "../../plugin-api" and never reaches into
+                      the core. The core re-exports them.
 src/main.ts           core boot only: load board, create the
                       PluginHost + PluginContext factory, load
                       plugins. Renders no DOM.
-src/                  headless core: board model, persistence,
-                      undo, camera, events, the plugin host.
-src/plugins.ts        plugin host: loads first-party (ES module)
+src/backend/          headless core: board model, persistence,
+                      undo, camera, events, search, media, drops,
+                      poster capture, welcome board, card chrome.
+src/plugins/host.ts   plugin host: loads first-party (ES module)
                       and user (plugin: scheme) plugins, builds
                       PluginContext, enforces permissions.
-src/core-plugins/     first-party UI plugins, one file per surface,
+src/ui/               first-party UI plugins, one file per surface,
                       each using only PluginContext: board, cards,
-                      toolbar, titlebar, search, settings.
+                      toolbar, titlebar, search, settings. Plus
+                      styles.css.
 plugins/              the nine bundled plugins (AI Chat, Multiple
                       Boards, Command Palette, Hide Button, Colour
                       Palette, Presentation, Tidy Up, Visual
@@ -40,11 +47,11 @@ electron/             main process and the window.bowerbird bridge
 ## Plugin loading
 
 - **User plugins** (in `plugins/` or installed): loaded as ES modules over the `plugin:` scheme. `apiVersion` is checked, permissions are enforced. A plugin is written in TypeScript and compiled in the app when it loads — there is no build step (see PLUGIN_API.md).
-- **First-party plugins** (in `src/core-plugins/`): ES modules imported by the core at boot, then `activate(api)` with the same `PluginContext` a user plugin gets, under a manifest that declares the same permissions. They are *not* given a back door: if a first-party plugin needs something, that something goes in the API.
+- **First-party plugins** (in `src/ui/`): ES modules imported by the core at boot, then `activate(api)` with the same `PluginContext` a user plugin gets, under a manifest that declares the same permissions. They are *not* given a back door: if a first-party plugin needs something, that something goes in the API.
 - **Required plugins.** The board and Settings are `required: true` and cannot be disabled: disabling the board removed the toolbar and the Settings window with it, so the app soft-locked with no way back. A required plugin is always enabled, whatever the enabled map says, so a stale `false` in plugins.json self-heals on the next boot. The other core plugins stay disableable — that is how a replacement UI plugin takes over.
 
 ## Known boundary
 
-The render loop and the input loop (pan, zoom, drag, resize/rotate, text edit) live in the board plugin (`src/core-plugins/board.ts`), not in the core. The core (`src/main.ts`) is boot only: it loads the board, creates the PluginHost and the PluginContext factory, and loads the plugins. It owns the board model, persistence, the undo store, the search engine and the media module, and it renders no DOM.
+The render loop and the input loop (pan, zoom, drag, resize/rotate, text edit) live in the board plugin (`src/ui/board.ts`), not in the core. The core (`src/main.ts`) is boot only: it loads the board, creates the PluginHost and the PluginContext factory, and loads the plugins. It owns the board model, persistence, the undo store, the search engine and the media module, and it renders no DOM.
 
-The board plugin uses only the public API, plus the pure board-model functions in `src/model.ts` (geometry over the board data it reads through the API). It reaches the core's board state through `api.board`, `api.view`, `api.ui`, `api.pen`, `api.search`, `api.media`, `api.shapes` and `api.files`. The live-drag methods on `api.board` (`moveItems`, `resizeItem`, `setItemRotation`, `removeItems`, `bringToFront`, `setTextContent`, `createGroup`, `addItemSilent`) change the live board without saving or rendering, so a drag saves once at drag end; the selection queries (`hitTest`, `marqueeSelect`, `lassoSelect`, `strokesNear`) are pure reads. The board plugin registers its controller with the plugin system (`registerBoardController` in `src/plugins.ts`), and the core delegates its render, selection, editing and tool calls there — the same shape as the settings UI registration. The core keeps the board element, the cards element (for the media and search modules) and the toast element from the shell; it does not keep the SVG world or grid elements.
+The board plugin uses only the public API, plus the pure board-model functions in `src/backend/model.ts` (geometry over the board data it reads through the API). It reaches the core's board state through `api.board`, `api.view`, `api.ui`, `api.pen`, `api.search`, `api.media`, `api.shapes` and `api.files`. The live-drag methods on `api.board` (`moveItems`, `resizeItem`, `setItemRotation`, `removeItems`, `bringToFront`, `setTextContent`, `createGroup`, `addItemSilent`) change the live board without saving or rendering, so a drag saves once at drag end; the selection queries (`hitTest`, `marqueeSelect`, `lassoSelect`, `strokesNear`) are pure reads. The board plugin registers its controller with the plugin system (`registerBoardController` in `src/plugins/host.ts`), and the core delegates its render, selection, editing and tool calls there — the same shape as the settings UI registration. The core keeps the board element, the cards element (for the media and search modules) and the toast element from the shell; it does not keep the SVG world or grid elements.

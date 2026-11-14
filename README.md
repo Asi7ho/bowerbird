@@ -33,8 +33,10 @@ Or push a version tag (`v0.2.2`) and the release workflow builds all three and a
 
 ```
 electron/          main process (TypeScript, compiled to electron-dist/)
-src/               renderer: board UI, model, plugin host and API
-src/core-plugins/  first-party UI plugins
+src/               renderer: boot, backend, plugin host, UI
+src/backend/       headless core (model, search, media, undo, drops)
+src/plugins/       plugin host
+src/ui/            first-party UI plugins
 plugins/           bundled plugins
 index.html         board shell
 assets/            welcome media and icon
