@@ -5,12 +5,12 @@ import { createBoardSearch, type BoardSearch } from "./backend/search";
 import { createUndoStore, type UndoStore } from "./backend/undo";
 import { createDrops, type Drops } from "./backend/drops";
 import { ensureVideoPoster } from "./backend/poster";
-import * as coreBoard from "./core-plugins/board";
-import * as coreCards from "./core-plugins/cards";
-import * as coreSearch from "./core-plugins/search";
-import * as coreSettings from "./core-plugins/settings";
-import * as coreTitlebar from "./core-plugins/titlebar";
-import * as coreToolbar from "./core-plugins/toolbar";
+import * as coreBoard from "./ui/board";
+import * as coreCards from "./ui/cards";
+import * as coreSearch from "./ui/search";
+import * as coreSettings from "./ui/settings";
+import * as coreTitlebar from "./ui/titlebar";
+import * as coreToolbar from "./ui/toolbar";
 import {
   Board, Camera, Item, Pt, ShapeKind, Size,
   AUDIO_TRANSCRIPT_HIDDEN_H, boardGet, CARD_DECORATIONS_H, centre, clampZoom, elementPoint, elementSize,
