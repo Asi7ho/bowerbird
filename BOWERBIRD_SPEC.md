@@ -105,6 +105,7 @@ An item:
 | `Swatch` | `hex` |
 | `Audio` | `path`, `title?`, `transcript?` (the on-device speech-to-text of a voice recording, when it has one) |
 | `Video` | `source`, `remote` (bool), `size_bytes` |
+| `Model3D` | `path`, `size_bytes` (a GLB file; drag on the model rotates it, wheel zooms, it turns slowly when idle) |
 | `Stroke` | `points` (`[{x, y}]`), `color`, `width`, `marker` (bool), `pressures?` |
 | `Connector` | `from`, `to` (each `{"Item": id}` or `{"Point": {"x","y"}}`), `color` |
 | `Plugin` | `plugin`, `kind`, `data` (any JSON) |

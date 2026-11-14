@@ -29,6 +29,7 @@ export type Kind =
   | { Swatch: { hex: string } }
   | { Audio: { path: string; title?: string; transcript?: string } }
   | { Video: { source: string; remote: boolean; size_bytes: number } }
+  | { Model3D: { path: string; size_bytes: number } }
   | { Stroke: { points: Pt[]; color: string; width: number; marker: boolean; pressures?: number[] } }
   | { Connector: { from: Anchor; to: Anchor; color: string } }
   // Plugin cards (see PLUGIN_API.md): namespaced so the core never
