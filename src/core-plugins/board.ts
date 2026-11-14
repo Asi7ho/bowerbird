@@ -21,14 +21,12 @@
 // (undo, board switch, reset).
 import type { PluginContext, PluginManifest } from "../plugins";
 import {
-  emitPluginEvent,
   getCardRenderer,
   getCreateActions,
   getPluginTool,
   handlePluginCardAction,
   handlePluginCardDoubleClick,
   handlePluginShortcut,
-  refreshActiveView,
   registerBoardController,
   syncPluginToolButtons,
 } from "../plugins";
@@ -520,7 +518,7 @@ function render(): void {
     else v.addEventListener("loadedmetadata", restore, { once: true });
   }
   if (editingHtml) cardsEl.insertAdjacentHTML("beforeend", editingHtml);
-  refreshActiveView();
+  api.view.refresh();
   lastContentKey = visibleKey();
   applyCamera();
   api.search.update();
@@ -632,7 +630,7 @@ function updateSelection(): void {
   // The toolbar plugin follows the selection through the
   // "selection" plugin event, so its note-colours flyout
   // appears when a text note is selected.
-  emitPluginEvent("selection");
+  api.events.emit("selection");
 }
 
 function applyStacking(): void {
@@ -885,7 +883,7 @@ function setTool(t: Tool): void {
   // show the right flyout without polling. The plugin tool
   // buttons are the plugin system's own DOM, so the core
   // syncs them here.
-  emitPluginEvent("tool");
+  api.events.emit("tool");
   syncPluginToolButtons(t);
 }
 
