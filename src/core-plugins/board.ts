@@ -734,6 +734,12 @@ function startTextEdit(id: number): void {
   card.innerHTML = "";
   card.appendChild(row);
   card.classList.add("selected");
+  // The card's decorations (tag pills, "+ tag", progress)
+  // are from the render before editing started; they sit
+  // over the text box and would cover the mic on its left.
+  // They come back on the next render.
+  cardsEl.querySelector(`.card-decorations[data-for="${id}"]`)?.remove();
+  cardsEl.querySelector(`.card-decorations-right[data-for="${id}"]`)?.remove();
   ta.focus();
   ta.setSelectionRange(ta.value.length, ta.value.length);
   const commit = () => {
