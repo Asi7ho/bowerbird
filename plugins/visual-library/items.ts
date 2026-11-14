@@ -37,10 +37,6 @@ export function getCategories(): LibraryCategory[] {
   return categories;
 }
 
-export function getAssignment(itemId: number): string | null {
-  return assignments[itemId] ?? null;
-}
-
 export async function loadCategories(api: PluginContext): Promise<void> {
   if (categoriesLoaded) return;
   categoriesLoaded = true;

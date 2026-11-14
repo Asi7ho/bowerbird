@@ -1156,9 +1156,6 @@ export function closeSettingsUI(): void {
 export function isSettingsUIOpen(): boolean {
   return settingsUI?.isOpen() ?? false;
 }
-export function setSettingsUITab(tab: string): void {
-  settingsUI?.setTab(tab);
-}
 export function refreshSettingsUI(): void {
   settingsUI?.refresh();
 }
@@ -1186,9 +1183,6 @@ export interface BoardController {
 let boardController: BoardController | null = null;
 export function registerBoardController(c: BoardController): void {
   boardController = c;
-}
-export function getBoardController(): BoardController | null {
-  return boardController;
 }
 export function boardRender(): void {
   boardController?.render();
@@ -1390,14 +1384,6 @@ function setDockVisible(visible: boolean): void {
   dockVisible = visible;
   updatePanelDock();
   if (pluginsReady && prev !== visible) host?.render();
-}
-
-export function pluginsLoaded(): boolean {
-  return pluginsReady;
-}
-
-export function listLoadedPlugins(): LoadedPlugin[] {
-  return Array.from(loaded.values());
 }
 
 // ---------------------------------------------------------------- events
@@ -2337,12 +2323,6 @@ export function getActiveView(): string {
   return activeView;
 }
 
-export function listViewsForUI(): Array<{ id: string; title: string; plugin: string | null }> {
-  const out: Array<{ id: string; title: string; plugin: string | null }> = [{ id: "board", title: "Board", plugin: null }];
-  for (const v of views.values()) out.push({ id: v.id, title: v.title, plugin: v.pluginId });
-  return out;
-}
-
 function renderViewSwitcher(): void {
   if (!host) return;
   const el = shell.viewSwitcherEl;
@@ -2431,6 +2411,13 @@ export function getCardRenderer(item: Item): PluginCardDef | null {
   return cards.get(`${item.kind.Plugin.plugin}:${item.kind.Plugin.kind}`) ?? null;
 }
 
+// A placeholder card for a plugin card that cannot render:
+// missing plugin, a render that threw, or a builtin render
+// that threw. One helper, not three near-identical divs.
+function fallbackCard(title: string, sub: string, sub2?: string): string {
+  return `<div style="padding:12px"><div class="title" style="font-size:14px">${title}</div><div class="sub" style="font-size:12px">${sub}</div>${sub2 ? `<div class="sub" style="font-size:12px">${sub2}</div>` : ""}</div>`;
+}
+
 export function getCardHtml(item: Item): string | null {
   if (!isPluginCard(item)) return null;
   const def = getCardRenderer(item);
@@ -2450,12 +2437,12 @@ export function getCardHtml(item: Item): string | null {
       (c) => c.kind === kind && c.frame === true
     );
     if (isFrame) return null;
-    return `<div style="padding:12px"><div class="title" style="font-size:14px">Plugin card</div><div class="sub" style="font-size:12px">${escapeHtml(plugin)} — ${escapeHtml(kind)}</div><div class="sub" style="font-size:12px">Install the plugin to view this card. Your data is kept.</div></div>`;
+    return fallbackCard("Plugin card", `${escapeHtml(plugin)} — ${escapeHtml(kind)}`, "Install the plugin to view this card. Your data is kept.");
   }
   try {
     return def.render(item, item.kind.Plugin.data);
   } catch (e) {
-    return `<div style="padding:12px"><div class="title" style="font-size:14px">Plugin card failed to render</div><div class="sub" style="font-size:12px">${escapeHtml(String(e))}</div></div>`;
+    return fallbackCard("Plugin card failed to render", escapeHtml(String(e)));
   }
 }
 
@@ -2483,10 +2470,6 @@ export function registerBuiltinCard(pluginId: string, def: PluginBuiltinCardDef)
   builtinCards.set(def.kind, { ...def, pluginId });
 }
 
-export function getBuiltinCardRenderer(kind: string): (PluginBuiltinCardDef & { pluginId: string }) | null {
-  return builtinCards.get(kind) ?? null;
-}
-
 // Render a built-in card through the plugin that registered
 // a renderer for its kind, or null when no plugin provides
 // one (the core then falls back to its own renderer, during
@@ -2501,7 +2484,7 @@ export function getBuiltinCardHtml(item: Item, plain = false): string | null {
   try {
     return def.render(item, (item.kind as Record<string, unknown>)[kindName], plain);
   } catch (e) {
-    return `<div style="padding:12px"><div class="title" style="font-size:14px">Card failed to render</div><div class="sub" style="font-size:12px">${escapeHtml(String(e))}</div></div>`;
+    return fallbackCard("Card failed to render", escapeHtml(String(e)));
   }
 }
 
@@ -2574,13 +2557,20 @@ export async function runPluginCommand(pluginId: string, commandId: string): Pro
 
 // ---------------------------------------------------------------- loading
 
+// Drop every entry a plugin registered under its
+// `pluginId:` prefix. Five maps are keyed that way
+// (cards, decorators, create actions, commands, settings
+// sections); the others are keyed differently and are
+// handled by their own loops below.
+function deletePrefixed<V>(map: Map<string, V>, pluginId: string): void {
+  for (const key of Array.from(map.keys())) {
+    if (key.startsWith(`${pluginId}:`)) map.delete(key);
+  }
+}
+
 function unregisterPlugin(pluginId: string): void {
-  for (const key of Array.from(cards.keys())) {
-    if (key.startsWith(`${pluginId}:`)) cards.delete(key);
-  }
-  for (const key of Array.from(cardDecorators.keys())) {
-    if (key.startsWith(`${pluginId}:`)) cardDecorators.delete(key);
-  }
+  deletePrefixed(cards, pluginId);
+  deletePrefixed(cardDecorators, pluginId);
   for (const [fullId, t] of Array.from(tools.entries())) {
     if (t.pluginId === pluginId) {
       tools.delete(fullId);
@@ -2602,21 +2592,15 @@ function unregisterPlugin(pluginId: string): void {
   for (const [key, v] of Array.from(views.entries())) {
     if (v.pluginId === pluginId) views.delete(key);
   }
-  for (const key of Array.from(createActions.keys())) {
-    if (key.startsWith(`${pluginId}:`)) createActions.delete(key);
-  }
-  for (const key of Array.from(commands.keys())) {
-    if (key.startsWith(`${pluginId}:`)) commands.delete(key);
-  }
+  deletePrefixed(createActions, pluginId);
+  deletePrefixed(commands, pluginId);
   for (const [key, o] of Array.from(overlays.entries())) {
     if (o.pluginId === pluginId) {
       overlays.delete(key);
       o.el.remove();
     }
   }
-  for (const key of Array.from(settingsSections.keys())) {
-    if (key.startsWith(`${pluginId}:`)) settingsSections.delete(key);
-  }
+  deletePrefixed(settingsSections, pluginId);
   for (const [key, s] of Array.from(shortcuts.entries())) {
     if (s.pluginId === pluginId) shortcuts.delete(key);
   }
@@ -2817,6 +2801,29 @@ export async function endTrial(id: string): Promise<void> {
   host?.render();
 }
 
+// Activate one manifest, marking it failed on error.
+// Shared by initPlugins, refreshPlugins and
+// setPluginEnabled's retry — the version check and the
+// failure bookkeeping are identical at each site.
+async function tryActivateManifest(m: PluginManifest): Promise<void> {
+  if (m.apiVersion !== "2") {
+    const lp = loaded.get(m.id)!;
+    lp.failed = true;
+    lp.error = `Requires plugin API ${m.apiVersion}, this app provides 2`;
+    return;
+  }
+  try {
+    await activatePlugin(m);
+  } catch (e) {
+    const lp = loaded.get(m.id)!;
+    lp.failed = true;
+    lp.error = String(e);
+    lp.active = false;
+    unregisterPlugin(m.id);
+    host!.toast(`Plugin ${m.name} failed to load: ${String(e)}`);
+  }
+}
+
 export async function initPlugins(
   h: PluginHost,
   b: PluginBridge,
@@ -2893,22 +2900,7 @@ export async function initPlugins(
   }
   for (const m of manifests) {
     if (m.enabled === false) continue;
-    if (m.apiVersion !== "2") {
-      const lp = loaded.get(m.id)!;
-      lp.failed = true;
-      lp.error = `Requires plugin API ${m.apiVersion}, this app provides 2`;
-      continue;
-    }
-    try {
-      await activatePlugin(m);
-    } catch (e) {
-      const lp = loaded.get(m.id)!;
-      lp.failed = true;
-      lp.error = String(e);
-      lp.active = false;
-      unregisterPlugin(m.id);
-      h.toast(`Plugin ${m.name} failed to load: ${String(e)}`);
-    }
+    await tryActivateManifest(m);
   }
   renderViewSwitcher();
   updatePanelDock();
@@ -2930,33 +2922,17 @@ export async function setPluginEnabled(id: string, enabled: boolean): Promise<vo
   if (lp.trial) return;
   await bridge.setPluginEnabled(id, enabled);
   lp.manifest.enabled = enabled;
-  if (enabled && !lp.active && !lp.failed) {
+  if (enabled && !lp.active) {
     // A previously failed plugin gets one retry on re-enable; a
     // plugin that failed to load is not retried silently on every
-    // toggle — the user re-enabling it is the retry.
-    try {
-      await activatePlugin(lp.manifest);
-    } catch (e) {
-      lp.failed = true;
-      lp.error = String(e);
-      lp.active = false;
-      unregisterPlugin(id);
-      host.toast(`Plugin ${lp.manifest.name} failed to load: ${String(e)}`);
-    }
-  } else if (!enabled && lp.active) {
-    await deactivatePlugin(lp.manifest);
-  } else if (enabled && lp.failed) {
+    // toggle — the user re-enabling it is the retry. Clearing
+    // the failure first is a no-op for a plugin that never
+    // failed.
     lp.failed = false;
     lp.error = null;
-    try {
-      await activatePlugin(lp.manifest);
-    } catch (e) {
-      lp.failed = true;
-      lp.error = String(e);
-      lp.active = false;
-      unregisterPlugin(id);
-      host.toast(`Plugin ${lp.manifest.name} failed to load: ${String(e)}`);
-    }
+    await tryActivateManifest(lp.manifest);
+  } else if (!enabled && lp.active) {
+    await deactivatePlugin(lp.manifest);
   }
   host.render();
 }
@@ -2978,22 +2954,7 @@ export async function refreshPlugins(): Promise<void> {
     if (loaded.has(m.id)) continue;
     loaded.set(m.id, { manifest: m, active: false, failed: false, error: null, module: null });
     if (m.enabled === false) continue;
-    if (m.apiVersion !== "2") {
-      const lp = loaded.get(m.id)!;
-      lp.failed = true;
-      lp.error = `Requires plugin API ${m.apiVersion}, this app provides 2`;
-      continue;
-    }
-    try {
-      await activatePlugin(m);
-    } catch (e) {
-      const lp = loaded.get(m.id)!;
-      lp.failed = true;
-      lp.error = String(e);
-      lp.active = false;
-      unregisterPlugin(m.id);
-      host.toast(`Plugin ${m.name} failed to load: ${String(e)}`);
-    }
+    await tryActivateManifest(m);
   }
   renderViewSwitcher();
   updatePanelDock();

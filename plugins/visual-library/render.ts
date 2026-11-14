@@ -16,10 +16,6 @@ import { getLibAudioItemId, hasLibAudio, loadLibraryAudioDuration, rewireLibrary
 // straight away) or when its name is double-clicked.
 let editingCategory: string | null = null;
 
-export function setEditingCategory(id: string | null): void {
-  editingCategory = id;
-}
-
 // Panel refs (built once by initPanel).
 let panelSearch: HTMLInputElement | null = null;
 let panelSections: HTMLElement | null = null;
@@ -34,10 +30,6 @@ let viewSections: HTMLElement | null = null;
 // every disable/re-enable cycle.
 let panelIntersectionObserver: IntersectionObserver | null = null;
 let panelResizeObserver: ResizeObserver | null = null;
-
-export function getPanelSections(): HTMLElement | null {
-  return panelSections;
-}
 
 export function getViewSections(): HTMLElement | null {
   return viewSections;
