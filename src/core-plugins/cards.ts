@@ -43,7 +43,7 @@ type ImageData = { path: string };
 type UrlCardData = { url: string; title: string | null; description: string | null; image?: string | null; icon?: string | null; embed?: boolean };
 type PdfCardData = { path: string; size_bytes: number };
 type SwatchData = { hex: string };
-type AudioData = { path: string; transcript?: string };
+type AudioData = { path: string; title?: string; transcript?: string };
 type VideoData = { source: string; remote: boolean; size_bytes: number };
 
 // Link cards are previews only: clicking one opens it in the browser.
@@ -253,9 +253,11 @@ export function activate(api: PluginContext): void {
     title: "Audio",
     render: (item, data, plain = false) => {
       const c = chrome(item, plain);
-      const { path, transcript } = data as AudioData;
+      const { path, title, transcript } = data as AudioData;
       const text = typeof transcript === "string" ? transcript.trim() : "";
-      const name = path.split("/").pop() ?? path;
+      // A voice note can be renamed: the title is shown when
+      // set, otherwise the file's name.
+      const name = (typeof title === "string" && title.trim() !== "") ? title.trim() : (path.split("/").pop() ?? path);
       if (api.media.audioFailed(path)) {
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px"><div class="missing-media" style="flex:1 1 auto">File missing: ${api.text.escapeHtml(name)}</div></div></div>`;
       }
