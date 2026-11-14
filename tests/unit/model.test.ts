@@ -44,7 +44,7 @@ import {
   toggleTaskLine,
   type Board,
   type Item,
-} from "../../src/model";
+} from "../../src/backend/model";
 
 function textCard(id: number, x: number, y: number, w = 260, h = 48, text = "Note"): Item {
   return {

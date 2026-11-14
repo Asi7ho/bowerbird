@@ -29,8 +29,8 @@ import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
   elementPoint, elementSize, isInlineVideo, pressureWidth, rectFromPoints, screenToWorld, smoothStrokePath, smoothStrokePressures, smoothStrokeSamples, strokeMaxWidth, strokePressuresVary,
   worldToScreen, zoomCamera,
-} from "../model";
-import { syncModel3DViews, disposeAllModel3DViewers } from "../model3d";
+} from "../backend/model";
+import { syncModel3DViews, disposeAllModel3DViewers } from "../backend/model3d";
 
 export const manifest: PluginManifest = {
   id: "core-board",

@@ -1,10 +1,10 @@
-import { api } from "./api";
-import { createMedia, type Media } from "./media";
-import { createCardRenderer, SHAPES, shapePreviewPoints, type CardRenderer } from "./cards";
-import { createBoardSearch, type BoardSearch } from "./search";
-import { createUndoStore, type UndoStore } from "./undo";
-import { createDrops, type Drops } from "./drops";
-import { ensureVideoPoster } from "./poster";
+import { api } from "./backend/api";
+import { createMedia, type Media } from "./backend/media";
+import { createCardRenderer, SHAPES, shapePreviewPoints, type CardRenderer } from "./backend/cards";
+import { createBoardSearch, type BoardSearch } from "./backend/search";
+import { createUndoStore, type UndoStore } from "./backend/undo";
+import { createDrops, type Drops } from "./backend/drops";
+import { ensureVideoPoster } from "./backend/poster";
 import * as coreBoard from "./core-plugins/board";
 import * as coreCards from "./core-plugins/cards";
 import * as coreSearch from "./core-plugins/search";
@@ -16,8 +16,8 @@ import {
   AUDIO_TRANSCRIPT_HIDDEN_H, boardGet, CARD_DECORATIONS_H, centre, clampZoom, elementPoint, elementSize,
   estimateTextHeight, hitTest, itemsCentre, lassoSelect, marquee, moveSelection,
   resizeItem, screenToWorld, select, strokesWithin, zoomCamera,
-} from "./model";
-import { welcomeBoard } from "./welcome";
+} from "./backend/model";
+import { welcomeBoard } from "./backend/welcome";
 import {
   boardClearEditing, boardCommitEditing, boardDeleteSelected,
   boardGetEditingId, boardGetTool, boardGroupSelected, boardRender,
