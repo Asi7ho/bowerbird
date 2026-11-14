@@ -752,10 +752,9 @@ export interface PluginContext {
     // the built-in kinds; a user plugin could replace one.
     registerBuiltin: (def: PluginBuiltinCardDef) => void;
     // Register a decoration renderer: HTML shown under a
-    // card, at its bottom edge — tags bottom-left
-    // (`{ id, side?, render(item) }`, `side` "left" by
-    // default, "right" for the other corner; returning HTML
-    // or null). The checklist progress is core, not a
+    // card, at its bottom edge (`{ id, side?, render(item) }`,
+    // `side` "left" by default, "right" for the other corner;
+    // returning HTML or null). The checklist progress is core,
     // decorator: a Text card with task lines always shows
     // n/m at the bottom right. The core calls each
     // decorator for every card on every render, so it must
@@ -942,10 +941,10 @@ const cards = new Map<string, PluginCardDef & { pluginId: string }>();
 const builtinCards = new Map<string, PluginBuiltinCardDef & { pluginId: string }>();
 // Card decorations: a plugin registers a renderer that
 // returns HTML shown inside a card, at its bottom edge
-// (tags bottom-left, checklist progress bottom-right).
-// Decorations are display only — they never take clicks
-// (pointer-events: none in styles.css) and never write. A
-// renderer that throws renders nothing.
+// (checklist progress sits bottom-right). Decorations are
+// display only — they never take clicks (pointer-events:
+// none in styles.css) and never write. A renderer that
+// throws renders nothing.
 const cardDecorators = new Map<string, PluginCardDecoratorDef & { pluginId: string }>();
 export function getCardDecorations(item: Item): { left: string; right: string } {
   let left = "";
@@ -960,14 +959,6 @@ export function getCardDecorations(item: Item): { left: string; right: string } 
   return { left, right };
 }
 
-// Whether a card decorator is registered, by its full id
-// ("<pluginId>:<decoratorId>"). The core uses this for
-// affordances that belong to a decorator: the "+ tag"
-// button shows only while the Tags plugin's decorator is
-// registered, so disabling Tags hides it too.
-export function hasCardDecorator(id: string): boolean {
-  return cardDecorators.has(id);
-}
 const tools = new Map<string, PluginToolDef & { pluginId: string; fullId: string }>();
 const panels = new Map<string, PluginPanelDef & { pluginId: string; el: HTMLElement; body: HTMLElement; tab: HTMLElement; hidden: boolean }>();
 const views = new Map<string, PluginViewDef & { pluginId: string }>();

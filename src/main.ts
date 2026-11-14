@@ -247,8 +247,12 @@ async function loadBoardFromJson(json: string, dir: string, preserveUndo = false
   // matches the unrotated rect Presentation plays.
   // Text cards keep room for their bottom row below the
   // text: a card saved before that room existed is grown
-  // on load, so the tag pills never sit on its text.
+  // on load, so the checklist progress never sits on its
+  // text.
   for (const it of parsed.items) {
+    // Tags are gone: drop any the board still carries,
+    // so they never come back.
+    delete (it as { tags?: unknown }).tags;
     if (isFrameCard(it)) delete (it as { rotation?: number }).rotation;
     if ("Text" in it.kind) {
       const need = estimateTextHeight(it.kind.Text.text, it.kind.Text.size, it.size.w) + CARD_DECORATIONS_H;
@@ -256,8 +260,7 @@ async function loadBoardFromJson(json: string, dir: string, preserveUndo = false
     }
     // A voice note with a transcript keeps room for its
     // toggle below the seek: a card saved at the old
-    // hidden height is grown on load, so the toggle never
-    // sits on the tag pills.
+    // hidden height is grown on load, so the toggle fits.
     if ("Audio" in it.kind && typeof it.kind.Audio.transcript === "string" && it.kind.Audio.transcript.trim().length > 0) {
       if (it.size.h < AUDIO_TRANSCRIPT_HIDDEN_H) it.size.h = AUDIO_TRANSCRIPT_HIDDEN_H;
     }
@@ -464,6 +467,8 @@ async function init(): Promise<void> {
       board.grid = board.grid ?? "Dots";
       board.camera = board.camera ?? { x: 0, y: 0, zoom: 1 };
       for (const it of board.items) {
+        // Tags are gone: drop any the board still carries.
+        delete (it as { tags?: unknown }).tags;
         if ("UrlCard" in it.kind) {
           // Old boards may carry embed:true from the embedded-page era;
           // link cards are previews only now, so it is ignored.
@@ -673,9 +678,9 @@ async function init(): Promise<void> {
       const it = boardGet(board, id);
       if (!it || !("Text" in it.kind)) return false;
       it.kind.Text.text = text;
-      // The card keeps room for its bottom row (tag pills,
-      // the "+ tag" button) below the text, so the row never
-      // covers the last line.
+      // The card keeps room for its bottom row (checklist
+      // progress) below the text, so the row never covers
+      // the last line.
       it.size.h = Math.max(40, estimateTextHeight(text, it.kind.Text.size, it.size.w) + CARD_DECORATIONS_H);
       return true;
     },

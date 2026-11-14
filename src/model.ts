@@ -597,10 +597,9 @@ export function parseMarkdown(text: string): Block[] {
 }
 
 // The height reserved at a card's bottom for its bottom
-// row (tag pills, the "+ tag" button, the transcript
-// toggle): the row itself is 24 tall, plus 12 of padding
-// between the row and the card's contents, so the pills
-// never sit on the text.
+// row (checklist progress): the row itself is 24 tall,
+// plus 12 of padding between the row and the card's
+// contents, so the progress never sits on the text.
 export const CARD_DECORATIONS_H = 36;
 
 export function estimateTextHeight(text: string, fontSize: number, width: number): number {
