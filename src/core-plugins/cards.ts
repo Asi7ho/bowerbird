@@ -25,7 +25,6 @@
 // fileUrl(), which encodes each path segment.
 import type { PluginContext, PluginManifest } from "../plugins";
 import type { Item } from "../model";
-import { AUDIO_TRANSCRIPT_HIDDEN_H } from "../model";
 
 export const manifest: PluginManifest = {
   apiVersion: "2",
@@ -280,7 +279,7 @@ export function activate(api: PluginContext): void {
       // is grown the toggle heads the transcript, above the
       // text, and the text fills the card and scrolls, so a
       // long note does not grow the card.
-      const expanded = text.length > 0 && c.hh > AUDIO_TRANSCRIPT_HIDDEN_H;
+      const expanded = text.length > 0 && c.hh > api.cards.audioHeights.transcriptHidden;
       const toggleHtml = text.length > 0
         ? `<button type="button" class="audio-transcript-toggle" data-action="toggle-transcript" data-id="${c.id}" aria-expanded="${expanded}"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${expanded ? "M6 9l6 6 6-6" : "M9 6l6 6-6 6"}"/></svg> Transcript</button>`
         : "";

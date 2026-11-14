@@ -15,6 +15,8 @@ export interface Size { w: number; h: number }
 // card renderer and the toggle use these, so they agree.
 export const AUDIO_TRANSCRIPT_HIDDEN_H = 164;
 export const AUDIO_TRANSCRIPT_SHOWN_H = 240;
+// An audio card with no transcript.
+export const AUDIO_H = 104;
 export type Anchor = { Point: Pt } | { Item: number };
 export type ShapeKind = "rect" | "ellipse" | "triangle" | "diamond" | "hexagon" | "star" | "arrow";
 

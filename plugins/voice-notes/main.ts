@@ -15,13 +15,6 @@
 import type { PluginContext } from "../../src/plugins";
 import type { Pt } from "../../src/model";
 
-// The hidden height, matching AUDIO_TRANSCRIPT_HIDDEN_H
-// in src/model.ts (the card renderer shows the transcript
-// only above it). A plugin cannot import a value from the
-// app's src/ — the loader only serves the plugin's own
-// folder — so the number is repeated here, not imported.
-const AUDIO_TRANSCRIPT_HIDDEN_H = 164;
-
 const MIC_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>';
 
 const MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", ""];
@@ -133,8 +126,10 @@ async function finishRecording(api: PluginContext, world: Pt, mime: string): Pro
       api.media.transcribeAudio(blob),
     ]);
     // Short by default: the transcript stays hidden behind
-    // its toggle until the user expands the card.
-    const h = transcript ? AUDIO_TRANSCRIPT_HIDDEN_H : 104;
+    // its toggle until the user expands the card. The heights
+    // come from the API, so the card matches the built-in
+    // renderer instead of repeating its numbers.
+    const h = transcript ? api.cards.audioHeights.transcriptHidden : api.cards.audioHeights.plain;
     const id = api.board.addItem({ Audio: { path, ...(transcript ? { transcript } : {}) } }, { x: world.x - 150, y: world.y - h / 2 }, { w: 300, h });
     api.board.setSelected([id]);
   } catch {

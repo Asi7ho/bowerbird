@@ -24,7 +24,7 @@
 // v1 does not pretend otherwise.
 
 import type { Anchor, ArrangeOptions, Board, Camera, Item, Kind, Pt, Size } from "./model";
-import { anchorPoint, arrangeItems, boardGet, centre, checklistProgress, clippedEnds, domainOf, elide, escapeHtml, itemRotation, parseHex, rectCrossing, renderMarkdownHtml, segmentIntersectsRect, setChecklistDone, tileColorFor, tint, toggleTaskLine } from "./model";
+import { anchorPoint, arrangeItems, AUDIO_H, AUDIO_TRANSCRIPT_HIDDEN_H, AUDIO_TRANSCRIPT_SHOWN_H, boardGet, centre, checklistProgress, clippedEnds, domainOf, elide, escapeHtml, itemRotation, parseHex, rectCrossing, renderMarkdownHtml, segmentIntersectsRect, setChecklistDone, tileColorFor, tint, toggleTaskLine } from "./model";
 
 // ---------------------------------------------------------------- types
 
@@ -828,6 +828,13 @@ export interface PluginContext {
     // The board view calls this for double-clicks on a
     // plugin card.
     dispatchDoubleClick: (item: Item) => boolean;
+    // The Audio card's heights: a plain card (no transcript),
+    // a card with a transcript hidden, and one with it shown.
+    // A plugin that creates an audio card (voice notes)
+    // sizes it from these instead of hardcoding them, so it
+    // stays in step with the built-in renderer; the board
+    // view resizes on the transcript toggle from them too.
+    audioHeights: { plain: number; transcriptHidden: number; transcriptShown: number };
   };
   files: {
     // Embed a file as a board-owned copy. A File (from a
@@ -1875,6 +1882,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       },
       dispatchAction: (action: string, item: Item) => handlePluginCardAction(action, item),
       dispatchDoubleClick: (item: Item) => handlePluginCardDoubleClick(item),
+      audioHeights: { plain: AUDIO_H, transcriptHidden: AUDIO_TRANSCRIPT_HIDDEN_H, transcriptShown: AUDIO_TRANSCRIPT_SHOWN_H },
     },
     media: {
       audioFailed: (path: string) => host!.audioFailed(path),
