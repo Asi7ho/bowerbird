@@ -1120,6 +1120,9 @@ function registerIpc(): void {
   ipcMain.handle("bowerbird:embed-file-bytes", (_event, name: string, data: ArrayBuffer | Uint8Array) => {
     if (typeof name !== "string" || !name) throw new Error("embed needs a file name");
     const buf = Buffer.from(data as ArrayBuffer);
+    // Same 50 MB cap as read-file-base64: an unbounded buffer
+    // lets a hostile plugin fill the disk or OOM the main process.
+    if (buf.length > 50 * 1024 * 1024) throw new Error("file too large to embed");
     const assets = path.join(boardDir(), "assets");
     fs.mkdirSync(assets, { recursive: true });
     const clean = sanitise(path.basename(name));
