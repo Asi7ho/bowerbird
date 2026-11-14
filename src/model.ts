@@ -4,8 +4,12 @@
 // {"Text": {"text": "...", "bold": false, "size": 16, "color": "#1A1A1A"}}
 // and a connector endpoint is {"Item": 3} or {"Point": {"x": 1, "y": 2}}.
 
-export interface Pt { x: number; y: number }
-export interface Size { w: number; h: number }
+// The board model types live in plugin-api.d.ts (outside src/) so
+// plugins import them without reaching into the core. This module
+// re-exports them, so existing core imports from "./model" keep working.
+import type { Anchor, ArrangeOptions, Block, Board, Camera, Item, Kind, Pt, Segment, ShapeKind, Size } from "../plugin-api";
+export type { Anchor, ArrangeOptions, Block, Board, Camera, Item, Kind, Pt, Segment, ShapeKind, Size };
+
 
 // An audio card with a transcript is short by default —
 // player, seek, and a Transcript toggle — until the toggle
@@ -17,27 +21,7 @@ export const AUDIO_TRANSCRIPT_HIDDEN_H = 164;
 export const AUDIO_TRANSCRIPT_SHOWN_H = 240;
 // An audio card with no transcript.
 export const AUDIO_H = 104;
-export type Anchor = { Point: Pt } | { Item: number };
-export type ShapeKind = "rect" | "ellipse" | "triangle" | "diamond" | "hexagon" | "star" | "arrow";
 
-export type Kind =
-  | { Text: { text: string; bold: boolean; size: number; color: string; bg?: string } }
-  | { Shape: { shape: ShapeKind; fill: string } }
-  | { Image: { path: string } }
-  | { UrlCard: { url: string; title: string | null; description: string | null; image?: string | null; icon?: string | null; embed?: boolean } }
-  | { PdfCard: { path: string; size_bytes: number } }
-  | { Swatch: { hex: string } }
-  | { Audio: { path: string; title?: string; transcript?: string } }
-  | { Video: { source: string; remote: boolean; size_bytes: number; poster?: string; duration?: number } }
-  | { Model3D: { path: string; size_bytes: number } }
-  | { Stroke: { points: Pt[]; color: string; width: number; marker: boolean; pressures?: number[] } }
-  | { Connector: { from: Anchor; to: Anchor; color: string } }
-  // Plugin cards (see PLUGIN_API.md): namespaced so the core never
-  // has to know a plugin's data shape. `data` is always JSON. If
-  // the plugin is missing or disabled, the core renders a
-  // placeholder and carries `data` through load and save verbatim
-  // — uninstalling a plugin never deletes its cards' data.
-  | { Plugin: { plugin: string; kind: string; data: unknown } };
 
 // A local video in a format Chromium can play inline, so it
 // can be shown and played on the board itself. Remote links
@@ -67,35 +51,6 @@ export function posterNameFor(source: string): string {
   return `${stem || "video"}-poster.jpg`;
 }
 
-export interface Item {
-  id: number;
-  pos: Pt;
-  size: Size;
-  group: number | null;
-  kind: Kind;
-  // Rotation in degrees, clockwise, around the item's centre
-  // (card centre, or stroke bounding-box centre).
-  // Optional so old boards load unchanged: missing means 0.
-  // Cards and strokes rotate; connectors never carry it,
-  // and slide frames are excluded by the rotate action.
-  rotation?: number;
-}
-
-export interface Camera { x: number; y: number; zoom: number }
-
-export interface Board {
-  items: Item[];
-  camera: Camera;
-  next_id: number;
-  next_group: number;
-  // Labels for groups: a group is a section, so each group
-  // carries the label its frame shows. Optional so old
-  // boards load unchanged: a group with no entry gets
-  // "Section <id>" on load.
-  groups?: Record<number, { label: string }>;
-  bg: string;
-  grid: "Lines" | "Dots" | "Off";
-}
 
 export const GRID = 100;
 
@@ -224,20 +179,6 @@ export function elementPoint(el: HTMLElement, clientX: number, clientY: number):
   return { x: clientX - r.left, y: clientY - r.top };
 }
 
-// Arranging cards: the layout math for api.board.arrange.
-// Given the board and a set of item ids, compute where each
-// card goes. The caller applies the positions (one undo step
-// via updateItems). Every layout anchors on the bounding box
-// of the cards' current positions, so the arrangement happens
-// in place — "tidy these" keeps them where they are,
-// organised. Connectors are not cards to lay out, so they
-// are skipped. A single card has nowhere to go, so it stays.
-export type ArrangeOptions =
-  | { type: "grid"; columns: number; gap?: number }
-  | { type: "columns"; columns: number; gap?: number }
-  | { type: "row"; gap?: number }
-  | { type: "column"; gap?: number }
-  | { type: "radial"; center: number; radius?: number };
 
 export function arrangeItems(board: Board, ids: number[], options: ArrangeOptions): Array<{ id: number; pos: Pt }> {
   const items = ids
@@ -669,14 +610,6 @@ export function normaliseHex(hex: string): string | null {
 
 // --- Markdown (same subset as the GPUI board) ---------------------------
 
-export interface Segment { text: string; bold?: boolean; italic?: boolean; code?: boolean; link?: boolean; strike?: boolean }
-export type Block =
-  | { Heading: { level: number; segments: Segment[] } }
-  | { Bullet: { segments: Segment[] } }
-  | { Ordered: { n: number; segments: Segment[] } }
-  | { Quote: { segments: Segment[] } }
-  | { Code: { lines: string[] } }
-  | { Paragraph: { segments: Segment[] } };
 
 export function parseInline(s: string): Segment[] {
   const out: Segment[] = [];

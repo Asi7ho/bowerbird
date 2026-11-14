@@ -9,7 +9,7 @@
 // stroke or connector's position alone would not move
 // what is drawn. Rotated cards align by their unrotated
 // box, the same box the core uses for their handles.
-import type { Item, Pt } from "../../src/model";
+import type { Item, Pt } from "../../plugin-api";
 
 export type Axis = "x" | "y";
 export type Edge = "start" | "centre" | "end";

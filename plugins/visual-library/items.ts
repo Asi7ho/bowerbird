@@ -3,8 +3,7 @@
 // section, and syncing the library's copy of the board with
 // the board itself. Owns boardItems, the search query, the
 // collapsed sections and the last signature.
-import type { PluginContext } from "../../src/plugins";
-import type { Item } from "../../src/model";
+import type { Item, PluginContext } from "../../plugin-api";
 
 export type LibraryMode = "panel" | "view";
 

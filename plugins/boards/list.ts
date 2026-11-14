@@ -3,7 +3,7 @@
 // (or a board created elsewhere) shows up here without a
 // manual refresh. Renaming is inline: click a board's name
 // to edit it, Enter to save, Esc to cancel.
-import type { PluginContext } from "../../src/plugins";
+import type { PluginContext } from "../../plugin-api";
 
 export interface BoardInfo {
   name: string;

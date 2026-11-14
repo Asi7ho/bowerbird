@@ -6,7 +6,7 @@ This is the VS Code / Obsidian shape, not a skin system: the built-in UI has no 
 
 ## Principles
 
-- **One API.** There is a single public surface (`PluginContext`, in `src/plugins.ts`). If the built-in UI needs something, that something is added to the API first, then the UI uses it. The core never reaches into a plugin's DOM and a plugin never reaches into the core's DOM or internals.
+- **One API.** There is a single public surface (`PluginContext`, in `plugin-api.d.ts`). If the built-in UI needs something, that something is added to the API first, then the UI uses it. The core never reaches into a plugin's DOM and a plugin never reaches into the core's DOM or internals.
 - **Core renders nothing.** `index.html` is a bare mount point. The core creates no title bar, toolbar, search box, settings window or board DOM. A plugin builds each of those.
 - **First-party plugins are plugins.** The bundled UI is a set of first-party plugins in `src/core-plugins/`. They use the same `PluginContext` as user plugins. The only difference is loading: first-party plugins are ES modules imported by the core; user plugins are ES modules loaded over the `plugin:` scheme, so they can be multiple files with relative imports.
 - **Board JSON is stable.** Moving a card kind or a UI piece into a plugin never changes the board format. Built-in kinds (`Text`, `Image`, `Swatch`, `UrlCard`, `PdfCard`, `Audio`, `Video`, `Shape`, `Stroke`, `Connector`) keep their shape in board JSON; only who renders them changes.

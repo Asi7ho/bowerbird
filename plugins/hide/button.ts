@@ -1,7 +1,7 @@
 // Hide — the floating corner button. Click it to hide the board
 // into the corner; the title bar moves the window, so the button
 // is click-to-hide only now. It used to drag the window too.
-import type { PluginContext } from "../../src/plugins";
+import type { PluginContext } from "../../plugin-api";
 import { getCorner } from "./corner.js";
 
 let button: HTMLButtonElement | null = null;

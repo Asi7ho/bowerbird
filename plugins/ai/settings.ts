@@ -9,7 +9,7 @@
 // renderer held could be read by any plugin. The provider
 // and model are plain settings. The key is never shown back
 // — the settings only say whether one is saved.
-import type { PluginContext } from "../../src/plugins";
+import type { PluginContext } from "../../plugin-api";
 
 export interface Provider {
   id: string;

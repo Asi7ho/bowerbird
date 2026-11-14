@@ -1,7 +1,7 @@
 // Boards — the panel: the intro line, the new-board form,
 // and the list container. The list itself (rows, delete,
 // rename) lives in list.ts; this file owns the panel DOM.
-import type { PluginContext } from "../../src/plugins";
+import type { PluginContext } from "../../plugin-api";
 import { refresh } from "./list.js";
 
 let listEl: HTMLDivElement | null = null;
