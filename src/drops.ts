@@ -7,7 +7,7 @@
 // original cannot break the card. Preview fills are background
 // work, not user changes: they save without an undo step.
 import { api } from "./api";
-import { boardGet, domainOf, estimateTextHeight, normaliseHex, type Board, type Pt } from "./model";
+import { boardGet, domainOf, estimateTextHeight, normaliseHex, type Board, type Kind, type Pt, type Size } from "./model";
 
 export interface DropsContext {
   getBoard(): Board;
@@ -27,6 +27,22 @@ export interface Drops {
 
 export function createDrops(ctx: DropsContext): Drops {
   // ---------------------------------------------------------------- drops
+
+  // Stored files (pdf, audio, video, model3d) all embed as
+  // bytes, then land as a card at the drop point. The image
+  // branch genuinely differs — it loads the image for its
+  // natural size — so it stays separate.
+  const STORED_KINDS: Record<string, { size: Size; needsSize: boolean; kind: (stored: string, size: number) => Kind }> = {
+    // Tall enough to show a page, not just a tile: the
+    // page preview needs height, and a user can still
+    // resize it smaller, where it falls back to a row.
+    pdf: { size: { w: 260, h: 360 }, needsSize: true, kind: (stored, size) => ({ PdfCard: { path: stored, size_bytes: size } }) },
+    audio: { size: { w: 300, h: 104 }, needsSize: false, kind: (stored) => ({ Audio: { path: stored } }) },
+    video: { size: { w: 360, h: 264 }, needsSize: true, kind: (stored, size) => ({ Video: { source: stored, remote: false, size_bytes: size } }) },
+    // Wide enough for the viewport plus the title row
+    // below it (the canvas takes the height above it).
+    model3d: { size: { w: 360, h: 300 }, needsSize: true, kind: (stored, size) => ({ Model3D: { path: stored, size_bytes: size } }) },
+  };
 
   function dropKindForExt(ext: string): string {
     const e = ext.toLowerCase();
@@ -130,37 +146,13 @@ export function createDrops(ctx: DropsContext): Drops {
           const id = ctx.allocId();
           ctx.getBoard().items.push({ id, pos: at, size: { w: Math.max(40, nw * scale), h: Math.max(40, nh * scale) }, group: null, kind: { Image: { path: stored } } });
           added++;
-        } else if (kind === "pdf") {
+        } else if (kind in STORED_KINDS) {
+          const desc = STORED_KINDS[kind];
           const stored = await api.embedFileBytes(file.name, await file.arrayBuffer());
-          const size = await api.fileSize(stored).catch(() => 0);
+          const size = desc.needsSize ? await api.fileSize(stored).catch(() => 0) : 0;
           if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
           const id = ctx.allocId();
-          // Tall enough to show a page, not just a tile: the
-          // page preview needs height, and a user can still
-          // resize it smaller, where it falls back to a row.
-          ctx.getBoard().items.push({ id, pos: at, size: { w: 260, h: 360 }, group: null, kind: { PdfCard: { path: stored, size_bytes: size } } });
-          added++;
-        } else if (kind === "audio") {
-          const stored = await api.embedFileBytes(file.name, await file.arrayBuffer());
-          if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
-          const id = ctx.allocId();
-          ctx.getBoard().items.push({ id, pos: at, size: { w: 300, h: 104 }, group: null, kind: { Audio: { path: stored } } });
-          added++;
-        } else if (kind === "video") {
-          const stored = await api.embedFileBytes(file.name, await file.arrayBuffer());
-          const size = await api.fileSize(stored).catch(() => 0);
-          if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
-          const id = ctx.allocId();
-          ctx.getBoard().items.push({ id, pos: at, size: { w: 360, h: 264 }, group: null, kind: { Video: { source: stored, remote: false, size_bytes: size } } });
-          added++;
-        } else if (kind === "model3d") {
-          const stored = await api.embedFileBytes(file.name, await file.arrayBuffer());
-          const size = await api.fileSize(stored).catch(() => 0);
-          if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
-          const id = ctx.allocId();
-          // Wide enough for the viewport plus the title row
-          // below it (the canvas takes the height above it).
-          ctx.getBoard().items.push({ id, pos: at, size: { w: 360, h: 300 }, group: null, kind: { Model3D: { path: stored, size_bytes: size } } });
+          ctx.getBoard().items.push({ id, pos: at, size: desc.size, group: null, kind: desc.kind(stored, size) });
           added++;
         } else if (kind === "text") {
           const text = await file.text();
@@ -203,10 +195,10 @@ export function createDrops(ctx: DropsContext): Drops {
           // board can have a different link card at this id.
           if (!current || !("UrlCard" in current.kind) || current.kind.UrlCard.url !== url) return;
           let changed = false;
-          if (preview.title && current.kind.UrlCard.title !== preview.title) { current.kind.UrlCard.title = preview.title; changed = true; }
-          if (preview.description && current.kind.UrlCard.description !== preview.description) { current.kind.UrlCard.description = preview.description; changed = true; }
+          for (const key of ["title", "description", "icon"] as const) {
+            if (preview[key] && current.kind.UrlCard[key] !== preview[key]) { current.kind.UrlCard[key] = preview[key]; changed = true; }
+          }
           if (preview.image && current.kind.UrlCard.image !== preview.image) { current.kind.UrlCard.image = preview.image; current.size = { w: 320, h: 300 }; changed = true; }
-          if (preview.icon && current.kind.UrlCard.icon !== preview.icon) { current.kind.UrlCard.icon = preview.icon; changed = true; }
           if (changed) { ctx.saveWithoutUndo(); ctx.requestRender(); }
         } catch { /* keep the domain card */ }
       })());
