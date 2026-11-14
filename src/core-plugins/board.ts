@@ -22,16 +22,12 @@
 import type { PluginContext, PluginManifest } from "../plugins";
 import {
   emitPluginEvent,
-  getActiveView,
   getCardRenderer,
   getCreateActions,
   getPluginTool,
   handlePluginCardAction,
   handlePluginCardDoubleClick,
   handlePluginShortcut,
-  isSettingsUIOpen,
-  openSettingsUI,
-  closeSettingsUI,
   refreshActiveView,
   registerBoardController,
   syncPluginToolButtons,
@@ -547,7 +543,7 @@ function updateResizeHandle(): void {
   // A plugin view owns the screen: the board's resize handle is
   // not part of that view, so it must never float over it — it
   // did, at the selected card's corner, while playing a slide.
-  if (getActiveView() !== "board" || selected.length !== 1 || isSettingsUIOpen() || editingId !== null) {
+  if (api.view.getView() !== "board" || selected.length !== 1 || api.ui.isSettingsOpen() || editingId !== null) {
     el.style.display = "none";
     if (rotEl) rotEl.style.display = "none";
     return;
@@ -1037,7 +1033,7 @@ boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
   // A plugin view owns its own viewport: core board clicks, pan and
   // tools must not run while it is active. The plugin's own
   // listeners on its container handle clicks there.
-  if (getActiveView() !== "board" && target.closest("#plugin-view")) return;
+  if (api.view.getView() !== "board" && target.closest("#plugin-view")) return;
   if (tool.startsWith("plugin:")) {
     const pt = getPluginTool(tool);
     if (pt?.onMouseDown) {
@@ -1346,7 +1342,7 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
         const w = pendingCursor;
         if (!w) return;
         const selected = api.board.getSelected();
-        if (isSettingsUIOpen() || editingId !== null) {
+        if (api.ui.isSettingsOpen() || editingId !== null) {
           boardEl.style.cursor = "default";
         } else if (tool === "pen" || tool === "connector" || isShapeTool(tool) || (tool === "select" && lassoMode)) {
           boardEl.style.cursor = "crosshair";
@@ -1371,7 +1367,7 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
     // not lag a frame. It shows only over the board itself,
     // never over the toolbar, panels, title bar or settings.
     const overBoard = !(e.target as HTMLElement).closest("#toolbar, #settings-backdrop, #plugin-panels, #title-bar, #plugin-overlays, #plugin-view, input, textarea, select");
-    const showRing = tool === "eraser" && overBoard && !isSettingsUIOpen() && editingId === null && getActiveView() === "board";
+    const showRing = tool === "eraser" && overBoard && !api.ui.isSettingsOpen() && editingId === null && api.view.getView() === "board";
     updateEraserRing(e.clientX, e.clientY, showRing);
     return;
   }
@@ -1794,10 +1790,10 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   // switched tools, and +/- zoomed, all while the user thought
   // they were in Settings. Esc still closes the sheet (handled
   // below), and Tab keeps its normal focus job in the sheet.
-  if (isSettingsUIOpen() && e.key !== "Escape" && e.key !== "Tab") return;
+  if (api.ui.isSettingsOpen() && e.key !== "Escape" && e.key !== "Tab") return;
   // Tab cycles elements, unless Settings is open, where Tab keeps
   // its normal job of moving focus around the sheet.
-  if (e.key === "Tab" && !isSettingsUIOpen()) {
+  if (e.key === "Tab" && !api.ui.isSettingsOpen()) {
     // Tab in a text input keeps its normal focus job too: a
     // panel input (a section rename, a search) commits on
     // blur, and Tab is how the user leaves it. Cycling here
@@ -1815,9 +1811,9 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   // as the other board keys: Settings being open already
   // returns above, and textareas and the search box return
   // before this, so typing a comma never opens the sheet.
-  if (ctrl && e.key === ",") { openSettingsUI(); return; }
+  if (ctrl && e.key === ",") { api.ui.openSettings(); return; }
   if (e.key === "Escape") {
-    if (isSettingsUIOpen()) { closeSettingsUI(); return; }
+    if (api.ui.isSettingsOpen()) { api.ui.closeSettings(); return; }
     // An active search is cleared first; the next Esc clears the
     // selection, as before. Searching must not eat the selection
     // clear entirely, and clearing the selection must not eat a
@@ -1873,7 +1869,7 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   // Plugin shortcuts, last: core keys above win, so a plugin cannot
   // steal V, P, A, Ctrl+G/U, Delete, zoom or reset. The core guards
   // above (textarea, search box, Settings open) already applied.
-  else if (editingId === null && !isSettingsUIOpen() && !ctrl && handlePluginShortcut(e.key)) { /* plugin handled it */ }
+  else if (editingId === null && !api.ui.isSettingsOpen() && !ctrl && handlePluginShortcut(e.key)) { /* plugin handled it */ }
 });
 window.addEventListener("keyup", (e: KeyboardEvent) => {
   if (e.key === " ") spaceDown = false;
