@@ -24,7 +24,7 @@
 // renderMarkdownHtml; image/video sources go through
 // fileUrl(), which encodes each path segment.
 import type { PluginContext, PluginManifest } from "../plugins";
-import type { Item } from "../model";
+import { isInlineVideo, type Item } from "../model";
 
 export const manifest: PluginManifest = {
   apiVersion: "2",
@@ -307,18 +307,22 @@ export function activate(api: PluginContext): void {
     title: "Video",
     render: (item, data, plain = false) => {
       const c = chrome(item, plain);
-      const { source, remote, size_bytes } = data as VideoData;
+      const { source, remote, size_bytes, poster, duration } = data as VideoData;
       const name = remote ? api.text.domainOf(source) : (source.split("/").pop() ?? source);
-      const sub = remote ? "Video link" : `${formatKB(size_bytes)} KB`;
+      const sub = remote ? "Video link" : `${formatKB(size_bytes)} KB${typeof duration === "number" && isFinite(duration) && duration > 0 ? ` · ${api.media.formatAudioTime(duration)}` : ""}`;
       const thumbH = (c.ww - 24) * 9 / 16;
-      // A local video in a format Chromium can play plays right here
-      // in the board, with its real first frame as the thumbnail —
-      // no black box, no trip out to a browser or system player.
-      // Remote links (YouTube, Vimeo, …) and formats Chromium cannot
-      // play still open outside the app, as before.
-      const ext = source.toLowerCase().split("?")[0].split("#")[0].split(".").pop() ?? "";
-      const inline = !remote && ["mp4", "webm", "m4v"].includes(ext);
-      if (inline) {
+      // A video card is a poster until it is played. A live
+      // <video> element per card costs a decoder and a
+      // composited frame on every pan, and a board of videos
+      // grinds; the poster is the captured frame (see
+      // src/poster.ts). The <video> mounts only for the one
+      // card whose play button was pressed, and moves when
+      // another is played. Remote links (YouTube, Vimeo, …)
+      // and formats Chromium cannot play still open outside
+      // the app, as before.
+      const inline = isInlineVideo(source, remote);
+      const active = !plain && inline && api.media.getVideoState().id === c.id;
+      if (active) {
         const src = api.files.fileUrl(source);
         if (c.hh >= thumbH + 70) {
           return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
@@ -327,6 +331,20 @@ export function activate(api: PluginContext): void {
         }
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px">
           <video controls preload="metadata" playsinline src="${src}" data-name="${api.text.escapeHtml(name)}" data-path="${api.text.escapeHtml(source)}" style="width:96px;height:56px;object-fit:${c.sel ? "contain" : "cover"};border-radius:10px;background:#1d1d1f;pointer-events:auto"></video>
+          ${titleSubCol(name, c.ww - 132, sub)}</div></div>`;
+      }
+      // The poster, with the play button over it. No poster
+      // yet — an old board, or the capture is still running —
+      // falls through to the dark tile below.
+      if (inline && poster) {
+        const posterUrl = api.files.fileUrl(poster);
+        if (c.hh >= thumbH + 70) {
+          return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
+            <div class="video-thumb clickable" data-action="play-video" data-id="${c.id}" style="width:${c.ww - 24}px;height:${thumbH}px;font-size:28px;overflow:hidden"><img src="${posterUrl}" alt=""><span class="video-play">▶</span></div>
+            ${titleHtml(name, c.ww - 24)}<div class="sub" style="font-size:12px">${sub}</div></div></div>`;
+        }
+        return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px">
+          <div class="video-thumb clickable" data-action="play-video" data-id="${c.id}" style="width:96px;height:56px;font-size:20px;overflow:hidden"><img src="${posterUrl}" alt=""><span class="video-play">▶</span></div>
           ${titleSubCol(name, c.ww - 132, sub)}</div></div>`;
       }
       if (c.hh >= thumbH + 70) {

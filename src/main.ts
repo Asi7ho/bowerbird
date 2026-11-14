@@ -866,6 +866,11 @@ async function init(): Promise<void> {
     // Toggle playback of an audio card. The board view's
     // play button.
     toggleAudio: (id, path) => { media.toggleAudio(id, path); },
+    // Show the live <video> element for a video card. The
+    // board view's play button on a poster. At most one card
+    // is live; playing another moves it there.
+    playVideo: (id) => { media.playVideo(id); },
+    getVideoState: () => media.getVideoState(),
     // Seek the playing audio card to a time in seconds. The
     // board view's seek slider. No-op when that card is not
     // the one playing.

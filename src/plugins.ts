@@ -394,6 +394,11 @@ export interface PluginHost {
   // playing, pause it if it is. The board view's play
   // button. The raw audio element is never handed out.
   toggleAudio: (id: number, path: string) => void;
+  // Show the live <video> element for a video card. The
+  // board view's play button on a poster. At most one card
+  // is live; playing another moves it there.
+  playVideo: (id: number) => void;
+  getVideoState: () => { id: number | null };
   // Seek the playing audio card to a time in seconds. The
   // board view's seek slider. No-op when that card is not
   // the one playing.
@@ -978,6 +983,11 @@ export interface PluginContext {
     // Toggle playback of an audio card: play it if it is not
     // playing, pause it if it is. The board view's play button.
     toggleAudio: (id: number, path: string) => void;
+    // Show the live <video> element for a video card. The
+    // board view's play button on a poster. At most one card
+    // is live; playing another moves it there.
+    playVideo: (id: number) => void;
+    getVideoState: () => { id: number | null };
     // Seek the playing audio card to a time in seconds. The
     // board view's seek slider. No-op when that card is not
     // the one playing.
@@ -1906,6 +1916,8 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       transcribeAudio: (blob: Blob) => host!.transcribeAudio(blob),
       formatAudioTime: (sec: number) => host!.formatAudioTime(sec),
       toggleAudio: (id: number, path: string) => host!.toggleAudio(id, path),
+      playVideo: (id: number) => host!.playVideo(id),
+      getVideoState: () => host!.getVideoState(),
       seekAudio: (id: number, time: number) => host!.seekAudio(id, time),
       pdfFailed: (path: string) => host!.pdfFailed(path),
       getPdfPage: (id: number) => host!.getPdfPage(id),
