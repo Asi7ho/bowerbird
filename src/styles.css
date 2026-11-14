@@ -335,22 +335,20 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   border-radius: 999px; padding: 3px 9px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;
 }
-/* The "+ tag" button: a quiet ghost pill at the end of
-   the tag row — transparent, grey text — so the board
-   stays clean until a tag is wanted. It shows only on the
-   selected card: the row sits over the card's bottom
-   edge, so a button on every card would cover the text
-   of any card whose content runs to the bottom. */
+/* The "+ tag" button: a white pill at the end of the
+   tag row, on every card — even one with no tags yet —
+   so tagging is always one click away. It is opaque
+   like the tag pills, so it never shows the card's text
+   through it where the row sits over the card's bottom
+   edge. */
 .card-decorations .tag-add {
   display: inline-flex; align-items: center; gap: 3px;
   font: inherit; font-size: 12px; color: var(--grey);
-  background: transparent; border: 1px solid var(--hairline);
+  background: #fff; border: 1px solid var(--hairline);
   border-radius: 999px; padding: 3px 9px; cursor: pointer;
-  white-space: nowrap; pointer-events: none;
-  opacity: 0; transition: opacity 0.12s;
+  white-space: nowrap; pointer-events: auto;
 }
 .card-decorations .tag-add svg { width: 13px; height: 13px; }
-.card.selected + .card-decorations .tag-add { opacity: 1; pointer-events: auto; }
 .card-decorations .tag-add:hover { color: var(--ink); background: var(--fill); }
 .card-decorations .tag-add-input {
   font: inherit; font-size: 12px; color: var(--ink);
