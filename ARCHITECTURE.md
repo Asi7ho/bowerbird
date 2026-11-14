@@ -26,10 +26,10 @@ src/plugins.ts        plugin host: loads first-party (ES module)
 src/core-plugins/     first-party UI plugins, one file per surface,
                       each using only PluginContext: board, cards,
                       toolbar, titlebar, search, settings.
-plugins/              the eight bundled plugins (AI Chat, Multiple
+plugins/              the nine bundled plugins (AI Chat, Multiple
                       Boards, Command Palette, Hide Button, Colour
                       Palette, Presentation, Tidy Up, Visual
-                      Library). Same API, opt-in, written in
+                      Library, Voice Notes). Same API, opt-in, written in
                       TypeScript.
 electron/             main process and the window.bowerbird bridge
                       (board load/save, files, window controls,
