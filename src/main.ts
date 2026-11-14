@@ -11,10 +11,10 @@ import * as coreSettings from "./core-plugins/settings";
 import * as coreTitlebar from "./core-plugins/titlebar";
 import * as coreToolbar from "./core-plugins/toolbar";
 import {
-  Board, Item, Pt, ShapeKind,
-  AUDIO_TRANSCRIPT_HIDDEN_H, boardGet, CARD_DECORATIONS_H, centre, estimateTextHeight,
-  hitTest, itemBounds, lassoSelect, marquee, moveSelection,
-  resizeItem, select, strokesWithin,
+  Board, Camera, Item, Pt, ShapeKind,
+  AUDIO_TRANSCRIPT_HIDDEN_H, boardGet, CARD_DECORATIONS_H, centre, clampZoom, elementPoint, elementSize,
+  estimateTextHeight, hitTest, itemBounds, lassoSelect, marquee, moveSelection,
+  resizeItem, screenToWorld, select, strokesWithin, zoomCamera,
 } from "./model";
 import { welcomeBoard } from "./welcome";
 import {
@@ -185,7 +185,7 @@ const drops: Drops = createDrops({
 });
 
 function toWorld(s: Pt): Pt {
-  return { x: s.x / board.camera.zoom + board.camera.x, y: s.y / board.camera.zoom + board.camera.y };
+  return screenToWorld(s, board.camera);
 }
 // The board no longer fills the window: the title bar sits
 // above it, so board-local size and points differ from window
@@ -193,22 +193,29 @@ function toWorld(s: Pt): Pt {
 // centre, cull and input conversion below goes through these,
 // never window.innerWidth/innerHeight or raw clientX/Y.
 function boardSize(): Pt {
-  return { x: boardEl.clientWidth, y: boardEl.clientHeight };
+  return elementSize(boardEl);
 }
 function boardPoint(clientX: number, clientY: number): Pt {
-  const r = boardEl.getBoundingClientRect();
-  return { x: clientX - r.left, y: clientY - r.top };
+  return elementPoint(boardEl, clientX, clientY);
 }
 function zoomAt(screen: Pt, factor: number): void {
-  const before = toWorld(screen);
-  board.camera.zoom = Math.max(0.01, Math.min(8, board.camera.zoom * factor));
-  const after = toWorld(screen);
-  board.camera.x += before.x - after.x;
-  board.camera.y += before.y - after.y;
+  Object.assign(board.camera, zoomCamera(board.camera, screen, factor));
 }
 function zoomCentre(factor: number): void {
   const s = boardSize();
   zoomAt({ x: s.x / 2, y: s.y / 2 }, factor);
+}
+// Validate and apply a camera, clamping the zoom. The
+// floor is 0.01, not 0.1: fit (F) must be able to reach a
+// very wide board. Shared by setCamera (which also saves
+// and renders) and setCameraSilent. Returns false when the
+// camera is not finite (ignored).
+function applyCamera(cam: Camera): boolean {
+  if (!isFinite(cam.x) || !isFinite(cam.y) || !isFinite(cam.zoom)) return false;
+  const z = board.camera.zoom;
+  board.camera = { x: cam.x, y: cam.y, zoom: clampZoom(cam.zoom) };
+  if (board.camera.zoom !== z) emitPluginEvent("camera");
+  return true;
 }
 // Search documents and the MiniSearch index are cached
 // by board version, not rebuilt on every keystroke:
@@ -782,22 +789,13 @@ async function init(): Promise<void> {
     },
     getCamera: () => board.camera,
     setCamera: (cam) => {
-      if (!isFinite(cam.x) || !isFinite(cam.y) || !isFinite(cam.zoom)) return;
-      const z = board.camera.zoom;
-      // The floor is 0.01, not 0.1: fit (F) must be able to
-      // reach a very wide board — a 0.1 floor silently crops
-      // anything wider than ~12,800 world units.
-      board.camera = { x: cam.x, y: cam.y, zoom: Math.max(0.01, Math.min(8, cam.zoom)) };
-      if (board.camera.zoom !== z) emitPluginEvent("camera");
+      if (!applyCamera(cam)) return;
       undoStore.save(); boardRender();
     },
     // Set the camera without saving or rendering, for a live
     // pan or zoom drag. The drag saves once at drag end.
     setCameraSilent: (cam) => {
-      if (!isFinite(cam.x) || !isFinite(cam.y) || !isFinite(cam.zoom)) return;
-      const z = board.camera.zoom;
-      board.camera = { x: cam.x, y: cam.y, zoom: Math.max(0.01, Math.min(8, cam.zoom)) };
-      if (board.camera.zoom !== z) emitPluginEvent("camera");
+      applyCamera(cam);
     },
     setCanvas: (patch) => {
       if (patch.bg !== undefined) board.bg = patch.bg;

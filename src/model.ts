@@ -141,6 +141,36 @@ export function fitCamera(board: Board, viewport: Size, padding = 48): Camera | 
   };
 }
 
+// Camera/viewport conversions, shared by the board plugin
+// and main (both had their own identical copies). The
+// floor is 0.01, not 0.1: fit must reach very wide boards.
+export function clampZoom(z: number): number {
+  return Math.max(0.01, Math.min(8, z));
+}
+export function screenToWorld(s: Pt, cam: Camera): Pt {
+  return { x: s.x / cam.zoom + cam.x, y: s.y / cam.zoom + cam.y };
+}
+export function worldToScreen(p: Pt, cam: Camera): Pt {
+  return { x: (p.x - cam.x) * cam.zoom, y: (p.y - cam.y) * cam.zoom };
+}
+// The camera after zooming by a factor around a screen
+// point: the point stays under the cursor. Pure — the
+// caller applies the result (setCameraSilent in the board
+// plugin, a direct assign in main).
+export function zoomCamera(cam: Camera, screen: Pt, factor: number): Camera {
+  const before = screenToWorld(screen, cam);
+  const zoom = clampZoom(cam.zoom * factor);
+  const after = { x: screen.x / zoom + cam.x, y: screen.y / zoom + cam.y };
+  return { x: cam.x + before.x - after.x, y: cam.y + before.y - after.y, zoom };
+}
+export function elementSize(el: HTMLElement): Pt {
+  return { x: el.clientWidth, y: el.clientHeight };
+}
+export function elementPoint(el: HTMLElement, clientX: number, clientY: number): Pt {
+  const r = el.getBoundingClientRect();
+  return { x: clientX - r.left, y: clientY - r.top };
+}
+
 // Arranging cards: the layout math for api.board.arrange.
 // Given the board and a set of item ids, compute where each
 // card goes. The caller applies the positions (one undo step

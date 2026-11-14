@@ -27,7 +27,8 @@
 import type { PluginContext, PluginManifest } from "../plugins";
 import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
-  pressureWidth, strokeMaxWidth, strokePressuresVary,
+  elementPoint, elementSize, pressureWidth, screenToWorld, strokeMaxWidth, strokePressuresVary,
+  worldToScreen, zoomCamera,
 } from "../model";
 import { syncModel3DViews, disposeAllModel3DViewers } from "../model3d";
 
@@ -136,12 +137,10 @@ let listenersAttached = false;
 // ---------------------------------------------------------------- helpers
 
 function toScreen(p: Pt): Pt {
-  const cam = api.view.getCamera();
-  return { x: (p.x - cam.x) * cam.zoom, y: (p.y - cam.y) * cam.zoom };
+  return worldToScreen(p, api.view.getCamera());
 }
 function toWorld(s: Pt): Pt {
-  const cam = api.view.getCamera();
-  return { x: s.x / cam.zoom + cam.x, y: s.y / cam.zoom + cam.y };
+  return screenToWorld(s, api.view.getCamera());
 }
 // The board no longer fills the window: the title bar sits
 // above it, so board-local size and points differ from window
@@ -149,18 +148,13 @@ function toWorld(s: Pt): Pt {
 // centre, cull and input conversion below goes through these,
 // never window.innerWidth/innerHeight or raw clientX/Y.
 function boardSize(): Pt {
-  return { x: boardEl.clientWidth, y: boardEl.clientHeight };
+  return elementSize(boardEl);
 }
 function boardPoint(clientX: number, clientY: number): Pt {
-  const r = boardEl.getBoundingClientRect();
-  return { x: clientX - r.left, y: clientY - r.top };
+  return elementPoint(boardEl, clientX, clientY);
 }
 function zoomAt(screen: Pt, factor: number): void {
-  const before = toWorld(screen);
-  const cam = api.view.getCamera();
-  const zoom = Math.max(0.01, Math.min(8, cam.zoom * factor));
-  const after = { x: screen.x / zoom + cam.x, y: screen.y / zoom + cam.y };
-  api.view.setCameraSilent({ x: cam.x + before.x - after.x, y: cam.y + before.y - after.y, zoom });
+  api.view.setCameraSilent(zoomCamera(api.view.getCamera(), screen, factor));
 }
 function zoomCentre(factor: number): void {
   const s = boardSize();
