@@ -35,7 +35,7 @@ import {
 import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
   AUDIO_TRANSCRIPT_HIDDEN_H, AUDIO_TRANSCRIPT_SHOWN_H,
-  boardGet, centre, clippedEnds, fitCamera,
+  centre, clippedEnds, fitCamera,
   itemBounds, itemRotation, parseHex, pressureWidth, rotatePoint, select,
   strokeMaxWidth, strokePressuresVary, toggleTaskLine,
 } from "../model";
@@ -551,7 +551,7 @@ function updateResizeHandle(): void {
   // The board, fresh: the selected item's position is what
   // the handle follows, and it moves during a drag.
   const board = api.board.get();
-  const it = boardGet(board, selected[0]);
+  const it = api.board.getItem(selected[0]);
   if (!it || "Connector" in it.kind) {
     el.style.display = "none";
     if (rotEl) rotEl.style.display = "none";
@@ -660,8 +660,7 @@ function createTextNoteAt(world: Pt): void {
 }
 
 function startTextEdit(id: number, isNew = false): void {
-  const board = api.board.get();
-  const item = boardGet(board, id);
+  const item = api.board.getItem(id);
   if (!item || !("Text" in item.kind)) return;
   // Render first, then mark the note as editing: render() skips
   // the editing note, so setting editingId before it would
@@ -715,8 +714,7 @@ function startTextEdit(id: number, isNew = false): void {
     // The button never takes focus; the click still runs.
     mic.addEventListener("mousedown", (e) => e.preventDefault());
     mic.addEventListener("click", () => {
-      const b = api.board.get();
-      const it = boardGet(b, id);
+      const it = api.board.getItem(id);
       if (!it) return;
       const point = { x: it.pos.x, y: it.pos.y };
       commitEditingIfAny();
@@ -830,8 +828,7 @@ function audioTitleHit(id: number, clientX: number, clientY: number): boolean {
 // cancels. An empty name clears the title, so the card
 // falls back to the file's name.
 function startAudioRename(id: number): void {
-  const board = api.board.get();
-  const it = boardGet(board, id);
+  const it = api.board.getItem(id);
   if (!it || !("Audio" in it.kind)) return;
   const current = (it.kind.Audio.title?.trim() ?? "") || (it.kind.Audio.path.split("/").pop() ?? it.kind.Audio.path);
   const cardEl = cardsEl.querySelector(`.card[data-id="${id}"]`) as HTMLElement | null;
@@ -912,7 +909,7 @@ function groupSelected(): boolean {
 function ungroupSelected(): boolean {
   const selected = api.board.getSelected();
   const board = api.board.get();
-  const groups = new Set(selected.map((id) => boardGet(board, id)?.group).filter((g): g is number => g !== null && g !== undefined));
+  const groups = new Set(selected.map((id) => api.board.getItem(id)?.group).filter((g): g is number => g !== null && g !== undefined));
   if (groups.size === 0) return false;
   const patches = board.items
     .filter((it) => it.group !== null && groups.has(it.group))
@@ -934,7 +931,7 @@ function deleteSelected(): boolean {
 function cornerHit(id: number, world: Pt): boolean {
   const cam = api.view.getCamera();
   const board = api.board.get();
-  const it = boardGet(board, id);
+  const it = api.board.getItem(id);
   if (!it || "Connector" in it.kind) return false;
   const [p, s] = itemBounds(board, it);
   const corner = rotatePoint({ x: p.x + s.w, y: p.y + s.h }, centre(it), itemRotation(it));
@@ -943,8 +940,7 @@ function cornerHit(id: number, world: Pt): boolean {
 }
 function rotateHit(id: number, world: Pt): boolean {
   const cam = api.view.getCamera();
-  const board = api.board.get();
-  const it = boardGet(board, id);
+  const it = api.board.getItem(id);
   if (!it || !isRotatable(it)) return false;
   const h = rotateHandleWorld(it);
   const tol = 18 / cam.zoom;
@@ -958,10 +954,9 @@ function normAngle(deg: number): number {
 }
 function rotateSelected(delta: number): boolean {
   const selected = api.board.getSelected();
-  const board = api.board.get();
   let changed = false;
   for (const id of selected) {
-    const it = boardGet(board, id);
+    const it = api.board.getItem(id);
     if (!it || !isRotatable(it)) continue;
     api.board.setItemRotation(id, normAngle(itemRotation(it) + delta));
     changed = true;
@@ -1066,8 +1061,7 @@ boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
   }
   if (tool === "connector") {
     const hit = api.board.hitTest(world);
-    const board = api.board.get();
-    const hitItem = hit !== null ? boardGet(board, hit) : null;
+    const hitItem = hit !== null ? api.board.getItem(hit) : null;
     const anchorable = hitItem && !("Stroke" in hitItem.kind) && !("Connector" in hitItem.kind);
     drag = { kind: "connector", from: hitItem && anchorable ? { Item: hitItem.id } : { Point: world }, current: world };
     return;
@@ -1090,8 +1084,7 @@ boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
     if (labelEl) { startGroupRename(Number(labelEl.dataset.group)); return; }
     const hit = api.board.hitTest(world);
     if (hit !== null) {
-      const board = api.board.get();
-      const it = boardGet(board, hit);
+      const it = api.board.getItem(hit);
       if (it && "Plugin" in it.kind && handlePluginCardDoubleClick(it)) return;
       if (it && "Text" in it.kind) { startTextEdit(hit); return; }
       // Double-clicking a voice note's name renames it,
@@ -1110,15 +1103,13 @@ boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
   const clicked = api.board.hitTest(world);
   const selected = api.board.getSelected();
   if (selected.length === 1 && rotateHit(selected[0], world)) {
-    const board = api.board.get();
-    const it = boardGet(board, selected[0]);
+    const it = api.board.getItem(selected[0]);
     drag = { kind: "rotate", id: selected[0], origRot: it ? itemRotation(it) : 0, moved: false };
     return;
   }
   if (selected.length === 1 && cornerHit(selected[0], world)) {
     const sel = selected[0];
-    const board = api.board.get();
-    const it = boardGet(board, sel);
+    const it = api.board.getItem(sel);
     drag = { kind: "resize", id: sel, startWorld: world, origW: it?.size.w ?? 100, origH: it?.size.h ?? 100, moved: false };
     return;
   }
@@ -1128,7 +1119,7 @@ boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
     api.board.bringToFront(api.board.getSelected());
     applyStacking();
     updateSelection();
-    const it = boardGet(board, clicked);
+    const it = api.board.getItem(clicked);
     drag = { kind: "resize", id: clicked, startWorld: world, origW: it?.size.w ?? 100, origH: it?.size.h ?? 100, moved: false };
     return;
   }
@@ -1152,8 +1143,7 @@ cardsEl.addEventListener("click", (e: MouseEvent) => {
   const pbtn = target.closest("[data-plugin-action]") as HTMLElement | null;
   if (pbtn) {
     const pid = Number(pbtn.dataset.id);
-    const board = api.board.get();
-    const pit = boardGet(board, pid);
+    const pit = api.board.getItem(pid);
     if (pit && handlePluginCardAction(pbtn.dataset.pluginAction ?? "", pit)) return;
   }
   const task = target.closest("[data-action=\"toggle-task\"]") as HTMLElement | null;
@@ -1163,8 +1153,7 @@ cardsEl.addEventListener("click", (e: MouseEvent) => {
     // suppress that and let the text be the state instead.
     e.preventDefault();
     const cardEl = task.closest(".card") as HTMLElement | null;
-    const board = api.board.get();
-    const it = boardGet(board, Number(cardEl?.dataset.id));
+    const it = api.board.getItem(Number(cardEl?.dataset.id));
     if (!it || !("Text" in it.kind)) return;
     const lineNo = Number(task.dataset.line);
     const lines = it.kind.Text.text.split("\n");
@@ -1180,8 +1169,7 @@ cardsEl.addEventListener("click", (e: MouseEvent) => {
   if (!btn) return;
   const id = Number(btn.dataset.id);
   const action = btn.dataset.action;
-  const board = api.board.get();
-  const it = boardGet(board, id);
+  const it = api.board.getItem(id);
   if (!it) return;
   if (action === "open-link" && "UrlCard" in it.kind) openExternal(it.kind.UrlCard.url);
   if (action === "play-audio" && "Audio" in it.kind) api.media.toggleAudio(id, it.kind.Audio.path);
@@ -1266,9 +1254,8 @@ function updateLassoPreview(points: Pt[]): void {
 function updateDraggedCards(ids: number[]): void {
   // Cards are world-space now, so moving one is a style change on
   // its own node — no markdown, no image re-parse, no rebuild.
-  const board = api.board.get();
   for (const id of ids) {
-    const it = boardGet(board, id);
+    const it = api.board.getItem(id);
     const el = cardsEl.querySelector(`[data-id="${id}"]`) as HTMLElement | null;
     if (!it || !el) continue;
     el.style.left = `${it.pos.x}px`;
@@ -1308,7 +1295,7 @@ function updateDraggedGroupFrames(ids: number[]): void {
   const board = api.board.get();
   const groups = new Set<number>();
   for (const id of ids) {
-    const it = boardGet(board, id);
+    const it = api.board.getItem(id);
     if (it && it.group !== null) groups.add(it.group);
   }
   for (const g of groups) {
@@ -1391,8 +1378,7 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
     renderSvgOnly();
     updateResizeHandle();
   } else if (drag.kind === "resize") {
-    const board = api.board.get();
-    const it = boardGet(board, drag.id);
+    const it = api.board.getItem(drag.id);
     api.board.resizeItem(drag.id, drag.origW + (world.x - drag.startWorld.x), drag.origH + (world.y - drag.startWorld.y));
     if (Math.hypot(world.x - drag.startWorld.x, world.y - drag.startWorld.y) > 2) drag.moved = true;
     updateDraggedCards([drag.id]);
@@ -1453,8 +1439,7 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
       el.setAttribute("fill", penColor); el.setAttribute("fill-opacity", "0.85");
     }
   } else if (drag.kind === "rotate") {
-    const board = api.board.get();
-    const it = boardGet(board, drag.id);
+    const it = api.board.getItem(drag.id);
     if (it) {
       const c = centre(it);
       let deg = Math.atan2(world.y - c.y, world.x - c.x) * 180 / Math.PI + 90;
@@ -1522,9 +1507,8 @@ window.addEventListener("pointerup", (e: PointerEvent) => {
     // click that erased nothing leaves no step behind.
     if (d.erased) api.board.save();
   } else if (d.kind === "connector") {
-    const board = api.board.get();
     const to = api.board.hitTest(world);
-    const toItem = to !== null ? boardGet(board, to) : null;
+    const toItem = to !== null ? api.board.getItem(to) : null;
     const toAnchorable = toItem && !("Stroke" in toItem.kind) && !("Connector" in toItem.kind);
     const toAnchor: Anchor = toItem && toAnchorable ? { Item: toItem.id } : { Point: world };
     const a = api.geometry.anchorPoint(d.from);
@@ -1535,7 +1519,7 @@ window.addEventListener("pointerup", (e: PointerEvent) => {
     const selfConnector = "Item" in d.from && "Item" in toAnchor && d.from.Item === toAnchor.Item;
     if (!degenerate && !selfConnector) {
       const aPt = a ?? { x: 0, y: 0 };
-      const bPt = "Point" in toAnchor ? toAnchor.Point : (boardGet(board, toAnchor.Item) ? centre(boardGet(board, toAnchor.Item) as Item) : { x: 0, y: 0 });
+      const bPt = "Point" in toAnchor ? toAnchor.Point : (api.board.getItem(toAnchor.Item) ? centre(api.board.getItem(toAnchor.Item) as Item) : { x: 0, y: 0 });
       const pos = { x: Math.min(aPt.x, bPt.x), y: Math.min(aPt.y, bPt.y) };
       const size = { w: Math.max(1, Math.abs(bPt.x - aPt.x)), h: Math.max(1, Math.abs(bPt.y - aPt.y)) };
       api.board.addItem({ Connector: { from: d.from, to: toAnchor, color: "#333333" } }, pos, size);
@@ -1551,8 +1535,7 @@ window.addEventListener("pointerup", (e: PointerEvent) => {
     // may not be at the mouseup point, so the rotation
     // would otherwise stop one step short of where the
     // user actually released.
-    const board = api.board.get();
-    const it = boardGet(board, d.id);
+    const it = api.board.getItem(d.id);
     if (it) {
       const c = centre(it);
       let deg = Math.atan2(world.y - c.y, world.x - c.x) * 180 / Math.PI + 90;
