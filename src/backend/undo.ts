@@ -12,7 +12,7 @@
 // the seen keys so the next save retries instead of skipping.
 import { api } from "./api";
 import { boardGet, type Board, type Item } from "./model";
-import { emitPluginEvent } from "../plugins";
+import { emitPluginEvent } from "../plugins/host";
 
 export interface UndoState {
   items: Item[];

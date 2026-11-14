@@ -15,7 +15,7 @@
 // "pen") and refreshes its DOM only when the state key
 // changes, so a render on every mousemove does not rebuild
 // the toolbar for nothing.
-import type { PluginContext, PluginManifest } from "../plugins";
+import type { PluginContext, PluginManifest } from "../plugins/host";
 
 export const manifest: PluginManifest = {
   apiVersion: "2",

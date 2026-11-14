@@ -24,7 +24,7 @@
 // like the model geometry above: the board preserves
 // Model3D card nodes across renders so their WebGL contexts
 // survive, and mounts viewers on new ones.
-import type { PluginContext, PluginManifest } from "../plugins";
+import type { PluginContext, PluginManifest } from "../plugins/host";
 import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
   elementPoint, elementSize, isInlineVideo, pressureWidth, rectFromPoints, screenToWorld, smoothStrokePath, smoothStrokePressures, smoothStrokeSamples, strokeMaxWidth, strokePressuresVary,

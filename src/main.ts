@@ -27,7 +27,7 @@ import {
   openSettingsUI,
   refreshSettingsUI, registerShellElements,
   type PluginHost,
-} from "./plugins";
+} from "./plugins/host";
 
 // ---------------------------------------------------------------- state
 

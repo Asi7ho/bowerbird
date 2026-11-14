@@ -12,7 +12,7 @@ import type { Media } from "./media";
 import {
   itemRotation, type Item, type ShapeKind, checklistProgress,
 } from "./model";
-import { getBuiltinCardHtml, getCardDecorations, getCardHtml, getCardRenderer } from "../plugins";
+import { getBuiltinCardHtml, getCardDecorations, getCardHtml, getCardRenderer } from "../plugins/host";
 
 export interface CardContext {
   media: Media;
