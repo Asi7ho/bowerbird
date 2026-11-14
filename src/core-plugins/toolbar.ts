@@ -56,14 +56,29 @@ export function activate(api: PluginContext): void {
   toolsSeg.id = "tools";
   toolbar.appendChild(toolsSeg);
 
-  function toolButton(id: string, title: string, label: string, icon: string, onClick: () => void): HTMLButtonElement {
+  function toolButton(id: string, title: string, label: string, icon: string, onClick: () => void, parent: HTMLElement = toolsSeg, opts: { className?: string; type?: "button" | "reset" | "submit"; text?: string } = {}): HTMLButtonElement {
     const b = document.createElement("button");
     b.id = id;
     b.title = title;
     b.setAttribute("aria-label", label);
-    b.innerHTML = icon;
+    if (opts.text !== undefined) b.textContent = opts.text;
+    else b.innerHTML = icon;
+    if (opts.className) b.className = opts.className;
+    if (opts.type) b.type = opts.type;
     b.addEventListener("click", onClick);
-    toolsSeg.appendChild(b);
+    parent.appendChild(b);
+    return b;
+  }
+
+  function swatchButton(hex: string, onClick: () => void, pressed = false): HTMLButtonElement {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "swatch";
+    b.style.background = hex;
+    b.title = hex;
+    b.setAttribute("aria-label", hex);
+    b.setAttribute("aria-pressed", String(pressed));
+    b.addEventListener("click", onClick);
     return b;
   }
 
@@ -113,55 +128,23 @@ export function activate(api: PluginContext): void {
   zoomGroup.className = "zoom-group";
   toolbar.appendChild(zoomGroup);
 
-  const zoomOut = document.createElement("button");
-  zoomOut.id = "zoom-out";
-  zoomOut.title = "Zoom out (-)";
-  zoomOut.setAttribute("aria-label", "Zoom out");
-  zoomOut.innerHTML = ICONS.zoomOut;
-  zoomOut.addEventListener("click", () => api.view.zoomBy(1 / 1.2));
-  zoomGroup.appendChild(zoomOut);
+  toolButton("zoom-out", "Zoom out (-)", "Zoom out", ICONS.zoomOut, () => api.view.zoomBy(1 / 1.2), zoomGroup);
 
   // The zoom level, as live state between the zoom buttons.
   // Clicking it resets the view, the same as pressing 0.
-  const zoomLabel = document.createElement("button");
-  zoomLabel.id = "zoom-label";
-  zoomLabel.type = "button";
-  zoomLabel.className = "zoom-label";
-  zoomLabel.title = "Zoom level — reset the view (0)";
-  zoomLabel.setAttribute("aria-label", "Zoom level, reset the view");
-  zoomLabel.textContent = "100%";
-  zoomLabel.addEventListener("click", () => api.view.setCamera({ x: 0, y: 0, zoom: 1 }));
-  zoomGroup.appendChild(zoomLabel);
+  const zoomLabel = toolButton("zoom-label", "Zoom level — reset the view (0)", "Zoom level, reset the view", "", () => api.view.setCamera({ x: 0, y: 0, zoom: 1 }), zoomGroup, { className: "zoom-label", type: "button", text: "100%" });
 
-  const zoomIn = document.createElement("button");
-  zoomIn.id = "zoom-in";
-  zoomIn.title = "Zoom in (+)";
-  zoomIn.setAttribute("aria-label", "Zoom in");
-  zoomIn.innerHTML = ICONS.zoomIn;
-  zoomIn.addEventListener("click", () => api.view.zoomBy(1.2));
-  zoomGroup.appendChild(zoomIn);
+  toolButton("zoom-in", "Zoom in (+)", "Zoom in", ICONS.zoomIn, () => api.view.zoomBy(1.2), zoomGroup);
 
   const div2 = document.createElement("div");
   div2.className = "divider";
   toolbar.appendChild(div2);
 
-  const delBtn = document.createElement("button");
-  delBtn.id = "btn-delete";
-  delBtn.title = "Delete selection (Delete)";
-  delBtn.setAttribute("aria-label", "Delete");
-  delBtn.innerHTML = ICONS.delete;
-  delBtn.addEventListener("click", () => { api.board.deleteSelected(); });
-  toolbar.appendChild(delBtn);
+  const delBtn = toolButton("btn-delete", "Delete selection (Delete)", "Delete", ICONS.delete, () => { api.board.deleteSelected(); }, toolbar);
 
-  const settingsBtn = document.createElement("button");
-  settingsBtn.id = "btn-settings";
-  settingsBtn.title = "Settings (?)";
-  settingsBtn.setAttribute("aria-label", "Settings");
-  settingsBtn.innerHTML = ICONS.settings;
-  settingsBtn.addEventListener("click", () => {
+  toolButton("btn-settings", "Settings (?)", "Settings", ICONS.settings, () => {
     if (api.ui.isSettingsOpen()) api.ui.closeSettings(); else api.ui.openSettings();
-  });
-  toolbar.appendChild(settingsBtn);
+  }, toolbar);
 
   // The toolbar lives in the board area, beside the cards
   // layer. The core's shell mounts it here; the plugin
@@ -207,26 +190,19 @@ export function activate(api: PluginContext): void {
 
     const isShape = isShapeTool(tool);
     setActive(shapeBtn, isShape);
-    if (isShape) {
-      const meta = api.shapes.list().find((s) => s.kind === tool);
-      if (meta && shapeBtn.dataset.shape !== tool) {
-        shapeBtn.dataset.shape = tool;
-        shapeBtn.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${meta.svg}</svg>`;
-        shapeBtn.title = meta.key ? `${meta.label} (${meta.key})` : meta.label;
-        shapeBtn.setAttribute("aria-label", meta.label);
-      }
-    } else if (!shapeBtn.dataset.shape) {
-      // Before any shape is used there is no last shape, so
-      // the button starts on the first shape — the one a
-      // click activates. Without this it kept its initial
-      // select icon, a duplicate of Select.
-      const first = api.shapes.list()[0];
-      if (first) {
-        shapeBtn.dataset.shape = first.kind;
-        shapeBtn.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${first.svg}</svg>`;
-        shapeBtn.title = first.key ? `${first.label} (${first.key})` : first.label;
-        shapeBtn.setAttribute("aria-label", first.label);
-      }
+    // The button shows the shape last chosen. Before any
+    // shape is used there is no last shape, so it starts
+    // on the first shape — the one a click activates.
+    // Without this it kept its initial select icon, a
+    // duplicate of Select.
+    const target = isShape
+      ? api.shapes.list().find((s) => s.kind === tool)
+      : (!shapeBtn.dataset.shape ? api.shapes.list()[0] : undefined);
+    if (target && shapeBtn.dataset.shape !== target.kind) {
+      shapeBtn.dataset.shape = target.kind;
+      shapeBtn.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${target.svg}</svg>`;
+      shapeBtn.title = target.key ? `${target.label} (${target.key})` : target.label;
+      shapeBtn.setAttribute("aria-label", target.label);
     }
 
     // Shape picker: shown when a shape tool is active.
@@ -257,19 +233,11 @@ export function activate(api: PluginContext): void {
     noteEl.style.display = showNotes ? "flex" : "none";
     if (showNotes && noteEl.childElementCount === 0) {
       for (const hex of NOTE_COLOURS) {
-        const b = document.createElement("button");
-        b.type = "button";
-        b.className = "swatch";
-        b.style.background = hex;
-        b.title = hex;
-        b.setAttribute("aria-label", hex);
-        b.setAttribute("aria-pressed", "false");
-        b.addEventListener("click", () => {
+        noteEl.appendChild(swatchButton(hex, () => {
           const ids = api.board.getSelected();
           api.board.setNoteBackground(ids, hex);
           update();
-        });
-        noteEl.appendChild(b);
+        }));
       }
     }
     if (showNotes) {
@@ -285,15 +253,9 @@ export function activate(api: PluginContext): void {
     palette.style.display = tool === "pen" ? "flex" : "none";
     if (tool === "pen" && palette.childElementCount === 0) {
       for (const hex of PALETTE) {
-        const b = document.createElement("button");
-        b.type = "button";
-        b.className = "swatch" + (hex === penColor ? " active" : "");
-        b.style.background = hex;
-        b.title = hex;
-        b.setAttribute("aria-label", hex);
-        b.setAttribute("aria-pressed", String(hex === penColor));
-        b.addEventListener("click", () => { api.pen.setColor(hex); });
-        palette.appendChild(b);
+        // The sync loop below marks the active swatch, so
+        // the build-time " active" class is not needed.
+        palette.appendChild(swatchButton(hex, () => { api.pen.setColor(hex); }, hex === penColor));
       }
     }
     if (tool === "pen") {
@@ -309,15 +271,7 @@ export function activate(api: PluginContext): void {
       }
       const hasCurrent = Array.from(palette.children).some((c) => (c as HTMLButtonElement).title.toUpperCase() === penColor.toUpperCase());
       if (!hasCurrent) {
-        const b = document.createElement("button");
-        b.type = "button";
-        b.className = "swatch";
-        b.style.background = penColor;
-        b.title = penColor;
-        b.setAttribute("aria-label", penColor);
-        b.setAttribute("aria-pressed", "true");
-        b.addEventListener("click", () => { api.pen.setColor(penColor); });
-        palette.prepend(b);
+        palette.prepend(swatchButton(penColor, () => { api.pen.setColor(penColor); }, true));
       }
       for (const child of Array.from(palette.children)) {
         const sw = child as HTMLButtonElement;
