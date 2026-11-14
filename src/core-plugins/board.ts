@@ -21,9 +21,6 @@
 // (undo, board switch, reset).
 import type { PluginContext, PluginManifest } from "../plugins";
 import {
-  getCreateActions,
-  getPluginTool,
-  handlePluginShortcut,
   registerBoardController,
   syncPluginToolButtons,
 } from "../plugins";
@@ -679,7 +676,7 @@ function startTextEdit(id: number, isNew = false): void {
   // double-click point for a new note).
   const row = document.createElement("div");
   row.className = "note-edit-row";
-  const actions = getCreateActions();
+  const actions = api.ui.listCreateActions();
   if (isNew && actions.length > 0) {
     const a = actions[0];
     const mic = document.createElement("button");
@@ -1019,7 +1016,7 @@ boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
   // listeners on its container handle clicks there.
   if (api.view.getView() !== "board" && target.closest("#plugin-view")) return;
   if (tool.startsWith("plugin:")) {
-    const pt = getPluginTool(tool);
+    const pt = api.ui.getToolDef(tool);
     if (pt?.onMouseDown) {
       try { pt.onMouseDown(world); } catch (e) { api.ui.toast(`Plugin tool failed: ${String(e)}`); }
       pluginToolDown = true;
@@ -1461,7 +1458,7 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
 window.addEventListener("pointerup", (e: PointerEvent) => {
   if (pluginToolDown) {
     pluginToolDown = false;
-    const pt = getPluginTool(tool);
+    const pt = api.ui.getToolDef(tool);
     if (pt?.onMouseUp) {
       try { pt.onMouseUp(toWorld(boardPoint(e.clientX, e.clientY))); } catch (err) { api.ui.toast(`Plugin tool failed: ${String(err)}`); }
     }
@@ -1841,7 +1838,7 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   // Plugin shortcuts, last: core keys above win, so a plugin cannot
   // steal V, P, A, Ctrl+G/U, Delete, zoom or reset. The core guards
   // above (textarea, search box, Settings open) already applied.
-  else if (editingId === null && !api.ui.isSettingsOpen() && !ctrl && handlePluginShortcut(e.key)) { /* plugin handled it */ }
+  else if (editingId === null && !api.ui.isSettingsOpen() && !ctrl && api.ui.dispatchShortcut(e.key)) { /* plugin handled it */ }
 });
 window.addEventListener("keyup", (e: KeyboardEvent) => {
   if (e.key === " ") spaceDown = false;

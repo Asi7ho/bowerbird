@@ -686,8 +686,18 @@ export interface PluginContext {
     // icon beside it, and clicking the icon runs the action
     // at the note's position instead of typing.
     registerCreateAction: (def: PluginCreateActionDef) => void;
+    // Every registered create action, with its plugin, so
+    // the board view can offer them beside a new note. The
+    // voice-notes plugin's Record action is one of these.
+    listCreateActions: () => Array<PluginCreateActionDef & { pluginId: string }>;
     listCommands: () => Array<{ pluginId: string; pluginName: string; id: string; title: string }>;
     listTools: () => Array<{ pluginId: string; pluginName: string; id: string; title: string }>;
+    // The full definition of a plugin tool by its full id
+    // ("plugin:<pluginId>:<toolId>"), or null. The board
+    // view reads the tool's pointer handlers from this to
+    // drive a plugin tool. The current tool's id alone is
+    // getTool; this is the definition behind it.
+    getToolDef: (id: string) => (PluginToolDef & { pluginId: string; fullId: string }) | null;
     runCommand: (pluginId: string, commandId: string) => Promise<void>;
     setTool: (id: string) => void;
     // The current tool id ("select", "pen", "connector", a
@@ -728,6 +738,11 @@ export interface PluginContext {
     // Every shortcut a plugin registered, with its plugin,
     // so a settings UI can list them alongside the core's.
     listShortcuts: () => Array<{ pluginId: string; pluginName: string; key: string; title: string }>;
+    // Offer a key to every plugin shortcut, in registration
+    // order. True when one ran. The board view calls this
+    // for keys no core handler claims, so a plugin shortcut
+    // works anywhere on the board.
+    dispatchShortcut: (key: string) => boolean;
     // The board area element: the mount point for board
     // overlays. A UI plugin appends its overlay DOM here.
     boardEl: HTMLElement;
@@ -1734,6 +1749,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       registerPanel: (def: PluginPanelDef) => registerPanel(pluginId, def),
       registerCommand: (def: PluginCommandDef) => registerCommand(pluginId, def),
       registerCreateAction: (def: PluginCreateActionDef) => registerCreateAction(pluginId, def),
+      listCreateActions: () => getCreateActions(),
       // Commands are user actions, not code: listing and running
       // them is what Settings' Run buttons already do, so a
       // palette plugin can do the same without a permission.
@@ -1741,6 +1757,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       // so it cannot do anything its plugin could not do itself.
       listCommands: () => listPluginCommands().map((c) => ({ pluginId: c.pluginId, pluginName: c.pluginName, id: c.id, title: c.title })),
       listTools: () => Array.from(tools.values()).map((t) => ({ pluginId: t.pluginId, pluginName: loaded.get(t.pluginId)?.manifest.name ?? t.pluginId, id: t.fullId, title: t.title })),
+      getToolDef: (id: string) => getPluginTool(id),
       runCommand: (pid: string, cid: string) => runPluginCommand(pid, cid),
       setTool: (id: string) => host!.setTool(id),
       getTool: () => host!.getTool(),
@@ -1772,6 +1789,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       renderSettingsSections: () => renderSettingsSections(),
       registerShortcut: (def: PluginShortcutDef) => registerShortcut(pluginId, def),
       listShortcuts: () => listPluginShortcuts(),
+      dispatchShortcut: (key: string) => handlePluginShortcut(key),
       // The board element, built by the core-board plugin.
       // Read from the shell (set by the board plugin when it
       // activates) so a plugin activating after the board
