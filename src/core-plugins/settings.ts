@@ -25,10 +25,6 @@ export const manifest: PluginManifest = {
   required: true,
 };
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
 // Feedback goes to the maker's inbox by email. There is no
 // server and no account in the app: the message opens in the
 // tester's own email app, addressed here, and they press Send
@@ -125,7 +121,36 @@ function renderShortcutsTable(): void {
   if (!table) return;
   const allShortcuts: Array<[string, string]> = [...SHORTCUTS];
   for (const s of api.ui.listShortcuts()) allShortcuts.push([s.key.toUpperCase(), `${s.title} (${s.pluginName})`]);
-  table.innerHTML = allShortcuts.map(([k, v]) => `<tr><td><kbd>${escapeHtml(k)}</kbd></td><td>${escapeHtml(v)}</td></tr>`).join("");
+  table.innerHTML = allShortcuts.map(([k, v]) => `<tr><td><kbd>${api!.text.escapeHtml(k)}</kbd></td><td>${api!.text.escapeHtml(v)}</td></tr>`).join("");
+}
+
+// One option row: a set of preview buttons in a
+// container, one active. The background and grid rows
+// share the loop; only the tile, the active check and
+// the canvas patch differ.
+function renderOpts(
+  id: string,
+  opts: Array<[string, string]>,
+  current: () => string,
+  isActive: (value: string, current: string) => boolean,
+  tile: (value: string) => HTMLElement,
+  apply: (value: string) => void,
+  rerender: () => void,
+): void {
+  if (!api) return;
+  const container = el<HTMLDivElement>(id);
+  if (!container) return;
+  container.innerHTML = "";
+  const cur = current();
+  for (const [label, value] of opts) {
+    const b = document.createElement("button");
+    b.title = label;
+    b.setAttribute("aria-label", label);
+    b.appendChild(tile(value));
+    if (isActive(value, cur)) b.classList.add("active");
+    b.addEventListener("click", () => { apply(value); api!.board.save(); api!.board.render(); rerender(); });
+    container.appendChild(b);
+  }
 }
 
 function renderBgOpts(): void {
@@ -137,28 +162,13 @@ function renderBgOpts(): void {
   // shadow — and the colour stays visible. The name lives in
   // the tooltip and aria-label only. Colours are circles, the
   // way the toolbar's pen swatches are.
-  const opts: Array<[string, string]> = [["White", "#FFFFFF"], ["Paper", "#F7F5F0"], ["Sage", "#EAF3EC"], ["Sky", "#E8F0F7"], ["Ink", "#1C1C1E"]];
-  const container = el<HTMLDivElement>("bg-opts");
-  if (!container) return;
-  container.innerHTML = "";
-  const currentBg = api.board.get().bg ?? "#FFFFFF";
-  for (const [label, hex] of opts) {
-    const b = document.createElement("button");
-    b.title = label;
-    b.setAttribute("aria-label", label);
-    const sw = document.createElement("span");
-    sw.className = "bg-swatch";
-    sw.style.background = hex;
-    b.appendChild(sw);
-    if (currentBg.toUpperCase() === hex) b.classList.add("active");
-    b.addEventListener("click", () => {
-      api!.board.setCanvas({ bg: hex });
-      api!.board.save();
-      api!.board.render();
-      renderBgOpts();
-    });
-    container.appendChild(b);
-  }
+  renderOpts("bg-opts",
+    [["White", "#FFFFFF"], ["Paper", "#F7F5F0"], ["Sage", "#EAF3EC"], ["Sky", "#E8F0F7"], ["Ink", "#1C1C1E"]],
+    () => api!.board.get().bg ?? "#FFFFFF",
+    (hex, cur) => cur.toUpperCase() === hex,
+    (hex) => { const sw = document.createElement("span"); sw.className = "bg-swatch"; sw.style.background = hex; return sw; },
+    (hex) => { api!.board.setCanvas({ bg: hex }); },
+    renderBgOpts);
 }
 
 function renderGridOpts(): void {
@@ -167,29 +177,13 @@ function renderGridOpts(): void {
   // pattern itself — dots, lines, or blank for Off — inside a
   // button, the same shape as the colour options. The name
   // lives in the tooltip and aria-label only.
-  const opts: Array<[string, string]> = [["Dots", "Dots"], ["Lines", "Lines"], ["Off", "Off"]];
-  const container = el<HTMLDivElement>("grid-opts");
-  if (!container) return;
-  container.innerHTML = "";
-  const currentGrid = api.board.get().grid ?? "Dots";
-  for (const [label, mode] of opts) {
-    const b = document.createElement("button");
-    b.title = label;
-    b.setAttribute("aria-label", label);
-    const tile = document.createElement("span");
-    tile.className = "grid-tile";
-    if (mode === "Dots") tile.classList.add("grid-dots");
-    if (mode === "Lines") tile.classList.add("grid-lines");
-    b.appendChild(tile);
-    if (currentGrid === mode) b.classList.add("active");
-    b.addEventListener("click", () => {
-      api!.board.setCanvas({ grid: mode as "Dots" | "Lines" | "Off" });
-      api!.board.save();
-      api!.board.render();
-      renderGridOpts();
-    });
-    container.appendChild(b);
-  }
+  renderOpts("grid-opts",
+    [["Dots", "Dots"], ["Lines", "Lines"], ["Off", "Off"]],
+    () => api!.board.get().grid ?? "Dots",
+    (mode, cur) => cur === mode,
+    (mode) => { const t = document.createElement("span"); t.className = "grid-tile"; if (mode === "Dots") t.classList.add("grid-dots"); if (mode === "Lines") t.classList.add("grid-lines"); return t; },
+    (mode) => { api!.board.setCanvas({ grid: mode as "Dots" | "Lines" | "Off" }); },
+    renderGridOpts);
 }
 
 async function renderBackups(): Promise<void> {
@@ -281,6 +275,24 @@ function countPluginCards(pluginId: string): { count: number; frames: number } {
   };
 }
 
+// The four refreshes after a plugin reset or toggle:
+// shortcuts, plugin sections, the plugin list, and the
+// board itself.
+function refreshPluginUI(): void {
+  renderShortcutsTable();
+  renderPluginSettingsSections();
+  renderPluginSettings();
+  api!.board.render();
+}
+
+function renderMeta(): void {
+  if (!api) return;
+  const boardDirEl = el("board-dir-meta");
+  if (boardDirEl) boardDirEl.textContent = `Board folder: ${api.board.getDir()}`;
+  const buildEl = el("build-meta");
+  if (buildEl) buildEl.textContent = `Build: ${api.app.getBuildId()}`;
+}
+
 function renderPluginSettings(): void {
   if (!api) return;
   const list = el<HTMLDivElement>("plugin-list");
@@ -305,9 +317,9 @@ function renderPluginSettings(): void {
     // trial plugin is not installed yet, so it gets no
     // toggle; a failed plugin shows its error underneath.
     const off = !lp.active;
-    let row = `<div class="plugin-row${off ? " plugin-row-off" : ""}"><span class="plugin-dot" aria-hidden="true"></span><div class="plugin-row-text"><div><strong>${escapeHtml(lp.name)}</strong></div>`;
-    if (lp.description) row += `<p class="plugin-desc">${escapeHtml(lp.description)}</p>`;
-    if (lp.failed && lp.error) row += `<p class="meta"><strong>${escapeHtml(lp.error)}</strong></p>`;
+    let row = `<div class="plugin-row${off ? " plugin-row-off" : ""}"><span class="plugin-dot" aria-hidden="true"></span><div class="plugin-row-text"><div><strong>${api!.text.escapeHtml(lp.name)}</strong></div>`;
+    if (lp.description) row += `<p class="plugin-desc">${api!.text.escapeHtml(lp.description)}</p>`;
+    if (lp.failed && lp.error) row += `<p class="meta"><strong>${api!.text.escapeHtml(lp.error)}</strong></p>`;
     // The disable warning: when this plugin is awaiting a
     // disable confirmation, say how many of its cards are on
     // the board and what will happen to them, so the user
@@ -361,10 +373,7 @@ function renderPluginSettings(): void {
     // "Disable anyway" confirm on a plugin that is already off.
     confirmingDisable = null;
     await api!.plugins.reset();
-    renderShortcutsTable();
-    renderPluginSettingsSections();
-    renderPluginSettings();
-    api!.board.render();
+    refreshPluginUI();
   });
   for (const btn of Array.from(list.querySelectorAll("[data-plugin-settings]"))) {
     btn.addEventListener("click", () => {
@@ -405,10 +414,7 @@ function renderPluginSettings(): void {
         confirmingDisable = null;
         await api!.plugins.setEnabled(id, true);
       }
-      renderShortcutsTable();
-      renderPluginSettingsSections();
-      renderPluginSettings();
-      api!.board.render();
+      refreshPluginUI();
     });
   }
 }
@@ -425,10 +431,7 @@ function setSettings(open: boolean): void {
     const resetBtn = el<HTMLButtonElement>("btn-reset");
     if (confirmEl) confirmEl.style.display = "none";
     if (resetBtn) resetBtn.style.display = "";
-    const boardDirEl = el("board-dir-meta");
-    if (boardDirEl) boardDirEl.textContent = `Board folder: ${api.board.getDir()}`;
-    const buildEl = el("build-meta");
-    if (buildEl) buildEl.textContent = `Build: ${api.app.getBuildId()}`;
+    renderMeta();
     renderShortcutsTable();
     renderBgOpts();
     renderGridOpts();
@@ -445,10 +448,7 @@ function refresh(): void {
   // meta) must match the board again, if Settings is open.
   renderBgOpts();
   renderGridOpts();
-  const boardDirEl = el("board-dir-meta");
-  if (boardDirEl && api) boardDirEl.textContent = `Board folder: ${api.board.getDir()}`;
-  const buildEl = el("build-meta");
-  if (buildEl && api) buildEl.textContent = `Build: ${api.app.getBuildId()}`;
+  renderMeta();
 }
 
 export function activate(context: PluginContext): void {

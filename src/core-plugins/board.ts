@@ -854,6 +854,25 @@ function startTextEdit(id: number, isNew = false): void {
 // board's pointer and key handlers leave it alone: the
 // pointerdown guard ignores inputs, and typing in one
 // never triggers board shortcuts.
+// Wire a rename input: Enter or leaving the field
+// commits, Escape cancels, and only the first of
+// commit/cancel runs. Shared by section-label and
+// voice-note renames.
+function wireRenameInput(input: HTMLInputElement, onCommit: () => void): void {
+  input.focus();
+  input.select();
+  let done = false;
+  const commit = () => { if (done) return; done = true; onCommit(); render(); };
+  const cancel = () => { if (done) return; done = true; render(); };
+  input.addEventListener("keydown", (ev) => {
+    ev.stopPropagation();
+    if (ev.key === "Enter") { ev.preventDefault(); input.blur(); }
+    else if (ev.key === "Escape") { ev.preventDefault(); cancel(); }
+  });
+  input.addEventListener("change", commit);
+  input.addEventListener("blur", commit);
+}
+
 function startGroupRename(group: number): void {
   const board = api.board.get();
   const label = board.groups?.[group]?.label ?? `Section ${group}`;
@@ -866,27 +885,9 @@ function startGroupRename(group: number): void {
   input.style.width = `${Math.max(8, label.length + 2)}ch`;
   chip.textContent = "";
   chip.appendChild(input);
-  input.focus();
-  input.select();
-  let done = false;
-  const commit = () => {
-    if (done) return;
-    done = true;
+  wireRenameInput(input, () => {
     if (input.value.trim() !== "" && input.value !== label) api.board.setGroupLabel(group, input.value);
-    render();
-  };
-  const cancel = () => {
-    if (done) return;
-    done = true;
-    render();
-  };
-  input.addEventListener("keydown", (ev) => {
-    ev.stopPropagation();
-    if (ev.key === "Enter") { ev.preventDefault(); input.blur(); }
-    else if (ev.key === "Escape") { ev.preventDefault(); cancel(); }
   });
-  input.addEventListener("change", commit);
-  input.addEventListener("blur", commit);
 }
 
 // Is the click on a voice note's name? The card itself
@@ -919,27 +920,7 @@ function startAudioRename(id: number): void {
   input.setAttribute("aria-label", "Voice note name");
   titleEl.textContent = "";
   titleEl.appendChild(input);
-  input.focus();
-  input.select();
-  let done = false;
-  const commit = () => {
-    if (done) return;
-    done = true;
-    api.board.setAudioTitle(id, input.value);
-    render();
-  };
-  const cancel = () => {
-    if (done) return;
-    done = true;
-    render();
-  };
-  input.addEventListener("keydown", (ev) => {
-    ev.stopPropagation();
-    if (ev.key === "Enter") { ev.preventDefault(); input.blur(); }
-    else if (ev.key === "Escape") { ev.preventDefault(); cancel(); }
-  });
-  input.addEventListener("change", commit);
-  input.addEventListener("blur", commit);
+  wireRenameInput(input, () => { api.board.setAudioTitle(id, input.value); });
 }
 
 function commitEditingIfAny(): void {
