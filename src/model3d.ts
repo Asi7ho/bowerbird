@@ -93,7 +93,10 @@ class Model3DViewer {
     this.azimuth = saved?.azimuth ?? 0;
     this.elevation = saved?.elevation ?? 0.35;
     this.distance = saved?.distance ?? 3;
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    // preserveDrawingBuffer so the canvas can be read back
+    // (tests, and a future export): without it toDataURL
+    // returns blank once the frame is composited.
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.camera = new THREE.PerspectiveCamera(45, 1, 0.01, 100);
     this.scene.add(this.root);
