@@ -95,6 +95,14 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
   const contextIndex = new Map<string, ContextEntry>();
   let contextIndexLoaded = false;
   let contextIndexing = false;
+  // Generation: bumped whenever the board changes
+  // (clearBoardCaches). In-flight indexing workers capture
+  // it at start and stop writing — and stop flushing — if
+  // it moved, so a board switch cannot leave the old
+  // board's entries in the new board's index, and the new
+  // board's indexing is not skipped because the old run
+  // still held the flag.
+  let contextIndexGeneration = 0;
   let contextIndexTotal = 0;
   let contextIndexDone = 0;
   let contextIndexFailed = false;
@@ -244,12 +252,13 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
     } catch { /* video frames are a bonus, not a failure */ }
     return urls;
   }
-  async function indexContextItem(item: Item): Promise<void> {
+  async function indexContextItem(item: Item, gen: number): Promise<void> {
     const k = item.kind;
     try {
       if ("Image" in k) {
         if (contextIndex.get(k.Image.path)?.embedding) return;
         const embedding = await api.contextEmbedImage(k.Image.path);
+        if (contextIndexGeneration !== gen) return;
         contextIndex.set(k.Image.path, { embedding });
       } else if ("Audio" in k) {
         if (contextIndex.get(k.Audio.path)?.labels) return;
@@ -257,6 +266,7 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
         if (!pcm) return;
         const out = await api.contextClassifyAudio(pcm);
         const labels = out.map((o) => o.label.toLowerCase());
+        if (contextIndexGeneration !== gen) return;
         contextIndex.set(k.Audio.path, { labels });
       } else if ("Video" in k && !k.Video.remote) {
         const existing = contextIndex.get(k.Video.source);
@@ -273,6 +283,7 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
             labels.push(...out.map((o) => o.label.toLowerCase()));
           } catch { /* visual frames alone are enough */ }
         }
+        if (contextIndexGeneration !== gen) return;
         if (frames.length > 0 || labels.length > 0) contextIndex.set(k.Video.source, { frames, labels });
       } else {
         return;
@@ -309,6 +320,7 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
     // it looked like it reindexed all the time.
     if (!hasUnindexedMedia()) return;
     contextIndexing = true;
+    const gen = contextIndexGeneration;
     // Refresh the count now that indexing is really
     // running, so the status appears during the model
     // load itself, not only after the first item lands.
@@ -338,8 +350,9 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
     let next = 0;
     const workers = Array.from({ length: Math.min(4, items.length) }, async () => {
       while (next < items.length) {
+        if (contextIndexGeneration !== gen) return;
         const it = items[next++];
-        try { await indexContextItem(it); } catch { contextIndexFailed = true; }
+        try { await indexContextItem(it, gen); } catch { contextIndexFailed = true; }
         contextIndexDone++;
         const input = ui?.input ?? null;
         if (input && input.value.trim() !== "") updateSearch();
@@ -348,6 +361,14 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
     await Promise.all(workers);
     contextIndexing = false;
     indexingDonePromise = null;
+    // A board switch mid-run: the workers stopped above
+    // and wrote nothing for the old board. Start the new
+    // board's indexing now instead of leaving it skipped
+    // until a later search.
+    if (contextIndexGeneration !== gen) {
+      void startContextIndexing();
+      return;
+    }
     flushContextIndex();
     const input = ui?.input ?? null;
     if (input && input.value.trim() !== "") updateSearch();
@@ -831,6 +852,7 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
     contextIndex.clear();
     contextIndexLoaded = false;
     contextIndexFailed = false;
+    contextIndexGeneration++;
     contextQueryCache.clear();
     contextQueryEmbedding = null;
   }
