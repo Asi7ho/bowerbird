@@ -12,7 +12,7 @@
 // are laid out inside it, and the results dropdown is
 // absolutely positioned below it, so it never changes the
 // box's size).
-import type { PluginContext, PluginManifest } from "../plugins";
+import type { PluginContext, PluginManifest } from "../plugins/host";
 
 export const manifest: PluginManifest = {
   id: "core-search",

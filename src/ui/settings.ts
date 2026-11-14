@@ -12,7 +12,7 @@
 // loaded with activateFirstPartyPlugin, under a manifest that
 // declares the same permissions a user plugin would. It has no
 // back door into the core. See ARCHITECTURE.md.
-import type { PluginContext, PluginManifest } from "../plugins";
+import type { PluginContext, PluginManifest } from "../plugins/host";
 
 export const manifest: PluginManifest = {
   apiVersion: "2",

@@ -23,7 +23,7 @@
 // macOS, maximise toggles maximise on Windows/Linux. The
 // buttons opt out of the title bar's drag region in CSS,
 // so a click acts instead of moving the window.
-import type { PluginContext, PluginManifest } from "../plugins";
+import type { PluginContext, PluginManifest } from "../plugins/host";
 
 export const manifest: PluginManifest = {
   id: "core-titlebar",

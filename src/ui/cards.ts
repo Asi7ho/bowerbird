@@ -23,7 +23,7 @@
 // interpolated. Markdown text is already escaped by
 // renderMarkdownHtml; image/video sources go through
 // fileUrl(), which encodes each path segment.
-import type { PluginContext, PluginManifest } from "../plugins";
+import type { PluginContext, PluginManifest } from "../plugins/host";
 import { isInlineVideo, type Item } from "../backend/model";
 
 export const manifest: PluginManifest = {
