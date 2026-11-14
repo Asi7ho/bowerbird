@@ -101,9 +101,8 @@ export function createMedia(host: MediaContext): Media {
           return pdfjsLib.getDocument({ data }).promise;
         } catch {
           const { base64 } = await api.readFileBase64(path);
-          const binary = atob(base64);
-          const data = new Uint8Array(binary.length);
-          for (let i = 0; i < binary.length; i++) data[i] = binary.charCodeAt(i);
+          // atob output is Latin-1, so each char is one byte.
+          const data = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
           return pdfjsLib.getDocument({ data }).promise;
         }
       })();
@@ -169,6 +168,19 @@ export function createMedia(host: MediaContext): Media {
   function loadAudioDuration(id: number, path: string): void {
     if (audioDurations.has(path) || audioProbing.has(path) || audioFailed.has(path)) return;
     audioProbing.add(path);
+    // Both the first probe and the data-URL retry write the
+    // duration the same way: only if this card is still an
+    // audio card for the same file on this board.
+    const onAudioMetadata = (el: HTMLAudioElement) => () => {
+      audioProbing.delete(path);
+      const it = boardGet(host.getBoard(), id);
+      if (!it || !("Audio" in it.kind) || it.kind.Audio.path !== path) return;
+      if (isFinite(el.duration)) {
+        audioDurations.set(path, el.duration);
+        const durEl = host.getCardsEl().querySelector(`[data-audio-dur="${id}"]`);
+        if (durEl) durEl.textContent = formatAudioTime(el.duration);
+      }
+    };
     const probe = new Audio(api.fileUrl(path));
     probe.onerror = () => {
       // Same app-file fallback as images and video: try
@@ -178,19 +190,7 @@ export function createMedia(host: MediaContext): Media {
         mediaDataUrls.set(path, dataUrl);
         const retry = new Audio(dataUrl);
         retry.preload = "metadata";
-        retry.onloadedmetadata = () => {
-          audioProbing.delete(path);
-          // The board may have switched while probing: only
-          // write the duration if this card is still an
-          // audio card for the same file on this board.
-          const it = boardGet(host.getBoard(), id);
-          if (!it || !("Audio" in it.kind) || it.kind.Audio.path !== path) return;
-          if (isFinite(retry.duration)) {
-            audioDurations.set(path, retry.duration);
-            const durEl = host.getCardsEl().querySelector(`[data-audio-dur="${id}"]`);
-            if (durEl) durEl.textContent = formatAudioTime(retry.duration);
-          }
-        };
+        retry.onloadedmetadata = onAudioMetadata(retry);
         retry.onerror = () => {
           audioProbing.delete(path);
           audioFailed.add(path);
@@ -203,17 +203,7 @@ export function createMedia(host: MediaContext): Media {
       });
     };
     probe.preload = "metadata";
-    probe.onloadedmetadata = () => {
-      audioProbing.delete(path);
-      // Same board-switch guard as the retry above.
-      const it = boardGet(host.getBoard(), id);
-      if (!it || !("Audio" in it.kind) || it.kind.Audio.path !== path) return;
-      if (isFinite(probe.duration)) {
-        audioDurations.set(path, probe.duration);
-        const durEl = host.getCardsEl().querySelector(`[data-audio-dur="${id}"]`);
-        if (durEl) durEl.textContent = formatAudioTime(probe.duration);
-      }
-    };
+    probe.onloadedmetadata = onAudioMetadata(probe);
   }
   async function renderPdfPage(id: number, path: string): Promise<void> {
     if (pdfRendering.has(id) || pdfFailed.has(path)) return;
