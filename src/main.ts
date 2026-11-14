@@ -258,20 +258,7 @@ async function loadBoardFromJson(json: string, dir: string, preserveUndo = false
   // on load, so the checklist progress never sits on its
   // text.
   for (const it of parsed.items) {
-    // Tags are gone: drop any the board still carries,
-    // so they never come back.
-    delete (it as { tags?: unknown }).tags;
-    if (isFrameCard(it)) delete (it as { rotation?: number }).rotation;
-    if ("Text" in it.kind) {
-      const need = estimateTextHeight(it.kind.Text.text, it.kind.Text.size, it.size.w) + CARD_DECORATIONS_H;
-      if (it.size.h < need) it.size.h = need;
-    }
-    // A voice note with a transcript keeps room for its
-    // toggle below the seek: a card saved at the old
-    // hidden height is grown on load, so the toggle fits.
-    if ("Audio" in it.kind && typeof it.kind.Audio.transcript === "string" && it.kind.Audio.transcript.trim().length > 0) {
-      if (it.size.h < AUDIO_TRANSCRIPT_HIDDEN_H) it.size.h = AUDIO_TRANSCRIPT_HIDDEN_H;
-    }
+    healBoardItem(it);
   }
   // Groups are sections: give every group its label, and
   // drop labels for groups that no longer have members.
@@ -365,6 +352,28 @@ function isFrameCard(it: Item | undefined): boolean {
   // from their renderer.
   if (it.kind.Plugin.plugin === "presentation" && it.kind.Plugin.kind === "slide") return true;
   return getCardRenderer(it)?.frame === true;
+}
+
+// Heal one loaded item: drop stale tags, un-rotate frames,
+// grow text cards to fit their text plus the bottom row,
+// and grow transcript voice notes so the toggle fits.
+// Shared by loadBoardFromJson and init (which adds its own
+// UrlCard branch on top).
+function healBoardItem(it: Item): void {
+  // Tags are gone: drop any the board still carries,
+  // so they never come back.
+  delete (it as { tags?: unknown }).tags;
+  if (isFrameCard(it)) delete (it as { rotation?: number }).rotation;
+  if ("Text" in it.kind) {
+    const need = estimateTextHeight(it.kind.Text.text, it.kind.Text.size, it.size.w) + CARD_DECORATIONS_H;
+    if (it.size.h < need) it.size.h = need;
+  }
+  // A voice note with a transcript keeps room for its
+  // toggle below the seek: a card saved at the old
+  // hidden height is grown on load, so the toggle fits.
+  if ("Audio" in it.kind && typeof it.kind.Audio.transcript === "string" && it.kind.Audio.transcript.trim().length > 0) {
+    if (it.size.h < AUDIO_TRANSCRIPT_HIDDEN_H) it.size.h = AUDIO_TRANSCRIPT_HIDDEN_H;
+  }
 }
 
 function hitTestWithFrames(b: Board, world: Pt): number | null {
@@ -475,27 +484,13 @@ async function init(): Promise<void> {
       board.grid = board.grid ?? "Dots";
       board.camera = board.camera ?? { x: 0, y: 0, zoom: 1 };
       for (const it of board.items) {
-        // Tags are gone: drop any the board still carries.
-        delete (it as { tags?: unknown }).tags;
         if ("UrlCard" in it.kind) {
           // Old boards may carry embed:true from the embedded-page era;
           // link cards are previews only now, so it is ignored.
           it.kind.UrlCard.image = it.kind.UrlCard.image ?? null;
           it.kind.UrlCard.icon = it.kind.UrlCard.icon ?? null;
         }
-        // Frames never rotate; see loadBoardFromJson.
-        if (isFrameCard(it)) delete (it as { rotation?: number }).rotation;
-        // Text cards keep room for their bottom row below the
-        // text; see loadBoardFromJson.
-        if ("Text" in it.kind) {
-          const need = estimateTextHeight(it.kind.Text.text, it.kind.Text.size, it.size.w) + CARD_DECORATIONS_H;
-          if (it.size.h < need) it.size.h = need;
-        }
-        // A voice note with a transcript keeps room for its
-        // toggle below the seek; see loadBoardFromJson.
-        if ("Audio" in it.kind && typeof it.kind.Audio.transcript === "string" && it.kind.Audio.transcript.trim().length > 0) {
-          if (it.size.h < AUDIO_TRANSCRIPT_HIDDEN_H) it.size.h = AUDIO_TRANSCRIPT_HIDDEN_H;
-        }
+        healBoardItem(it);
       }
     } else {
       board = welcomeBoard(boardDir, loaded.pdf_size_bytes, loaded.video_size_bytes ?? 0);
