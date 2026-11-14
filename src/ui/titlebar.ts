@@ -9,7 +9,7 @@
 // way the toolbar plugin provides the tools segment.
 //
 // The DOM uses the same ids and classes as the old static
-// title bar, so src/styles.css applies unchanged, and the
+// title bar, so src/ui/styles.css applies unchanged, and the
 // window controls are drawn the way the OS the app is
 // running on draws them — macOS traffic lights on the
 // left, Windows caption buttons on the right, GNOME-style
