@@ -47,6 +47,13 @@ let timer: ReturnType<typeof setInterval> | null = null;
 let pill: HTMLDivElement | null = null;
 let timeEl: HTMLElement | null = null;
 let stopBtn: HTMLButtonElement | null = null;
+// Transcribing is part of the busy state, not just recording:
+// while the first note is transcribing its recorder is already
+// inactive, so the recorder-state guard alone would let a second
+// recording start — and the first finish's setRecording(false)
+// would then hide the second recording's pill and stop button,
+// leaving a running recorder with no visible stop.
+let transcribing = false;
 
 function setStatus(text: string): void {
   if (timeEl) timeEl.textContent = text;
@@ -79,6 +86,10 @@ function showPill(api: PluginContext, world: Pt): void {
 
 async function startRecording(api: PluginContext, world: Pt): Promise<void> {
   if (recorder && recorder.state !== "inactive") return;
+  if (transcribing) {
+    api.ui.toast("Still transcribing the last note — wait a moment.");
+    return;
+  }
   if (typeof MediaRecorder === "undefined" || !navigator.mediaDevices?.getUserMedia) {
     api.ui.toast("Recording is not supported here.");
     return;
@@ -119,6 +130,7 @@ async function finishRecording(api: PluginContext, world: Pt, mime: string): Pro
   }
   setStatus("Transcribing…");
   if (stopBtn) stopBtn.hidden = true;
+  transcribing = true;
   const file = new File([blob], fileName(mime), { type: blob.type });
   try {
     const [path, transcript] = await Promise.all([
@@ -135,6 +147,7 @@ async function finishRecording(api: PluginContext, world: Pt, mime: string): Pro
   } catch {
     api.ui.toast("Could not save the recording.");
   } finally {
+    transcribing = false;
     setRecording(false);
   }
 }

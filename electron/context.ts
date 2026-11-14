@@ -55,6 +55,8 @@ let transformers: TransformersModule | null = null;
 let clip: ClipBundle | null = null; // { tokenizer, processor, model }
 let ast: AudioPipeline | null = null; // pipeline
 let whisper: WhisperPipeline | null = null; // pipeline
+let whisperQueue: Promise<unknown> = Promise.resolve();
+let frameSeq = 0;
 let clipLoading: Promise<ClipBundle> | null = null;
 let astLoading: Promise<AudioPipeline> | null = null;
 let whisperLoading: Promise<WhisperPipeline> | null = null;
@@ -155,7 +157,10 @@ export async function embedImageDataUrl(app: App, dataUrl: string): Promise<numb
   // embedImageFile loads the model; no need to load it here too.
   const match = /^data:image\/(\w+);base64,(.+)$/.exec(dataUrl);
   if (!match) throw new Error("not an image data URL");
-  const tmp = path.join(os.tmpdir(), `bowerbird-frame-${Date.now()}.${match[1]}`);
+  // Date.now() alone collides when two frames land in the
+  // same millisecond: a per-process counter makes the name
+  // unique.
+  const tmp = path.join(os.tmpdir(), `bowerbird-frame-${Date.now()}-${process.pid}-${frameSeq++}.${match[1]}`);
   fs.writeFileSync(tmp, Buffer.from(match[2], "base64"));
   try {
     return await embedImageFile(app, tmp);
@@ -187,10 +192,19 @@ export async function classifyAudio(app: App, pcm: Float32Array | number[]): Pro
 export async function transcribeAudio(app: App, pcm: Float32Array | number[]): Promise<string | null> {
   const arr = pcm instanceof Float32Array ? pcm : Float32Array.from(pcm);
   if (arr.length === 0) return null;
-  const pipe = await loadWhisper(app);
-  const out = await pipe(arr);
-  const text = (out.text ?? "").trim();
-  return text.length > 0 ? text : null;
+  // One Whisper pipeline, one inference at a time: two
+  // concurrent calls would run on the same ONNX session.
+  // Chain each run onto the last, and keep the chain alive
+  // through a failure so one bad clip does not break the
+  // next transcription.
+  const task = whisperQueue.then(async () => {
+    const pipe = await loadWhisper(app);
+    const out = await pipe(arr);
+    const text = (out.text ?? "").trim();
+    return text.length > 0 ? text : null;
+  });
+  whisperQueue = task.catch(() => undefined);
+  return task;
 }
 
 export function cosine(a: number[], b: number[]): number {
