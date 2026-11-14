@@ -600,11 +600,12 @@ export function parseMarkdown(text: string): Block[] {
   return blocks;
 }
 
-// The height the card's bottom row (tag pills, the
-// "+ tag" button, the transcript toggle) needs. A text
-// card's height reserves this much at its bottom, so the
-// row never covers the card's text.
-export const CARD_DECORATIONS_H = 24;
+// The height reserved at a card's bottom for its bottom
+// row (tag pills, the "+ tag" button, the transcript
+// toggle): the row itself is 24 tall, plus 12 of padding
+// between the row and the card's contents, so the pills
+// never sit on the text.
+export const CARD_DECORATIONS_H = 36;
 
 export function estimateTextHeight(text: string, fontSize: number, width: number): number {
   const blocks = parseMarkdown(text);

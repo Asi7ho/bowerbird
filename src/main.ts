@@ -265,8 +265,15 @@ async function loadBoardFromJson(json: string, dir: string, preserveUndo = false
   // an older board, or set while Presentation was
   // disabled, is healed on load, so what is drawn always
   // matches the unrotated rect Presentation plays.
+  // Text cards keep room for their bottom row below the
+  // text: a card saved before that room existed is grown
+  // on load, so the tag pills never sit on its text.
   for (const it of parsed.items) {
     if (isFrameCard(it)) delete (it as { rotation?: number }).rotation;
+    if ("Text" in it.kind) {
+      const need = estimateTextHeight(it.kind.Text.text, it.kind.Text.size, it.size.w) + CARD_DECORATIONS_H;
+      if (it.size.h < need) it.size.h = need;
+    }
   }
   // Groups are sections: give every group its label, and
   // drop labels for groups that no longer have members.
