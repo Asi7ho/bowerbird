@@ -319,10 +319,17 @@ async function main() {
       });
       await waitFor("renamed label on disk", () => readBoard().groups?.[1]?.label === "Reading");
       // Drag one card 100px right: it is in a group, so the
-      // whole group moves and the frame follows it.
+      // whole group moves and the frame follows it — mid-drag,
+      // not only after release (the frame is a derived div,
+      // so the drag path moves it from the live board).
       await page.mouse.move(730, 624);
       await page.mouse.down();
       await page.mouse.move(830, 624, { steps: 10 });
+      await waitFor("frame follows the drag mid-drag", async () => {
+        const el = await page.$(".group-frame");
+        const box = el && (await el.boundingBox());
+        return box && Math.round(box.x) === 176 ? true : null;
+      });
       await page.mouse.up();
       await waitFor("frame follows the drag", async () => {
         const el = await page.$(".group-frame");

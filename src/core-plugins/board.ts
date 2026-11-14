@@ -1284,6 +1284,35 @@ function updateDraggedCards(ids: number[]): void {
       rightDeco.style.top = `${top}px`;
     }
   }
+  updateDraggedGroupFrames(ids);
+}
+
+// The section frame is a derived div, not part of any card,
+// so it does not move with the cards it frames: recompute
+// its bounds from the live board (the cards already moved)
+// and move the frame to match, or it stays behind while the
+// group is dragged. A resize moves it too (a member's size
+// changes the union), so this covers both.
+function updateDraggedGroupFrames(ids: number[]): void {
+  if (!groupsEl) return;
+  const board = api.board.get();
+  const groups = new Set<number>();
+  for (const id of ids) {
+    const it = boardGet(board, id);
+    if (it && it.group !== null) groups.add(it.group);
+  }
+  for (const g of groups) {
+    const members = board.items.filter((it) => it.group === g);
+    if (members.length < 2) continue;
+    const b = groupBounds(board, g);
+    if (!b) continue;
+    const frame = groupsEl.querySelector(`.group-frame[data-group="${g}"]`) as HTMLElement | null;
+    if (!frame) continue;
+    frame.style.left = `${b.x}px`;
+    frame.style.top = `${b.y}px`;
+    frame.style.width = `${b.w}px`;
+    frame.style.height = `${b.h}px`;
+  }
 }
 
 function attachWindowListeners(): void {
