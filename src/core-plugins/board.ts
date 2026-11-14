@@ -21,9 +21,6 @@
 // (undo, board switch, reset).
 import type { PluginContext, PluginManifest } from "../plugins";
 import {
-  syncPluginToolButtons,
-} from "../plugins";
-import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
   AUDIO_TRANSCRIPT_HIDDEN_H, AUDIO_TRANSCRIPT_SHOWN_H,
   centre, clippedEnds, fitCamera,
@@ -867,11 +864,9 @@ function setTool(t: Tool): void {
   updateEraserRing(0, 0, false);
   // The toolbar plugin follows the tool through the "tool"
   // plugin event, so it can highlight the active tool and
-  // show the right flyout without polling. The plugin tool
-  // buttons are the plugin system's own DOM, so the core
-  // syncs them here.
+  // show the right flyout without polling. The plugin
+  // system syncs its own tool buttons on the same event.
   api.events.emit("tool");
-  syncPluginToolButtons(t);
 }
 
 // Selection actions, shared by the keyboard shortcuts and by the

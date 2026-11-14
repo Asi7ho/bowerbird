@@ -1042,6 +1042,7 @@ const listeners = new Map<string, Set<() => void>>();
 
 let host: PluginHost | null = null;
 let bridge: PluginBridge | null = null;
+let toolButtonsSynced = false;
 let activeView = "board";
 let pluginsReady = false;
 
@@ -2782,6 +2783,14 @@ export async function initPlugins(
 ): Promise<void> {
   host = h;
   bridge = b;
+  // The plugin tool buttons are the plugin system's own DOM,
+  // so it syncs their active state when the tool changes —
+  // the board just emits "tool" and never reaches into the
+  // plugin system to sync them.
+  if (!toolButtonsSynced) {
+    toolButtonsSynced = true;
+    onEvent("tool", () => syncPluginToolButtons(boardGetTool()));
+  }
   wirePanelsToggle();
   ensureResizeHandle();
   try {
