@@ -816,6 +816,60 @@ function startGroupRename(group: number): void {
   input.addEventListener("blur", commit);
 }
 
+// Is the click on a voice note's name? The card itself
+// has pointer-events: none (only its controls take
+// clicks), so a click on the name reaches the board as a
+// #cards target — the DOM target cannot say which part of
+// the card was clicked. The title's screen rect can.
+function audioTitleHit(id: number, clientX: number, clientY: number): boolean {
+  const titleEl = cardsEl.querySelector(`.card[data-id="${id}"] .col .title`) as HTMLElement | null;
+  if (!titleEl) return false;
+  const r = titleEl.getBoundingClientRect();
+  return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
+}
+
+// Rename a voice note: double-clicking its name swaps the
+// title for an input, like a section label. Enter or
+// leaving the field commits (one undo step), Escape
+// cancels. An empty name clears the title, so the card
+// falls back to the file's name.
+function startAudioRename(id: number): void {
+  const board = api.board.get();
+  const it = boardGet(board, id);
+  if (!it || !("Audio" in it.kind)) return;
+  const current = (it.kind.Audio.title?.trim() ?? "") || (it.kind.Audio.path.split("/").pop() ?? it.kind.Audio.path);
+  const cardEl = cardsEl.querySelector(`.card[data-id="${id}"]`) as HTMLElement | null;
+  const titleEl = cardEl?.querySelector(".col .title") as HTMLElement | null;
+  if (!titleEl) return;
+  const input = document.createElement("input");
+  input.className = "audio-rename";
+  input.value = current;
+  input.setAttribute("aria-label", "Voice note name");
+  titleEl.textContent = "";
+  titleEl.appendChild(input);
+  input.focus();
+  input.select();
+  let done = false;
+  const commit = () => {
+    if (done) return;
+    done = true;
+    api.board.setAudioTitle(id, input.value);
+    render();
+  };
+  const cancel = () => {
+    if (done) return;
+    done = true;
+    render();
+  };
+  input.addEventListener("keydown", (ev) => {
+    ev.stopPropagation();
+    if (ev.key === "Enter") { ev.preventDefault(); input.blur(); }
+    else if (ev.key === "Escape") { ev.preventDefault(); cancel(); }
+  });
+  input.addEventListener("change", commit);
+  input.addEventListener("blur", commit);
+}
+
 function commitEditingIfAny(): void {
   if (editingId === null) return;
   const ta = cardsEl.querySelector("textarea.note-edit") as HTMLTextAreaElement | null;
@@ -1044,6 +1098,11 @@ boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
       const it = boardGet(board, hit);
       if (it && "Plugin" in it.kind && handlePluginCardDoubleClick(it)) return;
       if (it && "Text" in it.kind) { startTextEdit(hit); return; }
+      // Double-clicking a voice note's name renames it,
+      // like a section label renames its group. Anywhere
+      // else on the card keeps its own behaviour (the tile
+      // plays, the seek seeks).
+      if (it && "Audio" in it.kind && audioTitleHit(hit, e.clientX, e.clientY)) { startAudioRename(hit); return; }
       if (it && "UrlCard" in it.kind) { openExternal(it.kind.UrlCard.url); return; }
       if (it && "PdfCard" in it.kind) { openExternal(it.kind.PdfCard.path); return; }
       if (it && "Image" in it.kind) { openExternal(it.kind.Image.path); return; }

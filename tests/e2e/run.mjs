@@ -613,6 +613,36 @@ async function main() {
         return t;
       });
     });
+
+    await check("an audio card's title can be renamed", async () => {
+      // A voice-note audio card, written from outside: the
+      // live-follow watcher reloads it. It reuses the recorded
+      // file, so the card does not flip to "File missing".
+      const board = readBoard();
+      const id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
+      const audio = board.items.find((it) => "Audio" in it.kind);
+      board.items.push({ id, pos: { x: 100, y: 850 }, size: { w: 300, h: 136 }, group: null, kind: { Audio: { path: audio.kind.Audio.path } } });
+      board.next_id = id;
+      const tmp = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(board));
+      fs.renameSync(tmp, boardPath);
+      await page.locator(`#cards .card[data-id="${id}"] .title`).first().waitFor({ timeout: 15000 });
+      // Double-clicking the name swaps it for an input.
+      const titleBox = await page.locator(`#cards .card[data-id="${id}"] .title`).first().boundingBox();
+      assert.ok(titleBox, "audio title on screen");
+      await doubleClick(page, titleBox.x + titleBox.width / 2, titleBox.y + titleBox.height / 2);
+      await page.locator(`#cards .card[data-id="${id}"] input.audio-rename`).waitFor({ timeout: 10000 });
+      // Typing a new name and pressing Enter commits it: the
+      // card shows it, and it lands on disk.
+      await page.locator(`#cards .card[data-id="${id}"] input.audio-rename`).fill("Morning idea");
+      await page.keyboard.press("Enter");
+      await waitFor("renamed title shows on the card", async () => {
+        const t = await page.locator(`#cards .card[data-id="${id}"] .title`).first().textContent().catch(() => "");
+        return (t ?? "").includes("Morning idea");
+      });
+      const card = readBoard().items.find((it) => it.id === id);
+      assert.equal(card.kind.Audio.title, "Morning idea");
+    });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
     console.log(`  FAIL  setup: ${String(error.message).split("\n")[0]}`);
