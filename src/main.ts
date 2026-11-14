@@ -228,7 +228,14 @@ let boardSearchVersion = 0;
 // the board it replaced, and its context index is its own
 // file in its own folder.
 async function loadBoardFromJson(json: string, dir: string, preserveUndo = false): Promise<void> {
-  boardCommitEditing();
+  // Discard an in-progress edit, do not commit it: the incoming
+  // board replaces the outgoing one, and committing would save
+  // the outgoing board to disk after the incoming content was
+  // already read — overwriting a restore or an external change
+  // and leaving disk and memory diverged. (A board switch
+  // commits and saves the edit before calling this, so nothing
+  // is lost there.)
+  boardClearEditing();
   const oldDir = boardDir;
   const sameBoard = oldDir !== "" && oldDir === dir;
   // Save the outgoing board's stack before replacing it,
