@@ -22,7 +22,6 @@
 import type { PluginContext, PluginManifest } from "../plugins";
 import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
-  AUDIO_TRANSCRIPT_HIDDEN_H, AUDIO_TRANSCRIPT_SHOWN_H,
   centre, clippedEnds, fitCamera,
   itemBounds, itemRotation, pressureWidth, rotatePoint, select,
   strokeMaxWidth, strokePressuresVary,
@@ -1157,8 +1156,8 @@ cardsEl.addEventListener("click", (e: MouseEvent) => {
     // The card's height is the state: taller than the hidden
     // height, the transcript shows; at it or below, only the
     // toggle does. A normal resize, so one undo step.
-    const expanded = it.size.h > AUDIO_TRANSCRIPT_HIDDEN_H;
-    const h = expanded ? AUDIO_TRANSCRIPT_HIDDEN_H : AUDIO_TRANSCRIPT_SHOWN_H;
+    const expanded = it.size.h > api.cards.audioHeights.transcriptHidden;
+    const h = expanded ? api.cards.audioHeights.transcriptHidden : api.cards.audioHeights.transcriptShown;
     api.board.updateItem(id, { size: { w: it.size.w, h } });
   }
   if ((action === "pdf-prev" || action === "pdf-next") && "PdfCard" in it.kind) {
