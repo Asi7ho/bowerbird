@@ -833,7 +833,10 @@ function isBoardLocal(filePath: string): boolean {
   return false;
 }
 function isPrivateHost(host: string): boolean {
-  const h = String(host || "").toLowerCase().replace(/\.$/, "");
+  let h = String(host || "").toLowerCase().replace(/\.$/, "");
+  // WHATWG URL returns IPv6 hostnames bracketed ("[::1]"), so
+  // strip the brackets or the IPv6 checks below never match.
+  if (h.startsWith("[") && h.endsWith("]")) h = h.slice(1, -1);
   if (!h || h === "localhost" || h.endsWith(".local") || h === "0.0.0.0") return true;
   const v4 = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(h);
   if (v4) {
@@ -844,7 +847,33 @@ function isPrivateHost(host: string): boolean {
     if (a === 127 || (a === 169 && b === 254)) return true;
     return false;
   }
-  if (h === "::1" || h.startsWith("fe80:") || h.startsWith("fc00:") || h.startsWith("fd00:") || h.startsWith("::ffff:127.") || h.startsWith("::ffff:10.") || h.startsWith("::ffff:192.168.")) return true;
+  if (h === "::1" || h.startsWith("fe80:") || h.startsWith("fc00:") || h.startsWith("fd00:")) return true;
+  // IPv4-mapped IPv6: WHATWG URL returns the embedded address
+  // in hex ("::ffff:7f00:1" for 127.0.0.1), so the dotted
+  // ::ffff: checks never see it. Decode the first hextet:
+  // 7f00-7fff is 127.x, 0a00-0aff is 10.x, ac10-ac1f is
+  // 172.16-31, c0a8 is 192.168, a9fe is 169.254.
+  if (h.startsWith("::ffff:")) {
+    const rest = h.slice("::ffff:".length);
+    if (rest.includes(".")) {
+      const m = /^(\d+)\.(\d+)\.(\d+)\.(\d+)$/.exec(rest);
+      if (!m) return false;
+      const [a, b] = [Number(m[1]), Number(m[2])];
+      if (a === 10) return true;
+      if (a === 172 && b >= 16 && b <= 31) return true;
+      if (a === 192 && b === 168) return true;
+      if (a === 127 || (a === 169 && b === 254)) return true;
+      return false;
+    }
+    const first = Number.parseInt(rest.split(":")[0] || "", 16);
+    if (Number.isNaN(first)) return false;
+    if (first >= 0x7f00 && first <= 0x7fff) return true;
+    if (first >= 0x0a00 && first <= 0x0aff) return true;
+    if (first >= 0xac10 && first <= 0xac1f) return true;
+    if (first === 0xc0a8) return true;
+    if (first === 0xa9fe) return true;
+    return false;
+  }
   return false;
 }
 
