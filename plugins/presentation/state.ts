@@ -12,7 +12,7 @@
 // local first: a property read is not narrowed across a function
 // call the way a local is, so `state.stage` after a guard would
 // not stay non-null past the next call, but a local does.
-import type { Item, PluginContext } from "../../plugin-api";
+import type { Item, PluginContext } from "bowerbird-plugin-api";
 
 export interface Slide {
   frame: Item;

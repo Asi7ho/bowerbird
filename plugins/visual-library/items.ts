@@ -3,7 +3,7 @@
 // section, and syncing the library's copy of the board with
 // the board itself. Owns boardItems, the search query, the
 // collapsed sections and the last signature.
-import type { Item, PluginContext } from "../../plugin-api";
+import type { Item, PluginContext } from "bowerbird-plugin-api";
 
 export type LibraryMode = "panel" | "view";
 

@@ -4,7 +4,7 @@
 // plus the shared search row and the selection highlight.
 // Owns the panel and view element refs, and the panel's
 // layout observers.
-import type { Item, PluginContext } from "../../plugin-api";
+import type { Item, PluginContext } from "bowerbird-plugin-api";
 import { createCategory, deleteCategory, getBoardItems, getCategories, getQuery, isSectionCollapsed, renameCategory, sectionsList, setQuery, setSectionCollapsed, syncFromBoard } from "./items.js";
 import type { LibraryMode } from "./items.js";
 import { attachCardInteractions } from "./interactions.js";

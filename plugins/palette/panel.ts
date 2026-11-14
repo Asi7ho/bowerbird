@@ -21,7 +21,7 @@
 // saturation from the wheel, lightness from the slider.
 // At the default lightness (50%) the preview matches the
 // wheel pixel exactly.
-import type { PluginContext } from "../../plugin-api";
+import type { PluginContext } from "bowerbird-plugin-api";
 import { hexToHsl, hslToHex, palettesFor } from "./color.js";
 import { getBase, savePicked, setBase, setBaseH, setBaseL, setBaseS, setSettingPen } from "./state.js";
 import { attachPlaceInteractions } from "./place.js";

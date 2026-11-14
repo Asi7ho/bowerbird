@@ -76,7 +76,7 @@
 // panel.ts the slide list, export.ts the HTML export,
 // draw.ts draw mode. main.ts is the entry point that
 // wires them together.
-import type { PluginContext } from "../../plugin-api";
+import type { PluginContext } from "bowerbird-plugin-api";
 import { getApi, state } from "./state.js";
 import { isFrameItem } from "./geometry.js";
 import { buildView, onKeyDown, renderSlide, startPresentation, stopPresentationAudio, syncFromBoard, viewContainerClear } from "./view.js";

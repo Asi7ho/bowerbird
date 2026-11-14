@@ -3,7 +3,7 @@
 // from the reply. The API key lives in secure storage (see
 // settings.ts) and the chat call runs in the main process
 // (api.ai.chat), not the renderer.
-import type { PluginContext } from "../../plugin-api";
+import type { PluginContext } from "bowerbird-plugin-api";
 import { renderPanel } from "./panel.js";
 import { renderSettings } from "./settings.js";
 

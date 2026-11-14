@@ -3,7 +3,7 @@
 // audio player belongs to the board). Owns the playing Audio
 // element, which tile and controls it is wired to, and the
 // per-path duration cache.
-import type { Item, PluginContext } from "../../plugin-api";
+import type { Item, PluginContext } from "bowerbird-plugin-api";
 
 let libAudio: HTMLAudioElement | null = null;
 let libAudioItemId: number | null = null;

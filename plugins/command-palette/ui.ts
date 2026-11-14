@@ -8,7 +8,7 @@
 // propagation, so typing in its input never fires a board
 // shortcut (typing "v" must not switch to the Select tool
 // behind the palette).
-import type { PluginContext } from "../../plugin-api";
+import type { PluginContext } from "bowerbird-plugin-api";
 import { buildEntries } from "./entries.js";
 import type { Entry } from "./entries.js";
 

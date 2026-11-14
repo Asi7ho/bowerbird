@@ -22,7 +22,7 @@
 // board list (rows, delete, rename), panel.ts the panel
 // DOM and the new-board form, main.ts the entry point that
 // wires them together.
-import type { PluginContext } from "../../plugin-api";
+import type { PluginContext } from "bowerbird-plugin-api";
 import { clearPanel, refreshPanel, renderPanel } from "./panel.js";
 
 let apiRef: PluginContext | null = null;
