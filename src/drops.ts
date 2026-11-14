@@ -34,6 +34,10 @@ export function createDrops(ctx: DropsContext): Drops {
     if (e === "pdf") return "pdf";
     if (["mp3", "wav", "flac", "ogg", "m4a"].includes(e)) return "audio";
     if (["mp4", "mov", "webm", "mkv", "avi", "m4v"].includes(e)) return "video";
+    // GLB only: a .gltf references external buffers and
+    // textures that would not be embedded with it, so it
+    // stays unknown rather than landing as a broken card.
+    if (e === "glb") return "model3d";
     if (["txt", "md"].includes(e)) return "text";
     if (["url", "webloc"].includes(e)) return "shortcut";
     return "unknown";
@@ -148,6 +152,15 @@ export function createDrops(ctx: DropsContext): Drops {
           if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
           const id = ctx.allocId();
           ctx.getBoard().items.push({ id, pos: at, size: { w: 360, h: 264 }, group: null, kind: { Video: { source: stored, remote: false, size_bytes: size } } });
+          added++;
+        } else if (kind === "model3d") {
+          const stored = await api.embedFileBytes(file.name, await file.arrayBuffer());
+          const size = await api.fileSize(stored).catch(() => 0);
+          if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
+          const id = ctx.allocId();
+          // Wide enough for the viewport plus the title row
+          // below it (the canvas takes the height above it).
+          ctx.getBoard().items.push({ id, pos: at, size: { w: 360, h: 300 }, group: null, kind: { Model3D: { path: stored, size_bytes: size } } });
           added++;
         } else if (kind === "text") {
           const text = await file.text();
