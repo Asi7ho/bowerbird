@@ -3,7 +3,7 @@
 // persistence, the plugin host and the API, and it renders
 // no card itself. This plugin provides the eight built-in
 // kinds (Text, Image, Swatch, UrlCard, PdfCard, Audio,
-// Video, Shape) through the same `cards.registerBuiltin`
+// Video, Model3D, Shape) through the same `cards.registerBuiltin`
 // any plugin uses. It is the reference implementation for
 // a card plugin: a plugin that replaces a built-in kind is
 // built the same way, registering the same kind name.
@@ -44,6 +44,7 @@ type PdfCardData = { path: string; size_bytes: number };
 type SwatchData = { hex: string };
 type AudioData = { path: string; title?: string; transcript?: string };
 type VideoData = { source: string; remote: boolean; size_bytes: number };
+type Model3DData = { path: string; size_bytes: number };
 
 // Link cards are previews only: clicking one opens it in the browser.
 // The preview (image, icon, title) comes from the site itself, via
@@ -332,6 +333,33 @@ export function activate(api: PluginContext): void {
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px">
         <div class="video-thumb clickable" data-action="play-video" data-id="${c.id}" style="width:96px;height:56px;font-size:20px">▶</div>
         <div class="col"><div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, c.ww - 132, 14, true))}</div><div class="sub" style="font-size:12px">${sub}</div></div></div></div>`;
+    },
+  });
+
+  api.cards.registerBuiltin({
+    kind: "Model3D",
+    title: "3D model",
+    render: (item, data, plain = false) => {
+      const c = chrome(item, plain);
+      const { path, size_bytes } = data as Model3DData;
+      const name = path.split("/").pop() ?? path;
+      const sub = `${Math.round(num(size_bytes, 0) / 1024)} KB · GLB`;
+      // A plain render (a preview outside the board) has no
+      // viewer to mount, so it gets a static tile instead
+      // of an empty canvas.
+      if (plain) {
+        return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
+          <div class="model3d-tile" style="flex:1 1 auto">3D</div>
+          <div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, c.ww - 24, 14, true))}</div><div class="sub" style="font-size:12px">${sub}</div></div></div>`;
+      }
+      // The canvas is the viewport: drag rotates, wheel
+      // zooms. The title row below it is the grab area —
+      // it takes no pointer events, so pressing there hits
+      // the board and moves the card.
+      const canvasH = Math.max(80, c.hh - 70);
+      return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
+        <canvas class="model3d clickable" data-id="${c.id}" data-path="${api.text.escapeHtml(path)}" style="width:${c.ww - 24}px;height:${canvasH}px;border-radius:10px;background:var(--bg-system)"></canvas>
+        <div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, c.ww - 24, 14, true))}</div><div class="sub" style="font-size:12px">${sub}</div></div></div>`;
     },
   });
 }
