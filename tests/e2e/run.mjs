@@ -956,7 +956,14 @@ async function main() {
         return pts;
       }, String(modelId));
       let before = null;
-      for (let i = 0; i < 30; i++) {
+      // The first model load is slow under SwiftShader
+      // (GLTF parse plus the one-time PMREM environment),
+      // and background work — media indexing loading its
+      // models in the main process — can delay it further,
+      // so wait up to 30s for the render instead of 15.
+      // The model does render; a short budget only proves
+      // the machine was busy, not that the feature broke.
+      for (let i = 0; i < 60; i++) {
         const s = await sample();
         if (s && s[0][2] > s[0][0] + 30 && s[0][2] > 80) { before = s; break; }
         await new Promise((r) => setTimeout(r, 500));

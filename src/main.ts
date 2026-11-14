@@ -247,6 +247,22 @@ let boardSearchVersion = 0;
 // carried over — a restored board must not undo back into
 // the board it replaced, and its context index is its own
 // file in its own folder.
+// Start indexing the board's media in the background,
+// once the renderer is idle — so the model loads don't
+// compete with the board's first render and the user's
+// first interactions. requestIdleCallback fires when the
+// main thread is quiet; the 10s timeout is the backstop
+// so indexing still starts on a busy board. A search
+// starts indexing at once (see updateSearch), so this
+// delay only ever costs a few seconds of background time.
+function startBackgroundIndexing(): void {
+  const start = () => { void search.startContextIndexing(); };
+  if (typeof requestIdleCallback === "function") {
+    requestIdleCallback(start, { timeout: 10000 });
+  } else {
+    setTimeout(start, 2000);
+  }
+}
 async function loadBoardFromJson(json: string, dir: string, preserveUndo = false): Promise<void> {
   // Discard an in-progress edit, do not commit it: the incoming
   // board replaces the outgoing one, and committing would save
@@ -303,11 +319,11 @@ async function loadBoardFromJson(json: string, dir: string, preserveUndo = false
   undoStore.restoreUndoForBoard(dir, sameBoard || preserveUndo);
   boardRender();
   void search.loadContextIndex();
-  // Index the board's media in the background now, so the
+  // Index the board's media in the background, so the
   // first search does not pay the model-load and embedding
   // cost. It is async and guarded: nothing happens when
   // everything is already indexed.
-  void search.startContextIndexing();
+  startBackgroundIndexing();
 }
 async function switchToBoard(name: string, preserveUndo = false): Promise<boolean> {
   try {
@@ -939,9 +955,9 @@ async function init(): Promise<void> {
   // Preload the context index now, in the background,
   // so the first search does not pay the index-load
   // cost on top of everything else — and start indexing
-  // the board's media now, for the same reason.
+  // the board's media once idle, for the same reason.
   void search.loadContextIndex();
-  void search.startContextIndexing();
+  startBackgroundIndexing();
   // Fill in previews for cards that never got one (welcome card, old
   // boards): title, description, image and icon, in the background.
   void drops.refreshLinkPreviews();
