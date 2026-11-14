@@ -146,7 +146,16 @@ async function main() {
   try {
     app = await electron.launch({
       executablePath: electronPath,
-      args: [".", "--no-sandbox"],
+      args: [
+        ".",
+        "--no-sandbox",
+        // The 3D model check needs WebGL. CI has no GPU, so
+        // Chromium blocklists it; SwiftShader (software GL)
+        // is the fallback that makes the canvas render there.
+        // A real machine uses its own GPU and never needs this.
+        "--enable-unsafe-swiftshader",
+        "--ignore-gpu-blocklist",
+      ],
       cwd: repoRoot,
       env: {
         ...process.env,
@@ -812,10 +821,15 @@ async function main() {
       const tmp2 = `${boardPath}.tmp`;
       fs.writeFileSync(tmp2, JSON.stringify(board));
       fs.renameSync(tmp2, boardPath);
-      const canvas = page.locator(`#cards .card[data-id="${modelId}"] canvas.model3d`).first();
-      await canvas.waitFor({ timeout: 15000 });
+      // Fit after the live-follow reload, not before it: F
+      // fits the board in memory, and the reload is debounced
+      // (300ms), so pressing F at once would fit the board
+      // without the new card and leave it off-screen.
+      await new Promise((r) => setTimeout(r, 1200));
       await page.keyboard.press("f");
       await new Promise((r) => setTimeout(r, 500));
+      const canvas = page.locator(`#cards .card[data-id="${modelId}"] canvas.model3d`).first();
+      await canvas.waitFor({ timeout: 15000 });
       // Read the canvas through a 2D canvas (the viewer sets
       // preserveDrawingBuffer so this is reliable). The cube
       // is blue; the card background is light grey, where
