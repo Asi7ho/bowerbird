@@ -415,6 +415,20 @@ async function main() {
       // Library panel used to jump here, but it lives in
       // its own PR, not this one.
       const hello = readBoard().items.find((it) => "Text" in it.kind && it.kind.Text.text === "Hello CI!");
+      // The "+ tag" button is on every card, even one with
+      // no tags and not selected: it is visible before the
+      // note is clicked at all.
+      const addVisible = await page.evaluate((id) => {
+        const btn = document.querySelector(`.card-decorations[data-for="${id}"] .tag-add`);
+        if (!btn) return null;
+        const r = btn.getBoundingClientRect();
+        const cs = getComputedStyle(btn);
+        return { w: r.width, h: r.height, opacity: cs.opacity, pointerEvents: cs.pointerEvents };
+      }, hello.id);
+      assert.ok(addVisible, "tag button present on an untagged card");
+      assert.ok(addVisible.w > 0 && addVisible.h > 0, "tag button has size");
+      assert.equal(addVisible.opacity, "1", "tag button visible without selection");
+      assert.equal(addVisible.pointerEvents, "auto", "tag button clickable without selection");
       const centre = await page.evaluate((id) => {
         const el = document.querySelector(`#cards .card[data-id="${id}"]`);
         if (!el) return null;
