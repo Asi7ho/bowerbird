@@ -18,7 +18,7 @@ import {
 import {
   Anchor, Item, Pt, ShapeKind,
   CARD_DECORATIONS_H, estimateTextHeight,
-  isInlineVideo, pressureWidth, rectFromPoints, smoothStrokePath, smoothStrokePressures, smoothStrokeSamples, strokePressuresVary,
+  isInlineVideo, pressureWidth, rectFromPoints, smoothStrokePath, smoothStrokePressures, smoothStrokeSamples, splitStrokeByEraser, strokeMaxWidth, strokePressuresVary,
   zoomCamera,
 } from "../backend/model";
 
@@ -62,16 +62,37 @@ export function updateEraserRing(clientX: number, clientY: number, show: boolean
   ring.style.left = `${clientX - d / 2}px`;
   ring.style.top = `${clientY - d / 2}px`;
 }
-// Remove every stroke the eraser touches at this point.
-// Returns true when at least one stroke went. The board
-// is not saved here: the drag saves once, on mouseup, so
-// a whole sweep is one undo step.
+// Erase the ink the eraser touches at this point, the
+// way a pen draws: only the part under the eraser goes,
+// and a stroke it passes through breaks into the pieces
+// either side. Returns true when at least one stroke
+// changed. The board is not saved here: the drag saves
+// once, on mouseup, so a whole sweep is one undo step —
+// the new pieces are added silent, like the removed
+// stroke was, and only the SVG layer is rebuilt.
 export function eraseAt(world: Pt): boolean {
   const ids = S.api.board.strokesNear(world, ERASER_RADIUS);
   if (ids.length === 0) return false;
-  S.api.board.removeItems(ids);
-  renderSvgOnly();
-  return true;
+  let changed = false;
+  for (const id of ids) {
+    const it = S.api.board.getItem(id);
+    if (!it || !("Stroke" in it.kind)) continue;
+    const st = it.kind.Stroke;
+    const runs = splitStrokeByEraser(st.points, st.pressures, world, ERASER_RADIUS, strokeMaxWidth(st) / 2);
+    S.api.board.removeItems([id]);
+    for (const run of runs) {
+      const xs = run.points.map((p) => p.x), ys = run.points.map((p) => p.y);
+      const pos = { x: Math.min(...xs), y: Math.min(...ys) };
+      const size = { w: Math.max(1, Math.max(...xs) - pos.x), h: Math.max(1, Math.max(...ys) - pos.y) };
+      S.api.board.addItemSilent(
+        { Stroke: { points: run.points, color: st.color, width: st.width, marker: st.marker, ...(run.pressures && run.pressures.length > 0 ? { pressures: run.pressures } : {}) } },
+        pos, size,
+      );
+    }
+    changed = true;
+  }
+  if (changed) renderSvgOnly();
+  return changed;
 }
 
 // ---------------------------------------------------------------- editing

@@ -39,6 +39,7 @@ import {
   smoothStrokePath,
   smoothStrokePressures,
   smoothStrokeSamples,
+  splitStrokeByEraser,
   strokeMaxWidth,
   strokePressuresVary,
   strokesWithin,
@@ -237,6 +238,42 @@ describe("marquee and lasso", () => {
     expect(strokesWithin(b, { x: 150, y: 105 }, 12)).toEqual([1]);
     expect(strokesWithin(b, { x: 150, y: 105 }, 1)).toEqual([]);
     expect(strokesWithin(b, { x: 150, y: 200 }, 12)).toEqual([]);
+  });
+  it("splitStrokeByEraser breaks a stroke at the eraser, keeping both sides", () => {
+    const pts = [100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200].map((x) => ({ x, y: 100 }));
+    const runs = splitStrokeByEraser(pts, undefined, { x: 150, y: 100 }, 12, 1.5);
+    expect(runs.map((r) => r.points.map((p) => p.x))).toEqual([
+      [100, 110, 120, 130],
+      [170, 180, 190, 200],
+    ]);
+  });
+  it("splitStrokeByEraser leaves nothing when the whole stroke is under the eraser", () => {
+    const pts = [{ x: 100, y: 100 }, { x: 150, y: 100 }, { x: 200, y: 100 }];
+    expect(splitStrokeByEraser(pts, undefined, { x: 150, y: 100 }, 100, 1.5)).toEqual([]);
+  });
+  it("splitStrokeByEraser trims a stroke when the eraser takes one end", () => {
+    const pts = [100, 110, 120, 130, 140, 150].map((x) => ({ x, y: 100 }));
+    const runs = splitStrokeByEraser(pts, undefined, { x: 100, y: 100 }, 12, 1.5);
+    expect(runs.map((r) => r.points.map((p) => p.x))).toEqual([[120, 130, 140, 150]]);
+  });
+  it("splitStrokeByEraser keeps pressures aligned with their points", () => {
+    const pts = [100, 110, 120, 130, 140, 150, 160, 170].map((x) => ({ x, y: 100 }));
+    const prs = [0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
+    const runs = splitStrokeByEraser(pts, prs, { x: 135, y: 100 }, 14, 1.5);
+    expect(runs.map((r) => r.points.map((p) => p.x))).toEqual([[100, 110], [160, 170]]);
+    expect(runs.map((r) => r.pressures)).toEqual([[0.3, 0.4], [0.9, 1.0]]);
+  });
+  it("splitStrokeByEraser cuts a run when a segment crosses the circle, ends outside it", () => {
+    // A fast stroke: sparse points, the segment between
+    // them passes through the eraser while both ends are
+    // clear of it. Without the segment test the stroke
+    // would survive the sweep whole.
+    const pts = [{ x: 100, y: 100 }, { x: 140, y: 100 }, { x: 160, y: 100 }, { x: 200, y: 100 }];
+    const runs = splitStrokeByEraser(pts, undefined, { x: 150, y: 100 }, 5, 1.5);
+    expect(runs.map((r) => r.points.map((p) => p.x))).toEqual([
+      [100, 140],
+      [160, 200],
+    ]);
   });
 });
 

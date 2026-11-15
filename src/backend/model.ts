@@ -489,6 +489,55 @@ export function strokesWithin(board: Board, world: Pt, radius: number): number[]
   return out;
 }
 
+// Split a stroke where the eraser passes, the way a real
+// eraser lifts only the ink it touches: points inside the
+// eraser circle (radius + half the stroke width) are gone,
+// and the stroke breaks into the contiguous runs that
+// remain. A run of one point cannot draw, so it is
+// dropped. Pressures travel with their points, so a split
+// stroke keeps its thick and thin parts. A segment that
+// crosses the circle with both ends outside it still cuts
+// the run, or a fast stroke would survive a sweep through
+// its middle.
+export function splitStrokeByEraser(
+  points: Pt[],
+  pressures: number[] | undefined,
+  center: Pt,
+  radius: number,
+  halfWidth: number,
+): { points: Pt[]; pressures?: number[] }[] {
+  const tol = radius + halfWidth;
+  const runs: { points: Pt[]; pressures?: number[] }[] = [];
+  let cur: Pt[] = [];
+  let curPr: number[] = [];
+  const hasPr = pressures !== undefined && pressures.length === points.length;
+  const flush = () => {
+    if (cur.length >= 2) {
+      runs.push(hasPr ? { points: cur, pressures: curPr } : { points: cur });
+    }
+    cur = [];
+    curPr = [];
+  };
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    const erased = Math.hypot(p.x - center.x, p.y - center.y) <= tol;
+    if (erased) {
+      flush();
+      continue;
+    }
+    // The segment from the previous point crosses the
+    // eraser circle: the run breaks here even though
+    // both ends survive.
+    if (cur.length > 0 && distToSegment(center, points[i - 1], p) <= tol) {
+      flush();
+    }
+    cur.push(p);
+    if (hasPr) curPr.push(pressures![i]);
+  }
+  flush();
+  return runs;
+}
+
 export function marquee(board: Board, a: Pt, b: Pt): number[] {
   const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x);
   const y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);
