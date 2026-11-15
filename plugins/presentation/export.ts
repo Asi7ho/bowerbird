@@ -33,16 +33,30 @@ const oversizedByUrl = new Map<string, string>();
 // of shipping a dead app-file URL.
 const EXPORT_FILE_MB = 25;
 
+function recordOversized(url: string, size: number): void {
+  const name = decodeURIComponent(url.split("/").pop() || "media file");
+  const mb = Math.round(size / 1024 / 1024);
+  oversizedExportFiles.push({ name, mb });
+  oversizedByUrl.set(url, oversizedPlaceholder(name, mb));
+}
+
 async function fetchDataUrl(url: string): Promise<string | null> {
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
+    // The cap is checked on the header first: a 500 MB
+    // video must not be read into memory just to be
+    // rejected afterwards. app-file responses always
+    // carry Content-Length; without it, fall back to
+    // reading the body and checking its size.
+    const headerSize = Number(res.headers.get("Content-Length"));
+    if (Number.isFinite(headerSize) && headerSize > EXPORT_FILE_MB * 1024 * 1024) {
+      recordOversized(url, headerSize);
+      return null;
+    }
     const blob = await res.blob();
     if (blob.size > EXPORT_FILE_MB * 1024 * 1024) {
-      const name = decodeURIComponent(url.split("/").pop() || "media file");
-      const mb = Math.round(blob.size / 1024 / 1024);
-      oversizedExportFiles.push({ name, mb });
-      oversizedByUrl.set(url, oversizedPlaceholder(name, mb));
+      recordOversized(url, blob.size);
       return null;
     }
     return await new Promise<string>((resolve, reject) => {
