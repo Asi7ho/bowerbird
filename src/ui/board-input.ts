@@ -452,11 +452,12 @@ S.boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
     S.drag = { kind: "shape", shape: S.tool as ShapeKind, start: world, current: world };
     return;
   }
-  if (S.tool === "pen") {
+  if (S.tool === "pen" || S.tool === "pencil") {
     // A stylus records its pressure per point, so the
     // stroke can thicken and thin with the press; a mouse
     // or finger records none, and draws a uniform stroke.
-    S.drag = { kind: "stroke", points: [world], pressures: e.pointerType === "pen" ? [e.pressure] : [] };
+    // The pencil draws thinner than the pen.
+    S.drag = { kind: "stroke", points: [world], pressures: e.pointerType === "pen" ? [e.pressure] : [], width: S.tool === "pencil" ? 2 : 3 };
     return;
   }
   if (S.tool === "select" && S.lassoMode) {
@@ -643,19 +644,20 @@ export function dragPreview(id: string, tag: string): SVGElement {
 // stroke is one smooth path; a pen stroke whose pressure
 // varies is one line per short sample along the smooth
 // curve, each at the width its pressure makes, so the
-// stroke visibly thickens as it is drawn.
-export function updateLiveStroke(points: Pt[], pressures: number[]): void {
+// stroke visibly thickens as it is drawn. `width` is the
+// tool's base width: the pencil draws thinner than the pen.
+export function updateLiveStroke(points: Pt[], pressures: number[], width: number): void {
   const el = dragPreview("live-stroke", "g");
   while (el.firstChild) el.removeChild(el.firstChild);
   if (pressures.length === points.length && strokePressuresVary({ pressures })) {
     const pts = smoothStrokeSamples(points);
     const prs = smoothStrokePressures(pressures);
     for (let i = 0; i + 1 < pts.length; i++) {
-      const w = pressureWidth(3, (prs[i] + prs[i + 1]) / 2);
+      const w = pressureWidth(width, (prs[i] + prs[i + 1]) / 2);
       el.appendChild(svgEl2("line", { x1: String(pts[i].x), y1: String(pts[i].y), x2: String(pts[i + 1].x), y2: String(pts[i + 1].y), stroke: S.api.pen.getColor(), "stroke-width": String(w), "stroke-linecap": "round" }));
     }
   } else {
-    el.appendChild(svgEl2("path", { d: smoothStrokePath(points), fill: "none", stroke: S.api.pen.getColor(), "stroke-width": "3", "stroke-linecap": "round", "stroke-linejoin": "round" }));
+    el.appendChild(svgEl2("path", { d: smoothStrokePath(points), fill: "none", stroke: S.api.pen.getColor(), "stroke-width": String(width), "stroke-linecap": "round", "stroke-linejoin": "round" }));
   }
 }
 // The lasso loop, drawn live while dragging. The path is
@@ -774,7 +776,7 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
         const selected = S.api.board.getSelected();
         if (S.api.ui.isSettingsOpen() || S.editingId !== null) {
           S.boardEl.style.cursor = "default";
-        } else if (S.tool === "pen" || S.tool === "connector" || isShapeTool(S.tool) || (S.tool === "select" && S.lassoMode)) {
+        } else if (S.tool === "pen" || S.tool === "pencil" || S.tool === "connector" || isShapeTool(S.tool) || (S.tool === "select" && S.lassoMode)) {
           S.boardEl.style.cursor = "crosshair";
         } else if (S.tool === "eraser") {
           // The ring is the cursor while erasing.
@@ -842,7 +844,7 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
     if (Math.hypot(world.x - last.x, world.y - last.y) > 2 / cam.zoom) {
       S.drag.points.push(world);
       if (e.pointerType === "pen") S.drag.pressures.push(e.pressure);
-      updateLiveStroke(S.drag.points, S.drag.pressures);
+      updateLiveStroke(S.drag.points, S.drag.pressures, S.drag.width);
     }
   } else if (S.drag.kind === "lasso") {
     const cam = S.api.view.getCamera();
@@ -933,7 +935,7 @@ window.addEventListener("pointerup", (e: PointerEvent) => {
       const xs = d.points.map((p) => p.x), ys = d.points.map((p) => p.y);
       const pos = { x: Math.min(...xs), y: Math.min(...ys) };
       const size = { w: Math.max(1, Math.max(...xs) - pos.x), h: Math.max(1, Math.max(...ys) - pos.y) };
-      S.api.board.addItem({ Stroke: { points: d.points, color: S.api.pen.getColor(), width: 3, marker: false, ...(d.pressures.length > 0 ? { pressures: d.pressures } : {}) } }, pos, size);
+      S.api.board.addItem({ Stroke: { points: d.points, color: S.api.pen.getColor(), width: d.width, marker: false, ...(d.pressures.length > 0 ? { pressures: d.pressures } : {}) } }, pos, size);
     }
   } else if (d.kind === "lasso") {
     // A click, not a loop: select what is under the cursor,
