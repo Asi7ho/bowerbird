@@ -18,7 +18,7 @@ import * as path from "node:path";
 import { createBackups } from "./backups";
 import { handleAppFileRequest, MIME } from "./appFile";
 import * as context from "./context";
-import { isPrivateHost, linkHref, metaContent, tagContent } from "./link-preview";
+import { isPrivateHost, linkHref, metaContent, readCappedText, tagContent } from "./link-preview";
 // The plugin TypeScript transpiler, bundled into electron-dist at
 // build time (scripts/bundle-sucrase.mjs). The packaged app ships
 // no node_modules, so the transpiler is a file inside electron-dist.
@@ -1262,7 +1262,10 @@ function registerIpc(): void {
     } catch (e) {
       if (e instanceof Error && e.message.includes("private address")) throw e;
     }
-    const text = (await res.text()).slice(0, 300000);
+    // Read at most 300 KB: the meta tags sit at the top of the
+    // document, and a hostile page must not OOM the main
+    // process with a multi-GB body that only gets sliced after.
+    const { text } = await readCappedText(res, 300000);
     // Resolve a possibly-relative image/icon URL against the page URL,
     // and only ever hand the renderer an http(s) URL.
     const resolveHttp = (href: string | null): string | null => {
@@ -1490,7 +1493,7 @@ function registerIpc(): void {
     if (!res.ok) {
       let detail = "";
       try {
-        const body = await res.text();
+        const { text: body } = await readCappedText(res, 2000);
         try {
           const parsedBody = JSON.parse(body) as { error?: { message?: string } };
           detail = parsedBody?.error?.message || body.slice(0, 200);
@@ -1500,7 +1503,11 @@ function registerIpc(): void {
       } catch { /* no body: status alone */ }
       throw new Error(`ai request failed (${res.status})${detail ? ": " + detail : ""}`);
     }
-    const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    // A completion over 1 MB is pathological; refuse it
+    // truncated rather than parsing an unbounded body.
+    const { text: body, truncated } = await readCappedText(res, 1000000);
+    if (truncated) throw new Error("ai response too large");
+    const data = JSON.parse(body) as { choices?: Array<{ message?: { content?: string } }> };
     const content = data?.choices?.[0]?.message?.content;
     if (typeof content !== "string") throw new Error("ai response had no message");
     return content;

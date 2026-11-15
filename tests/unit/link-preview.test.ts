@@ -8,6 +8,7 @@ import {
   isPrivateHost,
   linkHref,
   metaContent,
+  readCappedText,
   tagContent,
 } from "../../electron/link-preview";
 
@@ -66,6 +67,22 @@ describe("isPrivateHost", () => {
     for (const input of ["http://0x7f000001/", "http://0177.0.0.1/", "http://2130706433/"]) {
       expect(isPrivateHost(hostOf(input))).toBe(true);
     }
+  });
+});
+
+describe("readCappedText", () => {
+  it("reads a small body whole, and only a prefix past the cap", async () => {
+    await expect(readCappedText(new Response("hello"), 300000)).resolves.toEqual({
+      text: "hello",
+      truncated: false,
+    });
+    const big = await readCappedText(new Response("x".repeat(100)), 10);
+    expect(big.truncated).toBe(true);
+    expect(big.text).toBe("x".repeat(10));
+    await expect(readCappedText(new Response(""), 10)).resolves.toEqual({
+      text: "",
+      truncated: false,
+    });
   });
 });
 
