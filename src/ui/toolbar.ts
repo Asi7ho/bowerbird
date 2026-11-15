@@ -146,11 +146,20 @@ export function activate(api: PluginContext): void {
   drawPicker.style.display = "none";
   toolbar.appendChild(drawPicker);
 
-  const noteEl = document.createElement("div");
-  noteEl.className = "palette";
-  noteEl.id = "note-colours";
-  noteEl.style.display = "none";
-  toolbar.appendChild(noteEl);
+  // The note-colours bar: a floating bar that sits next
+  // to the selected text note, not in the toolbar. It is
+  // positioned in screen coordinates (see update), so it
+  // stays a usable size at any zoom and tracks the note
+  // as the board pans. Clicking a colour sets the
+  // background of every selected text note, in one undo
+  // step. It lives on the body, outside the board, so
+  // clicking it never starts a drag or deselects.
+  const noteBar = document.createElement("div");
+  noteBar.className = "note-colour-bar";
+  noteBar.id = "note-colours";
+  noteBar.style.display = "none";
+  noteBar.addEventListener("pointerdown", (e) => e.stopPropagation());
+  document.body.appendChild(noteBar);
 
   const div1 = document.createElement("div");
   div1.className = "divider";
@@ -184,14 +193,14 @@ export function activate(api: PluginContext): void {
   api.ui.boardEl.appendChild(wrap);
 
   // ---- toolbar state ----
-  // The background of the selected text notes (the first
-  // one found), or null when no text note is selected.
-  // The note-colours flyout shows only then.
-  function noteBgOfSelected(): string | null {
+  // The first selected text note, or null when none is
+  // selected. The note-colours bar shows only then, and
+  // sits next to this note.
+  function selectedNote(): { id: number; bg: string } | null {
     const selected = api.board.getSelected();
     for (const id of selected) {
       const it = api.board.getItem(id);
-      if (it && "Text" in it.kind) return (it.kind as { Text: { bg?: string } }).Text.bg ?? "#FFFFFF";
+      if (it && "Text" in it.kind) return { id, bg: (it.kind as { Text: { bg?: string } }).Text.bg ?? "#FFFFFF" };
     }
     return null;
   }
@@ -211,10 +220,16 @@ export function activate(api: PluginContext): void {
     const tool = api.ui.getTool();
     const selected = api.board.getSelected();
     const penColor = api.pen.getColor();
-    const noteBg = noteBgOfSelected();
+    const note = selectedNote();
+    const noteBg = note?.bg ?? null;
     const zoom = api.view.getCamera().zoom;
     const outline = api.shapes.getOutline();
-    const key = `${tool}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}|${colorBarOpen}|${outline}`;
+    // The note's position is in the key, so the colours
+    // bar follows it when it is moved, not only when the
+    // selection or the camera changes.
+    const noteItem = note ? api.board.getItem(note.id) : null;
+    const notePos = noteItem ? api.geometry.itemBounds(noteItem)[0] : null;
+    const key = `${tool}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}|${colorBarOpen}|${outline}|${notePos ? `${notePos.x},${notePos.y}` : ""}`;
     if (key === lastKey) return;
     lastKey = key;
 
@@ -317,14 +332,17 @@ export function activate(api: PluginContext): void {
     }
 
     // Note colours: shown when at least one selected card
-    // is a text note and no draw tool is active.
-    // Clicking a colour sets the background of every
-    // selected text note, in one undo step.
-    const showNotes = noteBg !== null && !isDraw;
-    noteEl.style.display = showNotes ? "flex" : "none";
-    if (showNotes && noteEl.childElementCount === 0) {
+    // is a text note and no draw tool is active. The bar
+    // sits just above the note (below it when the note is
+    // too close to the top of the screen), left-aligned
+    // with the note, and follows it as the board pans or
+    // zooms. Clicking a colour sets the background of
+    // every selected text note, in one undo step.
+    const showNotes = note !== null && !isDraw;
+    noteBar.style.display = showNotes ? "flex" : "none";
+    if (showNotes && noteBar.childElementCount === 0) {
       for (const hex of NOTE_COLOURS) {
-        noteEl.appendChild(swatchButton(hex, () => {
+        noteBar.appendChild(swatchButton(hex, () => {
           const ids = api.board.getSelected();
           api.board.setNoteBackground(ids, hex);
           update();
@@ -332,11 +350,26 @@ export function activate(api: PluginContext): void {
       }
     }
     if (showNotes) {
-      for (const child of Array.from(noteEl.children)) {
+      for (const child of Array.from(noteBar.children)) {
         const sw = child as HTMLButtonElement;
         const active = sw.title.toUpperCase() === (noteBg ?? "#FFFFFF").toUpperCase();
         sw.classList.toggle("active", active);
         sw.setAttribute("aria-pressed", String(active));
+      }
+      // Position the bar next to the note, in screen
+      // coordinates: the board element's rect plus the
+      // camera transform of the note's world position.
+      const item = api.board.getItem(note.id);
+      if (item) {
+        const [pos, size] = api.geometry.itemBounds(item);
+        const cam = api.view.getCamera();
+        const rect = api.ui.boardEl.getBoundingClientRect();
+        const left = rect.left + (pos.x - cam.x) * cam.zoom;
+        const top = rect.top + (pos.y - cam.y) * cam.zoom;
+        const barH = noteBar.offsetHeight;
+        const above = top - barH - 8;
+        noteBar.style.left = `${Math.max(8, left)}px`;
+        noteBar.style.top = `${above >= 8 ? above : top + size.h * cam.zoom + 8}px`;
       }
     }
 
@@ -381,14 +414,18 @@ export function activate(api: PluginContext): void {
   api.events.on("tool", update);
   api.events.on("selection", update);
   api.events.on("pen", update);
-  // Follow the camera (zoom level).
+  // Follow the camera (zoom level) and the board content,
+  // so the note-colours bar follows a note that is moved.
   api.events.on("camera", update);
+  api.events.on("board", update);
   update();
 }
 
 export function deactivate(): void {
   // The toolbar DOM is built by this plugin; removing it
   // restores the board without a toolbar (the core renders
-  // nothing on its own).
+  // nothing on its own). The note-colours bar lives on the
+  // body, not in the toolbar, so it is removed too.
   document.getElementById("toolbar-wrap")?.remove();
+  document.getElementById("note-colours")?.remove();
 }
