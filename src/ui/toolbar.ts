@@ -96,6 +96,9 @@ export function activate(api: PluginContext): void {
     { id: "eraser", label: "Eraser (X)", icon: ICONS.eraser, key: "X" },
   ] as const;
   const drawBtn = toolButton("tool-draw", "Pen (P)", "Pen", ICONS.pen, () => {
+    // Opening the draw picker dismisses the colour bar, or
+    // the picker would stay hidden behind it.
+    colorBarOpen = false;
     const cur = api.ui.getTool();
     const isDraw = DRAW_TOOLS.some((d) => d.id === cur);
     api.ui.setTool(isDraw ? cur : drawBtn.dataset.draw ?? "pen");
@@ -214,10 +217,18 @@ export function activate(api: PluginContext): void {
   // clicked again or a colour is picked. While it is open
   // the draw picker hides, so only one flyout shows.
   let colorBarOpen = false;
+  // The tool at the last update. A tool change dismisses
+  // the colour bar, or the draw picker would stay hidden
+  // behind it when the user switches tools by keyboard.
+  let lastTool = "";
 
   let lastKey = "";
   function update(): void {
     const tool = api.ui.getTool();
+    if (tool !== lastTool) {
+      colorBarOpen = false;
+      lastTool = tool;
+    }
     const selected = api.board.getSelected();
     const penColor = api.pen.getColor();
     const note = selectedNote();
