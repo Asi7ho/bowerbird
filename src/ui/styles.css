@@ -641,6 +641,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #toolbar .palette#shape-picker { top: 140px; }
 #toolbar .palette .shape-option {
   width: 36px; height: 36px; padding: 0;
+}
 /* The shape picker's filled/outline switch: two small
    text buttons at the top of the flyout. */
 #toolbar .palette .shape-mode {
