@@ -68,7 +68,12 @@ const API_TEST_PLUGIN_MANIFEST = {
 // plugin is off by default and only the final check enables
 // it, so its card cannot disturb the earlier checks.
 const API_TEST_PLUGIN_MAIN = `
-export function activate(api) {
+export async function activate(api) {
+  // Live counters for the handlers, left on the window so a
+  // later check can tell whether another plugin managed to
+  // trigger this plugin's registrations.
+  const counts = { cmd: 0, action: 0, shortcut: 0 };
+  window.__apiTestCounts = counts;
   const id = api.board.addItem(
     { Text: { text: "API card\\n- [ ] one\\n- [ ] two", bold: false, size: 16, color: "#1A1A1A" } },
     { x: 900, y: 400 }, { w: 320, h: 120 },
@@ -93,7 +98,7 @@ export function activate(api) {
     kind: "APIAction",
     title: "API action card",
     render: () => '<div style="padding:12px">API action card</div>',
-    onAction: (action, item) => { actionSeen = action + ":" + item.id; },
+    onAction: (action, item) => { counts.action++; actionSeen = action + ":" + item.id; },
     onDoubleClick: (item) => { dblSeen = item.id; },
   });
   const frameItem = { id: 901, pos: { x: 0, y: 0 }, size: { w: 300, h: 200 }, group: null, kind: { Plugin: { plugin: "api-test-plugin", kind: "APIFrame", data: {} } } };
@@ -109,12 +114,64 @@ export function activate(api) {
   // and dispatch the shortcut through the API.
   let shortcutSeen = false;
   api.ui.registerTool({ id: "apitest", title: "API test tool" });
-  api.ui.registerShortcut({ key: "j", title: "API test shortcut", run: () => { shortcutSeen = true; } });
+  api.ui.registerShortcut({ key: "j", title: "API test shortcut", run: () => { counts.shortcut++; shortcutSeen = true; } });
   const toolDef = api.ui.getToolDef("plugin:api-test-plugin:apitest");
   const toolMiss = api.ui.getToolDef("plugin:api-test-plugin:nope");
   const shortcutOk = api.ui.dispatchShortcut("j");
   const shortcutMiss = api.ui.dispatchShortcut("z");
-  window.__apiTest = { id, before, after, isFrameFrame, isFrameText, actionOk, dblOk, actionMiss, dblMiss, actionSeen, dblSeen, toolDef: toolDef ? { id: toolDef.id, title: toolDef.title, pluginId: toolDef.pluginId } : null, toolMiss, shortcutOk, shortcutMiss, shortcutSeen };
+  // A command: register it and run it ourselves. Running
+  // another plugin's command is rejected, but our own is
+  // always allowed.
+  api.ui.registerCommand({ id: "api-cmd", title: "API test command", run: () => { counts.cmd++; } });
+  await api.ui.runCommand("api-test-plugin", "api-cmd");
+  window.__apiTest = { id, before, after, isFrameFrame, isFrameText, actionOk, dblOk, actionMiss, dblMiss, actionSeen, dblSeen, toolDef: toolDef ? { id: toolDef.id, title: toolDef.title, pluginId: toolDef.pluginId } : null, toolMiss, shortcutOk, shortcutMiss, shortcutSeen, cmdCount: counts.cmd, actionCount: counts.action, shortcutCount: counts.shortcut };
+}
+export function deactivate() {}
+`;
+
+// Probes the api-test plugin's registrations and the core's
+// own surface: every cross-plugin attempt must throw, and
+// our own command and shortcut must still work. The results
+// are left on the window for the e2e check. The controller
+// probe runs last: if the gate ever failed, a fake controller
+// would break the board for every check after this one.
+const ISOLATION_TEST_PLUGIN_MANIFEST = {
+  id: "isolation-test-plugin",
+  name: "Isolation Test Plugin",
+  version: "0.1.0",
+  apiVersion: "2",
+  description: "Probes another plugin's registrations to prove they are isolated.",
+  permissions: [],
+  main: "main.ts",
+};
+
+const ISOLATION_TEST_PLUGIN_MAIN = `
+export async function activate(api) {
+  // Wait for the victim to have activated (its result object
+  // is set at the end of its activate), so the probes run
+  // against registered handlers, not an empty registry.
+  for (let i = 0; i < 50 && !window.__apiTest; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  const r = {};
+  const probe = async (key, fn) => {
+    try { await fn(); r[key] = false; } catch { r[key] = true; }
+  };
+  await probe("runCommandThrew", () => api.ui.runCommand("api-test-plugin", "api-cmd"));
+  await probe("shortcutThrew", () => api.ui.dispatchShortcut("j"));
+  const victimItem = { id: 902, pos: { x: 0, y: 0 }, size: { w: 260, h: 96 }, group: null, kind: { Plugin: { plugin: "api-test-plugin", kind: "APIAction", data: {} } } };
+  await probe("actionThrew", () => api.cards.dispatchAction("ping", victimItem));
+  await probe("dblThrew", () => api.cards.dispatchDoubleClick(victimItem));
+  await probe("emitThrew", () => api.events.emit("board"));
+  let ownCmd = false;
+  api.ui.registerCommand({ id: "iso-cmd", title: "Isolation test command", run: () => { ownCmd = true; } });
+  await api.ui.runCommand("isolation-test-plugin", "iso-cmd");
+  r.ownCmdRan = ownCmd;
+  let ownShortcut = false;
+  api.ui.registerShortcut({ key: "x", title: "Isolation test shortcut", run: () => { ownShortcut = true; } });
+  r.ownShortcutRan = api.ui.dispatchShortcut("x") && ownShortcut;
+  await probe("controllerThrew", () => api.board.registerController({}));
+  window.__isolationTest = r;
 }
 export function deactivate() {}
 `;
@@ -204,6 +261,8 @@ async function main() {
   fs.mkdirSync(apiTestPluginDir, { recursive: true });
   const permTestPluginDir = path.join(pluginsDir, "perm-test-plugin");
   fs.mkdirSync(permTestPluginDir, { recursive: true });
+  const isoTestPluginDir = path.join(pluginsDir, "isolation-test-plugin");
+  fs.mkdirSync(isoTestPluginDir, { recursive: true });
   fs.writeFileSync(boardPath, JSON.stringify(EMPTY_BOARD));
   fs.writeFileSync(path.join(testPluginDir, "manifest.json"), JSON.stringify(TEST_PLUGIN_MANIFEST, null, 2));
   fs.writeFileSync(path.join(testPluginDir, "main.ts"), TEST_PLUGIN_MAIN);
@@ -211,6 +270,8 @@ async function main() {
   fs.writeFileSync(path.join(apiTestPluginDir, "main.ts"), API_TEST_PLUGIN_MAIN);
   fs.writeFileSync(path.join(permTestPluginDir, "manifest.json"), JSON.stringify(PERM_TEST_PLUGIN_MANIFEST, null, 2));
   fs.writeFileSync(path.join(permTestPluginDir, "main.ts"), PERM_TEST_PLUGIN_MAIN);
+  fs.writeFileSync(path.join(isoTestPluginDir, "manifest.json"), JSON.stringify(ISOLATION_TEST_PLUGIN_MANIFEST, null, 2));
+  fs.writeFileSync(path.join(isoTestPluginDir, "main.ts"), ISOLATION_TEST_PLUGIN_MAIN);
 
   const readBoard = () => JSON.parse(fs.readFileSync(boardPath, "utf8"));
   const strokes = () => readBoard().items.filter((it) => "Stroke" in it.kind);
@@ -664,6 +725,11 @@ async function main() {
       assert.equal(result.shortcutOk, true);
       assert.equal(result.shortcutSeen, true);
       assert.equal(result.shortcutMiss, false);
+      // Its own command ran once, and its own action and
+      // shortcut handlers each ran once.
+      assert.equal(result.cmdCount, 1);
+      assert.equal(result.actionCount, 1);
+      assert.equal(result.shortcutCount, 1);
       // The write landed on disk: the first task line is
       // checked.
       const card = readBoard().items.find((it) => it.id === result.id);
@@ -674,6 +740,33 @@ async function main() {
         const text = await page.locator(`.card-decorations-right[data-for="${result.id}"]`).first().textContent().catch(() => "");
         return (text ?? "").includes("1/2") ? true : null;
       });
+    });
+
+    await check("a plugin cannot trigger another plugin's registrations", async () => {
+      // The api-test plugin (the victim) is already enabled
+      // and re-activates on this reload, so its handlers are
+      // registered and its counters are reset to one own
+      // trigger each.
+      assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("isolation-test-plugin", true)), true);
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: 15000 });
+      const iso = await waitFor("isolation test result on the page", () => page.evaluate(() => window.__isolationTest ?? null));
+      // Every cross-plugin attempt threw.
+      assert.equal(iso.runCommandThrew, true);
+      assert.equal(iso.shortcutThrew, true);
+      assert.equal(iso.actionThrew, true);
+      assert.equal(iso.dblThrew, true);
+      assert.equal(iso.emitThrew, true);
+      assert.equal(iso.controllerThrew, true);
+      // Its own registrations still work.
+      assert.equal(iso.ownCmdRan, true);
+      assert.equal(iso.ownShortcutRan, true);
+      // And the victim's handlers did not run again: the
+      // attempts threw before reaching them.
+      const counts = await page.evaluate(() => window.__apiTestCounts);
+      assert.equal(counts.cmd, 1);
+      assert.equal(counts.action, 1);
+      assert.equal(counts.shortcut, 1);
     });
 
     await check("a voice note records and lands as an audio card", async () => {
