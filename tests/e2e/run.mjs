@@ -1132,10 +1132,17 @@ async function main() {
         id++;
       }
       board.next_id = id;
+      const before = await page.evaluate(() => document.querySelectorAll("#cards .card").length);
       const tmp2 = `${boardPath}.tmp`;
       fs.writeFileSync(tmp2, JSON.stringify(board));
       fs.renameSync(tmp2, boardPath);
-      await new Promise((r) => setTimeout(r, 1500));
+      // Wait for the live-follow reload before pressing F:
+      // the card count can only grow once the new board
+      // lands (the old cards stay, the new ones add).
+      await waitFor("models reloaded", async () => {
+        const n = await page.evaluate(() => document.querySelectorAll("#cards .card").length);
+        return n > before ? true : null;
+      });
       await page.keyboard.press("f");
       await new Promise((r) => setTimeout(r, 500));
       const count = await page.evaluate(() => document.querySelectorAll("#model3d-layer").length);
@@ -1184,10 +1191,19 @@ async function main() {
         board.items.push({ id: id++, pos: { x: 100 + col * 360, y: 100 + row * 120 }, size: { w: 320, h: 80 }, group: null, kind: { Text: { text: `card ${i}`, bold: false, size: 16, color: "#1A1A1A" } } });
       }
       board.next_id = id;
+      const before = await page.evaluate(() => document.querySelectorAll("#cards .card").length);
       const tmp2 = `${boardPath}.tmp`;
       fs.writeFileSync(tmp2, JSON.stringify(board));
       fs.renameSync(tmp2, boardPath);
-      await new Promise((r) => setTimeout(r, 1500));
+      // Wait for the live-follow reload, not a fixed sleep:
+      // pressing F before the swap fits the old board, and
+      // the count below then only ever sees the cards in
+      // that viewport. The count can only grow once the new
+      // board lands (the old cards stay, the new ones add).
+      await waitFor("wide board reloaded", async () => {
+        const n = await page.evaluate(() => document.querySelectorAll("#cards .card").length);
+        return n > before ? true : null;
+      });
       await page.keyboard.press("f");
       let shown = 0;
       for (let i = 0; i < 20; i++) {
