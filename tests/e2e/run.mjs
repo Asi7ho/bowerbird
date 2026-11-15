@@ -483,6 +483,24 @@ async function main() {
       assert.ok(fs.existsSync(image.kind.Image.path), "embedded asset file exists on disk");
     });
 
+    await check("dropping an image file adds an image card", async () => {
+      // A synthetic drop carrying a 1x1 PNG, the way a file
+      // dragged from Finder arrives: bytes, never a path.
+      // Only the clipboard paste was covered before; the drop
+      // path through window drop + dropPaths was not.
+      await page.evaluate(() => {
+        const dt = new DataTransfer();
+        const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAwMCAO+ip1sAAAAASUVORK5CYII="), (c) => c.charCodeAt(0));
+        dt.items.add(new File([bytes], "dropped.png", { type: "image/png" }));
+        document.body.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, clientX: 640, clientY: 400, dataTransfer: dt }));
+      });
+      const image = await waitFor("dropped image in board.json", () => {
+        const found = readBoard().items.filter((it) => "Image" in it.kind);
+        return found.length === 2 ? found[1] : null;
+      });
+      assert.ok(fs.existsSync(image.kind.Image.path), "embedded asset file exists on disk");
+    });
+
     await check("F zooms to fit the whole board", async () => {
       // Zoom in until the CI cards at world (100, 100) are
       // pushed off the left edge — they stay in the DOM
