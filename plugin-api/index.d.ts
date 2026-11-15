@@ -803,6 +803,14 @@ export interface PluginContext {
     // stays open to every plugin, so a palette can show
     // them; running them is what is restricted.
     runCommand: (pluginId: string, commandId: string) => Promise<void>;
+    // Routing: the command palette is a list the user picks
+    // from, not an executor. When the user picks a plugin
+    // command, the palette reports the pick here and the host
+    // runs the command as its owning plugin. Only the
+    // command palette may call this; any other plugin gets
+    // an error. A plugin runs its own commands with
+    // runCommand.
+    routeCommand: (pluginId: string, commandId: string) => Promise<void>;
     setTool: (id: string) => void;
     // The current tool id ("select", "pen", "connector", a
     // shape kind, or a plugin tool's full id). The toolbar

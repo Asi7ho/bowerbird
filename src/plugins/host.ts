@@ -787,6 +787,24 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
         requireOwn(pid, "run a command");
         await runPluginCommand(pid, cid);
       },
+      // Routing, not executing: the command palette is a list
+      // the user picks from, not an executor. When the user
+      // picks a plugin command, the palette reports the pick
+      // here and the host runs the command as its owning
+      // plugin — the command's `run` closure already belongs
+      // to that plugin, so it cannot do anything the plugin
+      // could not do itself. Only the palette may route: any
+      // other plugin calling this is trying to trigger
+      // another plugin's command, which isolation forbids.
+      // The id is safe to check: the bundled palette is
+      // loaded from the app's own plugins directory, its
+      // manifest is always in `loaded` (even when disabled),
+      // and installing a plugin with a duplicate id is
+      // rejected, so no other plugin can hold this id.
+      routeCommand: async (pid: string, cid: string) => {
+        if (pluginId !== "command-palette") throw new Error("only the command palette can route a command");
+        await runPluginCommand(pid, cid);
+      },
       setTool: (id: string) => host!.setTool(id),
       getTool: () => host!.getTool(),
       setToolbarToolsEl: (el: HTMLElement) => {
