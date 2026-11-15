@@ -538,6 +538,28 @@ export function allocId(board: Board): number {
   return board.next_id;
 }
 
+// A board file can carry two cards with the same id —
+// a stale next_id, a bad import, hand-editing. A duplicate
+// id used to kill search outright (MiniSearch throws on
+// duplicate document ids), so heal it on load: the first
+// card keeps the id, later ones get fresh ids. References
+// to the duplicated id (a connector endpoint, a group) are
+// ambiguous by construction, so they keep pointing at the
+// first card, which is the one that kept the id.
+export function healDuplicateIds(board: Board): void {
+  // next_id is the last allocated id, so it can lag behind
+  // the highest id on a corrupt board; allocating from a
+  // stale next_id could hand out an id already in use.
+  for (const it of board.items) {
+    if (it.id > board.next_id) board.next_id = it.id;
+  }
+  const seen = new Set<number>();
+  for (const it of board.items) {
+    if (seen.has(it.id)) it.id = allocId(board);
+    else seen.add(it.id);
+  }
+}
+
 export function select(board: Board, selected: number[], id: number, additive: boolean): number[] {
   const out = additive ? [...selected] : [];
   const it = boardGet(board, id);
