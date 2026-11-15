@@ -802,32 +802,39 @@ async function main() {
     });
 
     await check("a voice note records and lands as an audio card", async () => {
-      // No microphone in CI: stand in a looped speech sample
-      // for getUserMedia, so the real record → embed →
-      // transcribe → card flow runs on words Whisper can
-      // recognise. The first real click resumes the context.
+      // No microphone in CI, and live capture through a
+      // looped AudioContext proved environment-sensitive:
+      // in headless CI the recorder could land silence even
+      // with the model cached and the source sounding, so
+      // the card landed with an empty transcript. Instead
+      // the recorder itself is stood in: it delivers the
+      // speech fixture as the recorded data, deterministi-
+      // cally. The plugin's record → embed → transcribe →
+      // card flow, and Whisper itself, still run for real;
+      // only the microphone capture is faked. The fixture
+      // is MP3 data; decodeAudioData sniffs the format from
+      // the bytes, so the blob's webm type does not matter.
       await page.addInitScript((speechB64) => {
-        const ctx = new AudioContext();
-        // Exposed so the check can wait for the context to
-        // actually be running before recording: a suspended
-        // context records silence, Whisper returns nothing,
-        // and the card lands with an empty transcript.
-        window.__speechCtx = ctx;
-        const dest = ctx.createMediaStreamDestination();
-        const ready = (async () => {
-          const bytes = Uint8Array.from(atob(speechB64), (c) => c.charCodeAt(0));
-          const buf = await ctx.decodeAudioData(bytes.buffer);
-          const src = ctx.createBufferSource();
-          src.buffer = buf;
-          src.loop = true;
-          src.connect(dest);
-          src.start();
-          await ctx.resume();
-        })();
-        window.addEventListener("pointerdown", () => void ctx.resume(), { once: true });
-        navigator.mediaDevices.getUserMedia = async () => {
-          await ready;
-          return dest.stream;
+        const bytes = Uint8Array.from(atob(speechB64), (c) => c.charCodeAt(0));
+        navigator.mediaDevices.getUserMedia = async () => new MediaStream();
+        window.MediaRecorder = class {
+          static isTypeSupported(m) { return m === "audio/webm" || m === ""; }
+          constructor(stream, opts) {
+            this.stream = stream;
+            this.mimeType = opts?.mimeType || "audio/webm";
+            this.state = "inactive";
+            this.ondataavailable = null;
+            this.onstop = null;
+          }
+          start() {
+            this.state = "recording";
+            const blob = new Blob([bytes], { type: this.mimeType });
+            setTimeout(() => this.ondataavailable?.({ data: blob }), 50);
+          }
+          stop() {
+            this.state = "inactive";
+            setTimeout(() => this.onstop?.(), 50);
+          }
         };
       }, SPEECH_B64);
       assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("voice-notes", true)), true);
@@ -863,14 +870,6 @@ async function main() {
       const cy = noteBox.y + noteBox.height / 2;
       await doubleClick(page, cx, cy);
       await page.locator("textarea.note-edit").waitFor({ timeout: 10000 });
-      // The double-click resumes the speech context, but
-      // the resume is asynchronous: wait until it is
-      // actually running, so the recording hears the looped
-      // sample instead of silence.
-      await waitFor("speech context running", async () => {
-        const state = await page.evaluate(() => window.__speechCtx?.state);
-        return state === "running" ? true : null;
-      });
       const mic = page.locator(".note-edit-mic");
       assert.equal(await mic.count(), 1);
       await mic.click();
@@ -879,8 +878,9 @@ async function main() {
       // sentence rather than a fragment.
       await new Promise((resolve) => setTimeout(resolve, 3000));
       await page.locator(".vn-stop").click();
-      // The card lands after transcription, and the first run
-      // downloads the model, so the wait is generous.
+      // The card lands after transcription; the model ships
+      // with the app, so the wait is for inference, not a
+      // download.
       await page.locator("text=voice-note").first().waitFor({ timeout: 180000 });
       const audios = readBoard().items.filter((it) => "Audio" in it.kind);
       assert.equal(audios.length, 1);
