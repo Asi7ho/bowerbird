@@ -12,29 +12,29 @@ Link cards are previews only. They do not embed web pages.
 
 The board. Notes, photos, links, audio, video and colour cards on an infinite canvas.
 
-![Sketching with the pen](screenshots/pen-sketch.gif)
+![Drawing with the pen](screenshots/pen-sketch.gif)
 
-Sketch with the pen.
+Draw with the pen.
 
-![Double-click to add a note](screenshots/create-note.gif)
+![Double-click to add notes](screenshots/create-note.gif)
 
-Double-click anywhere to add a note.
+Double-click anywhere to add notes.
 
-![Selecting two cards and grouping them](screenshots/group-cards.gif)
+![Grouping cards and renaming the group](screenshots/group-cards.gif)
 
-Select cards and group them with Ctrl+G. They move together.
+Select cards, group them with Ctrl+G, and rename the group.
 
-![Panning and zooming the board](screenshots/pan-zoom.gif)
+![Panning and zooming a board full of cards](screenshots/pan-zoom.gif)
 
-Space + drag to pan, = to zoom in.
+Space + drag to pan, = to zoom in — across a board full of cards.
 
 ![The command palette listing actions and cards](screenshots/command-palette.png)
 
 Ctrl+K opens the command palette. It lists every action and jumps to any card.
 
-![A slide drawn over part of the board](screenshots/presentation.png)
+![Slides drawn over parts of the board](screenshots/presentation.png)
 
-Draw a slide over part of the board and present it.
+Draw slides over parts of the board and present them.
 
 ## Run it
 
