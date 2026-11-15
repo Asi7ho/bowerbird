@@ -1363,10 +1363,20 @@ function registerIpc(): void {
       throw new Error(`plugin file type not allowed: ${ext}`);
     }
     const resolved = path.resolve(dir, relativePath);
-    if (resolved !== dir && !resolved.startsWith(dir + path.sep)) {
+    // Resolve symlinks before the containment check: a symlink
+    // inside the plugin folder could otherwise point the read
+    // at another board's files, outside the folder.
+    let realResolved: string;
+    try {
+      realResolved = fs.realpathSync(resolved);
+    } catch {
+      throw new Error("plugin file not found");
+    }
+    const realDir = fs.realpathSync(dir);
+    if (realResolved !== realDir && !realResolved.startsWith(realDir + path.sep)) {
       throw new Error("plugin file path escapes its folder");
     }
-    return fs.readFileSync(resolved, "utf8");
+    return fs.readFileSync(realResolved, "utf8");
   });
   ipcMain.handle("bowerbird:get-plugin-enabled", () => loadPluginEnabled());
   ipcMain.handle("bowerbird:set-plugin-enabled", (_event, pluginId: string, enabled: boolean) => {
@@ -1671,21 +1681,31 @@ app.whenReady().then(() => {
       if (!dir) return new Response("not found", { status: 404 });
       const ext = path.extname(relativePath).toLowerCase();
       if (![".js", ".ts", ".css", ".json"].includes(ext)) return new Response("not found", { status: 404 });
-      const resolved = path.resolve(dir, relativePath);
-      if (resolved !== dir && !resolved.startsWith(dir + path.sep)) {
+      let resolved = path.resolve(dir, relativePath);
+      // A .js request may be satisfied by a .ts sibling: the
+      // plugin ships TypeScript and the loader asks for JS.
+      if (ext === ".js" && !fs.existsSync(resolved)) {
+        resolved = resolved.slice(0, -3) + ".ts";
+      }
+      // Resolve symlinks before the containment check: a symlink
+      // inside the plugin folder could otherwise point the read
+      // at another board's files, outside the folder.
+      let realResolved: string;
+      try {
+        realResolved = fs.realpathSync(resolved);
+      } catch {
         return new Response("not found", { status: 404 });
       }
-      if (ext === ".ts") {
-        return new Response(transpilePluginTs(resolved), { headers: { "Content-Type": "application/javascript" } });
+      const realDir = fs.realpathSync(dir);
+      if (realResolved !== realDir && !realResolved.startsWith(realDir + path.sep)) {
+        return new Response("not found", { status: 404 });
       }
-      if (ext === ".js" && !fs.existsSync(resolved)) {
-        const tsPath = resolved.slice(0, -3) + ".ts";
-        if (fs.existsSync(tsPath)) {
-          return new Response(transpilePluginTs(tsPath), { headers: { "Content-Type": "application/javascript" } });
-        }
+      const realExt = path.extname(realResolved).toLowerCase();
+      if (realExt === ".ts") {
+        return new Response(transpilePluginTs(realResolved), { headers: { "Content-Type": "application/javascript" } });
       }
-      const data = fs.readFileSync(resolved);
-      const type = ext === ".js" ? "application/javascript" : ext === ".css" ? "text/css" : "application/json";
+      const data = fs.readFileSync(realResolved);
+      const type = realExt === ".js" ? "application/javascript" : realExt === ".css" ? "text/css" : "application/json";
       return new Response(data, { headers: { "Content-Type": type } });
     } catch {
       return new Response("not found", { status: 404 });
