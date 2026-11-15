@@ -1265,6 +1265,48 @@ async function main() {
         return count === "" ? true : null;
       });
     });
+
+    await check("a backup restores the board to its snapshot", async () => {
+      // Backups are made at most once an hour on save, so the
+      // suite's first save left one snapshot: the board as it
+      // was before the checks built on it. listBackups returns
+      // only the newest entry. Last check: restoring reverts
+      // everything the suite added since.
+      const snapshot = await waitFor("a backup exists", async () => {
+        const list = await page.evaluate(() => window.bowerbird.listBackups());
+        return list.length >= 1 ? list[0] : null;
+      });
+      // Change the board after the snapshot, by writing the
+      // file directly (the fit check's pattern): the watcher
+      // follows it live, no pointer aim needed.
+      const board = readBoard();
+      let id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
+      board.items.push({ id, pos: { x: 5000, y: 5000 }, size: { w: 320, h: 80 }, group: null, kind: { Text: { text: "Doomed note", bold: false, size: 16, color: "#1A1A1A" } } });
+      board.next_id = id + 1;
+      const tmp2 = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp2, JSON.stringify(board));
+      fs.renameSync(tmp2, boardPath);
+      await new Promise((r) => setTimeout(r, 1500));
+      await waitFor("doomed note followed live", () =>
+        textCards().some((it) => it.kind.Text.text === "Doomed note"),
+      );
+      await page.evaluate((name) => window.bowerbird.restoreBackup(name), snapshot.name);
+      await waitFor("board.json restored to the snapshot", () => {
+        const restored = readBoard();
+        return (
+          restored.items.length === snapshot.items &&
+          !textCards().some((it) => it.kind.Text.text === "Doomed note")
+        );
+      });
+      // The file is restored; reload proves the app loads it.
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: 15000 });
+      await waitFor("board renders after restore", async () => {
+        const n = await page.evaluate(() => document.querySelectorAll("#cards .card").length);
+        return n >= 1 ? true : null;
+      });
+      assert.equal(textCards().some((it) => it.kind.Text.text === "Doomed note"), false);
+    });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
     console.log(`  FAIL  setup: ${String(error.message).split("\n")[0]}`);
