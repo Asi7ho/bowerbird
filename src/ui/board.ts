@@ -26,9 +26,15 @@
 // rect, and the board syncs viewers after each render.
 import type { PluginContext, PluginManifest } from "../plugins/host";
 import {
+  S,
+  ACCENT, ERASER_RADIUS,
+  boardPoint, boardSize, isFrameCard, toScreen, toWorld,
+  type Tool,
+} from "./board-state";
+import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
-  elementPoint, elementSize, isInlineVideo, pressureWidth, rectFromPoints, screenToWorld, smoothStrokePath, smoothStrokePressures, smoothStrokeSamples, strokeMaxWidth, strokePressuresVary,
-  worldToScreen, zoomCamera,
+  isInlineVideo, pressureWidth, rectFromPoints, smoothStrokePath, smoothStrokePressures, smoothStrokeSamples, strokeMaxWidth, strokePressuresVary,
+  zoomCamera,
 } from "../backend/model";
 import { syncModel3DViews, disposeAllModel3DViewers } from "../backend/model3d";
 import { groupBounds, isRotatable, membersBounds, normAngle, rotateAngleFor, rotateHandleWorld, strokePath, svgEl2 } from "./board-geometry";
@@ -44,146 +50,12 @@ export const manifest: PluginManifest = {
   required: true,
 };
 
-// Core tools are select/pen/connector/eraser. Plugin tools are strings of
-// the form "plugin:<pluginId>:<toolId>" (see src/plugins/host.ts); the
-// type stays open so a plugin tool is a valid Tool.
-type Tool = string;
-const ACCENT = "#007AFF";
-
 // The fallback icon for a creation action that offers
 // none of its own, shown beside the text box.
 const MIC_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>`;
 
-// The eraser's reach, in world units: a stroke is erased
-// when the eraser circle overlaps it. 12 is big enough
-// that a sweep feels forgiving, small enough to pick one
-// stroke out of a cluster.
-const ERASER_RADIUS = 12;
-
-// The board's mutable state, gathered into one object so the
-// file can split (board-state / render / input) without every
-// function reaching for module-level lets. All references are
-// S.<name>; the object is created once, at module load, and
-// activate() fills in the fields it owns (api, the DOM).
-// Fields set by activate() start as undefined (the same lie
-// the old `let x!` declarations told) and are guarded by the
-// same checks render() already had (`if (!S.boardEl) return`).
-type DragState = null
-  | { kind: "pan"; last: Pt }
-  | { kind: "move"; lastWorld: Pt; moved: boolean }
-  | { kind: "stroke"; points: Pt[]; pressures: number[] }
-  | { kind: "lasso"; points: Pt[] }
-  | { kind: "erase"; erased: boolean }
-  | { kind: "connector"; from: Anchor; current: Pt }
-  | { kind: "marquee"; start: Pt; current: Pt }
-  | { kind: "shape"; shape: ShapeKind; start: Pt; current: Pt }
-  | { kind: "rotate"; id: number; origRot: number; moved: boolean }
-  | { kind: "resize"; id: number; startWorld: Pt; origW: number; origH: number; moved: boolean };
-
-interface BoardState {
-  api: PluginContext;
-  // The board DOM, built by this plugin in activate().
-  boardEl: HTMLDivElement;
-  gridEl: HTMLDivElement;
-  worldEl: SVGGElement;
-  cardsEl: HTMLDivElement;
-  groupsEl: HTMLDivElement;
-  // The board as last rendered (a copy from api.board.get()).
-  // The render loop reads bg/grid/items from this; the
-  // visible-set check reads it too, so panning does not pay
-  // a fresh board copy per mousemove. Refreshed by render().
-  cachedBoard: Board | null;
-  // Drag path cache (see render): card element plus its two
-  // decoration divs, keyed by card id, rebuilt on each render.
-  cardEls: Map<number, { card: HTMLElement; left?: HTMLElement; right?: HTMLElement }>;
-  // Key of the card/stroke content currently built in the DOM. Camera
-  // moves that leave this key unchanged must not rebuild anything.
-  lastContentKey: number;
-  // Lasso is not a tool of its own — it is a mode of Select,
-  // toggled by L, with no toolbar button.
-  lassoMode: boolean;
-  tool: Tool;
-  editingId: number | null;
-  spaceDown: boolean;
-  drag: DragState;
-  pluginToolDown: boolean;
-  // Double-click tracking: pointer events carry no click count,
-  // so a double-click is two presses close in time and space.
-  lastPointerDown: { x: number; y: number; t: number };
-  // Trackpad zoom coalescing: a pinch sends wheel events at
-  // ~120 Hz; ticks only accumulate a factor, one frame applies
-  // it as a GPU transform, and content rebuilds once, when
-  // the pinch settles.
-  pendingZoomFactor: number;
-  pendingZoomAnchor: Pt | null;
-  zoomFrame: number | null;
-  zoomSettleTimer: ReturnType<typeof setTimeout> | null;
-  // Content refresh during a long pinch: without this, cards
-  // that scroll into view while zooming only appear after
-  // the gesture ends.
-  lastZoomRefreshZoom: number;
-  lastZoomRefreshTime: number;
-  wheelSaveTimer: ReturnType<typeof setTimeout> | null;
-  cursorRaf: number;
-  pendingCursor: Pt | null;
-  // The ring that shows the eraser's reach at the cursor.
-  // It is a body-level div, not part of the board SVG, so
-  // renderSvgOnly() never wipes it mid-drag.
-  eraserRing: HTMLDivElement | null;
-  listenersAttached: boolean;
-  lastAnnouncedSelection: string;
-}
-
-const S: BoardState = {
-  api: undefined as unknown as PluginContext,
-  boardEl: undefined as unknown as HTMLDivElement,
-  gridEl: undefined as unknown as HTMLDivElement,
-  worldEl: undefined as unknown as SVGGElement,
-  cardsEl: undefined as unknown as HTMLDivElement,
-  groupsEl: undefined as unknown as HTMLDivElement,
-  cachedBoard: null,
-  cardEls: new Map(),
-  lastContentKey: 0,
-  lassoMode: false,
-  tool: "select",
-  editingId: null,
-  spaceDown: false,
-  drag: null,
-  pluginToolDown: false,
-  lastPointerDown: { x: 0, y: 0, t: 0 },
-  pendingZoomFactor: 1,
-  pendingZoomAnchor: null,
-  zoomFrame: null,
-  zoomSettleTimer: null,
-  lastZoomRefreshZoom: 1,
-  lastZoomRefreshTime: 0,
-  wheelSaveTimer: null,
-  cursorRaf: 0,
-  pendingCursor: null,
-  eraserRing: null,
-  listenersAttached: false,
-  lastAnnouncedSelection: "",
-};
-
 // ---------------------------------------------------------------- helpers
 
-function toScreen(p: Pt): Pt {
-  return worldToScreen(p, S.api.view.getCamera());
-}
-function toWorld(s: Pt): Pt {
-  return screenToWorld(s, S.api.view.getCamera());
-}
-// The board no longer fills the window: the title bar sits
-// above it, so board-local size and points differ from window
-// size and client points by the bar's height. Every camera
-// centre, cull and input conversion below goes through these,
-// never window.innerWidth/innerHeight or raw clientX/Y.
-function boardSize(): Pt {
-  return elementSize(S.boardEl);
-}
-function boardPoint(clientX: number, clientY: number): Pt {
-  return elementPoint(S.boardEl, clientX, clientY);
-}
 function zoomAt(screen: Pt, factor: number): void {
   S.api.view.setCameraSilent(zoomCamera(S.api.view.getCamera(), screen, factor));
 }
@@ -228,11 +100,6 @@ function eraseAt(world: Pt): boolean {
   S.api.board.removeItems(ids);
   renderSvgOnly();
   return true;
-}
-
-function isFrameCard(it: Item | undefined): boolean {
-  if (!it) return false;
-  return S.api.cards.isFrame(it);
 }
 
 // ---------------------------------------------------------------- rendering
@@ -416,13 +283,6 @@ function renderStrokesAndConnectors(board: Board): void {
   // rebuild every card.
 }
 
-// Groups are sections: every group with two or more members
-// gets a labelled frame around its cards, drawn in the
-// #groups layer. The frame is derived state
-// — its bounds come from the members on every render — so
-// it always follows the group and never needs saving. The
-// frame sits this far outside the group's cards, so the
-// dashed border never touches them.
 function renderGroupFrames(board: Board): void {
   if (!S.groupsEl) return;
   const selected = S.api.board.getSelected();
@@ -1049,9 +909,6 @@ function navigateElements(dir: 1 | -1): void {
 
 // ---------------------------------------------------------------- input
 
-// The rotation for a rotate drag or release: the angle
-// from the card's centre to the pointer, +90 so the
-// handle sits at the top, snapped to 15° with Shift.
 function attachBoardListeners(): void {
 S.boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
   const target = e.target as HTMLElement;
