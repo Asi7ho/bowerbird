@@ -647,7 +647,9 @@ export interface PluginContext {
     // Register this plugin as the board controller: the
     // render, selection, editing and tool functions the core
     // delegates to. The board plugin provides this; other
-    // plugins do not call it. This is how a UI plugin
+    // plugins do not call it. Only the app's own UI may call
+    // it — a plugin that tries is rejected, so no plugin can
+    // replace the board controller. This is how a UI plugin
     // becomes the thing the core delegates to, the same
     // shape as registerSettingsUI.
     registerController: (controller: BoardController) => void;
@@ -748,7 +750,8 @@ export interface PluginContext {
     // Hand the engine the search box elements, built by
     // the core-search plugin. Attaches the input and
     // keyboard listeners. Until this is called, the search
-    // engine has no box to operate on.
+    // engine has no box to operate on. Only the app's own
+    // UI may call it; a plugin that tries is rejected.
     setElements: (els: { input: HTMLInputElement; count: HTMLElement; clear: HTMLButtonElement; results: HTMLElement }) => void;
     // Re-run the search for the current input value, as
     // after a board change.
@@ -792,6 +795,13 @@ export interface PluginContext {
     // drive a plugin tool. The current tool's id alone is
     // getTool; this is the definition behind it.
     getToolDef: (id: string) => (PluginToolDef & { pluginId: string; fullId: string }) | null;
+    // Run a command by its plugin and id. A plugin runs
+    // only its own commands — running another plugin's
+    // command is rejected, so no plugin can make another
+    // plugin act. The app's own UI is exempt: it dispatches
+    // on the user's behalf. Listing commands (listCommands)
+    // stays open to every plugin, so a palette can show
+    // them; running them is what is restricted.
     runCommand: (pluginId: string, commandId: string) => Promise<void>;
     setTool: (id: string) => void;
     // The current tool id ("select", "pen", "connector", a
@@ -802,7 +812,8 @@ export interface PluginContext {
     // Hand the plugin system the toolbar's tool container
     // (the #tools segment), so plugin tool buttons can be
     // added to it. The toolbar plugin provides this; other
-    // plugins do not call it.
+    // plugins do not call it. Only the app's own UI may call
+    // it — a plugin that tries is rejected.
     setToolbarToolsEl: (el: HTMLElement) => void;
     // Hand the plugin system the board DOM elements, built
     // by the core-board plugin: the board element itself,
@@ -810,13 +821,16 @@ export interface PluginContext {
     // handles), the plugin view, overlays, view switcher
     // and toast. The core reads them back through the
     // shell; it does not query them by id. The board plugin
-    // provides these; other plugins do not call it.
+    // provides these; other plugins do not call it. Only the
+    // app's own UI may call it — a plugin that tries is
+    // rejected.
     setBoardElements: (els: { board: HTMLElement; canvas: HTMLElement[]; pluginView: HTMLElement; overlays: HTMLElement; viewSwitcher: HTMLElement; toast: HTMLElement }) => void;
     // Hand the plugin system the panels toggle button, so
     // the plugin system can hide it when no plugin panels
     // exist and mark it active when a panel is open. The
     // title bar plugin provides this; other plugins do
-    // not call it.
+    // not call it. Only the app's own UI may call it — a
+    // plugin that tries is rejected.
     setPanelsToggleEl: (el: HTMLElement) => void;
     openSettings: () => void;
     closeSettings: () => void;
@@ -832,10 +846,13 @@ export interface PluginContext {
     // Every shortcut a plugin registered, with its plugin,
     // so a settings UI can list them alongside the core's.
     listShortcuts: () => Array<{ pluginId: string; pluginName: string; key: string; title: string }>;
-    // Offer a key to every plugin shortcut, in registration
-    // order. True when one ran. The board view calls this
-    // for keys no core handler claims, so a plugin shortcut
-    // works anywhere on the board.
+    // Offer a key to the shortcuts. A plugin dispatches
+    // only its own: the key's owner is the plugin whose
+    // handler would run, and dispatching another plugin's
+    // shortcut is rejected. The board view — the app's own
+    // UI — dispatches for keys no core handler claims, so a
+    // plugin shortcut works anywhere on the board. False
+    // when no shortcut is registered for the key.
     dispatchShortcut: (key: string) => boolean;
     // The board area element: the mount point for board
     // overlays. A UI plugin appends its overlay DOM here.
@@ -843,19 +860,24 @@ export interface PluginContext {
     // The settings plugin registers itself as the settings
     // UI here, so the core can open/close it without knowing
     // which plugin provides it. This is how a UI plugin
-    // becomes the thing the core delegates to.
+    // becomes the thing the core delegates to. Only the
+    // app's own UI may call it — a plugin that tries is
+    // rejected, so no plugin can replace the settings UI.
     registerSettingsUI: (ui: { open: () => void; close: () => void; isOpen: () => boolean; setTab: (tab: string) => void; refresh: () => void }) => void;
     // The settings plugin hands the plugin system the
     // container its settings sections render into, so
     // renderSettingsSections has somewhere to write. This
     // is how a UI plugin provides a shell element through
-    // the API, instead of the core passing DOM in.
+    // the API, instead of the core passing DOM in. Only the
+    // app's own UI may call it — a plugin that tries is
+    // rejected.
     setSettingsSectionsContainer: (el: HTMLElement) => void;
     // The search box container, built by the core-titlebar
     // plugin. The core-search plugin mounts its input,
     // count, clear button and results into it (read it
     // with getSearchBoxEl). Null until the title bar
-    // plugin has activated.
+    // plugin has activated. Only the app's own UI may call
+    // it — a plugin that tries is rejected.
     setSearchBoxEl: (el: HTMLElement) => void;
     getSearchBoxEl: () => HTMLElement | null;
     showPanel: (id: string) => void;
@@ -908,12 +930,15 @@ export interface PluginContext {
     // Route a card action (a click on [data-plugin-action])
     // to the plugin that rendered the card. True when a
     // plugin card handled it. The board view calls this for
-    // clicks on a plugin card's action button.
+    // clicks on a plugin card's action button. A plugin
+    // dispatches actions only on its own cards — dispatching
+    // on another plugin's card is rejected, so no plugin can
+    // run another plugin's action handler.
     dispatchAction: (action: string, item: Item) => boolean;
     // Route a double-click on a plugin card to the plugin
     // that rendered it. True when a plugin card handled it.
     // The board view calls this for double-clicks on a
-    // plugin card.
+    // plugin card. Same ownership rule as dispatchAction.
     dispatchDoubleClick: (item: Item) => boolean;
     // The Audio card's heights: a plain card (no transcript),
     // a card with a transcript hidden, and one with it shown.
@@ -1003,7 +1028,11 @@ export interface PluginContext {
     // Fire a plugin event for every listener. The board view
     // emits "selection" and "tool" when they change, so the
     // toolbar and other UI can follow without polling. A
-    // plugin may emit its own custom event the same way.
+    // plugin may emit its own custom event the same way. A
+    // core event name — board, camera, pen, saving, saved,
+    // save-failed, selection, tool, view — is rejected: only
+    // the core fires those, so no plugin can fake a state
+    // change every other plugin and the core would act on.
     emit: (event: string) => void;
   };
   // Pure geometry, from src/backend/model.ts — no permission needed,
