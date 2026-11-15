@@ -200,6 +200,9 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
   }
 
   function updateUndoButtons(): void {
+    // Node (unit tests) has no document: the buttons only
+    // exist in the renderer.
+    if (typeof document === "undefined") return;
     const undoBtn = document.getElementById("btn-undo") as HTMLButtonElement | null;
     const redoBtn = document.getElementById("btn-redo") as HTMLButtonElement | null;
     if (undoBtn) undoBtn.classList.toggle("dim", undoStack.length === 0);
