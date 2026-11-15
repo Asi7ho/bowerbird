@@ -31,6 +31,7 @@ import {
   worldToScreen, zoomCamera,
 } from "../backend/model";
 import { syncModel3DViews, disposeAllModel3DViewers } from "../backend/model3d";
+import { groupBounds, isRotatable, membersBounds, normAngle, rotateAngleFor, rotateHandleWorld, strokePath, svgEl2 } from "./board-geometry";
 
 export const manifest: PluginManifest = {
   id: "core-board",
@@ -206,12 +207,6 @@ function isFrameCard(it: Item | undefined): boolean {
 
 // ---------------------------------------------------------------- rendering
 
-function svgEl2(tag: string, attrs: Record<string, string>): SVGElement {
-  const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
-  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
-  return el;
-}
-
 // The grid is a CSS background, not SVG nodes: a repeating dot or
 // line pattern whose size and offset follow the camera. Panning
 // then costs two style properties, not rebuilding hundreds of
@@ -319,28 +314,6 @@ function renderSvgOnly(): void {
   renderStrokesAndConnectors(api.board.get());
 }
 
-// A stroke's SVG path string is rebuilt from its
-// points on every render — and renderSvgOnly runs on
-// every mousemove while dragging, so a few long strokes
-// meant rebuilding thousands of coordinates per frame
-// for strokes that had not moved. Cache it per item id:
-// the key is the point count plus the first and last
-// points, which is exactly what changes when a stroke
-// is drawn (points appended) or moved (all points
-// translated). There is no operation that rewrites
-// middle points alone.
-const strokePathCache = new Map<number, { key: string; d: string }>();
-function strokePath(item: Item, points: Pt[], color: string, width: number): string {
-  const first = points[0];
-  const last = points[points.length - 1];
-  const key = `${points.length}:${first.x},${first.y}:${last.x},${last.y}:${color}:${width}`;
-  const hit = strokePathCache.get(item.id);
-  if (hit && hit.key === key) return hit.d;
-  const d = smoothStrokePath(points);
-  strokePathCache.set(item.id, { key, d });
-  return d;
-}
-
 function renderStrokesAndConnectors(board: Board): void {
   const items = board.items;
   const selected = api.board.getSelected();
@@ -420,29 +393,6 @@ function renderStrokesAndConnectors(board: Board): void {
 // it always follows the group and never needs saving. The
 // frame sits this far outside the group's cards, so the
 // dashed border never touches them.
-const GROUP_PAD = 24;
-
-// The bounding box of a set of items, or null when empty.
-// The board plugin reads bounds through api.geometry
-// (the live board); model.itemsBounds needs the board
-// object, which the plugin only gets as a deep copy.
-function membersBounds(members: Item[]): { x: number; y: number; w: number; h: number } | null {
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const it of members) {
-    const [p, s] = api.geometry.itemBounds(it);
-    minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
-    maxX = Math.max(maxX, p.x + s.w); maxY = Math.max(maxY, p.y + s.h);
-  }
-  if (!Number.isFinite(minX)) return null;
-  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
-}
-
-function groupBounds(members: Item[]): { x: number; y: number; w: number; h: number } | null {
-  const b = membersBounds(members);
-  if (!b) return null;
-  return { x: b.x - GROUP_PAD, y: b.y - GROUP_PAD, w: b.w + GROUP_PAD * 2, h: b.h + GROUP_PAD * 2 };
-}
-
 function renderGroupFrames(board: Board): void {
   if (!groupsEl) return;
   const selected = api.board.getSelected();
@@ -461,7 +411,7 @@ function renderGroupFrames(board: Board): void {
   }
   for (const [g, members] of byGroup) {
     if (members.length < 2) continue;
-    const b = groupBounds(members);
+    const b = groupBounds(members, api.geometry.itemBounds);
     if (!b) continue;
     if (b.x > v.x1 || b.y > v.y1 || b.x + b.w < v.x0 || b.y + b.h < v.y0) continue;
     const isSel = members.some((it) => selected.includes(it.id));
@@ -579,16 +529,6 @@ function render(): void {
   api.search.update();
 }
 
-function isRotatable(it: Item | undefined): boolean {
-  if (!it || "Connector" in it.kind) return false;
-  return !isFrameCard(it);
-}
-function rotateHandleWorld(it: Item): Pt {
-  const c = api.geometry.centre(it);
-  const cam = api.view.getCamera();
-  const top = { x: c.x, y: it.pos.y - 28 / cam.zoom };
-  return api.geometry.rotatePoint(top, c, api.geometry.itemRotation(it));
-}
 function updateResizeHandle(): void {
   const el = document.getElementById("resize-handle") as HTMLDivElement;
   const rotEl = document.getElementById("rotate-handle") as HTMLDivElement | null;
@@ -625,8 +565,8 @@ function updateResizeHandle(): void {
     el.style.display = "block";
   }
   if (rotEl) {
-    if (!isRotatable(it)) { rotEl.style.display = "none"; return; }
-    const rs = toScreen(rotateHandleWorld(it));
+    if (!isRotatable(it, isFrameCard)) { rotEl.style.display = "none"; return; }
+    const rs = toScreen(rotateHandleWorld(it, api.view.getCamera()));
     if (rs.x < 0 || rs.y < 0 || rs.x > bs.x || rs.y > bs.y) {
       rotEl.style.display = "none"; return;
     }
@@ -1016,23 +956,17 @@ function cornerHit(id: number, world: Pt): boolean {
 function rotateHit(id: number, world: Pt): boolean {
   const cam = api.view.getCamera();
   const it = api.board.getItem(id);
-  if (!it || !isRotatable(it)) return false;
-  const h = rotateHandleWorld(it);
+  if (!it || !isRotatable(it, isFrameCard)) return false;
+  const h = rotateHandleWorld(it, api.view.getCamera());
   const tol = 18 / cam.zoom;
   return Math.hypot(world.x - h.x, world.y - h.y) <= tol;
-}
-function normAngle(deg: number): number {
-  let d = deg % 360;
-  if (d > 180) d -= 360;
-  if (d <= -180) d += 360;
-  return d;
 }
 function rotateSelected(delta: number): boolean {
   const selected = api.board.getSelected();
   let changed = false;
   for (const id of selected) {
     const it = api.board.getItem(id);
-    if (!it || !isRotatable(it)) continue;
+    if (!it || !isRotatable(it, isFrameCard)) continue;
     api.board.setItemRotation(id, normAngle(api.geometry.itemRotation(it) + delta));
     changed = true;
   }
@@ -1074,7 +1008,7 @@ function navigateElements(dir: 1 | -1): void {
   let c: Pt;
   if (target.group !== null) {
     const members = board.items.filter((it) => it.group === target.group);
-    const b = membersBounds(members);
+    const b = membersBounds(members, api.geometry.itemBounds);
     c = b ? { x: b.x + b.w / 2, y: b.y + b.h / 2 } : api.geometry.centre(target);
   } else {
     c = api.geometry.centre(target);
@@ -1089,13 +1023,6 @@ function navigateElements(dir: 1 | -1): void {
 // The rotation for a rotate drag or release: the angle
 // from the card's centre to the pointer, +90 so the
 // handle sits at the top, snapped to 15° with Shift.
-function rotateAngleFor(world: Pt, it: Item, shiftKey: boolean): number {
-  const c = api.geometry.centre(it);
-  let deg = Math.atan2(world.y - c.y, world.x - c.x) * 180 / Math.PI + 90;
-  if (shiftKey) deg = Math.round(deg / 15) * 15;
-  return normAngle(deg);
-}
-
 function attachBoardListeners(): void {
 boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
   const target = e.target as HTMLElement;
@@ -1421,7 +1348,7 @@ function updateDraggedGroupFrames(ids: number[]): void {
       const it = api.board.getItem(id);
       if (it) members.push(it);
     }
-    const b = groupBounds(members);
+    const b = groupBounds(members, api.geometry.itemBounds);
     if (!b) continue;
     const frame = groupsEl.querySelector(`.group-frame[data-group="${g}"]`) as HTMLElement | null;
     if (!frame) continue;
