@@ -36,9 +36,16 @@
 import type { Anchor, ArrangeOptions, Board, BoardController, Camera, Item, Kind, PluginBridge, PluginBuiltinCardDef, PluginCardDecoratorDef, PluginCardDef, PluginCommandDef, PluginContext, PluginCreateActionDef, PluginHost, PluginManifest, PluginOverlayDef, PluginPanelDef, PluginSettingsSectionDef, PluginShortcutDef, PluginToolDef, PluginViewDef, Pt, SettingsUI, ShellElements, Size } from "bowerbird-plugin-api";
 export type { Anchor, ArrangeOptions, Board, BoardController, Camera, Item, Kind, PluginBridge, PluginBuiltinCardDef, PluginCardDecoratorDef, PluginCardDef, PluginCommandDef, PluginContext, PluginCreateActionDef, PluginHost, PluginManifest, PluginOverlayDef, PluginPanelDef, PluginSettingsSectionDef, PluginShortcutDef, PluginToolDef, PluginViewDef, Pt, SettingsUI, ShellElements, Size };
 import { anchorPoint, arrangeItems, AUDIO_H, AUDIO_TRANSCRIPT_HIDDEN_H, AUDIO_TRANSCRIPT_SHOWN_H, boardGet, centre, checklistProgress, clippedEnds, domainOf, elide, escapeHtml, fitCamera, itemBounds, itemRotation, parseHex, rectCrossing, rectFromPoints, renderMarkdownHtml, rotatePoint, segmentIntersectsRect, select, setChecklistDone, tileColorFor, tint, toggleTaskLine } from "../backend/model";
-import { builtinCards, cardDecorators, cards, commands, CORE_EVENTS, createActions, listeners, loaded, overlays, panels, settingsSections, shell, shortcuts, tools, views } from "./host-state";
+import { cardDecorators, cards, commands, CORE_EVENTS, createActions, listeners, loaded, overlays, panels, settingsSections, shell, shortcuts, tools, views } from "./host-state";
 import { applySavedPanelSettings, bindPanelDeps, deactivateMissingActivePanel, deactivatePanelIfActive, ensureResizeHandle, isPanelActive as isPanelActiveKey, registerPanel, setActivePanel, updatePanelDock, wirePanelsToggle } from "./host-panels";
 import { bindViewDeps, getActiveView, refreshActiveView, registerView, renderViewSwitcher, setActiveView } from "./host-views";
+import { bindCardDeps, domId, getCardRenderer, handlePluginCardAction, handlePluginCardDoubleClick, isPluginCard, listPluginCommands, getPluginTool, registerBuiltinCard, runPluginCommand, syncPluginToolButtons } from "./host-cards";
+// getBuiltinCardHtml, getCardHtml, getCardRenderer,
+// getPluginCardSearchText and builtinKindName moved to
+// host-cards with the card registry; re-exported here so
+// existing imports from this module (src/backend/cards.ts,
+// src/backend/search.ts, src/main.ts) keep working.
+export { builtinKindName, getBuiltinCardHtml, getCardHtml, getCardRenderer, getPluginCardSearchText } from "./host-cards";
 // getCardDecorations moved to host-state with the cardDecorators
 // registry; re-exported here so existing imports from this
 // module (src/backend/cards.ts) keep working.
@@ -166,18 +173,10 @@ function offEvent(event: string, handler: () => void): void {
 
 // ---------------------------------------------------------------- helpers
 
-function domId(pluginId: string, kind: string, id: string): string {
-  return `${kind}-plugin-${pluginId}-${id}`.replace(/[^A-Za-z0-9_-]/g, "-");
-}
-
 function requirePerm(manifest: PluginManifest, perm: string): void {
   const perms = manifest.permissions ?? [];
   if (perms.includes(perm)) return;
   throw new Error(`Plugin ${manifest.id} lacks permission ${perm}`);
-}
-
-function isPluginCard(item: Item): item is Item & { kind: { Plugin: { plugin: string; kind: string; data: unknown } } } {
-  return "Plugin" in item.kind;
 }
 
 // ---------------------------------------------------------------- API builder
@@ -1079,159 +1078,6 @@ export function handlePluginShortcut(key: string): boolean {
   return false;
 }
 
-// ---------------------------------------------------------------- views
-
-// ---------------------------------------------------------------- core callbacks
-
-export function getCardRenderer(item: Item): PluginCardDef | null {
-  if (!isPluginCard(item)) return null;
-  return cards.get(`${item.kind.Plugin.plugin}:${item.kind.Plugin.kind}`) ?? null;
-}
-
-// A placeholder card for a plugin card that cannot render:
-// missing plugin, a render that threw, or a builtin render
-// that threw. One helper, not three near-identical divs.
-function fallbackCard(title: string, sub: string, sub2?: string): string {
-  return `<div style="padding:12px"><div class="title" style="font-size:14px">${title}</div><div class="sub" style="font-size:12px">${sub}</div>${sub2 ? `<div class="sub" style="font-size:12px">${sub2}</div>` : ""}</div>`;
-}
-
-export function getCardHtml(item: Item): string | null {
-  if (!isPluginCard(item)) return null;
-  const def = getCardRenderer(item);
-  // Selection class and card chrome are applied by the core
-  // wrapper in main.ts; this returns inner HTML only.
-  if (!def) {
-    const { plugin, kind } = item.kind.Plugin;
-    // A frame card is a container, not content: when its
-    // plugin is disabled, the frame itself goes away rather
-    // than showing a placeholder. The frame is declared in
-    // the plugin's manifest, so the core knows it is a frame
-    // even though the plugin was never activated in this
-    // session — the card's data stays in the board, and
-    // re-enabling the plugin brings the frame back.
-    const manifest = loaded.get(plugin)?.manifest;
-    const isFrame = manifest?.contributions?.cards?.some(
-      (c) => c.kind === kind && c.frame === true
-    );
-    if (isFrame) return null;
-    return fallbackCard("Plugin card", `${escapeHtml(plugin)} — ${escapeHtml(kind)}`, "Install the plugin to view this card. Your data is kept.");
-  }
-  try {
-    return def.render(item, item.kind.Plugin.data);
-  } catch (e) {
-    return fallbackCard("Plugin card failed to render", escapeHtml(String(e)));
-  }
-}
-
-// ---------------------------------------------------------------- built-in card kinds
-
-// The built-in card kinds (Text, Image, Swatch, UrlCard,
-// PdfCard, Audio, Video, Shape). Strokes and connectors are
-// not cards — they are drawn on the canvas, not rendered
-// as card HTML — so they have no builtin renderer.
-export function builtinKindName(item: Item): string | null {
-  if (isPluginCard(item)) return null;
-  if ("Text" in item.kind) return "Text";
-  if ("Image" in item.kind) return "Image";
-  if ("Swatch" in item.kind) return "Swatch";
-  if ("UrlCard" in item.kind) return "UrlCard";
-  if ("PdfCard" in item.kind) return "PdfCard";
-  if ("Audio" in item.kind) return "Audio";
-  if ("Video" in item.kind) return "Video";
-  if ("Model3D" in item.kind) return "Model3D";
-  if ("Shape" in item.kind) return "Shape";
-  return null;
-}
-
-export function registerBuiltinCard(pluginId: string, def: PluginBuiltinCardDef): void {
-  builtinCards.set(def.kind, { ...def, pluginId });
-}
-
-// Render a built-in card through the plugin that registered
-// a renderer for its kind, or null when no plugin provides
-// one (the core then falls back to its own renderer, during
-// migration, or a placeholder). The renderer returns the
-// complete card HTML — outer div, position, size, selection
-// ring and all — exactly as the core's renderer did.
-export function getBuiltinCardHtml(item: Item, plain = false): string | null {
-  const kindName = builtinKindName(item);
-  if (!kindName) return null;
-  const def = builtinCards.get(kindName);
-  if (!def) return null;
-  try {
-    return def.render(item, (item.kind as Record<string, unknown>)[kindName], plain);
-  } catch (e) {
-    return fallbackCard("Card failed to render", escapeHtml(String(e)));
-  }
-}
-
-export function getPluginCardSearchText(item: Item): string | null {
-  if (!isPluginCard(item)) return null;
-  const def = getCardRenderer(item);
-  if (def?.searchText) {
-    try {
-      return def.searchText(item.kind.Plugin.data);
-    } catch {
-      return null;
-    }
-  }
-  return `${item.kind.Plugin.plugin} ${item.kind.Plugin.kind} ${JSON.stringify(item.kind.Plugin.data ?? "")}`;
-}
-
-export function handlePluginCardDoubleClick(item: Item): boolean {
-  if (!isPluginCard(item)) return false;
-  const def = getCardRenderer(item);
-  if (!def?.onDoubleClick) return false;
-  try {
-    def.onDoubleClick(item, item.kind.Plugin.data);
-  } catch (e) {
-    host?.toast(`Plugin card failed: ${String(e)}`);
-  }
-  return true;
-}
-
-export function handlePluginCardAction(action: string, item: Item): boolean {
-  if (!isPluginCard(item)) return false;
-  const def = getCardRenderer(item);
-  if (!def?.onAction) return false;
-  try {
-    def.onAction(action, item, item.kind.Plugin.data);
-  } catch (e) {
-    host?.toast(`Plugin action failed: ${String(e)}`);
-  }
-  return true;
-}
-
-export function getPluginTool(fullId: string): (PluginToolDef & { pluginId: string; fullId: string }) | null {
-  return tools.get(fullId) ?? null;
-}
-
-export function syncPluginToolButtons(activeTool: string): void {
-  for (const t of tools.values()) {
-    const btn = document.getElementById(domId(t.pluginId, "tool", t.id));
-    if (btn) btn.classList.toggle("active", activeTool === t.fullId);
-  }
-}
-
-export function listPluginCommands(): Array<PluginCommandDef & { pluginId: string; pluginName: string }> {
-  const out: Array<PluginCommandDef & { pluginId: string; pluginName: string }> = [];
-  for (const c of commands.values()) {
-    const lp = loaded.get(c.pluginId);
-    out.push({ ...c, pluginName: lp?.manifest.name ?? c.pluginId });
-  }
-  return out;
-}
-
-export async function runPluginCommand(pluginId: string, commandId: string): Promise<void> {
-  const c = commands.get(`${pluginId}:${commandId}`);
-  if (!c) return;
-  try {
-    await c.run();
-  } catch (e) {
-    host?.toast(`Plugin command failed: ${String(e)}`);
-  }
-}
-
 // ---------------------------------------------------------------- loading
 
 // Drop every entry a plugin registered under its
@@ -1517,6 +1363,11 @@ export async function initPlugins(
   bindViewDeps({
     getHost: () => host,
     emitEvent: (event: string) => emitPluginEvent(event),
+  });
+  // The card registry reads the host for toasts on a failed
+  // card action/command (host-cards).
+  bindCardDeps({
+    getHost: () => host,
   });
   // The plugin tool buttons are the plugin system's own DOM,
   // so it syncs their active state when the tool changes —
