@@ -1185,6 +1185,9 @@ function registerIpc(): void {
   });
   ipcMain.handle("bowerbird:context-embed-frame", async (_event, dataUrl: string) => {
     if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:image/")) throw new Error("not an image data URL");
+    // Real frames are 224x224 JPEGs, tens of KB: a multi-MB
+    // data URL would be decoded and written to disk uncapped.
+    if (dataUrl.length > 2000000) throw new Error("frame data URL too large");
     return context.embedImageDataUrl(app, dataUrl);
   });
   ipcMain.handle("bowerbird:context-embed-text", async (_event, text: string) => {
