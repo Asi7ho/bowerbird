@@ -111,6 +111,13 @@ class Model3DView {
     this.load();
   }
 
+  // For sync: the model this view was built for. Card ids
+  // restart at 1 on every board, so a board switch can reuse
+  // an id for a different model — the view must not survive that.
+  get sourceUrl(): string {
+    return this.url;
+  }
+
   private async load(): Promise<void> {
     let template: THREE.Group;
     try {
@@ -398,9 +405,20 @@ export function syncModel3DViews(
     const item = items.find((it) => it.id === id);
     if (!item || !("Model3D" in item.kind)) continue;
     seen.add(id);
+    const url = deps.fileUrl(item.kind.Model3D.path);
     let view = views.get(id);
+    if (view && view.sourceUrl !== url) {
+      // Same card id, different board: the old view draws
+      // the old board's model. Drop it — and its saved view
+      // angle, which belonged to that model — so the new
+      // model mounts fresh.
+      view.dispose();
+      views.delete(id);
+      viewState.delete(id);
+      view = undefined;
+    }
     if (!view) {
-      view = new Model3DView(id, deps.fileUrl(item.kind.Model3D.path), deps, envTexture);
+      view = new Model3DView(id, url, deps, envTexture);
       views.set(id, view);
     }
     // render() rebuilds the card DOM, so the placeholder
