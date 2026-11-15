@@ -14,7 +14,7 @@ import * as coreToolbar from "./ui/toolbar";
 import {
   Board, Camera, Item, Pt, ShapeKind, Size,
   AUDIO_TRANSCRIPT_HIDDEN_H, boardGet, CARD_DECORATIONS_H, centre, clampZoom, elementPoint, elementSize,
-  estimateTextHeight, hitTest, itemsCentre, lassoSelect, marquee, moveSelection,
+  estimateTextHeight, healDuplicateIds, hitTest, itemsCentre, lassoSelect, marquee, moveSelection,
   resizeItem, screenToWorld, select, strokesWithin, zoomCamera,
 } from "./backend/model";
 import { welcomeBoard } from "./backend/welcome";
@@ -346,6 +346,10 @@ async function loadBoardFromJson(json: string, dir: string, preserveUndo = false
   parsed.bg = parsed.bg ?? "#FFFFFF";
   parsed.grid = parsed.grid ?? "Dots";
   parsed.camera = parsed.camera ?? { x: 0, y: 0, zoom: 1 };
+  // A board file can carry two cards with the same id; the
+  // first keeps it and later ones get fresh ids, so search
+  // and every id lookup see a consistent board.
+  healDuplicateIds(parsed);
   // Frames never rotate: a frame carrying rotation from
   // an older board, or set while Presentation was
   // disabled, is healed on load, so what is drawn always
@@ -588,6 +592,9 @@ async function init(): Promise<void> {
       board.bg = board.bg ?? "#FFFFFF";
       board.grid = board.grid ?? "Dots";
       board.camera = board.camera ?? { x: 0, y: 0, zoom: 1 };
+      // Same heal as loadBoardFromJson: startup parses the
+      // board inline and never calls it.
+      healDuplicateIds(board);
       for (const it of board.items) {
         if ("UrlCard" in it.kind) {
           // Old boards may carry embed:true from the embedded-page era;
