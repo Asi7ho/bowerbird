@@ -403,6 +403,11 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
   const requireTrusted = (what: string): void => {
     if (!trusted) throw new Error(`Only the app's own UI can ${what}`);
   };
+  const requireOwn = (ownerId: string, what: string): void => {
+    if (!trusted && ownerId !== pluginId) {
+      throw new Error(`Plugin ${pluginId} cannot ${what}: owned by ${ownerId}`);
+    }
+  };
   // A trial plugin is still a plugin, so it runs with the same
   // permission checks as an installed one — but it must not be
   // able to make anything permanent while it is only being
@@ -752,15 +757,23 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
       registerCommand: (def: PluginCommandDef) => registerCommand(pluginId, def),
       registerCreateAction: (def: PluginCreateActionDef) => registerCreateAction(pluginId, def),
       listCreateActions: () => getCreateActions(),
-      // Commands are user actions, not code: listing and running
-      // them is what Settings' Run buttons already do, so a
-      // palette plugin can do the same without a permission.
-      // A command still runs with its own plugin's API object,
-      // so it cannot do anything its plugin could not do itself.
+      // Commands are user actions, not code: listing them is
+      // what Settings' Run buttons and the palette do, so any
+      // plugin can list them. Running one is different: a
+      // plugin runs only its own commands. The app's own UI
+      // is exempt — it dispatches on the user's behalf — but
+      // a plugin that runs another plugin's command would be
+      // making that plugin act without the user asking it to.
+      // A command still runs with its own plugin's API
+      // object, so it cannot do anything its plugin could not
+      // do itself; the isolation is about who may trigger it.
       listCommands: () => listPluginCommands().map((c) => ({ pluginId: c.pluginId, pluginName: c.pluginName, id: c.id, title: c.title })),
       listTools: () => Array.from(tools.values()).map((t) => ({ pluginId: t.pluginId, pluginName: loaded.get(t.pluginId)?.manifest.name ?? t.pluginId, id: t.fullId, title: t.title })),
       getToolDef: (id: string) => getPluginTool(id),
-      runCommand: (pid: string, cid: string) => runPluginCommand(pid, cid),
+      runCommand: async (pid: string, cid: string) => {
+        requireOwn(pid, "run a command");
+        await runPluginCommand(pid, cid);
+      },
       setTool: (id: string) => host!.setTool(id),
       getTool: () => host!.getTool(),
       setToolbarToolsEl: (el: HTMLElement) => {
@@ -794,7 +807,19 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
       renderSettingsSections: () => renderSettingsSections(),
       registerShortcut: (def: PluginShortcutDef) => registerShortcut(pluginId, def),
       listShortcuts: () => listPluginShortcuts(),
-      dispatchShortcut: (key: string) => handlePluginShortcut(key),
+      // Offer a key to the shortcuts. A plugin dispatches
+      // only its own: the key's owner is the plugin whose
+      // handler would run, and triggering another plugin's
+      // handler is triggering that plugin. The board view —
+      // the app's own UI — dispatches for keys no core
+      // handler claims, so a plugin shortcut works anywhere
+      // on the board. No shortcut for the key means false,
+      // not an error.
+      dispatchShortcut: (key: string) => {
+        const owner = shortcutOwner(key);
+        if (owner !== null) requireOwn(owner, "dispatch a shortcut");
+        return handlePluginShortcut(key);
+      },
       // The board element, built by the core-board plugin.
       // Read from the shell (set by the board plugin when it
       // activates) so a plugin activating after the board
@@ -1281,6 +1306,19 @@ export function listPluginShortcuts(): Array<PluginShortcutDef & { pluginId: str
     out.push({ ...s, pluginName: lp?.manifest.name ?? s.pluginId });
   }
   return out;
+}
+
+// The plugin that owns the first shortcut registered for a
+// key, or null when no plugin registered one. Keys are
+// single, lowercased, no modifiers — the same match rule
+// handlePluginShortcut uses, so the owner here is the
+// plugin whose handler that function would run.
+export function shortcutOwner(key: string): string | null {
+  const lower = key.toLowerCase();
+  for (const s of shortcuts.values()) {
+    if (s.key.toLowerCase() === lower) return s.pluginId;
+  }
+  return null;
 }
 
 export function handlePluginShortcut(key: string): boolean {
