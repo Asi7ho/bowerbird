@@ -59,6 +59,7 @@ const C: BootContext = {
   currentBuildId: "dev",
   boardGeneration: 0,
   penColor: PALETTE[0],
+  shapeOutline: false,
   selected: [],
   toastTimer: null,
   toast: undefined as unknown as (msg: string) => void,
@@ -588,6 +589,9 @@ async function init(): Promise<void> {
     // Drag-preview polygon points for a shape. The board
     // view draws the live shape preview from this.
     shapePreviewPoints: (kind: string, x0: number, y0: number, w: number, h: number) => shapePreviewPoints(kind as ShapeKind, x0, y0, w, h),
+    // Whether new shapes are outlines or filled.
+    getShapeOutline: () => C.shapeOutline,
+    setShapeOutline: (outline: boolean) => { C.shapeOutline = outline; },
     // Set the background of the given text notes, in one
     // save (one undo step). The toolbar's note-colour
     // flyout. Only Text notes are affected.

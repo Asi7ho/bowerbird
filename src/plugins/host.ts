@@ -529,6 +529,8 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
     shapes: {
       list: () => host!.listShapes(),
       previewPoints: (kind: string, x0: number, y0: number, w: number, h: number) => host!.shapePreviewPoints(kind, x0, y0, w, h),
+      getOutline: () => host!.getShapeOutline(),
+      setOutline: (outline: boolean) => host!.setShapeOutline(outline),
     },
     search: {
       setElements: (els: { input: HTMLInputElement; count: HTMLElement; clear: HTMLButtonElement; results: HTMLElement }) => {

@@ -892,23 +892,31 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
   } else if (S.drag.kind === "shape") {
     S.drag.current = world;
     const penColor = S.api.pen.getColor();
+    const outline = S.api.shapes.getOutline();
     const x0 = Math.min(S.drag.start.x, world.x), y0 = Math.min(S.drag.start.y, world.y);
     const w = Math.abs(world.x - S.drag.start.x), h = Math.abs(world.y - S.drag.start.y);
+    // An outline shape previews as a stroke, not a fill.
+    const fillAttr = outline ? "none" : penColor;
+    const strokeAttr = outline ? penColor : "none";
     if (S.drag.shape === "rect") {
       const el = dragPreview("shape-preview", "rect");
       el.setAttribute("x", String(x0)); el.setAttribute("y", String(y0));
       el.setAttribute("width", String(w)); el.setAttribute("height", String(h));
       el.setAttribute("rx", "12");
-      el.setAttribute("fill", penColor); el.setAttribute("fill-opacity", "0.85");
+      el.setAttribute("fill", fillAttr); el.setAttribute("fill-opacity", outline ? "1" : "0.85");
+      el.setAttribute("stroke", strokeAttr); el.setAttribute("stroke-width", outline ? "4" : "0");
     } else if (S.drag.shape === "ellipse") {
       const el = dragPreview("shape-preview", "ellipse");
       el.setAttribute("cx", String(x0 + w / 2)); el.setAttribute("cy", String(y0 + h / 2));
       el.setAttribute("rx", String(w / 2)); el.setAttribute("ry", String(h / 2));
-      el.setAttribute("fill", penColor); el.setAttribute("fill-opacity", "0.85");
+      el.setAttribute("fill", fillAttr); el.setAttribute("fill-opacity", outline ? "1" : "0.85");
+      el.setAttribute("stroke", strokeAttr); el.setAttribute("stroke-width", outline ? "4" : "0");
     } else {
       const el = dragPreview("shape-preview", "polygon");
       el.setAttribute("points", S.api.shapes.previewPoints(S.drag.shape, x0, y0, w, h));
-      el.setAttribute("fill", penColor); el.setAttribute("fill-opacity", "0.85");
+      el.setAttribute("fill", fillAttr); el.setAttribute("fill-opacity", outline ? "1" : "0.85");
+      el.setAttribute("stroke", strokeAttr); el.setAttribute("stroke-width", outline ? "4" : "0");
+      el.setAttribute("stroke-linejoin", "round");
     }
   } else if (S.drag.kind === "rotate") {
     const it = S.api.board.getItem(S.drag.id);
@@ -998,7 +1006,8 @@ window.addEventListener("pointerup", (e: PointerEvent) => {
     const w = Math.abs(world.x - d.start.x), h = Math.abs(world.y - d.start.y);
     if (w >= 10 && h >= 10) {
       const pos = { x: Math.min(d.start.x, world.x), y: Math.min(d.start.y, world.y) };
-      S.api.board.addItem({ Shape: { shape: d.shape, fill: S.api.pen.getColor() } }, pos, { w, h });
+      const outline = S.api.shapes.getOutline();
+      S.api.board.addItem({ Shape: { shape: d.shape, fill: S.api.pen.getColor(), ...(outline ? { outline: true } : {}) } }, pos, { w, h });
     }
   } else if (d.kind === "rotate") {
     // Apply the final point too: a drag's last mousemove

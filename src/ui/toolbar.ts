@@ -211,7 +211,8 @@ export function activate(api: PluginContext): void {
     const penColor = api.pen.getColor();
     const noteBg = noteBgOfSelected();
     const zoom = api.view.getCamera().zoom;
-    const key = `${tool}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}|${colorBarOpen}`;
+    const outline = api.shapes.getOutline();
+    const key = `${tool}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}|${colorBarOpen}|${outline}`;
     if (key === lastKey) return;
     lastKey = key;
 
@@ -278,8 +279,19 @@ export function activate(api: PluginContext): void {
     }
 
     // Shape picker: shown when a shape tool is active.
+    // The top row switches filled and outline shapes.
     shapePicker.style.display = isShape ? "flex" : "none";
     if (isShape && shapePicker.childElementCount === 0) {
+      for (const mode of [{ id: "filled", label: "Filled" }, { id: "outline", label: "Outline" }]) {
+        const b = document.createElement("button");
+        b.className = "shape-mode";
+        b.dataset.mode = mode.id;
+        b.title = mode.label;
+        b.setAttribute("aria-label", mode.label);
+        b.textContent = mode.label;
+        b.addEventListener("click", () => { api.shapes.setOutline(mode.id === "outline"); update(); });
+        shapePicker.appendChild(b);
+      }
       for (const meta of api.shapes.list()) {
         const b = document.createElement("button");
         b.className = "shape-option";
@@ -293,7 +305,12 @@ export function activate(api: PluginContext): void {
     }
     if (isShape) {
       for (const child of Array.from(shapePicker.children)) {
-        (child as HTMLButtonElement).classList.toggle("active", (child as HTMLButtonElement).dataset.shape === tool);
+        const btn = child as HTMLButtonElement;
+        if (btn.dataset.mode) {
+          btn.classList.toggle("active", (btn.dataset.mode === "outline") === outline);
+        } else {
+          btn.classList.toggle("active", btn.dataset.shape === tool);
+        }
       }
     }
 

@@ -22,7 +22,7 @@ export type ShapeKind = "rect" | "ellipse" | "triangle" | "diamond" | "hexagon" 
 
 export type Kind =
   | { Text: { text: string; bold: boolean; size: number; color: string; bg?: string } }
-  | { Shape: { shape: ShapeKind; fill: string } }
+  | { Shape: { shape: ShapeKind; fill: string; outline?: boolean } }
   | { Image: { path: string } }
   | { UrlCard: { url: string; title: string | null; description: string | null; image?: string | null; icon?: string | null; embed?: boolean } }
   | { PdfCard: { path: string; size_bytes: number } }
@@ -421,6 +421,11 @@ export interface PluginHost {
   // clip-path, so the preview is the shape drawn. The board
   // view draws the live shape preview from this.
   shapePreviewPoints: (kind: string, x0: number, y0: number, w: number, h: number) => string;
+  // Whether new shapes are outlines (stroke only) or
+  // filled. The toolbar's shape picker sets it; the board
+  // view reads it when a shape is drawn.
+  getShapeOutline: () => boolean;
+  setShapeOutline: (outline: boolean) => void;
   // Set the background of the given text notes, in one
   // save (one undo step). A board write. Only Text notes
   // are affected; other kinds are ignored.
@@ -739,6 +744,11 @@ export interface PluginContext {
     // (x0, y0) sized w x h. The board view draws the live
     // shape preview from this.
     previewPoints: (kind: string, x0: number, y0: number, w: number, h: number) => string;
+    // Whether new shapes are outlines (stroke only) or
+    // filled. The toolbar's shape picker sets it; the
+    // board view reads it when a shape is drawn.
+    getOutline: () => boolean;
+    setOutline: (outline: boolean) => void;
   };
   // Search: the search engine (MiniSearch + local context
   // search). The engine owns the matching, the dimming and
