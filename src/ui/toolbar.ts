@@ -233,14 +233,18 @@ export function activate(api: PluginContext): void {
     const penColor = api.pen.getColor();
     const note = selectedNote();
     const noteBg = note?.bg ?? null;
-    const zoom = api.view.getCamera().zoom;
+    const cam = api.view.getCamera();
+    const zoom = cam.zoom;
     const outline = api.shapes.getOutline();
     // The note's position is in the key, so the colours
     // bar follows it when it is moved, not only when the
-    // selection or the camera changes.
+    // selection or the camera changes. The camera's pan
+    // offset is in the key too: panning moves the note
+    // on screen without changing its board position or
+    // the zoom, and the bar must follow that as well.
     const noteItem = note ? api.board.getItem(note.id) : null;
     const notePos = noteItem ? api.geometry.itemBounds(noteItem)[0] : null;
-    const key = `${tool}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}|${colorBarOpen}|${outline}|${notePos ? `${notePos.x},${notePos.y}` : ""}`;
+    const key = `${tool}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}|${cam.x},${cam.y}|${colorBarOpen}|${outline}|${notePos ? `${notePos.x},${notePos.y}` : ""}`;
     if (key === lastKey) return;
     lastKey = key;
 
