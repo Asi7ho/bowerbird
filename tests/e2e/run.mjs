@@ -1253,7 +1253,11 @@ async function main() {
       await page.keyboard.press("Enter");
       await waitFor("jumped to the zebra note", async () => {
         const count = (await page.locator("#search-count").textContent()) ?? "";
-        if (!count.startsWith("1 of 1")) return null;
+        // "1 of N": the jump lands on the top-ranked match,
+        // the Zebra note. N can grow past 1 if the background
+        // context search matches a media card too, so do not
+        // pin it to 1.
+        if (!/^1 of \d+/.test(count)) return null;
         return page.evaluate(() =>
           [...document.querySelectorAll("#cards .card.selected")].some((el) =>
             (el.textContent ?? "").includes("Zebra"),
