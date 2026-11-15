@@ -1,10 +1,13 @@
 import { api } from "./backend/api";
+import {
+  type BootContext,
+  healBoardItem, isFrameCard, loadBoardFromJson, resetBoardToWelcome, restoreBoardBackup, startBackgroundIndexing, startPosterBackfill, switchToBoard, syncGroupLabels,
+} from "./boards";
 import { createMedia, type Media } from "./backend/media";
 import { createCardRenderer, SHAPES, shapePreviewPoints, type CardRenderer } from "./backend/cards";
 import { createBoardSearch, type BoardSearch } from "./backend/search";
 import { createUndoStore, type UndoStore } from "./backend/undo";
 import { createDrops, type Drops } from "./backend/drops";
-import { ensureVideoPoster } from "./backend/poster";
 import * as coreBoard from "./ui/board";
 import * as coreCards from "./ui/cards";
 import * as coreSearch from "./ui/search";
@@ -13,7 +16,7 @@ import * as coreTitlebar from "./ui/titlebar";
 import * as coreToolbar from "./ui/toolbar";
 import {
   Board, Camera, Item, Pt, ShapeKind, Size,
-  AUDIO_TRANSCRIPT_HIDDEN_H, boardGet, CARD_DECORATIONS_H, centre, clampZoom, elementPoint, elementSize,
+  boardGet, CARD_DECORATIONS_H, centre, clampZoom, elementPoint, elementSize,
   estimateTextHeight, healDuplicateIds, hitTest, itemsCentre, lassoSelect, marquee, moveSelection,
   resizeItem, screenToWorld, select, strokesWithin, zoomCamera,
 } from "./backend/model";
@@ -22,7 +25,7 @@ import {
   boardClearEditing, boardCommitEditing, boardDeleteSelected,
   boardGetEditingId, boardGetTool, boardGroupSelected, boardRender,
   boardSetTool, boardUngroupSelected, boardUpdateSelection,
-  closeSettingsUI, emitPluginEvent, getBoardElements, getCardRenderer,
+  closeSettingsUI, emitPluginEvent, getBoardElements,
   initPlugins, isSettingsUIOpen,
   openSettingsUI,
   refreshSettingsUI, registerShellElements,
@@ -38,45 +41,15 @@ const PALETTE = ["#1A1A1A", "#E63946", "#2E86AB", "#FF6B35", "#6a4c93", "#2A9D8F
 
 
 // The boot module's mutable state, gathered into one object so
-// the file can split (the board operations move to boards.ts)
+// the file can split (the board operations live in boards.ts)
 // without every function reaching for module-level lets. All
 // references are C.<name>; the object is created once, at module
 // load. The instances (media, search, cards, undoStore, drops)
 // start as undefined and are assigned by the creation calls
 // below, which run at module load in the same order. Fields set
 // by init() (boardEl, cardsEl, toastEl) start as undefined and
-// are filled in when the board plugin activates.
-export interface BootContext {
-  board: Board;
-  boardDir: string;
-  // Build id for this run (git short hash in a packaged build,
-  // "dev" from source). Set at board load; the feedback mail
-  // carries it so a report can be matched to the exact build.
-  currentBuildId: string;
-  // Board generation: bumped on every board load, so async
-  // work started for one board (a PDF render, a search
-  // index, an audio probe) can tell, after an await, that
-  // the user has switched boards and must not write its
-  // result into the new board's card with the same id.
-  boardGeneration: number;
-  penColor: string;
-  selected: number[];
-  toastTimer: ReturnType<typeof setTimeout> | null;
-  // The board DOM is built by the core-board plugin, so these
-  // start unassigned and are read from the shell after the
-  // plugin activates in init(). Before that they must not be
-  // used: the board does not exist yet.
-  boardEl: HTMLDivElement;
-  cardsEl: HTMLDivElement;
-  toastEl: HTMLDivElement;
-  boardSearchVersion: number;
-  media: Media;
-  search: BoardSearch;
-  cards: CardRenderer;
-  undoStore: UndoStore;
-  drops: Drops;
-}
-
+// are filled in when the board plugin activates. The toast
+// callback is wired up after the toast function below.
 const C: BootContext = {
   board: {
     items: [], camera: { x: 0, y: 0, zoom: 1 }, next_id: 0, next_group: 0,
@@ -88,6 +61,7 @@ const C: BootContext = {
   penColor: PALETTE[0],
   selected: [],
   toastTimer: null,
+  toast: undefined as unknown as (msg: string) => void,
   boardEl: undefined as unknown as HTMLDivElement,
   cardsEl: undefined as unknown as HTMLDivElement,
   toastEl: undefined as unknown as HTMLDivElement,
@@ -107,28 +81,11 @@ function toast(msg: string): void {
   if (C.toastTimer) clearTimeout(C.toastTimer);
   C.toastTimer = setTimeout(() => C.toastEl.classList.remove("show"), 4000);
 }
+// The board operations call toast through the context, so wire
+// the context up to this implementation (defined here because
+// the toast DOM is owned by the boot module).
+C.toast = toast;
 
-// Groups are sections: each group carries the label its
-// frame shows. Keep the label map in step with membership:
-// a group with fewer than two members is not a section,
-// so its entry goes; a group with members and no entry
-// gets "Section <id>". Called after every mutation that
-// can change membership, and on load for old boards.
-function syncGroupLabels(b: Board): void {
-  const counts = new Map<number, number>();
-  for (const it of b.items) {
-    if (it.group === null) continue;
-    counts.set(it.group, (counts.get(it.group) ?? 0) + 1);
-  }
-  const labels: Record<number, { label: string }> = b.groups ?? {};
-  for (const key of Object.keys(labels)) {
-    if ((counts.get(Number(key)) ?? 0) < 2) delete labels[Number(key)];
-  }
-  for (const [g, n] of counts) {
-    if (n >= 2 && !labels[g]) labels[g] = { label: `Section ${g}` };
-  }
-  if (Object.keys(labels).length > 0) b.groups = labels; else delete b.groups;
-}
 
 // Media owns the PDF and audio state (see src/media.ts); the
 // context below is how it reads the board and asks the core
@@ -269,249 +226,14 @@ function applyCamera(cam: Camera): boolean {
 // and when new PDF text or context labels land, so a
 // cached index is never stale for the board it covers.
 
-// Replace the board in place, from a JSON string the main
-// process just handed over (a board switch, or a backup
-// restore). The old board's undo, search, context index and
-// media caches are all per-board, so they are cleared, not
-// carried over — a restored board must not undo back into
-// the board it replaced, and its context index is its own
-// file in its own folder.
-// Start indexing the board's media in the background,
-// once the renderer is idle — so the model loads don't
-// compete with the board's first render and the user's
-// first interactions. requestIdleCallback fires when the
-// main thread is quiet; the 10s timeout is the backstop
-// so indexing still starts on a busy board. A search
-// starts indexing at once (see updateSearch), so this
-// delay only ever costs a few seconds of background time.
-function startBackgroundIndexing(): void {
-  const start = () => { void C.search.startContextIndexing(); };
-  if (typeof requestIdleCallback === "function") {
-    requestIdleCallback(start, { timeout: 10000 });
-  } else {
-    setTimeout(start, 2000);
-  }
-}
 
-// Fill in poster frames for videos that predate them — old
-// boards, and the welcome board — so every video card shows
-// its frame instead of a dark tile. One video at a time, in
-// the background once the renderer is idle, like the context
-// indexing: a capture loads a decoder briefly, and doing
-// them all at once would compete with the board's first
-// render. A board switch stops the run: the guard compares
-// the board object, which a load replaces.
-function startPosterBackfill(): void {
-  const start = () => { void runPosterBackfill(); };
-  if (typeof requestIdleCallback === "function") {
-    requestIdleCallback(start, { timeout: 10000 });
-  } else {
-    setTimeout(start, 2000);
-  }
-}
 
-async function runPosterBackfill(): Promise<void> {
-  const boardAtStart = C.board;
-  const pending: Array<{ id: number; source: string }> = [];
-  for (const it of boardAtStart.items) {
-    if ("Video" in it.kind && !it.kind.Video.remote && !it.kind.Video.poster) {
-      pending.push({ id: it.id, source: it.kind.Video.source });
-    }
-  }
-  if (pending.length === 0) return;
-  let filledAny = false;
-  let flushTimer: ReturnType<typeof setTimeout> | null = null;
-  // Save and re-render at most once every two seconds while
-  // posters land, so a board of many videos is not saved
-  // and rebuilt once per poster.
-  const flushSoon = () => {
-    if (flushTimer) return;
-    flushTimer = setTimeout(() => {
-      flushTimer = null;
-      if (C.board !== boardAtStart) return;
-      C.undoStore.saveWithoutUndo();
-      boardRender();
-    }, 2000);
-  };
-  for (const { id, source } of pending) {
-    if (C.board !== boardAtStart) return;
-    const filled = await ensureVideoPoster(source);
-    if (!filled) continue;
-    if (C.board !== boardAtStart) return;
-    // The item may have been deleted or replaced while the
-    // frame was captured: only fill the same video.
-    const current = boardGet(boardAtStart, id);
-    if (!current || !("Video" in current.kind) || current.kind.Video.source !== source || current.kind.Video.poster) continue;
-    current.kind.Video.poster = filled.poster;
-    current.kind.Video.duration = filled.duration;
-    filledAny = true;
-    flushSoon();
-  }
-  if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
-  if (filledAny && C.board === boardAtStart) {
-    C.undoStore.saveWithoutUndo();
-    boardRender();
-  }
-}
-async function loadBoardFromJson(json: string, dir: string, preserveUndo = false): Promise<void> {
-  // Discard an in-progress edit, do not commit it: the incoming
-  // board replaces the outgoing one, and committing would save
-  // the outgoing board to disk after the incoming content was
-  // already read — overwriting a restore or an external change
-  // and leaving disk and memory diverged. (A board switch
-  // commits and saves the edit before calling this, so nothing
-  // is lost there.)
-  boardClearEditing();
-  const oldDir = C.boardDir;
-  const sameBoard = oldDir !== "" && oldDir === dir;
-  // Save the outgoing board's stack before replacing it,
-  // unless this is the same board reloaded (a restore or
-  // a rename): then the stack is kept, not filed away.
-  if (!sameBoard && !preserveUndo && oldDir !== "") {
-    C.undoStore.stashUndoForBoard(oldDir);
-  }
-  const parsed = JSON.parse(json) as Board;
-  parsed.bg = parsed.bg ?? "#FFFFFF";
-  parsed.grid = parsed.grid ?? "Dots";
-  parsed.camera = parsed.camera ?? { x: 0, y: 0, zoom: 1 };
-  // A board file can carry two cards with the same id; the
-  // first keeps it and later ones get fresh ids, so search
-  // and every id lookup see a consistent board.
-  healDuplicateIds(parsed);
-  // Frames never rotate: a frame carrying rotation from
-  // an older board, or set while Presentation was
-  // disabled, is healed on load, so what is drawn always
-  // matches the unrotated rect Presentation plays.
-  // Text cards keep room for their bottom row below the
-  // text: a card saved before that room existed is grown
-  // on load, so the checklist progress never sits on its
-  // text.
-  for (const it of parsed.items) {
-    healBoardItem(it);
-  }
-  // Groups are sections: give every group its label, and
-  // drop labels for groups that no longer have members.
-  syncGroupLabels(parsed);
-  C.board = parsed;
-  C.boardGeneration++;
-  C.boardSearchVersion++;
-  C.boardDir = dir;
-  C.selected = [];
-  boardClearEditing();
-  C.search.reset();
-  const input = document.getElementById("search-input") as HTMLInputElement | null;
-  if (input) input.value = "";
-  // A pending debounced save belongs to the outgoing
-  // board: flush it only if the main process is still on
-  // that board (same-board reload/restore); on a switch
-  // the main process has already moved on, so flushing
-  // would write the old index into the new board's file
-  // — discard it instead, the new board re-indexes.
-  if (oldDir !== "" && oldDir === dir) C.search.flushContextIndex(); else C.search.cancelContextIndexSave();
-  C.search.clearBoardCaches();
-  C.media.clearBoardCaches();
-  C.undoStore.restoreUndoForBoard(dir, sameBoard || preserveUndo);
-  boardRender();
-  void C.search.loadContextIndex();
-  // Index the board's media in the background, so the
-  // first search does not pay the model-load and embedding
-  // cost. It is async and guarded: nothing happens when
-  // everything is already indexed.
-  startBackgroundIndexing();
-  // Fill in poster frames for videos that predate them
-  // (old boards, the welcome board), in the background.
-  startPosterBackfill();
-}
-async function switchToBoard(name: string, preserveUndo = false): Promise<boolean> {
-  try {
-    boardCommitEditing();
-    await api.saveBoard(JSON.stringify(C.board));
-    C.search.flushContextIndex();
-    const loaded = await api.switchBoard(name);
-    await loadBoardFromJson(loaded.json, loaded.board_dir, preserveUndo);
-    toast(`Board: ${name}`);
-    return true;
-  } catch (e) {
-    toast(`Could not switch boards: ${String(e)}`);
-    return false;
-  }
-}
-async function restoreBoardBackup(name: string): Promise<boolean> {
-  try {
-    const loaded = await api.restoreBackup(name);
-    await loadBoardFromJson(loaded.json, loaded.board_dir);
-    toast("Backup restored");
-    return true;
-  } catch (e) {
-    toast(`Could not restore backup: ${String(e)}`);
-    return false;
-  }
-}
-// Reset the board to a fresh welcome board (the settings
-// "Delete all board data" flow). The settings plugin calls
-// this through the API; the core owns the reset itself.
-// Delete first, then build the fresh welcome board in memory
-// and save that — never save the old board after the wipe,
-// or it would come straight back. The corner setting is
-// untouched: reset-board only deletes board data, not app
-// settings.
-async function resetBoardToWelcome(opts?: { confirmed?: boolean }): Promise<boolean> {
-  boardCommitEditing();
-  C.media.stopAudio();
-  C.selected = [];
-  boardClearEditing();
-  try {
-    const showcase = await api.resetBoard(opts);
-    C.board = welcomeBoard(C.boardDir, showcase.pdf_size_bytes, showcase.video_size_bytes);
-    C.board.camera = { x: 0, y: 0, zoom: 1 };
-    closeSettingsUI();
-    C.undoStore.save();
-    boardRender();
-    void C.drops.refreshLinkPreviews();
-    toast("Board data deleted — fresh welcome board restored");
-    return true;
-  } catch (e) {
-    toast(`Reset failed: ${String(e)}`);
-    return false;
-  }
-}
 function allocId(): number {
   C.board.next_id += 1;
   return C.board.next_id;
 }
 
-function isFrameCard(it: Item | undefined): boolean {
-  if (!it || !("Plugin" in it.kind)) return false;
-  // A slide is a frame by its stored kind, not only by its
-  // renderer: frames must never rotate, even if the
-  // Presentation plugin is disabled and no renderer is
-  // registered for them. Other frame kinds still come
-  // from their renderer.
-  if (it.kind.Plugin.plugin === "presentation" && it.kind.Plugin.kind === "slide") return true;
-  return getCardRenderer(it)?.frame === true;
-}
 
-// Heal one loaded item: drop stale tags, un-rotate frames,
-// grow text cards to fit their text plus the bottom row,
-// and grow transcript voice notes so the toggle fits.
-// Shared by loadBoardFromJson and init (which adds its own
-// UrlCard branch on top).
-function healBoardItem(it: Item): void {
-  // Tags are gone: drop any the board still carries,
-  // so they never come back.
-  delete (it as { tags?: unknown }).tags;
-  if (isFrameCard(it)) delete (it as { rotation?: number }).rotation;
-  if ("Text" in it.kind) {
-    const need = estimateTextHeight(it.kind.Text.text, it.kind.Text.size, it.size.w) + CARD_DECORATIONS_H;
-    if (it.size.h < need) it.size.h = need;
-  }
-  // A voice note with a transcript keeps room for its
-  // toggle below the seek: a card saved at the old
-  // hidden height is grown on load, so the toggle fits.
-  if ("Audio" in it.kind && typeof it.kind.Audio.transcript === "string" && it.kind.Audio.transcript.trim().length > 0) {
-    if (it.size.h < AUDIO_TRANSCRIPT_HIDDEN_H) it.size.h = AUDIO_TRANSCRIPT_HIDDEN_H;
-  }
-}
 
 function hitTestWithFrames(b: Board, world: Pt): number | null {
   // A frame is a container, not content: a card inside a frame
@@ -681,7 +403,7 @@ async function init(): Promise<void> {
     try {
       const reloaded = await api.loadBoard();
       if (!reloaded.json) return;
-      await loadBoardFromJson(reloaded.json, reloaded.board_dir);
+      await loadBoardFromJson(C, reloaded.json, reloaded.board_dir);
       emitPluginEvent("board");
       toast("Board updated on disk");
     } catch {
@@ -854,7 +576,7 @@ async function init(): Promise<void> {
     save: () => C.undoStore.save(),
     saveWithoutUndo: () => C.undoStore.saveWithoutUndo(),
     render: () => boardRender(),
-    switchBoard: (name: string, preserveUndo = false) => switchToBoard(name, preserveUndo),
+    switchBoard: (name: string, preserveUndo = false) => switchToBoard(C, name, preserveUndo),
     setTool: (toolName: string) => boardSetTool(toolName),
     getTool: () => boardGetTool(),
     // Zoom around the board centre, by a factor. The
@@ -941,7 +663,7 @@ async function init(): Promise<void> {
     groupSelection: () => boardGroupSelected(),
     ungroupSelection: () => boardUngroupSelected(),
     deleteSelection: () => boardDeleteSelected(),
-    restoreBackup: (name) => restoreBoardBackup(name),
+    restoreBackup: (name) => restoreBoardBackup(C, name),
     getBuildId: () => C.currentBuildId,
     // Media state, for the cards that play or preview media.
     // The raw audio element is never handed out; the plugin
@@ -996,7 +718,7 @@ async function init(): Promise<void> {
       return true;
     },
     pdfFailed: (path) => C.media.pdfFailed.has(path),
-    resetBoard: (opts?: { confirmed?: boolean }) => resetBoardToWelcome(opts),
+    resetBoard: (opts?: { confirmed?: boolean }) => resetBoardToWelcome(C, opts),
     getBoardDir: () => C.boardDir,
     getPanelOrder: () => [...panelOrderList],
     setPanelOrder: (order: string[]) => {
@@ -1062,8 +784,8 @@ async function init(): Promise<void> {
   // cost on top of everything else — and start indexing
   // the board's media once idle, for the same reason.
   void C.search.loadContextIndex();
-  startBackgroundIndexing();
-  startPosterBackfill();
+  startBackgroundIndexing(C);
+  startPosterBackfill(C);
   // Fill in previews for cards that never got one (welcome card, old
   // boards): title, description, image and icon, in the background.
   void C.drops.refreshLinkPreviews();
