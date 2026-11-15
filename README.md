@@ -32,10 +32,6 @@ Space + drag to pan, = to zoom in — across a board full of cards.
 
 Ctrl+K opens the command palette. It lists every action and jumps to any card.
 
-![Slides drawn over parts of the board](screenshots/presentation.png)
-
-Draw slides over parts of the board and present them.
-
 ## Run it
 
 ```sh
