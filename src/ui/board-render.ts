@@ -125,18 +125,32 @@ export function renderSvgOnly(): void {
   renderStrokesAndConnectors(S.api.board.get());
 }
 
-export function renderStrokesAndConnectors(board: Board): void {
-  // The pencil's graphite texture: fine turbulence
-  // displaces the stroke edge, so a pencil line reads
-  // rough and grainy where a pen line is smooth. The
-  // defs are rebuilt on every render, because the SVG
-  // layer is cleared and rebuilt with it.
+// The pencil's graphite texture, defined once in the
+// canvas SVG (the parent of the world group), not in
+// the world group itself: the world group is cleared
+// and rebuilt on every render, so defs inside it would
+// be recreated each time and the turbulence would be
+// re-compiled. A tiny warm-up rect uses the filter at
+// startup, so the first pencil stroke does not pay the
+// first-use compile cost and lag.
+function ensurePencilFilter(): void {
+  const svg = S.worldEl.ownerSVGElement;
+  if (!svg || svg.querySelector("#pencil-texture")) return;
   const defs = svgEl2("defs", {});
   const filter = svgEl2("filter", { id: "pencil-texture", x: "-5%", y: "-5%", width: "110%", height: "110%" });
   filter.appendChild(svgEl2("feTurbulence", { type: "fractalNoise", baseFrequency: "0.9", numOctaves: "2", seed: "7", result: "noise" }));
   filter.appendChild(svgEl2("feDisplacementMap", { in: "SourceGraphic", in2: "noise", scale: "2.5" }));
   defs.appendChild(filter);
-  S.worldEl.appendChild(defs);
+  svg.appendChild(defs);
+  // Warm-up: a 1px rect the filter paints once, so the
+  // turbulence is compiled before the first pencil
+  // stroke. Nearly transparent, so it reads as nothing.
+  const warm = svgEl2("rect", { x: "0", y: "0", width: "1", height: "1", fill: "#1A1A1A", opacity: "0.01", filter: "url(#pencil-texture)" });
+  svg.appendChild(warm);
+}
+
+export function renderStrokesAndConnectors(board: Board): void {
+  ensurePencilFilter();
   const items = board.items;
   const selected = S.api.board.getSelected();
   const v = visibleRect();
