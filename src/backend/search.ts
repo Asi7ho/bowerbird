@@ -583,6 +583,20 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
   }
   let searchDocsCache: { version: number; docs: SearchDoc[]; ms: MiniSearch<SearchDoc> } | null = null;
   function buildMiniSearch(docs: SearchDoc[]): MiniSearch<SearchDoc> {
+    // MiniSearch throws on a duplicate document id, and a
+    // board can carry one: an external edit (or the agent
+    // CLI) can reuse an id, and then every search dies
+    // silently inside the debounced update — no count, no
+    // dimming, no error shown. Keep the first card with an
+    // id; the duplicate stays on the board, just not
+    // separately searchable. (Healing the board itself is a
+    // load-time decision, not this function's.)
+    const seen = new Set<number>();
+    const unique = docs.filter((d) => {
+      if (seen.has(d.id)) return false;
+      seen.add(d.id);
+      return true;
+    });
     const ms = new MiniSearch<SearchDoc>({
       fields: ["title", "headings", "body"],
       storeFields: ["id"],
@@ -591,7 +605,7 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
     // Feed MiniSearch already-normalised text, so its
     // tokenizer sees the same diacritic-free words the
     // rest of Bowerbird search uses, plus CamelCase splits.
-    ms.addAll(docs.map((d) => ({
+    ms.addAll(unique.map((d) => ({
       ...d,
       title: normaliseSearch(`${d.title} ${splitCamel(d.title)}`),
       headings: normaliseSearch(`${d.headings} ${splitCamel(d.headings)}`),
