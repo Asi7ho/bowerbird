@@ -903,8 +903,26 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
         if (declared) return true;
         return getCardRenderer(item)?.frame === true;
       },
-      dispatchAction: (action: string, item: Item) => handlePluginCardAction(action, item),
-      dispatchDoubleClick: (item: Item) => handlePluginCardDoubleClick(item),
+      dispatchAction: (action: string, item: Item) => {
+        // Route a card action to the plugin that rendered the
+        // card — and only that plugin. A plugin dispatches
+        // actions on its own cards; dispatching on another
+        // plugin's card would run that plugin's handler. A
+        // card that is not a plugin card has no owner and no
+        // handler, so it returns false as before. The board
+        // view — the app's own UI — dispatches clicks on any
+        // plugin card's action button.
+        if (isPluginCard(item)) requireOwn(item.kind.Plugin.plugin, "dispatch a card action");
+        return handlePluginCardAction(action, item);
+      },
+      dispatchDoubleClick: (item: Item) => {
+        // Same ownership rule as dispatchAction: only the
+        // plugin that rendered the card handles its
+        // double-click. The board view dispatches
+        // double-clicks on any plugin card.
+        if (isPluginCard(item)) requireOwn(item.kind.Plugin.plugin, "dispatch a card double-click");
+        return handlePluginCardDoubleClick(item);
+      },
       audioHeights: { plain: AUDIO_H, transcriptHidden: AUDIO_TRANSCRIPT_HIDDEN_H, transcriptShown: AUDIO_TRANSCRIPT_SHOWN_H },
     },
     media: {
