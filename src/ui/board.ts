@@ -4,7 +4,7 @@
 // resize/rotate handles and toast — and it owns the render
 // loop and the input loop (pan, zoom, drag, resize/rotate,
 // text edit). It uses only the public API, plus the pure
-// board-model functions in src/model.ts (geometry over the
+// board-model functions in src/backend/model.ts (geometry over the
 // board data it reads through the API). The core never owns
 // board DOM and renders nothing itself.
 //
@@ -20,10 +20,10 @@
 // the core clears it through the board controller below
 // (undo, board switch, reset).
 //
-// The 3D viewer (src/model3d.ts) is a renderer-side helper
-// like the model geometry above: the board preserves
-// Model3D card nodes across renders so their WebGL contexts
-// survive, and mounts viewers on new ones.
+// The 3D viewer (src/backend/model3d.ts) is a renderer-side
+// helper like the model geometry above: one shared WebGL
+// renderer draws every visible model into its card's screen
+// rect, and the board syncs viewers after each render.
 import type { PluginContext, PluginManifest } from "../plugins/host";
 import {
   Anchor, Board, GRID, Item, Pt, ShapeKind,
@@ -44,7 +44,7 @@ export const manifest: PluginManifest = {
 };
 
 // Core tools are select/pen/connector/eraser. Plugin tools are strings of
-// the form "plugin:<pluginId>:<toolId>" (see src/plugins.ts); the
+// the form "plugin:<pluginId>:<toolId>" (see src/plugins/host.ts); the
 // type stays open so a plugin tool is a valid Tool.
 type Tool = string;
 const ACCENT = "#007AFF";
@@ -2111,7 +2111,7 @@ export function activate(a: PluginContext): void {
 
   // The board controller: the core delegates its render,
   // selection, editing and tool calls here (see
-  // src/plugins.ts). Registered now, so the core's host
+  // src/plugins/host.ts). Registered now, so the core's host
   // methods and the undo store reach this plugin from the
   // first render after activation.
   api.board.registerController({

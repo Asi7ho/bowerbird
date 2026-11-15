@@ -23,9 +23,10 @@
 // break. A future version may sandbox panels and views harder;
 // v1 does not pretend otherwise.
 
-// The public plugin API types live in plugin-api.d.ts (outside src/)
-// so plugins import them without reaching into the core. This module
-// re-exports them, so existing core imports from "./plugins/host" keep working.
+// The public plugin API types live in the bowerbird-plugin-api
+// package (plugin-api/) so plugins import them by name without
+// reaching into the core. This module re-exports them, so existing
+// core imports from "./plugins/host" keep working.
 import type { Anchor, ArrangeOptions, Board, BoardController, Camera, Item, Kind, PluginBridge, PluginBuiltinCardDef, PluginCardDecoratorDef, PluginCardDef, PluginCommandDef, PluginContext, PluginCreateActionDef, PluginHost, PluginManifest, PluginOverlayDef, PluginPanelDef, PluginSettingsSectionDef, PluginShortcutDef, PluginToolDef, PluginViewDef, Pt, SettingsUI, ShellElements, Size } from "bowerbird-plugin-api";
 export type { Anchor, ArrangeOptions, Board, BoardController, Camera, Item, Kind, PluginBridge, PluginBuiltinCardDef, PluginCardDecoratorDef, PluginCardDef, PluginCommandDef, PluginContext, PluginCreateActionDef, PluginHost, PluginManifest, PluginOverlayDef, PluginPanelDef, PluginSettingsSectionDef, PluginShortcutDef, PluginToolDef, PluginViewDef, Pt, SettingsUI, ShellElements, Size };
 import { anchorPoint, arrangeItems, AUDIO_H, AUDIO_TRANSCRIPT_HIDDEN_H, AUDIO_TRANSCRIPT_SHOWN_H, boardGet, centre, checklistProgress, clippedEnds, domainOf, elide, escapeHtml, fitCamera, itemBounds, itemRotation, parseHex, rectCrossing, rectFromPoints, renderMarkdownHtml, rotatePoint, segmentIntersectsRect, select, setChecklistDone, tileColorFor, tint, toggleTaskLine } from "../backend/model";

@@ -461,8 +461,7 @@ function createWindow(): void {
   const wa0 = screen.getPrimaryDisplay().workArea;
   // Screenshot override (not a user setting): BOWERBIRD_WINDOW_SIZE
   // e.g. 1440x900 makes the window fill the frame for App Store
-  // screenshots. Used only by screenshots/README.md recapture
-  // instructions. The 1100x720 minimum still applies to it.
+  // screenshots. The 1100x720 minimum still applies to it.
   const sizeOverride = /^([0-9]+)x([0-9]+)$/.exec(process.env.BOWERBIRD_WINDOW_SIZE || "");
   // The minimum applies to the initial size too, not just to
   // later resizing: an override smaller than 1100x720 still opens
