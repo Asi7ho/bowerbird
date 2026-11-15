@@ -627,15 +627,35 @@ async function main() {
       assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("voice-notes", true)), true);
       await page.reload();
       await page.waitForSelector("#board", { timeout: 15000 });
-      // Double-click empty space below the Hello note: the
-      // text box opens with the mic beside it, and there is
-      // no Voice Notes panel any more.
+      // Let the board finish its first render after the
+      // reload before clicking: a double-click into a
+      // mid-render board is lost. (No panel tab to wait
+      // for here: the plugins enabled so far — the test
+      // plugins and command palette — contribute no dock
+      // panel, so there is no button.plugin-tab yet.)
+      await new Promise((r) => setTimeout(r, 1000));
+      // Double-click empty space to the right of the Hello
+      // note: the text box opens with the mic beside it,
+      // and there is no Voice Notes panel any more. To the
+      // right, not below: the Hello note sits at the bottom
+      // of the fitted board, so below it is the view
+      // switcher, not empty board.
       assert.equal(await page.locator('.plugin-tab[title^="Voice Notes"]').count(), 0);
+      // Select tool, as the double-click note check does:
+      // a pen left active would draw instead of opening
+      // the editor.
+      await page.keyboard.press("v");
+      // Re-fit first: the camera drifted through the
+      // checklist drag and undo, so the Hello note's
+      // screen position — and the empty space beside it —
+      // is only predictable from a fitted view.
+      await page.keyboard.press("f");
+      await new Promise((r) => setTimeout(r, 300));
       const noteBox = await page.locator("#cards .card", { hasText: "Hello CI!" }).first().boundingBox();
       assert.ok(noteBox);
-      const cx = noteBox.x + 50;
-      const cy = noteBox.y + noteBox.height + 60;
-      doubleClick(page, cx, cy);
+      const cx = noteBox.x + noteBox.width + 60;
+      const cy = noteBox.y + noteBox.height / 2;
+      await doubleClick(page, cx, cy);
       await page.locator("textarea.note-edit").waitFor({ timeout: 10000 });
       const mic = page.locator(".note-edit-mic");
       assert.equal(await mic.count(), 1);
@@ -669,7 +689,7 @@ async function main() {
       // the Hello note, inside the group frame but on empty
       // space — below it is off the bottom of the window
       // once the audio card has landed there.
-      doubleClick(page, noteBox.x - 110, noteBox.y + noteBox.height / 2);
+      await doubleClick(page, noteBox.x - 110, noteBox.y + noteBox.height / 2);
       await page.locator("textarea.note-edit").waitFor({ timeout: 10000 });
       assert.equal(await page.locator(".note-edit-mic").count(), 1);
       await page.keyboard.press("Escape");
