@@ -306,13 +306,36 @@ export function renderPanel(container: HTMLElement): void {
 
   const onPointerDown = (e: PointerEvent): void => {
     pickFromWheel(e.clientX, e.clientY);
-    const onMove = (me: PointerEvent): void => pickFromWheel(me.clientX, me.clientY);
+    // Pointermove fires faster than a full panel update
+    // costs, and each one reads layout twice: coalesce
+    // to one pick per animation frame.
+    let raf = 0;
+    let latestX = e.clientX;
+    let latestY = e.clientY;
+    const onMove = (me: PointerEvent): void => {
+      latestX = me.clientX;
+      latestY = me.clientY;
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        pickFromWheel(latestX, latestY);
+      });
+    };
+    // A drag ending outside the window fires pointercancel,
+    // not pointerup: without it the listeners linger and the
+    // next drag adds a second pair. Same cleanup as the draw
+    // and place drags.
     const onUp = (): void => {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      window.removeEventListener("blur", onUp);
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    window.addEventListener("blur", onUp);
   };
   wheelWrap.addEventListener("pointerdown", onPointerDown);
   // Stashed on the wrapper, as before: nothing in the app
