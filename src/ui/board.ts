@@ -1895,6 +1895,13 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   // and a space started panning. Ctrl/Cmd shortcuts,
   // Escape and Tab still work in inputs.
   if (active && active.tagName === "INPUT" && !ctrl0 && e.key !== "Escape" && e.key !== "Tab") return;
+  // Focus is on a playing video or audio element: Tab, Space
+  // and the arrows are that element's own controls (Tab moves
+  // through the video controls, Space toggles play, arrows
+  // seek). Let them pass — otherwise Tab cycles cards and
+  // Space arms board panning while the video toggles.
+  // Escape still falls through to the board handler below.
+  if (active && (active.tagName === "VIDEO" || active.tagName === "AUDIO") && e.key !== "Escape") return;
   // Settings open means the board is not listening: without this,
   // Delete deleted the selected card behind the sheet, v/p/a
   // switched tools, and +/- zoomed, all while the user thought
