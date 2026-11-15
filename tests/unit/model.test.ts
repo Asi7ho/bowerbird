@@ -13,6 +13,7 @@ import {
   escapeHtml,
   estimateTextHeight,
   fitCamera,
+  healDuplicateIds,
   hitTest,
   isInlineVideo,
   itemBounds,
@@ -306,6 +307,40 @@ describe("selection and mutation", () => {
     const b = board([]);
     expect(allocId(b)).toBe(101);
     expect(allocId(b)).toBe(102);
+  });
+});
+
+describe("healDuplicateIds", () => {
+  it("leaves a board with unique ids alone", () => {
+    const b = board([textCard(1, 0, 0), textCard(2, 300, 0)]);
+    healDuplicateIds(b);
+    expect(b.items.map((it) => it.id)).toEqual([1, 2]);
+    expect(b.next_id).toBe(100);
+  });
+
+  it("first card keeps the id, later duplicates get fresh ids", () => {
+    const b = board([textCard(1, 0, 0), textCard(2, 300, 0), textCard(2, 600, 0), textCard(1, 900, 0)]);
+    healDuplicateIds(b);
+    expect(b.items[0].id).toBe(1);
+    expect(b.items[1].id).toBe(2);
+    expect(b.items[2].id).toBe(101);
+    expect(b.items[3].id).toBe(102);
+    expect(new Set(b.items.map((it) => it.id)).size).toBe(4);
+  });
+
+  it("bumps a stale next_id before allocating, so the fresh id cannot collide", () => {
+    const b = board([textCard(5, 0, 0), textCard(5, 300, 0)]);
+    b.next_id = 4;
+    healDuplicateIds(b);
+    expect(b.items.map((it) => it.id)).toEqual([5, 6]);
+    expect(b.next_id).toBe(6);
+  });
+
+  it("is a no-op on an empty board", () => {
+    const b = board([]);
+    healDuplicateIds(b);
+    expect(b.items).toEqual([]);
+    expect(b.next_id).toBe(100);
   });
 });
 
