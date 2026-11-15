@@ -1193,6 +1193,45 @@ async function main() {
       }
       assert.ok(shown >= 500, `${shown} cards in the DOM after fit, expected at least 500`);
     });
+
+    await check("search finds a note by text and Enter jumps to it", async () => {
+      // A note with a word nothing else on the board has, so
+      // the match count is exactly one. Search had no e2e
+      // check at all before this.
+      await page.keyboard.press("v");
+      await doubleClick(page, 200, 200);
+      await page.waitForSelector("textarea.note-edit", { timeout: 10000 });
+      await page.keyboard.type("Zebra crossing");
+      await page.keyboard.press("Escape");
+      await waitFor("zebra note in board.json", () =>
+        textCards().some((it) => it.kind.Text.text === "Zebra crossing"),
+      );
+      await page.keyboard.press("Control+f");
+      await page.locator("#search-input").waitFor({ timeout: 10000 });
+      await page.keyboard.type("Zebra");
+      // The count can carry a " · Indexing context…" suffix
+      // while media indexes, so match on the prefix.
+      await waitFor("one search match", async () => {
+        const count = (await page.locator("#search-count").textContent()) ?? "";
+        return count.startsWith("1 match") ? true : null;
+      });
+      await page.keyboard.press("Enter");
+      await waitFor("jumped to the zebra note", async () => {
+        const count = (await page.locator("#search-count").textContent()) ?? "";
+        if (!count.startsWith("1 of 1")) return null;
+        return page.evaluate(() =>
+          [...document.querySelectorAll("#cards .card.selected")].some((el) =>
+            (el.textContent ?? "").includes("Zebra"),
+          ),
+        );
+      });
+      // Escape clears the search and leaves the note selected.
+      await page.keyboard.press("Escape");
+      await waitFor("search cleared", async () => {
+        const count = (await page.locator("#search-count").textContent()) ?? "";
+        return count === "" ? true : null;
+      });
+    });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
     console.log(`  FAIL  setup: ${String(error.message).split("\n")[0]}`);
