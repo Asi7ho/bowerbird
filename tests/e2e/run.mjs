@@ -537,8 +537,13 @@ async function main() {
 
     await check("an external board edit is followed live", async () => {
       const board = readBoard();
-      board.items.push({ id: board.next_id, pos: { x: 900, y: 100 }, size: { w: 320, h: 80 }, group: null, kind: { Text: { text: "From the outside", bold: false, size: 16, color: "#1A1A1A" } } });
-      board.next_id += 1;
+      // next_id is the last allocated id (allocId increments
+      // first), so a fresh card is next_id + 1 — using
+      // next_id itself reuses the last card's id, and the
+      // board then carries a duplicate.
+      const id = board.next_id + 1;
+      board.items.push({ id, pos: { x: 900, y: 100 }, size: { w: 320, h: 80 }, group: null, kind: { Text: { text: "From the outside", bold: false, size: 16, color: "#1A1A1A" } } });
+      board.next_id = id;
       const tmp = `${boardPath}.tmp`;
       fs.writeFileSync(tmp, JSON.stringify(board));
       fs.renameSync(tmp, boardPath);
@@ -1252,8 +1257,18 @@ async function main() {
       // the match count is exactly one. Search had no e2e
       // check at all before this.
       await page.keyboard.press("v");
+      // The board holds 500+ cards and 20 models by now, so
+      // the main thread can be busy enough that the two
+      // presses land more than 500ms apart and the app reads
+      // them as two single clicks: retry the double-click
+      // once if no editor appears.
       await doubleClick(page, 200, 200);
-      await page.waitForSelector("textarea.note-edit", { timeout: 10000 });
+      try {
+        await page.waitForSelector("textarea.note-edit", { timeout: 3000 });
+      } catch {
+        await doubleClick(page, 200, 200);
+        await page.waitForSelector("textarea.note-edit", { timeout: 10000 });
+      }
       await page.keyboard.type("Zebra crossing");
       await page.keyboard.press("Escape");
       await waitFor("zebra note in board.json", () =>
