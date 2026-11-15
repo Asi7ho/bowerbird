@@ -67,7 +67,7 @@ unless `display-name.txt` says otherwise.
 - `items` — the cards, strokes and connectors, in z-order (last is
   on top). Frames (see PLUGIN_API.md) are items too.
 - `camera` — the view: `x`/`y` is the world point at the top-left
-  of the board area, `zoom` is clamped to 0.1–8.
+  of the board area, `zoom` is clamped to 0.01–8.
 - `next_id` / `next_group` — the last issued item id and group id.
   The next free id is `next_id + 1`: the app allocates by
   bumping first. A writer that adds items must take
@@ -104,7 +104,7 @@ An item:
 | `PdfCard` | `path`, `size_bytes` |
 | `Swatch` | `hex` |
 | `Audio` | `path`, `title?`, `transcript?` (the on-device speech-to-text of a voice recording, when it has one) |
-| `Video` | `source`, `remote` (bool), `size_bytes` |
+| `Video` | `source`, `remote` (bool), `size_bytes`, `poster?`, `duration?` |
 | `Model3D` | `path`, `size_bytes` (a GLB file; drag on the model rotates it, wheel zooms, it turns slowly when idle) |
 | `Stroke` | `points` (`[{x, y}]`), `color`, `width`, `marker` (bool), `pressures?` |
 | `Connector` | `from`, `to` (each `{"Item": id}` or `{"Point": {"x","y"}}`), `color` |
