@@ -119,6 +119,35 @@ export function activate(api) {
 export function deactivate() {}
 `;
 
+const PERM_TEST_PLUGIN_MANIFEST = {
+  id: "perm-test-plugin",
+  name: "Permission Test Plugin",
+  version: "0.1.0",
+  apiVersion: "2",
+  description: "Test plugin for the e2e suite: no permissions, tries a board write on activate.",
+  permissions: [],
+  main: "main.ts",
+};
+
+// Tries the write a plugin without board:write must not be
+// able to make, and leaves the outcome on the window: the
+// host must throw, and nothing may land on the board.
+const PERM_TEST_PLUGIN_MAIN = `
+export function activate(api) {
+  let threw = null;
+  try {
+    api.board.addItem(
+      { Text: { text: "must not land", bold: false, size: 16, color: "#1A1A1A" } },
+      { x: 0, y: 0 }, { w: 320, h: 80 },
+    );
+  } catch (e) {
+    threw = String(e);
+  }
+  window.__permTest = { threw };
+}
+export function deactivate() {}
+`;
+
 function fail(message) {
   throw new Error(message);
 }
@@ -173,11 +202,15 @@ async function main() {
   fs.mkdirSync(testPluginDir, { recursive: true });
   const apiTestPluginDir = path.join(pluginsDir, "api-test-plugin");
   fs.mkdirSync(apiTestPluginDir, { recursive: true });
+  const permTestPluginDir = path.join(pluginsDir, "perm-test-plugin");
+  fs.mkdirSync(permTestPluginDir, { recursive: true });
   fs.writeFileSync(boardPath, JSON.stringify(EMPTY_BOARD));
   fs.writeFileSync(path.join(testPluginDir, "manifest.json"), JSON.stringify(TEST_PLUGIN_MANIFEST, null, 2));
   fs.writeFileSync(path.join(testPluginDir, "main.ts"), TEST_PLUGIN_MAIN);
   fs.writeFileSync(path.join(apiTestPluginDir, "manifest.json"), JSON.stringify(API_TEST_PLUGIN_MANIFEST, null, 2));
   fs.writeFileSync(path.join(apiTestPluginDir, "main.ts"), API_TEST_PLUGIN_MAIN);
+  fs.writeFileSync(path.join(permTestPluginDir, "manifest.json"), JSON.stringify(PERM_TEST_PLUGIN_MANIFEST, null, 2));
+  fs.writeFileSync(path.join(permTestPluginDir, "main.ts"), PERM_TEST_PLUGIN_MAIN);
 
   const readBoard = () => JSON.parse(fs.readFileSync(boardPath, "utf8"));
   const strokes = () => readBoard().items.filter((it) => "Stroke" in it.kind);
@@ -318,6 +351,22 @@ async function main() {
       await page.reload();
       await page.waitForSelector("#board", { timeout: 15000 });
       await page.locator("text=CI plugin card").first().waitFor({ timeout: 15000 });
+    });
+
+    await check("a plugin without board:write cannot write the board", async () => {
+      assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("perm-test-plugin", true)), true);
+      const result = await waitFor("permission result on the window", async () => {
+        const r = await page.evaluate(() => window.__permTest);
+        return r ? r : null;
+      });
+      assert.ok(
+        result.threw && result.threw.includes("lacks permission board:write"),
+        `expected a permission throw, got ${result.threw}`,
+      );
+      assert.equal(textCards().some((it) => it.kind.Text.text === "must not land"), false);
+      // The plugin stays enabled but harmless; its failed write
+      // must not have left the board dirty.
+      assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("perm-test-plugin", false)), false);
     });
 
     await check("a bundled plugin enables and its panel opens", async () => {
