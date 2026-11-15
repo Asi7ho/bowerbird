@@ -1276,10 +1276,6 @@ export function handlePluginShortcut(key: string): boolean {
 
 // ---------------------------------------------------------------- views
 
-export function getActiveView(): string {
-  return activeView;
-}
-
 function renderViewSwitcher(): void {
   if (!host) return;
   const el = shell.viewSwitcherEl;
