@@ -31,7 +31,7 @@ export const ERASER_RADIUS = 12;
 export type DragState = null
   | { kind: "pan"; last: Pt }
   | { kind: "move"; lastWorld: Pt; moved: boolean }
-  | { kind: "stroke"; points: Pt[]; pressures: number[]; width: number; marker: boolean }
+  | { kind: "stroke"; points: Pt[]; pressures: number[]; width: number; marker: boolean; pencil: boolean }
   | { kind: "lasso"; points: Pt[] }
   | { kind: "erase"; erased: boolean }
   | { kind: "connector"; from: Anchor; current: Pt }

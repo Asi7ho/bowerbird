@@ -30,7 +30,7 @@ export type Kind =
   | { Audio: { path: string; title?: string; transcript?: string } }
   | { Video: { source: string; remote: boolean; size_bytes: number; poster?: string; duration?: number } }
   | { Model3D: { path: string; size_bytes: number } }
-  | { Stroke: { points: Pt[]; color: string; width: number; marker: boolean; pressures?: number[] } }
+  | { Stroke: { points: Pt[]; color: string; width: number; marker: boolean; pressures?: number[]; pencil?: boolean } }
   | { Connector: { from: Anchor; to: Anchor; color: string } }
   // Plugin cards (see PLUGIN_API.md): namespaced so the core never
   // has to know a plugin's data shape. `data` is always JSON. If

@@ -85,7 +85,7 @@ export function eraseAt(world: Pt): boolean {
       const pos = { x: Math.min(...xs), y: Math.min(...ys) };
       const size = { w: Math.max(1, Math.max(...xs) - pos.x), h: Math.max(1, Math.max(...ys) - pos.y) };
       S.api.board.addItemSilent(
-        { Stroke: { points: run.points, color: st.color, width: st.width, marker: st.marker, ...(run.pressures && run.pressures.length > 0 ? { pressures: run.pressures } : {}) } },
+        { Stroke: { points: run.points, color: st.color, width: st.width, marker: st.marker, ...(run.pressures && run.pressures.length > 0 ? { pressures: run.pressures } : {}), ...(st.pencil ? { pencil: true } : {}) } },
         pos, size,
       );
     }
@@ -487,6 +487,10 @@ S.boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
       pressures: e.pointerType === "pen" && !isHighlighter ? [e.pressure] : [],
       width: isHighlighter ? 12 : S.tool === "pencil" ? 2 : 3,
       marker: isHighlighter,
+      // The pencil is a graphite texture, not just a
+      // thinner pen: the flag travels with the stroke so
+      // it keeps its texture through erasing and reloads.
+      pencil: S.tool === "pencil",
     };
     return;
   }
@@ -678,9 +682,13 @@ export function dragPreview(id: string, tag: string): SVGElement {
 // tool's base width: the pencil draws thinner than the pen,
 // the highlighter much wider. A marker (highlighter) draws
 // translucent, like the stored stroke.
-export function updateLiveStroke(points: Pt[], pressures: number[], width: number, marker: boolean): void {
+export function updateLiveStroke(points: Pt[], pressures: number[], width: number, marker: boolean, pencil = false): void {
   const el = dragPreview("live-stroke", "g");
   while (el.firstChild) el.removeChild(el.firstChild);
+  // A pencil stroke shows its graphite texture while it
+  // is being drawn, not only once it is committed.
+  if (pencil) el.setAttribute("filter", "url(#pencil-texture)");
+  else el.removeAttribute("filter");
   const opacity = marker ? "0.45" : "1";
   if (pressures.length === points.length && strokePressuresVary({ pressures })) {
     const pts = smoothStrokeSamples(points);
@@ -877,7 +885,7 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
     if (Math.hypot(world.x - last.x, world.y - last.y) > 2 / cam.zoom) {
       S.drag.points.push(world);
       if (e.pointerType === "pen" && !S.drag.marker) S.drag.pressures.push(e.pressure);
-      updateLiveStroke(S.drag.points, S.drag.pressures, S.drag.width, S.drag.marker);
+      updateLiveStroke(S.drag.points, S.drag.pressures, S.drag.width, S.drag.marker, S.drag.pencil);
     }
   } else if (S.drag.kind === "lasso") {
     const cam = S.api.view.getCamera();
@@ -976,7 +984,7 @@ window.addEventListener("pointerup", (e: PointerEvent) => {
       const xs = d.points.map((p) => p.x), ys = d.points.map((p) => p.y);
       const pos = { x: Math.min(...xs), y: Math.min(...ys) };
       const size = { w: Math.max(1, Math.max(...xs) - pos.x), h: Math.max(1, Math.max(...ys) - pos.y) };
-      S.api.board.addItem({ Stroke: { points: d.points, color: S.api.pen.getColor(), width: d.width, marker: d.marker, ...(d.pressures.length > 0 ? { pressures: d.pressures } : {}) } }, pos, size);
+      S.api.board.addItem({ Stroke: { points: d.points, color: S.api.pen.getColor(), width: d.width, marker: d.marker, ...(d.pressures.length > 0 ? { pressures: d.pressures } : {}), ...(d.pencil ? { pencil: true } : {}) } }, pos, size);
     }
   } else if (d.kind === "lasso") {
     // A click, not a loop: select what is under the cursor,

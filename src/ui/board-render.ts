@@ -126,6 +126,17 @@ export function renderSvgOnly(): void {
 }
 
 export function renderStrokesAndConnectors(board: Board): void {
+  // The pencil's graphite texture: fine turbulence
+  // displaces the stroke edge, so a pencil line reads
+  // rough and grainy where a pen line is smooth. The
+  // defs are rebuilt on every render, because the SVG
+  // layer is cleared and rebuilt with it.
+  const defs = svgEl2("defs", {});
+  const filter = svgEl2("filter", { id: "pencil-texture", x: "-5%", y: "-5%", width: "110%", height: "110%" });
+  filter.appendChild(svgEl2("feTurbulence", { type: "fractalNoise", baseFrequency: "0.9", numOctaves: "2", seed: "7", result: "noise" }));
+  filter.appendChild(svgEl2("feDisplacementMap", { in: "SourceGraphic", in2: "noise", scale: "2.5" }));
+  defs.appendChild(filter);
+  S.worldEl.appendChild(defs);
   const items = board.items;
   const selected = S.api.board.getSelected();
   const v = visibleRect();
@@ -136,7 +147,7 @@ export function renderStrokesAndConnectors(board: Board): void {
     // drawn. The count is small, so this costs nothing.
     if (!("Stroke" in item.kind && S.api.geometry.itemRotation(item) !== 0) && !isVisibleItem(item, v)) continue;
     if ("Stroke" in item.kind) {
-      const { points, color, width, marker, pressures } = item.kind.Stroke;
+      const { points, color, width, marker, pressures, pencil } = item.kind.Stroke;
       if (points.length < 2) continue;
       const d = strokePath(item, points, color, width);
       const sel = selected.includes(item.id);
@@ -153,6 +164,13 @@ export function renderStrokesAndConnectors(board: Board): void {
         if (transform) selPath.setAttribute("transform", transform);
         S.worldEl.appendChild(selPath);
       }
+      // A pencil stroke's ink is wrapped in a group
+      // carrying the graphite texture filter, so the
+      // rough edge applies to the whole stroke at once,
+      // not per segment. The selection highlight above
+      // stays outside the group, and stays smooth.
+      const ink = pencil ? svgEl2("g", { filter: "url(#pencil-texture)" }) : null;
+      const target = ink ?? S.worldEl;
       if (pressures && strokePressuresVary(item.kind.Stroke)) {
         // A pen stroke is one line per short sample along
         // the smooth curve, each at the width its pressure
@@ -166,14 +184,15 @@ export function renderStrokesAndConnectors(board: Board): void {
           const line = svgEl2("line", { x1: String(pts[i].x), y1: String(pts[i].y), x2: String(pts[i + 1].x), y2: String(pts[i + 1].y), stroke: color, "stroke-width": String(w), "stroke-linecap": "round" });
           if (transform) line.setAttribute("transform", transform);
           if (marker) line.setAttribute("opacity", "0.45");
-          S.worldEl.appendChild(line);
+          target.appendChild(line);
         }
       } else {
         const path = svgEl2("path", { d, fill: "none", stroke: color, "stroke-width": String(width), "stroke-linecap": "round", "stroke-linejoin": "round" });
         if (transform) path.setAttribute("transform", transform);
         if (marker) path.setAttribute("opacity", "0.45");
-        S.worldEl.appendChild(path);
+        target.appendChild(path);
       }
+      if (ink) S.worldEl.appendChild(ink);
     }
     if ("Connector" in item.kind) {
       const ends = S.api.geometry.clippedEnds(item.kind.Connector.from, item.kind.Connector.to);
