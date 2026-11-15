@@ -4,6 +4,49 @@
 // they enforce can be unit-tested without launching the app.
 // main.ts imports them; the fetch handlers there do the I/O.
 
+// Read a fetch body as text, stopping at maxBytes: a server
+// must not be able to OOM the main process with a multi-GB
+// body the caller only slices afterwards. The meta tags a
+// preview needs sit at the top of the document, so a prefix
+// is enough for fetchPreview; callers that need the whole
+// body check `truncated`.
+export async function readCappedText(
+  res: Response,
+  maxBytes: number,
+): Promise<{ text: string; truncated: boolean }> {
+  if (!res.body) return { text: "", truncated: false };
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  let truncated = false;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (!value) continue;
+      if (total + value.byteLength > maxBytes) {
+        // Keep only up to the cap, then stop reading.
+        chunks.push(value.subarray(0, maxBytes - total));
+        total = maxBytes;
+        truncated = true;
+        await reader.cancel();
+        break;
+      }
+      chunks.push(value);
+      total += value.byteLength;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const buf = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    buf.set(c, off);
+    off += c.byteLength;
+  }
+  return { text: new TextDecoder().decode(buf), truncated };
+}
+
 // ---------------------------------------------------------------- link preview
 
 export function decodeEntities(s: string): string {
