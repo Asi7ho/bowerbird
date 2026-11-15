@@ -36,71 +36,19 @@
 import type { Anchor, ArrangeOptions, Board, BoardController, Camera, Item, Kind, PluginBridge, PluginBuiltinCardDef, PluginCardDecoratorDef, PluginCardDef, PluginCommandDef, PluginContext, PluginCreateActionDef, PluginHost, PluginManifest, PluginOverlayDef, PluginPanelDef, PluginSettingsSectionDef, PluginShortcutDef, PluginToolDef, PluginViewDef, Pt, SettingsUI, ShellElements, Size } from "bowerbird-plugin-api";
 export type { Anchor, ArrangeOptions, Board, BoardController, Camera, Item, Kind, PluginBridge, PluginBuiltinCardDef, PluginCardDecoratorDef, PluginCardDef, PluginCommandDef, PluginContext, PluginCreateActionDef, PluginHost, PluginManifest, PluginOverlayDef, PluginPanelDef, PluginSettingsSectionDef, PluginShortcutDef, PluginToolDef, PluginViewDef, Pt, SettingsUI, ShellElements, Size };
 import { anchorPoint, arrangeItems, AUDIO_H, AUDIO_TRANSCRIPT_HIDDEN_H, AUDIO_TRANSCRIPT_SHOWN_H, boardGet, centre, checklistProgress, clippedEnds, domainOf, elide, escapeHtml, fitCamera, itemBounds, itemRotation, parseHex, rectCrossing, rectFromPoints, renderMarkdownHtml, rotatePoint, segmentIntersectsRect, select, setChecklistDone, tileColorFor, tint, toggleTaskLine } from "../backend/model";
+import { builtinCards, cardDecorators, cards, commands, CORE_EVENTS, createActions, listeners, loaded, overlays, panels, settingsSections, shell, shortcuts, tools, views } from "./host-state";
+// getCardDecorations moved to host-state with the cardDecorators
+// registry; re-exported here so existing imports from this
+// module (src/backend/cards.ts) keep working.
+export { getCardDecorations } from "./host-state";
 
-
-interface LoadedPlugin {
-  manifest: PluginManifest;
-  // First-party (core) plugins are bundled with the app and
-  // build the app's own UI; the rest are user plugins. The
-  // flag is exposed in plugins.list() so Settings can group
-  // them, and so a plugin can tell core UI apart from extras.
-  firstParty?: boolean;
-  // A first-party plugin's module is a bundled import, not
-  // a file on disk, so it cannot be re-loaded from the
-  // plugin: scheme. It is kept here across deactivation so
-  // re-enabling the plugin re-activates the same module
-  // instead of fetching a URL that does not exist.
-  firstPartyModule?: { activate?: (api: PluginContext) => void | Promise<void>; deactivate?: () => void | Promise<void> } | null;
-  // Trial plugins run in memory only (see tryPlugin): they are
-  // never written to disk, and endTrial removes them entirely.
-  trial?: boolean;
-  active: boolean;
-  failed: boolean;
-  error: string | null;
-  module: { activate?: (api: PluginContext) => void | Promise<void>; deactivate?: () => void | Promise<void> } | null;
-}
 
 // ---------------------------------------------------------------- state
-
-const cards = new Map<string, PluginCardDef & { pluginId: string }>();
-const builtinCards = new Map<string, PluginBuiltinCardDef & { pluginId: string }>();
-// Card decorations: a plugin registers a renderer that
-// returns HTML shown inside a card, at its bottom edge
-// (checklist progress sits bottom-right). Decorations are
-// display only — they never take clicks (pointer-events:
-// none in styles.css) and never write. A renderer that
-// throws renders nothing.
-const cardDecorators = new Map<string, PluginCardDecoratorDef & { pluginId: string }>();
-export function getCardDecorations(item: Item): { left: string; right: string } {
-  let left = "";
-  let right = "";
-  for (const def of cardDecorators.values()) {
-    try {
-      const html = def.render(item);
-      if (!html) continue;
-      if (def.side === "right") right += html; else left += html;
-    } catch { /* a broken decorator renders nothing */ }
-  }
-  return { left, right };
-}
-
-const tools = new Map<string, PluginToolDef & { pluginId: string; fullId: string }>();
-const panels = new Map<string, PluginPanelDef & { pluginId: string; el: HTMLElement; body: HTMLElement; tab: HTMLElement; hidden: boolean }>();
-const views = new Map<string, PluginViewDef & { pluginId: string }>();
-const commands = new Map<string, PluginCommandDef & { pluginId: string }>();
-const createActions = new Map<string, PluginCreateActionDef & { pluginId: string }>();
-const overlays = new Map<string, PluginOverlayDef & { pluginId: string; el: HTMLElement }>();
-const settingsSections = new Map<string, PluginSettingsSectionDef & { pluginId: string }>();
-const shortcuts = new Map<string, PluginShortcutDef & { pluginId: string }>();
-const loaded = new Map<string, LoadedPlugin>();
-const listeners = new Map<string, Set<() => void>>();
-// The core's own events: state changes the core fires and
-// every plugin listens for — the board changed, a save
-// started or finished, the tool, view, camera, pen or
-// selection changed. A plugin may listen for these but never
-// fire them: firing one would make every other plugin and
-// the core act on a state change that never happened.
-const CORE_EVENTS = new Set(["board", "camera", "pen", "save-failed", "saved", "saving", "selection", "tool", "view"]);
+//
+// The registries (cards, tools, panels, views, commands, ...),
+// the shell element bag and the LoadedPlugin record live in
+// host-state.ts; this module imports them. The host/bridge
+// singletons stay here — they are set once by initPlugins.
 
 let host: PluginHost | null = null;
 let bridge: PluginBridge | null = null;
@@ -108,7 +56,6 @@ let toolButtonsSynced = false;
 let activeView = "board";
 let pluginsReady = false;
 
-const shell: Partial<ShellElements> = {};
 export function registerShellElements(els: Partial<ShellElements>): void {
   Object.assign(shell, els);
 }
