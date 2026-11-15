@@ -63,6 +63,12 @@ mv "$OUT/electron.exe" "$APP"
 # (assetsDir() looks for sample.pdf in assets/).
 mkdir -p "$OUT/resources/app"
 cp -r dist electron-dist "$OUT/resources/app/"
+# The Whisper model ships with the app in models/, so voice
+# notes transcribe offline with no download (loadWhisper in
+# electron/context.ts looks for models/whisper-base/).
+if [ -d models ]; then
+  cp -r models "$OUT/resources/app/"
+fi
 # Bundled plugins (see plugins/README.md): same API as user plugins,
 # shipped inside the app. Copy only if the folder exists, so a
 # checkout without bundled plugins still packages cleanly.

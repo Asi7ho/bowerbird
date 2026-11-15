@@ -3,8 +3,11 @@
 // Local, private, no cloud: images and video frames are
 // embedded with CLIP (Xenova/clip-vit-base-patch32), audio
 // is labelled with AST (Xenova/ast-finetuned-audioset).
-// Models download once on first context search, into
-// userData/models, and are cached there afterwards.
+// The Whisper model ships with the app in
+// models/whisper-base/, so transcription works offline
+// with no download; CLIP and AST still download once on
+// first context search, into userData/models, and are
+// cached there afterwards.
 // Nothing about a board file ever leaves the machine.
 //
 // Package warning, learned the hard way on 2026-11-01:
@@ -70,10 +73,34 @@ function modelsDir(app: App): string {
   }
 }
 
+// The directory holding the models that ship with the app
+// (models/whisper-base/), or null when the bundle has none.
+// Same candidate pattern as assetsDir: the first directory
+// holding the model wins.
+function bundledModelsDir(app: App): string | null {
+  const candidates = [
+    path.join(__dirname, "..", "models"),
+    path.join(process.cwd(), "models"),
+    path.join(app.getAppPath(), "models"),
+    path.join(process.resourcesPath || "", "app", "models"),
+  ];
+  for (const dir of candidates) {
+    if (dir && fs.existsSync(path.join(dir, "whisper-base", "config.json"))) return dir;
+  }
+  return null;
+}
+
 async function loadTransformers(app: App): Promise<TransformersModule> {
   if (!transformers) {
     transformers = await import("@xenova/transformers");
     transformers.env.cacheDir = modelsDir(app);
+    // The Whisper model ships with the app in
+    // models/whisper-base/. The library resolves local
+    // models as <localModelPath>/<modelId>/, so pointing
+    // localModelPath at the models/ directory makes the
+    // id "whisper-base" load the bundled model.
+    const bundled = bundledModelsDir(app);
+    if (bundled) transformers.env.localModelPath = bundled;
     // OnnxRuntime in Electron's main process runs on CPU;
     // no GPU / WASM backends are needed or wanted here.
     transformers.env.backends = transformers.env.backends || {};
@@ -130,9 +157,12 @@ async function loadWhisper(app: App): Promise<WhisperPipeline> {
       // without the caller choosing. Base is a step up from
       // tiny in accuracy (tiny's transcripts were rough),
       // still small and fast on-device — no audio leaves
-      // the machine. It downloads once (~145MB) on first
-      // transcription and is cached afterwards.
-      whisper = await t.pipeline("automatic-speech-recognition", "Xenova/whisper-base") as WhisperPipeline;
+      // the machine. It ships with the app in
+      // models/whisper-base/; when the bundle has no model
+      // (an old install, or a checkout without it), the
+      // full id downloads it once (~77MB) and caches it.
+      const modelId = bundledModelsDir(app) ? "whisper-base" : "Xenova/whisper-base";
+      whisper = await t.pipeline("automatic-speech-recognition", modelId) as WhisperPipeline;
       return whisper;
     })().catch((e: unknown) => { whisperLoading = null; throw e; });
   }
