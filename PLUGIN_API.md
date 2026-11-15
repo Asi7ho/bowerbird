@@ -117,7 +117,7 @@ A plugin that throws during `activate`, or whose module fails to import, is reco
 
 ## Styling
 
-Use the core tokens, not hard-coded copies: SF type, ink `#1D1D1F`, grey `#86868B`, hairline `rgba(0,0,0,0.08)`, separator `rgba(0,0,0,0.10)`, fill `rgba(120,120,128,0.12)`, quiet grey field `#F5F5F7`. Panels are opaque white with a hairline on the left. Cards are white, 12px radius, hairline border, soft shadow. Scope plugin CSS to the plugin's own containers — the core prefixes panel and view containers with `data-plugin="<id>"`. Do not restyle core UI from a plugin, and do not add branding, ads or a second toolbar inside a panel.
+Use the core tokens, not hard-coded copies: SF type, ink `#1D1D1F`, grey `#6e6e73`, hairline `rgba(0,0,0,0.08)`, separator `rgba(0,0,0,0.10)`, fill `rgba(120,120,128,0.12)`, quiet grey field `#F5F5F7`. Panels are opaque white with a hairline on the left. Cards are white, 12px radius, hairline border, soft shadow. Scope plugin CSS to the plugin's own containers — the core prefixes panel and view containers with `data-plugin="<id>"`. Do not restyle core UI from a plugin, and do not add branding, ads or a second toolbar inside a panel.
 
 ## What is not in the API
 

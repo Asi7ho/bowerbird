@@ -3,7 +3,7 @@
 Plugins in this folder ship inside the app. They are listed in Settings → Plugins as "Built in" and update with the app. They use exactly the same Plugin API as user plugins, no backdoors, so a bundled plugin is also proof that the API can build that feature. See `PLUGIN_API.md` in the repo root for the API.
 
 - **Hide Button** (`hide/`) — the corner button that hides Bowerbird into a corner, the corner picker in Settings, and H to minimise.
-- **Visual Library** (`visual-library/`) — the library is the board: every board card except strokes and connectors, in board order, under a single Uncategorized section. Click to focus the original, drag to duplicate.
+- **Visual Library** (`visual-library/`) — the library is the board: every board card except strokes and connectors, in board order, under user-created categories (Uncategorized by default). Click to focus the original, drag to duplicate.
 - **Colour Palette** (`palette/`) — a colour wheel panel. Pick a colour and five palettes are made from it live. Click or drag to place a 120×120 swatch. Placed swatches are ordinary board Swatch items, so they survive disabling the plugin.
 - **Presentation** (`presentation/`) — slides are frames on the board. Draw a rectangle around cards to make a slide, then play it. Export downloads all slides as a single HTML file.
 - **Multiple Boards** (`boards/`) — multiple boards, as a panel: click a board to open it, click the current board's name to rename it, × to delete it, New board to create one.

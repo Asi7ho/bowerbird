@@ -34,7 +34,7 @@ Or push a version tag (`v0.2.2`) and the release workflow builds all three and a
 ```
 electron/          main process (TypeScript, compiled to electron-dist/)
 src/               renderer: boot, backend, plugin host, UI
-src/backend/       headless core (model, search, media, undo, drops)
+src/backend/       headless core (model, search, media, undo, drops, api, cards, model3d, poster, welcome)
 src/plugins/       plugin host
 src/ui/            first-party UI plugins
 plugins/           bundled plugins
