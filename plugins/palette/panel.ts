@@ -177,6 +177,21 @@ function applyPickedHex(hex: string | undefined): void {
   updateAll(true);
 }
 
+// The native colour-input fallback, if one is open: its
+// input listener must be removed when it closes, and a
+// cancelled dialog fires no change event, so a stale one
+// is removed when the picker opens again.
+let eyeDropperFallback: HTMLInputElement | null = null;
+let eyeDropperFallbackOnInput: (() => void) | null = null;
+
+function removeEyeDropperFallback(): void {
+  if (!eyeDropperFallback) return;
+  if (eyeDropperFallbackOnInput) eyeDropperFallback.removeEventListener("input", eyeDropperFallbackOnInput);
+  eyeDropperFallback.remove();
+  eyeDropperFallback = null;
+  eyeDropperFallbackOnInput = null;
+}
+
 async function pickWithEyeDropper(): Promise<void> {
   // No await before open(): the call has to stay inside
   // the click's user gesture, or the browser rejects it.
@@ -193,12 +208,15 @@ async function pickWithEyeDropper(): Promise<void> {
       if (typeof e === "object" && e !== null && "name" in e && e.name === "AbortError") return;
     }
   }
+  removeEyeDropperFallback();
   const fallback = document.createElement("input");
   fallback.type = "color";
   fallback.value = hslToHex(getBase().h, getBase().s, getBase().l);
   fallback.style.cssText = "position:fixed;left:-100px;top:-100px;width:1px;height:1px;opacity:0;";
-  fallback.addEventListener("input", () => applyPickedHex(fallback.value));
-  fallback.addEventListener("change", () => fallback.remove(), { once: true });
+  eyeDropperFallbackOnInput = () => applyPickedHex(fallback.value);
+  fallback.addEventListener("input", eyeDropperFallbackOnInput);
+  fallback.addEventListener("change", () => removeEyeDropperFallback(), { once: true });
+  eyeDropperFallback = fallback;
   document.body.appendChild(fallback);
   fallback.click();
 }
