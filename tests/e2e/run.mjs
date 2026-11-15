@@ -607,6 +607,11 @@ async function main() {
       // recognise. The first real click resumes the context.
       await page.addInitScript((speechB64) => {
         const ctx = new AudioContext();
+        // Exposed so the check can wait for the context to
+        // actually be running before recording: a suspended
+        // context records silence, Whisper returns nothing,
+        // and the card lands with an empty transcript.
+        window.__speechCtx = ctx;
         const dest = ctx.createMediaStreamDestination();
         const ready = (async () => {
           const bytes = Uint8Array.from(atob(speechB64), (c) => c.charCodeAt(0));
@@ -657,6 +662,14 @@ async function main() {
       const cy = noteBox.y + noteBox.height / 2;
       await doubleClick(page, cx, cy);
       await page.locator("textarea.note-edit").waitFor({ timeout: 10000 });
+      // The double-click resumes the speech context, but
+      // the resume is asynchronous: wait until it is
+      // actually running, so the recording hears the looped
+      // sample instead of silence.
+      await waitFor("speech context running", async () => {
+        const state = await page.evaluate(() => window.__speechCtx?.state);
+        return state === "running" ? true : null;
+      });
       const mic = page.locator(".note-edit-mic");
       assert.equal(await mic.count(), 1);
       await mic.click();
