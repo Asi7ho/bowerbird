@@ -1,7 +1,10 @@
 // Command Palette — bundled Bowerbird plugin (see PLUGIN_API.md).
-// One place to run anything: plugin commands, board cards, views,
-// tools and the core actions the API can reach. Cmd/Ctrl+K opens
-// it, typing filters, Arrow keys move, Enter runs, Esc closes.
+// A routing palette: one place to find anything — plugin commands,
+// board cards, views, tools and the core actions the API can reach —
+// and route the selected action to the main app or the plugin that
+// owns it. The palette itself never runs another plugin's command.
+// Cmd/Ctrl+K opens it, typing filters, Arrow keys move, Enter runs
+// the selected action, Esc closes.
 //
 // Plugin shortcuts in v1 are single keys with no modifiers, so
 // Cmd/Ctrl+K cannot be one: this plugin listens for it itself,

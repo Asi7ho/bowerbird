@@ -1,7 +1,11 @@
-// Command Palette — the command registry. Everything the palette
-// can run, built fresh on every open so it never lists a dead
-// action: plugin commands, board cards to jump to, views, tools,
-// and the core actions the API can reach. Group, Ungroup, Delete,
+// Command Palette — a routing palette, not an executor. It lists
+// everything the user can do — plugin commands, board cards to
+// jump to, views, tools, and the core actions the API can reach —
+// built fresh on every open so it never lists a dead action, and
+// routes the selected action to the main app or the plugin that
+// owns it. A plugin command is routed through the host, which
+// runs it as its owning plugin; the palette itself never runs
+// another plugin's command. Group, Ungroup, Delete,
 // Undo and Redo only appear when they can actually do something,
 // so the palette never lists an action that silently does nothing.
 import type { Item, PluginContext } from "bowerbird-plugin-api";
@@ -51,14 +55,17 @@ export function buildEntries(api: PluginContext): Entry[] {
   const out: Entry[] = [];
 
   // Plugin commands first: these are the commands other plugins
-  // registered, if any. No plugin currently registers one.
+  // registered, if any. No plugin currently registers one. Each
+  // entry routes the user's pick to the host, which runs the
+  // command as its owning plugin — the palette never runs
+  // another plugin's command itself.
   const commands = api.ui.listCommands()
     .sort((a, b) => a.title.localeCompare(b.title));
   for (const c of commands) {
     out.push({
       title: c.title,
       hint: c.pluginName,
-      run: () => api.ui.runCommand(c.pluginId, c.id),
+      run: () => api.ui.routeCommand(c.pluginId, c.id),
     });
   }
 
