@@ -293,7 +293,7 @@ export function activate(api: PluginContext): void {
         : "";
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
         <div style="display:flex;align-items:center;gap:12px">
-          <div class="audio-tile clickable" data-action="play-audio" data-id="${c.id}" style="width:${tile}px;height:${tile}px;background:${api.text.tint("#6A4C93", 0.88)};color:#6a4c93;font-size:${tile === 56 ? 18 : 16}px">${playing ? "❚❚" : "▶"}</div>
+          <button type="button" class="audio-tile clickable" data-action="play-audio" data-id="${c.id}" aria-label="${playing ? "Pause audio" : "Play audio"}" style="width:${tile}px;height:${tile}px;background:${api.text.tint("#6A4C93", 0.88)};color:#6a4c93;font-size:${tile === 56 ? 18 : 16}px">${playing ? "❚❚" : "▶"}</button>
           ${titleSubCol(name, c.ww - 92, `<span data-audio-time="${c.id}">${api.media.formatAudioTime(cur)}</span> / <span data-audio-dur="${c.id}">${api.media.formatAudioTime(dur)}</span>`)}
         </div>
         <input class="audio-seek" type="range" min="0" max="1000" value="${seekVal}" style="--seek-pct:${seekPct}%" data-audio-seek="${c.id}" aria-label="Seek">
@@ -340,20 +340,20 @@ export function activate(api: PluginContext): void {
         const posterUrl = api.files.fileUrl(poster);
         if (c.hh >= thumbH + 70) {
           return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
-            <div class="video-thumb clickable" data-action="play-video" data-id="${c.id}" style="width:${c.ww - 24}px;height:${thumbH}px;font-size:28px;overflow:hidden"><img src="${posterUrl}" alt=""><span class="video-play">▶</span></div>
+            <button type="button" class="video-thumb clickable" data-action="play-video" aria-label="Play video" data-id="${c.id}" style="width:${c.ww - 24}px;height:${thumbH}px;font-size:28px;overflow:hidden"><img src="${posterUrl}" alt=""><span class="video-play">▶</span></button>
             ${titleHtml(name, c.ww - 24)}<div class="sub" style="font-size:12px">${sub}</div></div></div>`;
         }
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px">
-          <div class="video-thumb clickable" data-action="play-video" data-id="${c.id}" style="width:96px;height:56px;font-size:20px;overflow:hidden"><img src="${posterUrl}" alt=""><span class="video-play">▶</span></div>
+          <button type="button" class="video-thumb clickable" data-action="play-video" aria-label="Play video" data-id="${c.id}" style="width:96px;height:56px;font-size:20px;overflow:hidden"><img src="${posterUrl}" alt=""><span class="video-play">▶</span></button>
           ${titleSubCol(name, c.ww - 132, sub)}</div></div>`;
       }
       if (c.hh >= thumbH + 70) {
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
-          <div class="video-thumb clickable" data-action="play-video" data-id="${c.id}" style="width:${c.ww - 24}px;height:${thumbH}px;font-size:28px">▶</div>
+          <button type="button" class="video-thumb clickable" data-action="play-video" aria-label="Play video" data-id="${c.id}" style="width:${c.ww - 24}px;height:${thumbH}px;font-size:28px">▶</button>
           ${titleHtml(name, c.ww - 24)}<div class="sub" style="font-size:12px">${sub}</div></div></div>`;
       }
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px">
-        <div class="video-thumb clickable" data-action="play-video" data-id="${c.id}" style="width:96px;height:56px;font-size:20px">▶</div>
+        <button type="button" class="video-thumb clickable" data-action="play-video" aria-label="Play video" data-id="${c.id}" style="width:96px;height:56px;font-size:20px">▶</button>
         ${titleSubCol(name, c.ww - 132, sub)}</div></div>`;
     },
   });

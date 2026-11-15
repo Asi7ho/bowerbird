@@ -453,6 +453,8 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 .card .video-thumb {
   position: relative; background: #1d1d1f; border-radius: 10px;
   display: flex; align-items: center; justify-content: center; color: #fff; cursor: pointer;
+  /* A button since the a11y pass: drop the UA chrome. */
+  border: 0; padding: 0;
 }
 /* A video poster: the captured frame fills the tile, the play
    mark rides over it. The image is out of flow so the mark
@@ -477,6 +479,8 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 .card .audio-tile {
   flex: none; width: 48px; height: 48px; border-radius: 10px;
   display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px;
+  /* A button since the a11y pass: drop the UA chrome. */
+  border: 0; padding: 0;
 }
 /* Audio seek: a thin track in the tile's purple, with a small
    white thumb — quiet, like the rest of the cards, not a chunky
