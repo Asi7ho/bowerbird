@@ -18,10 +18,16 @@
 // filesystem directly — every privileged call goes through the
 // preload bridge — but it does run in the same renderer as the
 // core, so installing a plugin is trusting its code, like an
-// Obsidian or VS Code extension. The API is the supported
-// contract; reaching past it into core DOM is unsupported and may
-// break. A future version may sandbox panels and views harder;
-// v1 does not pretend otherwise.
+// Obsidian or VS Code extension. Within that, plugins are
+// isolated from each other: the host enforces caller identity at
+// the PluginContext boundary, so a plugin can only trigger its
+// own commands, shortcuts and card actions, can never emit a
+// core event, and can never replace a core delegation (the board
+// controller, the settings UI, the shell elements). The app's own
+// UI (src/ui/) is trusted and dispatches on the user's behalf.
+// The API is the supported contract; reaching past it into core
+// DOM is unsupported and may break. A future version may sandbox
+// panels and views harder; v1 does not pretend otherwise.
 
 // The public plugin API types live in the bowerbird-plugin-api
 // package (plugin-api/) so plugins import them by name without
