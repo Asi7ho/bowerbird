@@ -331,11 +331,27 @@ function boardDisplayName(folder: string): string {
   } catch { /* no display-name file: fall back to the folder */ }
   return path.basename(folder);
 }
+// Item counts by board file, cached on the file's mtime
+// and size: listBoards runs on every board event, and
+// re-reading + JSON-parsing every board's whole file
+// just to count items is the cost the Boards panel pays
+// on every save. A board only changes when it is saved,
+// which moves its mtime, so a matching mtime + size
+// means the count is still right.
+const boardItemCountCache = new Map<string, { mtimeMs: number; size: number; count: number }>();
 function boardItemCount(file: string): number {
   try {
+    const st = fs.statSync(file);
+    const cached = boardItemCountCache.get(file);
+    if (cached && cached.mtimeMs === st.mtimeMs && cached.size === st.size) return cached.count;
     const parsed = JSON.parse(fs.readFileSync(file, "utf8"));
-    return Array.isArray(parsed.items) ? parsed.items.length : 0;
-  } catch { return 0; }
+    const count = Array.isArray(parsed.items) ? parsed.items.length : 0;
+    boardItemCountCache.set(file, { mtimeMs: st.mtimeMs, size: st.size, count });
+    return count;
+  } catch {
+    boardItemCountCache.delete(file);
+    return 0;
+  }
 }
 function listBoards(): Array<{ name: string; current: boolean; items: number }> {
   const out: Array<{ name: string; current: boolean; items: number }> = [];
