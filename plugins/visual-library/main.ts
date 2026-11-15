@@ -58,6 +58,8 @@ let apiRef: PluginContext | null = null;
 let onBoardHandler: (() => void) | null = null;
 let onSelectionHandler: (() => void) | null = null;
 let resizeHandler: (() => void) | null = null;
+// A resize frame already queued, 0 when none is pending.
+let resizeRaf = 0;
 
 export async function activate(api: PluginContext): Promise<void> {
   apiRef = api;
@@ -66,9 +68,16 @@ export async function activate(api: PluginContext): Promise<void> {
   api.events.on("board", onBoardHandler);
   onSelectionHandler = () => updateSelectionHighlight(api);
   api.events.on("selection", onSelectionHandler);
+  // Resize fires many times per second while the edge is
+  // dragged, and each one rebuilds up to 200 view cards:
+  // coalesce to one render per animation frame.
   resizeHandler = () => {
-    const vs = getViewSections();
-    if (vs) renderSections(api, vs, "view");
+    if (resizeRaf) return;
+    resizeRaf = requestAnimationFrame(() => {
+      resizeRaf = 0;
+      const vs = getViewSections();
+      if (vs) renderSections(api, vs, "view");
+    });
   };
   window.addEventListener("resize", resizeHandler);
   api.ui.registerPanel({
@@ -131,6 +140,7 @@ export function deactivate(): void {
   if (apiRef && onBoardHandler) apiRef.events.off("board", onBoardHandler);
   if (apiRef && onSelectionHandler) apiRef.events.off("selection", onSelectionHandler);
   if (resizeHandler) window.removeEventListener("resize", resizeHandler);
+  if (resizeRaf) { cancelAnimationFrame(resizeRaf); resizeRaf = 0; }
   disconnectPanelObservers();
   onBoardHandler = null;
   onSelectionHandler = null;

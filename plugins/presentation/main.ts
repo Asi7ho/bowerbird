@@ -98,8 +98,16 @@ export function activate(api: PluginContext): void {
   };
   state.onViewHandler = onViewHandler;
   api.events.on("view", onViewHandler);
+  // A window resize fires many times per second while the
+  // edge is dragged, and renderSlide rebuilds the whole
+  // slide (restarting any playing video): coalesce to one
+  // render per animation frame.
   const resizeHandler = (): void => {
-    if (state.viewBuilt) renderSlide();
+    if (!state.viewBuilt || state.resizeRaf) return;
+    state.resizeRaf = requestAnimationFrame(() => {
+      state.resizeRaf = 0;
+      if (state.viewBuilt) renderSlide();
+    });
   };
   state.resizeHandler = resizeHandler;
   window.addEventListener("resize", resizeHandler);
@@ -196,6 +204,7 @@ export function deactivate(): void {
   if (api && onBoardHandler) api.events.off("board", onBoardHandler);
   if (api && onViewHandler) api.events.off("view", onViewHandler);
   if (resizeHandler) window.removeEventListener("resize", resizeHandler);
+  if (state.resizeRaf) { cancelAnimationFrame(state.resizeRaf); state.resizeRaf = 0; }
   state.onBoardHandler = null;
   state.onViewHandler = null;
   state.resizeHandler = null;

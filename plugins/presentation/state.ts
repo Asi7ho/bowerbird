@@ -53,6 +53,8 @@ export interface PresentationState {
   onBoardHandler: (() => void) | null;
   onViewHandler: (() => void) | null;
   resizeHandler: (() => void) | null;
+  // A resize frame already queued, 0 when none is pending.
+  resizeRaf: number;
   drawKeyHandler: ((e: KeyboardEvent) => void) | null;
   // One presentation audio at a time, played through a plain
   // Audio element (the core's audio player belongs to the
@@ -90,6 +92,7 @@ export const state: PresentationState = {
   onBoardHandler: null,
   onViewHandler: null,
   resizeHandler: null,
+  resizeRaf: 0,
   drawKeyHandler: null,
   presAudio: null,
   presAudioItemId: null,
