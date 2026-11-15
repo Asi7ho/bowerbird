@@ -355,6 +355,10 @@ async function main() {
 
     await check("a plugin without board:write cannot write the board", async () => {
       assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("perm-test-plugin", true)), true);
+      // Enabling a plugin only takes effect on reload, like
+      // the ci-test-plugin check above.
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: 15000 });
       const result = await waitFor("permission result on the window", async () => {
         const r = await page.evaluate(() => window.__permTest);
         return r ? r : null;
