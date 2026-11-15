@@ -1024,11 +1024,11 @@ async function main() {
       await new Promise((r) => setTimeout(r, 500));
       // The previous check left focus on the video play
       // button, where Tab keeps its native job instead of
-      // cycling the selection — click the board first so Tab
-      // cycles cards again. Any card hit just becomes the
-      // starting selection; the loop below still reaches the
-      // audio card.
+      // cycling the selection — blur it so Tab cycles cards
+      // again. Any card hit just becomes the starting
+      // selection; the loop below still reaches the audio card.
       await page.mouse.click(1200, 700);
+      await page.evaluate(() => document.activeElement?.blur());
       await new Promise((r) => setTimeout(r, 300));
       let selected = false;
       for (let i = 0; i < 40; i++) {
@@ -1310,6 +1310,15 @@ async function main() {
       await waitFor("zebra note in board.json", () =>
         textCards().some((it) => it.kind.Text.text === "Zebra crossing"),
       );
+      // Select a different card first, so the jump below has
+      // somewhere to jump from: creating the note selected it,
+      // and a selection that never moves proves nothing.
+      const zebra = textCards().find((it) => it.kind.Text.text === "Zebra crossing");
+      assert.ok(zebra, "zebra note on the board");
+      const firstCard = await page.locator("#cards .card").first().boundingBox();
+      assert.ok(firstCard, "a card on screen to select first");
+      await page.mouse.click(firstCard.x + firstCard.width / 2, firstCard.y + firstCard.height / 2);
+      await new Promise((r) => setTimeout(r, 300));
       await page.keyboard.press("Control+f");
       await page.locator("#search-input").waitFor({ timeout: 10000 });
       await page.keyboard.type("Zebra");
@@ -1320,19 +1329,14 @@ async function main() {
         return count.startsWith("1 match") ? true : null;
       });
       await page.keyboard.press("Enter");
-      await waitFor("jumped to the zebra note", async () => {
-        const count = (await page.locator("#search-count").textContent()) ?? "";
-        // "1 of N": the jump lands on the top-ranked match,
-        // the Zebra note. N can grow past 1 if the background
-        // context search matches a media card too, so do not
-        // pin it to 1.
-        if (!/^1 of \d+/.test(count)) return null;
-        return page.evaluate(() =>
-          [...document.querySelectorAll("#cards .card.selected")].some((el) =>
-            (el.textContent ?? "").includes("Zebra"),
-          ),
-        );
-      });
+      // The jump selects the note. The count alone cannot
+      // prove it: the background context search can append a
+      // media match and reopen the results list, so the count
+      // can read "2 matches" instead of "1 of 1" after the
+      // jump. The selection is the jump's own effect.
+      await waitFor("jumped to the zebra note", async () =>
+        page.evaluate((cid) => !!document.querySelector(`#cards .card[data-id="${cid}"].selected`), String(zebra.id)),
+      );
       // Escape clears the search and leaves the note selected.
       await page.keyboard.press("Escape");
       await waitFor("search cleared", async () => {
