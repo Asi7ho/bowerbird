@@ -213,9 +213,14 @@ function renderCardHtml(id: number, plain: boolean): string | null {
 // camera is not finite (ignored).
 function applyCamera(cam: Camera): boolean {
   if (!isFinite(cam.x) || !isFinite(cam.y) || !isFinite(cam.zoom)) return false;
-  const z = C.board.camera.zoom;
+  const old = C.board.camera;
   C.board.camera = { x: cam.x, y: cam.y, zoom: clampZoom(cam.zoom) };
-  if (C.board.camera.zoom !== z) emitPluginEvent("camera");
+  // The camera event fires whenever the camera moves, not
+  // only when the zoom changes: a pan changes x and y with
+  // the zoom untouched, and the toolbar's note colour bar
+  // (and anything else following the camera) must follow
+  // it live, not only after a zoom.
+  if (C.board.camera.x !== old.x || C.board.camera.y !== old.y || C.board.camera.zoom !== old.zoom) emitPluginEvent("camera");
   return true;
 }
 // Search documents and the MiniSearch index are cached
