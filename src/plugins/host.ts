@@ -38,6 +38,7 @@ export type { Anchor, ArrangeOptions, Board, BoardController, Camera, Item, Kind
 import { anchorPoint, arrangeItems, AUDIO_H, AUDIO_TRANSCRIPT_HIDDEN_H, AUDIO_TRANSCRIPT_SHOWN_H, boardGet, centre, checklistProgress, clippedEnds, domainOf, elide, escapeHtml, fitCamera, itemBounds, itemRotation, parseHex, rectCrossing, rectFromPoints, renderMarkdownHtml, rotatePoint, segmentIntersectsRect, select, setChecklistDone, tileColorFor, tint, toggleTaskLine } from "../backend/model";
 import { builtinCards, cardDecorators, cards, commands, CORE_EVENTS, createActions, listeners, loaded, overlays, panels, settingsSections, shell, shortcuts, tools, views } from "./host-state";
 import { applySavedPanelSettings, bindPanelDeps, deactivateMissingActivePanel, deactivatePanelIfActive, ensureResizeHandle, isPanelActive as isPanelActiveKey, registerPanel, setActivePanel, updatePanelDock, wirePanelsToggle } from "./host-panels";
+import { bindViewDeps, getActiveView, refreshActiveView, registerView, renderViewSwitcher, setActiveView } from "./host-views";
 // getCardDecorations moved to host-state with the cardDecorators
 // registry; re-exported here so existing imports from this
 // module (src/backend/cards.ts) keep working.
@@ -54,7 +55,6 @@ export { getCardDecorations } from "./host-state";
 let host: PluginHost | null = null;
 let bridge: PluginBridge | null = null;
 let toolButtonsSynced = false;
-let activeView = "board";
 let pluginsReady = false;
 
 export function registerShellElements(els: Partial<ShellElements>): void {
@@ -518,7 +518,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
       setCameraSilent: (cam: Camera) => host!.setCameraSilent(cam),
       zoomBy: (factor: number) => host!.zoomBy(factor),
       centreOn: (id: number) => host!.centreOn(id),
-      getView: () => activeView,
+      getView: () => getActiveView(),
       setView: (id: string) => setActiveView(id),
       listViews: () => {
         const out: Array<{ id: string; title: string; plugin: string | null }> = [{ id: "board", title: "Board", plugin: null }];
@@ -973,11 +973,6 @@ function registerCommand(pluginId: string, def: PluginCommandDef): void {
   commands.set(`${pluginId}:${def.id}`, { ...def, pluginId });
 }
 
-function registerView(pluginId: string, def: PluginViewDef): void {
-  views.set(def.id, { ...def, pluginId });
-  renderViewSwitcher();
-}
-
 function registerOverlay(pluginId: string, def: PluginOverlayDef): void {
   if (!host) return;
   // An overlay container covers the board area but takes no
@@ -1085,87 +1080,6 @@ export function handlePluginShortcut(key: string): boolean {
 }
 
 // ---------------------------------------------------------------- views
-
-function renderViewSwitcher(): void {
-  if (!host) return;
-  const el = shell.viewSwitcherEl;
-  if (!el) return;
-  el.innerHTML = "";
-  if (views.size === 0) {
-    el.style.display = "none";
-    return;
-  }
-  el.style.display = "flex";
-  const mk = (id: string, title: string) => {
-    const b = document.createElement("button");
-    b.textContent = title;
-    b.classList.toggle("active", activeView === id);
-    b.addEventListener("click", () => setActiveView(id));
-    el.appendChild(b);
-  };
-  mk("board", "Board");
-  for (const v of views.values()) mk(v.id, v.title);
-}
-
-export function setActiveView(id: string): void {
-  if (!host) return;
-  if (id !== "board" && !views.has(id)) return;
-  const prev = views.get(activeView);
-  if (prev?.onHide) {
-    try {
-      prev.onHide();
-    } catch {
-      // A view's onHide must never trap the user in the view.
-    }
-  }
-  activeView = id;
-  const viewEl = shell.pluginViewEl;
-  const canvasEls = shell.boardCanvasEls;
-  if (id === "board") {
-    for (const el of canvasEls ?? []) el.style.display = "";
-    if (viewEl) {
-      viewEl.style.display = "none";
-      viewEl.innerHTML = "";
-    }
-  } else if (viewEl) {
-    for (const el of canvasEls ?? []) el.style.display = "none";
-    viewEl.style.display = "";
-    const v = views.get(id)!;
-    viewEl.innerHTML = "";
-    viewEl.dataset.plugin = v.pluginId;
-    try {
-      v.render(viewEl, host.getBoard());
-    } catch (e) {
-      viewEl.textContent = `View failed to render: ${String(e)}`;
-    }
-    if (v.onShow) {
-      try {
-        v.onShow();
-      } catch {
-        // See onHide above.
-      }
-    }
-  }
-  renderViewSwitcher();
-  emitPluginEvent("view");
-  host.render();
-}
-
-export function refreshActiveView(): void {
-  if (!host || activeView === "board") return;
-  const v = views.get(activeView);
-  if (!v) {
-    setActiveView("board");
-    return;
-  }
-  const viewEl = shell.pluginViewEl;
-  if (!viewEl) return;
-  try {
-    v.render(viewEl, host.getBoard());
-  } catch (e) {
-    viewEl.textContent = `View failed to render: ${String(e)}`;
-  }
-}
 
 // ---------------------------------------------------------------- core callbacks
 
@@ -1364,8 +1278,8 @@ function unregisterPlugin(pluginId: string): void {
   for (const [key, s] of Array.from(shortcuts.entries())) {
     if (s.pluginId === pluginId) shortcuts.delete(key);
   }
-  if (host && activeView !== "board") {
-    const v = views.get(activeView);
+  if (host && getActiveView() !== "board") {
+    const v = views.get(getActiveView());
     if (!v) setActiveView("board");
   }
   renderViewSwitcher();
@@ -1597,6 +1511,12 @@ export async function initPlugins(
     getHost: () => host,
     getBridge: () => bridge,
     isPluginsReady: () => pluginsReady,
+  });
+  // The view switcher reads the host and the plugin event
+  // bus through getter closures (host-views).
+  bindViewDeps({
+    getHost: () => host,
+    emitEvent: (event: string) => emitPluginEvent(event),
   });
   // The plugin tool buttons are the plugin system's own DOM,
   // so it syncs their active state when the tool changes —
