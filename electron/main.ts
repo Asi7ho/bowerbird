@@ -1449,13 +1449,23 @@ function registerIpc(): void {
     if (!messages.every((m: unknown) => typeof m === "object" && m !== null && typeof (m as { role?: unknown }).role === "string" && typeof (m as { content?: unknown }).content === "string")) {
       throw new Error("ai messages must be { role, content } objects");
     }
+    // A plugin passes the messages: cap the total so one call
+    // cannot push an unbounded body at the AI base.
+    if (JSON.stringify(messages).length > 1000000) throw new Error("ai messages too large");
     let parsed: URL;
     try {
       parsed = new URL(base);
     } catch {
       throw new Error("ai base URL is not a valid URL");
     }
-    const isLocalhost = parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "::1";
+    // Credentials in the URL would be sent as Basic auth
+    // alongside the Bearer key — the key is the only auth.
+    if (parsed.username || parsed.password) throw new Error("ai base URL must not contain credentials");
+    // WHATWG URL returns IPv6 hostnames bracketed ("[::1]"),
+    // so compare the unbracketed form or the localhost check
+    // never matches and an IPv6-localhost base is unusable.
+    const host = parsed.hostname.startsWith("[") ? parsed.hostname.slice(1, -1) : parsed.hostname;
+    const isLocalhost = host === "localhost" || host === "127.0.0.1" || host === "::1";
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") throw new Error("ai base URL must be http or https");
     if (parsed.protocol === "http:" && !isLocalhost) throw new Error("ai base URL must be https");
     if (!isLocalhost && isPrivateHost(parsed.hostname)) throw new Error("ai base URL is not a public web address");
@@ -1466,6 +1476,16 @@ function registerIpc(): void {
       body: JSON.stringify({ model, messages }),
       signal: AbortSignal.timeout(120000),
     });
+    // fetch follows redirects, so a public base could redirect
+    // the POST — model and messages included — to a private
+    // host; check where it actually landed, as fetchPreview does.
+    try {
+      if (res.url && isPrivateHost(new URL(res.url).hostname)) {
+        throw new Error("ai request redirected to a private address");
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message.includes("private address")) throw e;
+    }
     if (!res.ok) {
       let detail = "";
       try {
