@@ -35,6 +35,7 @@ const NOTE_COLOURS = ["#FFFFFF", "#FEF3C7", "#FCE7F3", "#DCFCE7", "#DBEAFE", "#F
 const ICONS = {
   select: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5 19 12l-7.5 1.4L8.6 20.5 6 3.5Z" /></svg>',
   pen: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 19.5 5.6 15 16.2 4.4a2.12 2.12 0 0 1 3 3L8.6 18l-4.1 1.5Z" fill="none"/><path d="M14.5 6.5l3 3" /></svg>',
+  pencil: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>',
   eraser: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" /><path d="M22 21H7" /><path d="m5 11 9 9" /></svg>',
   connector: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 20 4" /><path d="M14 4h6v6" /></svg>',
   zoomOut: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg>',
@@ -83,8 +84,20 @@ export function activate(api: PluginContext): void {
   }
 
   const selectBtn = toolButton("tool-select", "Select (V)", "Select", ICONS.select, () => api.ui.setTool("select"));
-  const penBtn = toolButton("tool-pen", "Pen (P)", "Pen", ICONS.pen, () => api.ui.setTool("pen"));
-  const eraserBtn = toolButton("tool-eraser", "Eraser (X)", "Eraser", ICONS.eraser, () => api.ui.setTool("eraser"));
+  // One draw button for pencil, pen and eraser, like the
+  // shape button: it shows the draw tool last chosen, and
+  // the flyout beside the toolbar chooses between them.
+  // Its icon and title follow the current draw tool.
+  const DRAW_TOOLS = [
+    { id: "pencil", label: "Pencil", icon: ICONS.pencil, key: "" },
+    { id: "pen", label: "Pen (P)", icon: ICONS.pen, key: "P" },
+    { id: "eraser", label: "Eraser (X)", icon: ICONS.eraser, key: "X" },
+  ] as const;
+  const drawBtn = toolButton("tool-draw", "Pen (P)", "Pen", ICONS.pen, () => {
+    const cur = api.ui.getTool();
+    const isDraw = DRAW_TOOLS.some((d) => d.id === cur);
+    api.ui.setTool(isDraw ? cur : drawBtn.dataset.draw ?? "pen");
+  });
   const connectorBtn = toolButton("tool-connector", "Arrow (A)", "Arrow", ICONS.connector, () => api.ui.setTool("connector"));
   // The shape button shows the shape last chosen, and the
   // flyout beside the toolbar chooses between all shapes.
@@ -108,11 +121,28 @@ export function activate(api: PluginContext): void {
   palette.style.display = "none";
   toolbar.appendChild(palette);
 
+  // The colour in use, as a swatch in the toolbar.
+  // Clicking it opens the colour bar to change colours.
+  // It lives at the end of the tools, after the shape
+  // button, so the tool buttons stay together.
+  const colorSwatch = toolButton("tool-colour", "Colour — change the pen colour", "Colour", "", () => {
+    colorBarOpen = !colorBarOpen;
+    update();
+  }, toolsSeg, { className: "colour-swatch", type: "button" });
+
   const shapePicker = document.createElement("div");
   shapePicker.className = "palette";
   shapePicker.id = "shape-picker";
   shapePicker.style.display = "none";
   toolbar.appendChild(shapePicker);
+
+  // The draw picker: pencil, pen and eraser, beside the
+  // draw button. It shows when a draw tool is active.
+  const drawPicker = document.createElement("div");
+  drawPicker.className = "palette";
+  drawPicker.id = "draw-picker";
+  drawPicker.style.display = "none";
+  toolbar.appendChild(drawPicker);
 
   const noteEl = document.createElement("div");
   noteEl.className = "palette";
@@ -168,6 +198,12 @@ export function activate(api: PluginContext): void {
     return api.shapes.list().some((s) => s.kind === t);
   }
 
+  // Whether the colour bar is open. It opens only when
+  // the colour swatch is clicked, and closes when it is
+  // clicked again or a colour is picked. While it is open
+  // the draw picker hides, so only one flyout shows.
+  let colorBarOpen = false;
+
   let lastKey = "";
   function update(): void {
     const tool = api.ui.getTool();
@@ -175,7 +211,7 @@ export function activate(api: PluginContext): void {
     const penColor = api.pen.getColor();
     const noteBg = noteBgOfSelected();
     const zoom = api.view.getCamera().zoom;
-    const key = `${tool}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}`;
+    const key = `${tool}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}|${colorBarOpen}`;
     if (key === lastKey) return;
     lastKey = key;
 
@@ -183,9 +219,46 @@ export function activate(api: PluginContext): void {
 
     const setActive = (el: HTMLElement, on: boolean) => el.classList.toggle("active", on);
     setActive(selectBtn, tool === "select");
-    setActive(penBtn, tool === "pen");
-    setActive(eraserBtn, tool === "eraser");
     setActive(connectorBtn, tool === "connector");
+
+    // The draw button shows the draw tool last chosen.
+    const isDraw = DRAW_TOOLS.some((d) => d.id === tool);
+    setActive(drawBtn, isDraw);
+    const drawTarget = isDraw
+      ? DRAW_TOOLS.find((d) => d.id === tool)
+      : (!drawBtn.dataset.draw ? DRAW_TOOLS.find((d) => d.id === "pen") : undefined);
+    if (drawTarget && drawBtn.dataset.draw !== drawTarget.id) {
+      drawBtn.dataset.draw = drawTarget.id;
+      drawBtn.innerHTML = drawTarget.icon;
+      drawBtn.title = drawTarget.label;
+      drawBtn.setAttribute("aria-label", drawTarget.label.replace(/ \(.*\)$/, ""));
+    }
+
+    // Draw picker: shown when a draw tool is active and
+    // the colour bar is not open.
+    const showDraw = isDraw && !colorBarOpen;
+    drawPicker.style.display = showDraw ? "flex" : "none";
+    if (showDraw && drawPicker.childElementCount === 0) {
+      for (const d of DRAW_TOOLS) {
+        const b = document.createElement("button");
+        b.className = "shape-option";
+        b.dataset.draw = d.id;
+        b.title = d.label;
+        b.setAttribute("aria-label", d.label.replace(/ \(.*\)$/, ""));
+        b.innerHTML = d.icon;
+        b.addEventListener("click", () => api.ui.setTool(d.id));
+        drawPicker.appendChild(b);
+      }
+    }
+    if (showDraw) {
+      for (const child of Array.from(drawPicker.children)) {
+        (child as HTMLButtonElement).classList.toggle("active", (child as HTMLButtonElement).dataset.draw === tool);
+      }
+    }
+
+    // The colour swatch shows the pen colour in use.
+    colorSwatch.style.setProperty("--swatch-color", penColor);
+    colorSwatch.classList.toggle("active", colorBarOpen);
 
     const isShape = isShapeTool(tool);
     setActive(shapeBtn, isShape);
@@ -225,10 +298,10 @@ export function activate(api: PluginContext): void {
     }
 
     // Note colours: shown when at least one selected card
-    // is a text note and the pen flyout is not showing.
+    // is a text note and no draw tool is active.
     // Clicking a colour sets the background of every
     // selected text note, in one undo step.
-    const showNotes = noteBg !== null && tool !== "pen";
+    const showNotes = noteBg !== null && !isDraw;
     noteEl.style.display = showNotes ? "flex" : "none";
     if (showNotes && noteEl.childElementCount === 0) {
       for (const hex of NOTE_COLOURS) {
@@ -248,16 +321,18 @@ export function activate(api: PluginContext): void {
       }
     }
 
-    // Pen palette: shown when the pen tool is active.
-    palette.style.display = tool === "pen" ? "flex" : "none";
-    if (tool === "pen" && palette.childElementCount === 0) {
+    // Pen palette (the colour bar): shown only when the
+    // colour swatch opened it. Picking a colour sets the
+    // pen colour and closes the bar.
+    palette.style.display = colorBarOpen ? "flex" : "none";
+    if (colorBarOpen && palette.childElementCount === 0) {
       for (const hex of PALETTE) {
         // The sync loop below marks the active swatch, so
         // the build-time " active" class is not needed.
-        palette.appendChild(swatchButton(hex, () => { api.pen.setColor(hex); }, hex === penColor));
+        palette.appendChild(swatchButton(hex, () => { api.pen.setColor(hex); colorBarOpen = false; update(); }, hex === penColor));
       }
     }
-    if (tool === "pen") {
+    if (colorBarOpen) {
       // A pen colour set elsewhere — Palette's wheel, for
       // example — is not one of the six fixed swatches, so
       // without this it would show no active swatch at all,
@@ -270,7 +345,7 @@ export function activate(api: PluginContext): void {
       }
       const hasCurrent = Array.from(palette.children).some((c) => (c as HTMLButtonElement).title.toUpperCase() === penColor.toUpperCase());
       if (!hasCurrent) {
-        palette.prepend(swatchButton(penColor, () => { api.pen.setColor(penColor); }, true));
+        palette.prepend(swatchButton(penColor, () => { api.pen.setColor(penColor); colorBarOpen = false; update(); }, true));
       }
       for (const child of Array.from(palette.children)) {
         const sw = child as HTMLButtonElement;

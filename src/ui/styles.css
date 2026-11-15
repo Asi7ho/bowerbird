@@ -615,6 +615,21 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #toolbar .palette#shape-picker { top: 140px; }
 #toolbar .palette .shape-option {
   width: 36px; height: 36px; padding: 0;
+/* The colour swatch in the toolbar: the pen colour in
+   use, as a round swatch. Clicking it opens the colour
+   bar. It is a toolbar button in size, a swatch in look. */
+#toolbar button.colour-swatch {
+  width: 100%; height: 40px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+#toolbar button.colour-swatch::before {
+  content: ""; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--swatch-color, #1A1A1A); border: 1px solid rgba(0, 0, 0, 0.12);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35);
+}
+#toolbar button.colour-swatch.active::before {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent);
+}
   display: flex; align-items: center; justify-content: center;
 }
 #toolbar .palette .shape-option.active {
