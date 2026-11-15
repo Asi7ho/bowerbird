@@ -88,6 +88,13 @@ const settingsSections = new Map<string, PluginSettingsSectionDef & { pluginId: 
 const shortcuts = new Map<string, PluginShortcutDef & { pluginId: string }>();
 const loaded = new Map<string, LoadedPlugin>();
 const listeners = new Map<string, Set<() => void>>();
+// The core's own events: state changes the core fires and
+// every plugin listens for — the board changed, a save
+// started or finished, the tool, view, camera, pen or
+// selection changed. A plugin may listen for these but never
+// fire them: firing one would make every other plugin and
+// the core act on a state change that never happened.
+const CORE_EVENTS = new Set(["board", "camera", "pen", "save-failed", "saved", "saving", "selection", "tool", "view"]);
 
 let host: PluginHost | null = null;
 let bridge: PluginBridge | null = null;
@@ -1097,7 +1104,20 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
     events: {
       on: (event: string, handler: () => void) => onEvent(event, handler),
       off: (event: string, handler: () => void) => offEvent(event, handler),
-      emit: (event: string) => emitPluginEvent(event),
+      // Fire an event for every listener. Listening is open:
+      // a plugin follows the board, the tool, the view. Firing
+      // is not: a core event name is rejected, so no plugin can
+      // fake a board save, a tool change, or any other core
+      // state change. A custom event name is the plugin's own
+      // channel — the core never fires or listens for one — so
+      // it is emitted as-is. The board view (the app's own UI)
+      // emits "selection" and "tool" when they change.
+      emit: (event: string) => {
+        if (!trusted && CORE_EVENTS.has(event)) {
+          throw new Error(`Plugin ${pluginId} cannot emit the core event "${event}"`);
+        }
+        emitPluginEvent(event);
+      },
     },
     geometry: {
       centre: (item: Item) => centre(item),
