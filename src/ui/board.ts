@@ -2018,6 +2018,17 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
     } else if (selected.length === 1) {
       const it = api.board.getItem(selected[0]);
       if (it && "Text" in it.kind) startTextEdit(selected[0]);
+      else if (it && "Video" in it.kind) {
+        // The same action as the card's play button: a local
+        // video plays on the board, a remote link or an
+        // unplayable format opens outside the app. Tab cycles
+        // the selection to the card, Enter plays it — the
+        // button itself is not a Tab stop while Tab cycles
+        // cards, so the keyboard path runs through here.
+        const v = it.kind.Video;
+        if (isInlineVideo(v.source, v.remote)) api.media.playVideo(it.id);
+        else openExternal(v.source);
+      } else if (it && "Audio" in it.kind) api.media.toggleAudio(it.id, it.kind.Audio.path);
       else if (it && it.group !== null) startGroupRename(it.group);
     } else {
       const groups = new Set(selected.map((id) => api.board.getItem(id)?.group).filter((g): g is number => g !== null && g !== undefined));
