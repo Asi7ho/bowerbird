@@ -1054,11 +1054,17 @@ function navigateElements(dir: 1 | -1): void {
   const navigable = board.items.filter((it) => !("Stroke" in it.kind) && !("Connector" in it.kind));
   if (navigable.length === 0) return;
   const selected = api.board.getSelected();
+  // Advance from the edge of the selection in the direction
+  // of travel: from the last member going forward, from the
+  // first going back. Advancing from the first member in
+  // both directions traps Tab inside a group — selecting
+  // one member selects the whole group, so the next Tab
+  // lands on the group's other member and re-selects the
+  // same group forever (6, 2, 6, 2, …).
   let idx = -1;
-  if (selected.length === 1) idx = navigable.findIndex((it) => it.id === selected[0]);
-  if (idx === -1 && selected.length > 0) {
-    const first = navigable.findIndex((it) => selected.includes(it.id));
-    if (first !== -1) idx = first;
+  if (selected.length > 0) {
+    const indices = navigable.map((it, i) => (selected.includes(it.id) ? i : -1)).filter((i) => i !== -1);
+    if (indices.length > 0) idx = dir === 1 ? Math.max(...indices) : Math.min(...indices);
   }
   const next = idx === -1
     ? (dir === 1 ? 0 : navigable.length - 1)

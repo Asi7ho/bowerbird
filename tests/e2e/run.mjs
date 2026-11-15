@@ -1033,7 +1033,10 @@ async function main() {
       let selected = false;
       for (let i = 0; i < 40; i++) {
         await page.keyboard.press("Tab");
-        await new Promise((r) => setTimeout(r, 150));
+        // The DOM lags a Tab press while the board re-renders
+        // (a playing video on SwiftShader): read it too soon
+        // and the selection still shows the previous card.
+        await new Promise((r) => setTimeout(r, 400));
         selected = await page.evaluate((cid) => !!document.querySelector(`#cards .card[data-id="${cid}"].selected`), String(id));
         if (selected) break;
       }
