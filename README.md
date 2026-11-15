@@ -6,6 +6,36 @@ Drop images, notes, links, PDFs, audio, video and colours onto the board. Pan an
 
 Link cards are previews only. They do not embed web pages.
 
+## What it looks like
+
+![The board: notes, photos, links, audio, video and colour cards on an infinite canvas](screenshots/board-overview.png)
+
+The board. Notes, photos, links, audio, video and colour cards on an infinite canvas.
+
+![Sketching with the pen](screenshots/pen-sketch.gif)
+
+Sketch with the pen.
+
+![Double-click to add a note](screenshots/create-note.gif)
+
+Double-click anywhere to add a note.
+
+![Selecting two cards and grouping them](screenshots/group-cards.gif)
+
+Select cards and group them with Ctrl+G. They move together.
+
+![Panning and zooming the board](screenshots/pan-zoom.gif)
+
+Space + drag to pan, = to zoom in.
+
+![The command palette listing actions and cards](screenshots/command-palette.png)
+
+Ctrl+K opens the command palette. It lists every action and jumps to any card.
+
+![A slide drawn over part of the board](screenshots/presentation.png)
+
+Draw a slide over part of the board and present it.
+
 ## Run it
 
 ```sh
