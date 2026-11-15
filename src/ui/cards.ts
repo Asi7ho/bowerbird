@@ -37,7 +37,7 @@ export const manifest: PluginManifest = {
 };
 
 type TextData = { text: string; bold: boolean; size: number; color: string; bg?: string };
-type ShapeData = { shape: string; fill: string };
+type ShapeData = { shape: string; fill: string; outline?: boolean };
 type ImageData = { path: string };
 type UrlCardData = { url: string; title: string | null; description: string | null; image?: string | null; icon?: string | null; embed?: boolean };
 type PdfCardData = { path: string; size_bytes: number };
@@ -75,6 +75,36 @@ function shapeClipPath(kind: string): string | null {
     case "arrow": return "polygon(0 40%, 60% 40%, 60% 15%, 100% 50%, 60% 85%, 60% 60%, 0 60%)";
     default: return null;
   }
+}
+
+// An outline shape: the same geometry as the filled shape,
+// drawn as an SVG stroke with no fill, so the line follows
+// the shape — a triangle's outline is a triangle, not a
+// rectangle. The stroke is 4px, inset by half its width so
+// it is not clipped by the card edge. The fractions match
+// shapeClipPath above.
+function shapeOutlineSvg(shape: string, w: number, h: number, color: string): string {
+  const sw = 4, inset = sw / 2;
+  const stroke = `fill="none" stroke="${color}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"`;
+  const frac: Record<string, Array<[number, number]>> = {
+    triangle: [[0.5, 0], [1, 1], [0, 1]],
+    diamond: [[0.5, 0], [1, 0.5], [0.5, 1], [0, 0.5]],
+    hexagon: [[0.25, 0], [0.75, 0], [1, 0.5], [0.75, 1], [0.25, 1], [0, 0.5]],
+    star: [[0.5, 0], [0.61, 0.35], [0.98, 0.35], [0.68, 0.57], [0.79, 0.91], [0.5, 0.7], [0.21, 0.91], [0.32, 0.57], [0.02, 0.35], [0.39, 0.35]],
+    arrow: [[0, 0.4], [0.6, 0.4], [0.6, 0.15], [1, 0.5], [0.6, 0.85], [0.6, 0.6], [0, 0.6]],
+  };
+  let inner: string;
+  if (shape === "rect") {
+    inner = `<rect x="${inset}" y="${inset}" width="${w - sw}" height="${h - sw}" rx="12" ${stroke} />`;
+  } else if (shape === "ellipse") {
+    inner = `<ellipse cx="${w / 2}" cy="${h / 2}" rx="${w / 2 - inset}" ry="${h / 2 - inset}" ${stroke} />`;
+  } else if (frac[shape]) {
+    const pts = frac[shape].map(([fx, fy]) => `${inset + fx * (w - sw)},${inset + fy * (h - sw)}`).join(" ");
+    inner = `<polygon points="${pts}" ${stroke} />`;
+  } else {
+    return "";
+  }
+  return `<svg width="100%" height="100%" viewBox="0 0 ${w} ${h}">${inner}</svg>`;
 }
 
 export function activate(api: PluginContext): void {
@@ -139,9 +169,16 @@ export function activate(api: PluginContext): void {
     title: "Shape",
     render: (item, data, plain = false) => {
       const c = chrome(item, plain);
-      const { shape, fill } = data as ShapeData;
+      const { shape, fill, outline } = data as ShapeData;
       const fillColor = safeColor(fill, "#1A1A1A");
       const radius = shape === "ellipse" ? "50%" : shape === "rect" ? "12px" : "0px";
+      // An outline shape is a stroked SVG, not a filled
+      // div: a border on the div would be a rectangle even
+      // for a triangle. A shape saved before outlines
+      // existed has no outline flag, and draws filled.
+      if (outline) {
+        return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}background:transparent;border:none;border-radius:${radius}"><div class="inner" style="width:100%;height:100%">${shapeOutlineSvg(shape, item.size.w, item.size.h, fillColor)}</div></div>`;
+      }
       // Outer card is transparent with no hairline border,
       // so an ellipse is really an ellipse: a filled outer
       // rect would show its corners outside the ellipse,

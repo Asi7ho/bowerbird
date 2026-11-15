@@ -39,6 +39,8 @@ export interface BootContext {
   // result into the new board's card with the same id.
   boardGeneration: number;
   penColor: string;
+  // Whether new shapes are outlines (stroke only) or filled.
+  shapeOutline: boolean;
   selected: number[];
   toastTimer: ReturnType<typeof setTimeout> | null;
   // Show a transient message on the board's toast element.

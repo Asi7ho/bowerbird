@@ -615,6 +615,17 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #toolbar .palette#shape-picker { top: 140px; }
 #toolbar .palette .shape-option {
   width: 36px; height: 36px; padding: 0;
+/* The shape picker's filled/outline switch: two small
+   text buttons at the top of the flyout. */
+#toolbar .palette .shape-mode {
+  width: 64px; height: 28px; padding: 0;
+  font-size: 11px; font-weight: 600; color: var(--grey);
+  background: transparent; border-radius: 8px;
+}
+#toolbar .palette .shape-mode.active {
+  background: #fff; color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
 /* The colour swatch in the toolbar: the pen colour in
    use, as a round swatch. Clicking it opens the colour
    bar. It is a toolbar button in size, a swatch in look. */
