@@ -122,9 +122,14 @@ export async function activate(api) {
   // A command: register it and run it ourselves. Running
   // another plugin's command is rejected, but our own is
   // always allowed.
-  api.ui.registerCommand({ id: "api-cmd", title: "API test command", run: () => { counts.cmd++; } });
+  api.ui.registerCommand({ id: "api-cmd", title: "API test command", run: () => { counts.cmd++; window.__apiCmdRan = counts.cmd; } });
   await api.ui.runCommand("api-test-plugin", "api-cmd");
-  window.__apiTest = { id, before, after, isFrameFrame, isFrameText, actionOk, dblOk, actionMiss, dblMiss, actionSeen, dblSeen, toolDef: toolDef ? { id: toolDef.id, title: toolDef.title, pluginId: toolDef.pluginId } : null, toolMiss, shortcutOk, shortcutMiss, shortcutSeen, cmdCount: counts.cmd, actionCount: counts.action, shortcutCount: counts.shortcut };
+  // The routing gate: this plugin is not the palette, so
+  // routing its own command must throw and the command must
+  // not run.
+  let routeThrew = false;
+  try { await api.ui.routeCommand("api-test-plugin", "api-cmd"); } catch { routeThrew = true; }
+  window.__apiTest = { id, before, after, isFrameFrame, isFrameText, actionOk, dblOk, actionMiss, dblMiss, actionSeen, dblSeen, toolDef: toolDef ? { id: toolDef.id, title: toolDef.title, pluginId: toolDef.pluginId } : null, toolMiss, shortcutOk, shortcutMiss, shortcutSeen, cmdCount: counts.cmd, actionCount: counts.action, shortcutCount: counts.shortcut, routeThrew };
 }
 export function deactivate() {}
 `;
@@ -172,6 +177,7 @@ export async function activate(api) {
   r.ownShortcutRan = api.ui.dispatchShortcut("x") && ownShortcut;
   await probe("controllerThrew", () => api.board.registerController({}));
   window.__isolationTest = r;
+
 }
 export function deactivate() {}
 `;
@@ -767,6 +773,32 @@ async function main() {
       assert.equal(counts.cmd, 1);
       assert.equal(counts.action, 1);
       assert.equal(counts.shortcut, 1);
+    });
+
+    await check("the palette routes a plugin command to its plugin", async () => {
+      // The palette is already enabled (bundled plugin check)
+      // and the api-test-plugin is enabled (checklist check).
+      // Reload so both are active, then open the palette,
+      // filter to the api command and run it: the palette
+      // routes the pick to the host, which runs it as the
+      // api-test-plugin. The gate probe in the plugin's
+      // activate already proved a non-palette plugin cannot
+      // route — its own routeCommand threw and the command
+      // did not run.
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: 15000 });
+      const before = await waitFor("API test result on the page", () => page.evaluate(() => window.__apiTest ?? null));
+      assert.equal(before.routeThrew, true);
+      assert.equal(before.cmdCount, 1);
+      await page.keyboard.press("Control+k");
+      await page.locator(".cmd-palette").waitFor({ state: "visible", timeout: 10000 });
+      await page.keyboard.type("API test command");
+      await page.locator(".cmd-row", { hasText: "API test command" }).first().waitFor({ timeout: 10000 });
+      await page.keyboard.press("Enter");
+      await waitFor("API command ran via the palette", async () => {
+        const ran = await page.evaluate(() => window.__apiCmdRan ?? 0);
+        return ran === 2 ? true : null;
+      });
     });
 
     await check("a voice note records and lands as an audio card", async () => {
