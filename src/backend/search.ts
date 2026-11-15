@@ -242,6 +242,10 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
     const urls: string[] = [];
     try {
       const video = document.createElement("video");
+      // crossOrigin="anonymous": without it the app-file URL
+      // taints the canvas and toDataURL throws, so no video
+      // frame is ever indexed (see poster.ts).
+      video.crossOrigin = "anonymous";
       video.src = api.fileUrl(source);
       video.muted = true;
       video.preload = "auto";
