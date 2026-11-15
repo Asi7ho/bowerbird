@@ -99,17 +99,25 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
     // only — a camera-only write is not a change worth
     // announcing), "saved" when the file holds the board.
     if (contentChanged) emitPluginEvent("saving");
+    const onSaveFailed = (e: unknown) => {
+      // A failed write must not be remembered as saved:
+      // clear the seen keys so the next save retries
+      // instead of skipping on "nothing changed".
+      lastSeenContentKey = null;
+      lastSeenCameraJson = null;
+      emitPluginEvent("save-failed");
+      ctx.toast(`Save failed: ${String(e)}`);
+    };
     api.saveBoard(JSON.stringify(ctx.getBoard())).then(
-      () => emitPluginEvent("saved"),
-      (e) => {
-        // A failed write must not be remembered as saved:
-        // clear the seen keys so the next save retries
-        // instead of skipping on "nothing changed".
-        lastSeenContentKey = null;
-        lastSeenCameraJson = null;
-        emitPluginEvent("save-failed");
-        ctx.toast(`Save failed: ${String(e)}`);
+      (ok) => {
+        // A refused save — an external writer changed the file,
+        // or the board is absurdly large — is a failure too:
+        // without this the title bar says "Saved" for a board
+        // that never reached disk.
+        if (ok === false) onSaveFailed("save was refused");
+        else emitPluginEvent("saved");
       },
+      onSaveFailed,
     );
     return { itemsJson, contentKey };
   }

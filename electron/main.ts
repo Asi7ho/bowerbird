@@ -843,6 +843,11 @@ function registerIpc(): void {
   // instead of overwriting. Shared by the async save and
   // the synchronous unload flush.
   function saveBoardJson(json: string): boolean {
+    // Every other write path is capped (embed-file-bytes is
+    // 50 MB); a 2,000-card board is ~300 KB, so the same cap
+    // here leaves absurd saves no room to block the main
+    // process or fill the disk in one call.
+    if (json.length > 50000000) return false;
     const file = boardPath();
     // Live-follow guard: if the file on disk changed since the
     // app last read or wrote it, an external writer (the CLI
@@ -877,7 +882,7 @@ function registerIpc(): void {
   }
 
   ipcMain.handle("bowerbird:save-board", (_event, json: string) => {
-    saveBoardJson(json);
+    return saveBoardJson(json);
   });
 
   // Unload flush: an async invoke may not complete before
