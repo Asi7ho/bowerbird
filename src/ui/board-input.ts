@@ -473,12 +473,21 @@ S.boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
     S.drag = { kind: "shape", shape: S.tool as ShapeKind, start: world, current: world };
     return;
   }
-  if (S.tool === "pen" || S.tool === "pencil") {
+  if (S.tool === "pen" || S.tool === "pencil" || S.tool === "highlighter") {
     // A stylus records its pressure per point, so the
     // stroke can thicken and thin with the press; a mouse
     // or finger records none, and draws a uniform stroke.
-    // The pencil draws thinner than the pen.
-    S.drag = { kind: "stroke", points: [world], pressures: e.pointerType === "pen" ? [e.pressure] : [], width: S.tool === "pencil" ? 2 : 3 };
+    // The pencil draws thinner than the pen; the
+    // highlighter is a wide translucent marker, so it
+    // records no pressure and draws uniform.
+    const isHighlighter = S.tool === "highlighter";
+    S.drag = {
+      kind: "stroke",
+      points: [world],
+      pressures: e.pointerType === "pen" && !isHighlighter ? [e.pressure] : [],
+      width: isHighlighter ? 12 : S.tool === "pencil" ? 2 : 3,
+      marker: isHighlighter,
+    };
     return;
   }
   if (S.tool === "select" && S.lassoMode) {
@@ -666,19 +675,22 @@ export function dragPreview(id: string, tag: string): SVGElement {
 // varies is one line per short sample along the smooth
 // curve, each at the width its pressure makes, so the
 // stroke visibly thickens as it is drawn. `width` is the
-// tool's base width: the pencil draws thinner than the pen.
-export function updateLiveStroke(points: Pt[], pressures: number[], width: number): void {
+// tool's base width: the pencil draws thinner than the pen,
+// the highlighter much wider. A marker (highlighter) draws
+// translucent, like the stored stroke.
+export function updateLiveStroke(points: Pt[], pressures: number[], width: number, marker: boolean): void {
   const el = dragPreview("live-stroke", "g");
   while (el.firstChild) el.removeChild(el.firstChild);
+  const opacity = marker ? "0.45" : "1";
   if (pressures.length === points.length && strokePressuresVary({ pressures })) {
     const pts = smoothStrokeSamples(points);
     const prs = smoothStrokePressures(pressures);
     for (let i = 0; i + 1 < pts.length; i++) {
       const w = pressureWidth(width, (prs[i] + prs[i + 1]) / 2);
-      el.appendChild(svgEl2("line", { x1: String(pts[i].x), y1: String(pts[i].y), x2: String(pts[i + 1].x), y2: String(pts[i + 1].y), stroke: S.api.pen.getColor(), "stroke-width": String(w), "stroke-linecap": "round" }));
+      el.appendChild(svgEl2("line", { x1: String(pts[i].x), y1: String(pts[i].y), x2: String(pts[i + 1].x), y2: String(pts[i + 1].y), stroke: S.api.pen.getColor(), "stroke-width": String(w), "stroke-linecap": "round", opacity }));
     }
   } else {
-    el.appendChild(svgEl2("path", { d: smoothStrokePath(points), fill: "none", stroke: S.api.pen.getColor(), "stroke-width": String(width), "stroke-linecap": "round", "stroke-linejoin": "round" }));
+    el.appendChild(svgEl2("path", { d: smoothStrokePath(points), fill: "none", stroke: S.api.pen.getColor(), "stroke-width": String(width), "stroke-linecap": "round", "stroke-linejoin": "round", opacity }));
   }
 }
 // The lasso loop, drawn live while dragging. The path is
@@ -797,7 +809,7 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
         const selected = S.api.board.getSelected();
         if (S.api.ui.isSettingsOpen() || S.editingId !== null) {
           S.boardEl.style.cursor = "default";
-        } else if (S.tool === "pen" || S.tool === "pencil" || S.tool === "connector" || isShapeTool(S.tool) || (S.tool === "select" && S.lassoMode)) {
+        } else if (S.tool === "pen" || S.tool === "pencil" || S.tool === "highlighter" || S.tool === "connector" || isShapeTool(S.tool) || (S.tool === "select" && S.lassoMode)) {
           S.boardEl.style.cursor = "crosshair";
         } else if (S.tool === "eraser") {
           // The ring is the cursor while erasing.
@@ -864,8 +876,8 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
     const last = S.drag.points[S.drag.points.length - 1];
     if (Math.hypot(world.x - last.x, world.y - last.y) > 2 / cam.zoom) {
       S.drag.points.push(world);
-      if (e.pointerType === "pen") S.drag.pressures.push(e.pressure);
-      updateLiveStroke(S.drag.points, S.drag.pressures, S.drag.width);
+      if (e.pointerType === "pen" && !S.drag.marker) S.drag.pressures.push(e.pressure);
+      updateLiveStroke(S.drag.points, S.drag.pressures, S.drag.width, S.drag.marker);
     }
   } else if (S.drag.kind === "lasso") {
     const cam = S.api.view.getCamera();
@@ -964,7 +976,7 @@ window.addEventListener("pointerup", (e: PointerEvent) => {
       const xs = d.points.map((p) => p.x), ys = d.points.map((p) => p.y);
       const pos = { x: Math.min(...xs), y: Math.min(...ys) };
       const size = { w: Math.max(1, Math.max(...xs) - pos.x), h: Math.max(1, Math.max(...ys) - pos.y) };
-      S.api.board.addItem({ Stroke: { points: d.points, color: S.api.pen.getColor(), width: d.width, marker: false, ...(d.pressures.length > 0 ? { pressures: d.pressures } : {}) } }, pos, size);
+      S.api.board.addItem({ Stroke: { points: d.points, color: S.api.pen.getColor(), width: d.width, marker: d.marker, ...(d.pressures.length > 0 ? { pressures: d.pressures } : {}) } }, pos, size);
     }
   } else if (d.kind === "lasso") {
     // A click, not a loop: select what is under the cursor,

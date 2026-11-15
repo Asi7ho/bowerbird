@@ -36,6 +36,7 @@ const ICONS = {
   select: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5 19 12l-7.5 1.4L8.6 20.5 6 3.5Z" /></svg>',
   pen: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 19.5 5.6 15 16.2 4.4a2.12 2.12 0 0 1 3 3L8.6 18l-4.1 1.5Z" fill="none"/><path d="M14.5 6.5l3 3" /></svg>',
   pencil: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>',
+  highlighter: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 11-6 6v3h9l3-3" /><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4Z" /></svg>',
   eraser: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" /><path d="M22 21H7" /><path d="m5 11 9 9" /></svg>',
   connector: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 20 4" /><path d="M14 4h6v6" /></svg>',
   zoomOut: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg>',
@@ -91,6 +92,7 @@ export function activate(api: PluginContext): void {
   const DRAW_TOOLS = [
     { id: "pencil", label: "Pencil", icon: ICONS.pencil, key: "" },
     { id: "pen", label: "Pen (P)", icon: ICONS.pen, key: "P" },
+    { id: "highlighter", label: "Highlighter", icon: ICONS.highlighter, key: "" },
     { id: "eraser", label: "Eraser (X)", icon: ICONS.eraser, key: "X" },
   ] as const;
   const drawBtn = toolButton("tool-draw", "Pen (P)", "Pen", ICONS.pen, () => {
