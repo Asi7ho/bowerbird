@@ -4,9 +4,10 @@
 // {"Text": {"text": "...", "bold": false, "size": 16, "color": "#1A1A1A"}}
 // and a connector endpoint is {"Item": 3} or {"Point": {"x": 1, "y": 2}}.
 
-// The board model types live in plugin-api.d.ts (outside src/) so
-// plugins import them without reaching into the core. This module
-// re-exports them, so existing core imports from "./model" keep working.
+// The board model types live in the bowerbird-plugin-api package
+// (plugin-api/) so plugins import them by name without reaching
+// into the core. This module re-exports them, so existing core
+// imports from "./model" keep working.
 import type { Anchor, ArrangeOptions, Block, Board, Camera, Item, Kind, Pt, Segment, ShapeKind, Size } from "bowerbird-plugin-api";
 export type { Anchor, ArrangeOptions, Block, Board, Camera, Item, Kind, Pt, Segment, ShapeKind, Size };
 

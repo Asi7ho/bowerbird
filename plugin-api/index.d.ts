@@ -1,14 +1,16 @@
 // Bowerbird plugin API types — the public contract plugins build
 // against. A plugin is a folder with a manifest.json and a main
 // module; it receives one `api: PluginContext` and must not import
-// anything from the app's own source (src/). These types live here,
-// outside src/, so a plugin imports them from "../../plugin-api"
-// and never reaches into the core. The core (src/model.ts and
-// src/plugins.ts) re-exports them, so existing core imports keep
-// working. Board JSON is the stable on-disk shape these types
+// anything from the app's own source (src/). These types live in
+// the bowerbird-plugin-api package (plugin-api/), so a plugin
+// imports them by name — `import type { ... } from
+// "bowerbird-plugin-api"` — and never reaches into the core. The
+// core (src/backend/model.ts and src/plugins/host.ts) re-exports
+// them, so existing core imports keep working. Board JSON is the
+// stable on-disk shape these types
 // describe; see ARCHITECTURE.md and PLUGIN_API.md.
 
-// ---- board model (from src/model.ts) ----
+// ---- board model (from src/backend/model.ts) ----
 
 export interface Pt { x: number; y: number }
 
@@ -92,7 +94,7 @@ export type Block =
   | { Code: { lines: string[] } }
   | { Paragraph: { segments: Segment[] } };
 
-// ---- plugin API (from src/plugins.ts) ----
+// ---- plugin API (from src/plugins/host.ts) ----
 
 export interface PluginManifest {
   id: string;
@@ -1003,7 +1005,7 @@ export interface PluginContext {
     // plugin may emit its own custom event the same way.
     emit: (event: string) => void;
   };
-  // Pure geometry, from src/model.ts — no permission needed,
+  // Pure geometry, from src/backend/model.ts — no permission needed,
   // because these read nothing and write nothing. Plugins
   // used to copy these by hand (Presentation copied
   // rectCrossing and clipped ends), which drifted from
@@ -1066,7 +1068,7 @@ export interface PluginContext {
     // False when the document is not loaded yet.
     setPdfPage: (id: number, path: string, page: number) => Promise<boolean>;
   };
-  // Pure text and colour helpers, from src/model.ts — no
+  // Pure text and colour helpers, from src/backend/model.ts — no
   // permission needed. A card renderer needs these to escape
   // text, render markdown, and colour link tiles, the way
   // the core's renderers did. One implementation, so a

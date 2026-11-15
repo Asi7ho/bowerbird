@@ -32,7 +32,7 @@ import {
 // ---------------------------------------------------------------- state
 
 // Core tools are select/pen/connector/eraser. Plugin tools are strings of
-// the form "plugin:<pluginId>:<toolId>" (see src/plugins.ts); the
+// the form "plugin:<pluginId>:<toolId>" (see src/plugins/host.ts); the
 // type stays open so a plugin tool is a valid Tool.
 const PALETTE = ["#1A1A1A", "#E63946", "#2E86AB", "#FF6B35", "#6a4c93", "#2A9D8F"];
 

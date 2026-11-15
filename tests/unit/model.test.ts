@@ -1,4 +1,4 @@
-// Unit tests for the board model (src/model.ts): the pure core
+// Unit tests for the board model (src/backend/model.ts): the pure core
 // every tool, drag and plugin builds on. No DOM, no Electron,
 // so these run in plain vitest on every push and PR.
 import { describe, expect, it } from "vitest";
