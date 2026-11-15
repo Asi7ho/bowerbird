@@ -17,6 +17,7 @@ import {
 } from "./board-render";
 import {
   Anchor, Item, Pt, ShapeKind,
+  CARD_DECORATIONS_H, estimateTextHeight,
   isInlineVideo, pressureWidth, rectFromPoints, smoothStrokePath, smoothStrokePressures, smoothStrokeSamples, strokePressuresVary,
   zoomCamera,
 } from "../backend/model";
@@ -162,6 +163,17 @@ export function startTextEdit(id: number, isNew = false): void {
   S.cardsEl.querySelector(`.card-decorations-right[data-for="${id}"]`)?.remove();
   ta.focus();
   ta.setSelectionRange(ta.value.length, ta.value.length);
+  // Grow the note as you type: the card's height follows
+  // the text, using the same estimate the commit path
+  // uses, so the note never jumps when the edit ends.
+  // Without this the text box stays at the card's
+  // creation height and the text just scrolls inside it.
+  const grow = () => {
+    const h = Math.max(40, estimateTextHeight(ta.value, size, item.size.w) + CARD_DECORATIONS_H);
+    (card as HTMLElement).style.height = `${h}px`;
+  };
+  ta.addEventListener("input", grow);
+  grow();
   const commit = () => {
     if (S.editingId !== id) return;
     const text = ta.value;
