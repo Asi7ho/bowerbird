@@ -1022,6 +1022,14 @@ async function main() {
       const id = audio.id;
       await page.keyboard.press("f");
       await new Promise((r) => setTimeout(r, 500));
+      // The previous check left focus on the video play
+      // button, where Tab keeps its native job instead of
+      // cycling the selection — click the board first so Tab
+      // cycles cards again. Any card hit just becomes the
+      // starting selection; the loop below still reaches the
+      // audio card.
+      await page.mouse.click(1200, 700);
+      await new Promise((r) => setTimeout(r, 300));
       let selected = false;
       for (let i = 0; i < 40; i++) {
         await page.keyboard.press("Tab");
