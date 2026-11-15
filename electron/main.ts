@@ -48,6 +48,7 @@ let currentBoard: string | null = null;
 // registration order, so an old list never hides a panel.
 let panelOrder: string[] = [];
 let panelWidth = 290;
+let dockVisible = true;
 
 function clampPanelWidth(w: unknown): number {
   const n = typeof w === "number" && Number.isFinite(w) ? Math.round(w) : 290;
@@ -64,6 +65,7 @@ function loadAppSettings(): void {
     if (parsed && CORNERS.includes(parsed.corner)) cornerReveal = parsed.corner;
     if (parsed && Array.isArray(parsed.panelOrder)) panelOrder = parsed.panelOrder.filter((x: unknown) => typeof x === "string");
     if (parsed && typeof parsed.panelWidth === "number") panelWidth = clampPanelWidth(parsed.panelWidth);
+    if (parsed && typeof parsed.dockVisible === "boolean") dockVisible = parsed.dockVisible;
     if (parsed && typeof parsed.currentBoard === "string" && parsed.currentBoard && parsed.currentBoard !== "Main") {
       currentBoard = parsed.currentBoard.slice(0, 64);
     }
@@ -77,7 +79,7 @@ function saveAppSettings(): void {
     const file = appSettingsPath();
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const tmp = file + ".tmp";
-    fs.writeFileSync(tmp, JSON.stringify({ corner: cornerReveal, panelOrder, panelWidth, currentBoard }));
+    fs.writeFileSync(tmp, JSON.stringify({ corner: cornerReveal, panelOrder, panelWidth, dockVisible, currentBoard }));
     fs.renameSync(tmp, file);
   } catch {
     // Settings are a convenience, not board data: never fail the app
@@ -1413,7 +1415,7 @@ function registerIpc(): void {
     if (isBoardLocal(local)) return shell.openPath(local);
     throw new Error("not a public web address or a board-local file");
   });
-  ipcMain.handle("bowerbird:get-app-settings", () => ({ corner: cornerReveal, panelOrder: [...panelOrder], panelWidth }));
+  ipcMain.handle("bowerbird:get-app-settings", () => ({ corner: cornerReveal, panelOrder: [...panelOrder], panelWidth, dockVisible }));
   ipcMain.handle("bowerbird:list-boards", () => {
     return listBoards();
   });
@@ -1457,6 +1459,12 @@ function registerIpc(): void {
     panelWidth = clampPanelWidth(width);
     saveAppSettings();
     return panelWidth;
+  });
+  ipcMain.handle("bowerbird:set-dock-visible", (_event, visible: unknown) => {
+    if (typeof visible !== "boolean") return dockVisible;
+    dockVisible = visible;
+    saveAppSettings();
+    return dockVisible;
   });
   ipcMain.handle("bowerbird:list-plugins", () => listPlugins());
   ipcMain.handle("bowerbird:read-plugin-file", (_event, pluginId: string, relativePath: string) => {
