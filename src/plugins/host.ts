@@ -388,10 +388,21 @@ function isPluginCard(item: Item): item is Item & { kind: { Plugin: { plugin: st
 
 // ---------------------------------------------------------------- API builder
 
-function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): PluginContext {
+function createContext(manifest: PluginManifest, opts?: { trial?: boolean; firstParty?: boolean }): PluginContext {
   const pluginId = manifest.id;
   const trial = !!opts?.trial;
+  // Trust boundary: the app's own UI (src/ui/) is trusted — it
+  // dispatches on behalf of the user and the core. A plugin,
+  // bundled or user-installed, is not: it may only affect its
+  // own registrations. Anything that would trigger another
+  // plugin, fake a core event, or replace a core delegation
+  // is rejected. First-party here means the bundled UI modules
+  // the core imports (src/ui/), not the bundled plugins/ folder.
+  const trusted = !!opts?.firstParty;
   const require = (perm: string) => requirePerm(manifest, perm);
+  const requireTrusted = (what: string): void => {
+    if (!trusted) throw new Error(`Only the app's own UI can ${what}`);
+  };
   // A trial plugin is still a plugin, so it runs with the same
   // permission checks as an installed one — but it must not be
   // able to make anything permanent while it is only being
@@ -610,7 +621,10 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         return host!.resetBoard(opts);
       },
       getDir: () => host!.getBoardDir(),
-      registerController: (controller: BoardController) => registerBoardController(controller),
+      registerController: (controller: BoardController) => {
+        requireTrusted("register the board controller");
+        registerBoardController(controller);
+      },
     },
     boards: {
       list: async () => bridge!.listBoards(),
@@ -720,6 +734,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
     },
     search: {
       setElements: (els: { input: HTMLInputElement; count: HTMLElement; clear: HTMLButtonElement; results: HTMLElement }) => {
+        requireTrusted("provide the search elements");
         host!.setSearchElements(els);
       },
       update: () => host!.updateSearch(),
@@ -749,9 +764,11 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       setTool: (id: string) => host!.setTool(id),
       getTool: () => host!.getTool(),
       setToolbarToolsEl: (el: HTMLElement) => {
+        requireTrusted("provide the toolbar tools element");
         shell.toolbarToolsEl = el;
       },
       setBoardElements: (els: { board: HTMLElement; canvas: HTMLElement[]; pluginView: HTMLElement; overlays: HTMLElement; viewSwitcher: HTMLElement; toast: HTMLElement }) => {
+        requireTrusted("provide the board elements");
         registerShellElements({
           boardEl: els.board,
           boardCanvasEls: els.canvas,
@@ -762,6 +779,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
         });
       },
       setPanelsToggleEl: (el: HTMLElement) => {
+        requireTrusted("provide the panels toggle element");
         registerShellElements({ panelsToggleEl: el });
       },
       openSettings: () => host!.openSettings(),
@@ -783,12 +801,21 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean }): Pl
       // plugin — the title bar, which inserts before it —
       // sees it even before the core has read it back.
       boardEl: (shell.boardEl ?? host!.boardEl) as HTMLElement,
-      registerSettingsUI: (ui: { open: () => void; close: () => void; isOpen: () => boolean; setTab: (tab: string) => void; refresh: () => void }) => registerSettingsUI(ui),
-      setSettingsSectionsContainer: (el: HTMLElement) => registerShellElements({ settingsSectionsEl: el }),
+      registerSettingsUI: (ui: { open: () => void; close: () => void; isOpen: () => boolean; setTab: (tab: string) => void; refresh: () => void }) => {
+        requireTrusted("register the settings UI");
+        registerSettingsUI(ui);
+      },
+      setSettingsSectionsContainer: (el: HTMLElement) => {
+        requireTrusted("provide the settings sections container");
+        registerShellElements({ settingsSectionsEl: el });
+      },
       // The search box container, built by the core-titlebar
       // plugin. The core-search plugin mounts its input,
       // count, clear button and results into it.
-      setSearchBoxEl: (el: HTMLElement) => registerShellElements({ searchBoxEl: el }),
+      setSearchBoxEl: (el: HTMLElement) => {
+        requireTrusted("provide the search box element");
+        registerShellElements({ searchBoxEl: el });
+      },
       getSearchBoxEl: () => shell.searchBoxEl ?? null,
       showPanel: (id: string) => {
         // Showing a panel activates its tab, so the user
@@ -1670,7 +1697,7 @@ export async function activateFirstPartyPlugin(
   const lp = loaded.get(manifest.id)!;
   try {
     lp.module = mod;
-    const api = createContext(manifest, {});
+    const api = createContext(manifest, { firstParty: true });
     await mod.activate(api);
     lp.active = true;
     lp.failed = false;
