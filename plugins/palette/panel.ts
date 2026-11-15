@@ -49,6 +49,14 @@ let lightnessValue: HTMLSpanElement | null = null;
 let palettesEl: HTMLDivElement | null = null;
 let paletteTiles: HTMLButtonElement[] = [];
 
+// The wheel pixels, cached by canvas size: the wheel is
+// drawn at fixed lightness 50% and never depends on
+// state, so the pixels are identical every time. The
+// panel re-renders (and rebuilds its canvas) on every
+// open, and redrawing 129,600 pixels per open is pure
+// waste.
+let wheelPixels: { size: number; data: ImageData } | null = null;
+
 export function initPanel(a: PluginContext): void {
   api = a;
 }
@@ -70,6 +78,10 @@ function drawWheel(): void {
   const size = wheelCanvas.width;
   const ctx = wheelCanvas.getContext("2d");
   if (!ctx) return;
+  if (wheelPixels && wheelPixels.size === size) {
+    ctx.putImageData(wheelPixels.data, 0, 0);
+    return;
+  }
   const img = ctx.createImageData(size, size);
   const centre = size / 2;
   for (let y = 0; y < size; y++) {
@@ -99,6 +111,7 @@ function drawWheel(): void {
     }
   }
   ctx.putImageData(img, 0, 0);
+  wheelPixels = { size, data: img };
 }
 
 export function updateAll(setPen: boolean): void {
