@@ -63,10 +63,18 @@ export function updateAllDynamic(api: PluginContext): void {
   // the board, and re-wire its controls to the fresh DOM.
   // Only stop it when its card is gone.
   const playingId = getLibAudioItemId();
-  if (panelSections) renderSections(api, panelSections, "panel");
-  if (viewSections) renderSections(api, viewSections, "view");
+  // The panel ref persists after the view hides it, so a
+  // save in library-view mode would rebuild the hidden
+  // panel as well as the view: render the panel only
+  // while it is the active tab. The IntersectionObserver
+  // in initPanel re-renders it the moment it becomes
+  // visible again, so nothing goes stale. Only the
+  // surfaces actually rebuilt get their audio re-wired.
+  const rendered: Array<HTMLElement | null> = [];
+  if (panelSections && api.ui.isPanelActive("library")) { renderSections(api, panelSections, "panel"); rendered.push(panelSections); }
+  if (viewSections) { renderSections(api, viewSections, "view"); rendered.push(viewSections); }
   if (playingId !== null && hasLibAudio()) {
-    if (getBoardItems().some((it) => it.id === playingId)) rewireLibraryAudio([panelSections, viewSections]);
+    if (getBoardItems().some((it) => it.id === playingId)) rewireLibraryAudio(rendered);
     else stopLibraryAudio();
   }
 }
