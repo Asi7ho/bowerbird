@@ -1009,6 +1009,34 @@ async function main() {
       });
     });
 
+    await check("Enter toggles an audio card selected by Tab", async () => {
+      // Tab cycles the selection between cards; Enter
+      // activates the selected one — for audio that toggles
+      // playback, the same action as the tile button. The
+      // video card's Enter path is the same branch and is
+      // covered live in dev mode (its video is already
+      // playing by this point in the suite).
+      const board = readBoard();
+      const audio = board.items.find((it) => "Audio" in it.kind);
+      assert.ok(audio, "audio card on the board");
+      const id = audio.id;
+      await page.keyboard.press("f");
+      await new Promise((r) => setTimeout(r, 500));
+      let selected = false;
+      for (let i = 0; i < 40; i++) {
+        await page.keyboard.press("Tab");
+        await new Promise((r) => setTimeout(r, 150));
+        selected = await page.evaluate((cid) => !!document.querySelector(`#cards .card[data-id="${cid}"].selected`), String(id));
+        if (selected) break;
+      }
+      assert.ok(selected, "Tab selected the audio card");
+      await page.keyboard.press("Enter");
+      await waitFor("audio tile shows Pause", async () => {
+        const label = await page.evaluate((cid) => document.querySelector(`#cards .card[data-id="${cid}"] button.audio-tile`)?.getAttribute("aria-label") ?? "", String(id));
+        return label === "Pause audio" ? true : null;
+      });
+    });
+
     await check("hovering a decoration does not change its style", async () => {
       // A tag pill lost its colour and became invisible on
       // hover. The checklist progress is the decoration left
