@@ -371,9 +371,13 @@ export function activate(api: PluginContext): void {
         sw.classList.toggle("active", active);
         sw.setAttribute("aria-pressed", String(active));
       }
-      // Position the bar next to the note, in screen
+      // Position the bar beside the note, in screen
       // coordinates: the board element's rect plus the
       // camera transform of the note's world position.
+      // It sits to the right of the note, top-aligned
+      // with it, and to the left when the right side
+      // would run off the viewport; its top is clamped
+      // so the whole column stays on screen.
       const item = api.board.getItem(note.id);
       if (item) {
         const [pos, size] = api.geometry.itemBounds(item);
@@ -381,10 +385,11 @@ export function activate(api: PluginContext): void {
         const rect = api.ui.boardEl.getBoundingClientRect();
         const left = rect.left + (pos.x - cam.x) * cam.zoom;
         const top = rect.top + (pos.y - cam.y) * cam.zoom;
+        const barW = noteBar.offsetWidth;
         const barH = noteBar.offsetHeight;
-        const above = top - barH - 8;
-        noteBar.style.left = `${Math.max(8, left)}px`;
-        noteBar.style.top = `${above >= 8 ? above : top + size.h * cam.zoom + 8}px`;
+        const right = left + size.w * cam.zoom + 8;
+        noteBar.style.left = `${right + barW <= window.innerWidth - 8 ? right : Math.max(8, left - barW - 8)}px`;
+        noteBar.style.top = `${Math.max(8, Math.min(top, window.innerHeight - barH - 8))}px`;
       }
     }
 
