@@ -303,8 +303,9 @@ export interface PluginBridge {
   maximise: () => Promise<boolean>;
   windowState: () => Promise<{ maximised: boolean; fullscreen: boolean }>;
   moveWindow: (dx: number, dy: number) => void;
-  getAppSettings: () => Promise<{ corner: string; panelOrder?: string[]; panelWidth?: number }>;
+  getAppSettings: () => Promise<{ corner: string; panelOrder?: string[]; panelWidth?: number; dockVisible?: boolean }>;
   setPanelWidth: (width: number) => Promise<number>;
+  setDockVisible: (visible: boolean) => Promise<boolean>;
   setCorner: (corner: string) => Promise<string>;
 }
 

@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld("bowerbird", {
   openExternal: (target: string) => ipcRenderer.invoke("bowerbird:open-external", target),
   getAppSettings: () => ipcRenderer.invoke("bowerbird:get-app-settings"),
   setPanelWidth: (width: number) => ipcRenderer.invoke("bowerbird:set-panel-width", width),
+  setDockVisible: (visible: boolean) => ipcRenderer.invoke("bowerbird:set-dock-visible", visible),
   setCorner: (corner: string) => ipcRenderer.invoke("bowerbird:set-corner", corner),
   setPanelOrder: (order: string[]) => ipcRenderer.invoke("bowerbird:set-panel-order", order),
   collapse: () => ipcRenderer.invoke("bowerbird:collapse"),

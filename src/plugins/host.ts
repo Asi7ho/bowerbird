@@ -336,6 +336,10 @@ function setDockVisible(visible: boolean): void {
   dockVisible = visible;
   updatePanelDock();
   if (pluginsReady && prev !== visible) host?.render();
+  // The dock's visibility is a preference, like its
+  // width: remember it, so a closed dock stays closed
+  // across a reload instead of reopening.
+  if (prev !== visible) void bridge?.setDockVisible(visible);
 }
 
 // ---------------------------------------------------------------- events
@@ -1798,6 +1802,9 @@ export async function initPlugins(
     const settings = await b.getAppSettings();
     if (typeof settings.panelWidth === "number") {
       panelWidth = Math.min(600, Math.max(200, Math.round(settings.panelWidth)));
+    }
+    if (typeof settings.dockVisible === "boolean") {
+      dockVisible = settings.dockVisible;
     }
   } catch {
     // No saved width: keep the default.
