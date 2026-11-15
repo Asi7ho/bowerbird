@@ -60,39 +60,15 @@ const MIC_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" str
 // stroke out of a cluster.
 const ERASER_RADIUS = 12;
 
-let api!: PluginContext;
-
-// The board DOM, built by this plugin in activate().
-let boardEl!: HTMLDivElement;
-let gridEl!: HTMLDivElement;
-let worldEl!: SVGGElement;
-let cardsEl!: HTMLDivElement;
-let groupsEl!: HTMLDivElement;
-
-// The board as last rendered (a copy from api.board.get()).
-// The render loop reads bg/grid/items from this; the
-// visible-set check reads it too, so panning does not pay
-// a fresh board copy per mousemove (items do not change
-// while panning, only the camera does). It is refreshed by
-// render(), which is called after every board change.
-let cachedBoard: Board | null = null;
-// Drag path cache (see render): card element plus its two
-// decoration divs, keyed by card id, rebuilt on each render.
-const cardEls = new Map<number, { card: HTMLElement; left?: HTMLElement; right?: HTMLElement }>();
-// Key of the card/stroke content currently built in the DOM. Camera
-// moves that leave this key unchanged must not rebuild anything:
-// panning then is one GPU transform, not a DOM rebuild per frame.
-let lastContentKey = 0;
-
-// Lasso is not a tool of its own — it is a mode of Select,
-// toggled by L, with no toolbar button. While it is on, a
-// drag on the board draws a lasso loop instead of the
-// rectangular marquee.
-let lassoMode = false;
-let tool: Tool = "select";
-let editingId: number | null = null;
-let spaceDown = false;
-let drag: null
+// The board's mutable state, gathered into one object so the
+// file can split (board-state / render / input) without every
+// function reaching for module-level lets. All references are
+// S.<name>; the object is created once, at module load, and
+// activate() fills in the fields it owns (api, the DOM).
+// Fields set by activate() start as undefined (the same lie
+// the old `let x!` declarations told) and are guarded by the
+// same checks render() already had (`if (!S.boardEl) return`).
+type DragState = null
   | { kind: "pan"; last: Pt }
   | { kind: "move"; lastWorld: Pt; moved: boolean }
   | { kind: "stroke"; points: Pt[]; pressures: number[] }
@@ -102,46 +78,100 @@ let drag: null
   | { kind: "marquee"; start: Pt; current: Pt }
   | { kind: "shape"; shape: ShapeKind; start: Pt; current: Pt }
   | { kind: "rotate"; id: number; origRot: number; moved: boolean }
-  | { kind: "resize"; id: number; startWorld: Pt; origW: number; origH: number; moved: boolean } = null;
-let pluginToolDown = false;
-// Double-click tracking: pointer events carry no click count
-// (detail is always 0 in Chrome), so the old mouse-event
-// `e.detail === 2` check never fired after the input switch
-// to pointer events, and double-click silently stopped opening
-// notes. A double-click is two presses close in time and space.
-let lastPointerDown = { x: 0, y: 0, t: 0 };
-// Trackpad zoom coalescing: a pinch sends wheel events at
-// ~120 Hz, and every tick used to rebuild the card DOM
-// whenever the visible set changed — re-creating images
-// and videos mid-pinch, which is what made zoom feel
-// stepped instead of smooth. Now ticks only accumulate
-// a factor, one frame applies it as a GPU transform, and
-// content rebuilds once, when the pinch settles.
-let pendingZoomFactor = 1;
-let pendingZoomAnchor: Pt | null = null;
-let zoomFrame: number | null = null;
-let zoomSettleTimer: ReturnType<typeof setTimeout> | null = null;
-// Content refresh during a long pinch: without this, cards
-// that scroll into view while zooming only appear after
-// the gesture ends, which feels frozen and rigid.
-let lastZoomRefreshZoom = 1;
-let lastZoomRefreshTime = 0;
-let wheelSaveTimer: ReturnType<typeof setTimeout> | null = null;
-let cursorRaf = 0;
-let pendingCursor: Pt | null = null;
-// The ring that shows the eraser's reach at the cursor.
-// It is a body-level div, not part of the board SVG, so
-// renderSvgOnly() never wipes it mid-drag.
-let eraserRing: HTMLDivElement | null = null;
-let listenersAttached = false;
+  | { kind: "resize"; id: number; startWorld: Pt; origW: number; origH: number; moved: boolean };
+
+interface BoardState {
+  api: PluginContext;
+  // The board DOM, built by this plugin in activate().
+  boardEl: HTMLDivElement;
+  gridEl: HTMLDivElement;
+  worldEl: SVGGElement;
+  cardsEl: HTMLDivElement;
+  groupsEl: HTMLDivElement;
+  // The board as last rendered (a copy from api.board.get()).
+  // The render loop reads bg/grid/items from this; the
+  // visible-set check reads it too, so panning does not pay
+  // a fresh board copy per mousemove. Refreshed by render().
+  cachedBoard: Board | null;
+  // Drag path cache (see render): card element plus its two
+  // decoration divs, keyed by card id, rebuilt on each render.
+  cardEls: Map<number, { card: HTMLElement; left?: HTMLElement; right?: HTMLElement }>;
+  // Key of the card/stroke content currently built in the DOM. Camera
+  // moves that leave this key unchanged must not rebuild anything.
+  lastContentKey: number;
+  // Lasso is not a tool of its own — it is a mode of Select,
+  // toggled by L, with no toolbar button.
+  lassoMode: boolean;
+  tool: Tool;
+  editingId: number | null;
+  spaceDown: boolean;
+  drag: DragState;
+  pluginToolDown: boolean;
+  // Double-click tracking: pointer events carry no click count,
+  // so a double-click is two presses close in time and space.
+  lastPointerDown: { x: number; y: number; t: number };
+  // Trackpad zoom coalescing: a pinch sends wheel events at
+  // ~120 Hz; ticks only accumulate a factor, one frame applies
+  // it as a GPU transform, and content rebuilds once, when
+  // the pinch settles.
+  pendingZoomFactor: number;
+  pendingZoomAnchor: Pt | null;
+  zoomFrame: number | null;
+  zoomSettleTimer: ReturnType<typeof setTimeout> | null;
+  // Content refresh during a long pinch: without this, cards
+  // that scroll into view while zooming only appear after
+  // the gesture ends.
+  lastZoomRefreshZoom: number;
+  lastZoomRefreshTime: number;
+  wheelSaveTimer: ReturnType<typeof setTimeout> | null;
+  cursorRaf: number;
+  pendingCursor: Pt | null;
+  // The ring that shows the eraser's reach at the cursor.
+  // It is a body-level div, not part of the board SVG, so
+  // renderSvgOnly() never wipes it mid-drag.
+  eraserRing: HTMLDivElement | null;
+  listenersAttached: boolean;
+  lastAnnouncedSelection: string;
+}
+
+const S: BoardState = {
+  api: undefined as unknown as PluginContext,
+  boardEl: undefined as unknown as HTMLDivElement,
+  gridEl: undefined as unknown as HTMLDivElement,
+  worldEl: undefined as unknown as SVGGElement,
+  cardsEl: undefined as unknown as HTMLDivElement,
+  groupsEl: undefined as unknown as HTMLDivElement,
+  cachedBoard: null,
+  cardEls: new Map(),
+  lastContentKey: 0,
+  lassoMode: false,
+  tool: "select",
+  editingId: null,
+  spaceDown: false,
+  drag: null,
+  pluginToolDown: false,
+  lastPointerDown: { x: 0, y: 0, t: 0 },
+  pendingZoomFactor: 1,
+  pendingZoomAnchor: null,
+  zoomFrame: null,
+  zoomSettleTimer: null,
+  lastZoomRefreshZoom: 1,
+  lastZoomRefreshTime: 0,
+  wheelSaveTimer: null,
+  cursorRaf: 0,
+  pendingCursor: null,
+  eraserRing: null,
+  listenersAttached: false,
+  lastAnnouncedSelection: "",
+};
 
 // ---------------------------------------------------------------- helpers
 
 function toScreen(p: Pt): Pt {
-  return worldToScreen(p, api.view.getCamera());
+  return worldToScreen(p, S.api.view.getCamera());
 }
 function toWorld(s: Pt): Pt {
-  return screenToWorld(s, api.view.getCamera());
+  return screenToWorld(s, S.api.view.getCamera());
 }
 // The board no longer fills the window: the title bar sits
 // above it, so board-local size and points differ from window
@@ -149,13 +179,13 @@ function toWorld(s: Pt): Pt {
 // centre, cull and input conversion below goes through these,
 // never window.innerWidth/innerHeight or raw clientX/Y.
 function boardSize(): Pt {
-  return elementSize(boardEl);
+  return elementSize(S.boardEl);
 }
 function boardPoint(clientX: number, clientY: number): Pt {
-  return elementPoint(boardEl, clientX, clientY);
+  return elementPoint(S.boardEl, clientX, clientY);
 }
 function zoomAt(screen: Pt, factor: number): void {
-  api.view.setCameraSilent(zoomCamera(api.view.getCamera(), screen, factor));
+  S.api.view.setCameraSilent(zoomCamera(S.api.view.getCamera(), screen, factor));
 }
 function zoomCentre(factor: number): void {
   const s = boardSize();
@@ -166,22 +196,22 @@ function zoomCentre(factor: number): void {
 // it does not save.
 function zoomToFit(): void {
   const bs = boardSize();
-  const cam = api.geometry.fitCamera({ w: bs.x, h: bs.y });
-  if (cam) api.view.setCamera(cam);
+  const cam = S.api.geometry.fitCamera({ w: bs.x, h: bs.y });
+  if (cam) S.api.view.setCamera(cam);
 }
 
 function ensureEraserRing(): HTMLDivElement {
-  if (!eraserRing) {
-    eraserRing = document.createElement("div");
-    eraserRing.id = "eraser-ring";
-    document.body.appendChild(eraserRing);
+  if (!S.eraserRing) {
+    S.eraserRing = document.createElement("div");
+    S.eraserRing.id = "eraser-ring";
+    document.body.appendChild(S.eraserRing);
   }
-  return eraserRing;
+  return S.eraserRing;
 }
 function updateEraserRing(clientX: number, clientY: number, show: boolean): void {
   const ring = ensureEraserRing();
   if (!show) { ring.style.display = "none"; return; }
-  const d = ERASER_RADIUS * 2 * api.view.getCamera().zoom;
+  const d = ERASER_RADIUS * 2 * S.api.view.getCamera().zoom;
   ring.style.display = "block";
   ring.style.width = `${d}px`;
   ring.style.height = `${d}px`;
@@ -193,16 +223,16 @@ function updateEraserRing(clientX: number, clientY: number, show: boolean): void
 // is not saved here: the drag saves once, on mouseup, so
 // a whole sweep is one undo step.
 function eraseAt(world: Pt): boolean {
-  const ids = api.board.strokesNear(world, ERASER_RADIUS);
+  const ids = S.api.board.strokesNear(world, ERASER_RADIUS);
   if (ids.length === 0) return false;
-  api.board.removeItems(ids);
+  S.api.board.removeItems(ids);
   renderSvgOnly();
   return true;
 }
 
 function isFrameCard(it: Item | undefined): boolean {
   if (!it) return false;
-  return api.cards.isFrame(it);
+  return S.api.cards.isFrame(it);
 }
 
 // ---------------------------------------------------------------- rendering
@@ -212,12 +242,12 @@ function isFrameCard(it: Item | undefined): boolean {
 // then costs two style properties, not rebuilding hundreds of
 // circles on every frame.
 function applyGrid(): void {
-  const cam = api.view.getCamera();
-  const b = cachedBoard;
+  const cam = S.api.view.getCamera();
+  const b = S.cachedBoard;
   const bg = b?.bg ?? "#FFFFFF";
   const grid = b?.grid ?? "Dots";
-  if (grid === "Off") { gridEl.style.backgroundImage = "none"; return; }
-  const rgb = api.text.parseHex(bg) ?? [247, 245, 240];
+  if (grid === "Off") { S.gridEl.style.backgroundImage = "none"; return; }
+  const rgb = S.api.text.parseHex(bg) ?? [247, 245, 240];
   const lum = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
   const color = lum > 140 ? "#d8d8de" : "#55555a";
   let step = GRID;
@@ -227,15 +257,15 @@ function applyGrid(): void {
   const offX = (Math.floor(cam.x / step) * step - cam.x) * cam.zoom;
   const offY = (Math.floor(cam.y / step) * step - cam.y) * cam.zoom;
   if (grid === "Dots") {
-    gridEl.style.backgroundImage = `radial-gradient(circle, ${color} 1.5px, transparent 1.6px)`;
-    gridEl.style.backgroundSize = `${size}px ${size}px`;
-    gridEl.style.backgroundPosition = `${offX}px ${offY}px`;
-    gridEl.style.backgroundRepeat = "repeat";
+    S.gridEl.style.backgroundImage = `radial-gradient(circle, ${color} 1.5px, transparent 1.6px)`;
+    S.gridEl.style.backgroundSize = `${size}px ${size}px`;
+    S.gridEl.style.backgroundPosition = `${offX}px ${offY}px`;
+    S.gridEl.style.backgroundRepeat = "repeat";
   } else {
-    gridEl.style.backgroundImage = `linear-gradient(to right, ${color} 0 1px, transparent 1px), linear-gradient(to bottom, ${color} 0 1px, transparent 1px)`;
-    gridEl.style.backgroundSize = `${size}px ${size}px, ${size}px ${size}px`;
-    gridEl.style.backgroundPosition = `${offX}px ${offY}px, ${offX}px ${offY}px`;
-    gridEl.style.backgroundRepeat = "repeat";
+    S.gridEl.style.backgroundImage = `linear-gradient(to right, ${color} 0 1px, transparent 1px), linear-gradient(to bottom, ${color} 0 1px, transparent 1px)`;
+    S.gridEl.style.backgroundSize = `${size}px ${size}px, ${size}px ${size}px`;
+    S.gridEl.style.backgroundPosition = `${offX}px ${offY}px, ${offX}px ${offY}px`;
+    S.gridEl.style.backgroundRepeat = "repeat";
   }
 }
 
@@ -244,10 +274,10 @@ function applyGrid(): void {
 // offset and the resize-handle position. No DOM rebuild, no markdown,
 // no image re-parse — this is what makes pan and zoom feel smooth.
 function applyCamera(): void {
-  const cam = api.view.getCamera();
-  worldEl.setAttribute("transform", `translate(${-cam.x * cam.zoom},${-cam.y * cam.zoom}) scale(${cam.zoom})`);
-  cardsEl.style.transform = `translate(${-cam.x * cam.zoom}px,${-cam.y * cam.zoom}px) scale(${cam.zoom})`;
-  groupsEl.style.transform = `translate(${-cam.x * cam.zoom}px,${-cam.y * cam.zoom}px) scale(${cam.zoom})`;
+  const cam = S.api.view.getCamera();
+  S.worldEl.setAttribute("transform", `translate(${-cam.x * cam.zoom},${-cam.y * cam.zoom}) scale(${cam.zoom})`);
+  S.cardsEl.style.transform = `translate(${-cam.x * cam.zoom}px,${-cam.y * cam.zoom}px) scale(${cam.zoom})`;
+  S.groupsEl.style.transform = `translate(${-cam.x * cam.zoom}px,${-cam.y * cam.zoom}px) scale(${cam.zoom})`;
   applyGrid();
   updateResizeHandle();
 }
@@ -257,7 +287,7 @@ function applyCamera(): void {
 // with thousands of items, render() only builds DOM for what is on
 // screen, instead of rebuilding every card on every mousemove.
 function visibleRect(): { x0: number; y0: number; x1: number; y1: number } {
-  const cam = api.view.getCamera();
+  const cam = S.api.view.getCamera();
   const m = 200;
   return {
     x0: cam.x - m, y0: cam.y - m,
@@ -266,7 +296,7 @@ function visibleRect(): { x0: number; y0: number; x1: number; y1: number } {
   };
 }
 function isVisibleItem(item: Item, v: { x0: number; y0: number; x1: number; y1: number }): boolean {
-  const [p, s] = api.geometry.itemBounds(item);
+  const [p, s] = S.api.geometry.itemBounds(item);
   return p.x < v.x1 && p.x + s.w > v.x0 && p.y < v.y1 && p.y + s.h > v.y0;
 }
 
@@ -282,7 +312,7 @@ function isVisibleItem(item: Item, v: { x0: number; y0: number; x1: number; y1: 
 // while panning or zooming, only the camera does, so the
 // cache is fresh wherever this runs.
 function visibleKey(): number {
-  const b = cachedBoard;
+  const b = S.cachedBoard;
   if (!b) return 0;
   const v = visibleRect();
   let h = 2166136261;
@@ -292,8 +322,8 @@ function visibleKey(): number {
   };
   for (const item of b.items) if (isVisibleItem(item, v)) mix(item.id);
   mix(0x9e3779b9);
-  for (const id of api.board.getSelected()) mix(id);
-  mix(editingId ?? -1);
+  for (const id of S.api.board.getSelected()) mix(id);
+  mix(S.editingId ?? -1);
   return h;
 }
 
@@ -301,29 +331,29 @@ function visibleKey(): number {
 // actually changed (new cards scrolled into view). Panning inside
 // the same visible set is applyCamera() alone.
 function refreshContentIfVisibleChanged(): void {
-  if (visibleKey() !== lastContentKey) render();
+  if (visibleKey() !== S.lastContentKey) render();
 }
 
 // Rebuild only the SVG layer (strokes/connectors), without touching
 // card DOM. Used while dragging a card, so connectors attached to
 // it follow in real time without re-parsing every card.
 function renderSvgOnly(): void {
-  worldEl.innerHTML = "";
+  S.worldEl.innerHTML = "";
   // Fresh board: a drag may have moved items since the last
   // render, and the SVG layer must follow the live board.
-  renderStrokesAndConnectors(api.board.get());
+  renderStrokesAndConnectors(S.api.board.get());
 }
 
 function renderStrokesAndConnectors(board: Board): void {
   const items = board.items;
-  const selected = api.board.getSelected();
+  const selected = S.api.board.getSelected();
   const v = visibleRect();
   for (const item of items) {
     // A rotated stroke's extent can exceed its unrotated
     // bounding box, so culling it by that box would hide
     // it at the viewport edge: rotated strokes are always
     // drawn. The count is small, so this costs nothing.
-    if (!("Stroke" in item.kind && api.geometry.itemRotation(item) !== 0) && !isVisibleItem(item, v)) continue;
+    if (!("Stroke" in item.kind && S.api.geometry.itemRotation(item) !== 0) && !isVisibleItem(item, v)) continue;
     if ("Stroke" in item.kind) {
       const { points, color, width, marker, pressures } = item.kind.Stroke;
       if (points.length < 2) continue;
@@ -334,13 +364,13 @@ function renderStrokesAndConnectors(board: Board): void {
       // themselves are never rewritten, so undo, resize
       // and hit-testing all keep working in the local
       // frame, and rotation is just item.rotation.
-      const rot = api.geometry.itemRotation(item);
-      const c = api.geometry.centre(item);
+      const rot = S.api.geometry.itemRotation(item);
+      const c = S.api.geometry.centre(item);
       const transform = rot !== 0 ? `rotate(${rot} ${c.x} ${c.y})` : undefined;
       if (sel) {
         const selPath = svgEl2("path", { d, fill: "none", stroke: ACCENT, "stroke-width": String(strokeMaxWidth(item.kind.Stroke) + 6), "stroke-linecap": "round", "stroke-linejoin": "round" });
         if (transform) selPath.setAttribute("transform", transform);
-        worldEl.appendChild(selPath);
+        S.worldEl.appendChild(selPath);
       }
       if (pressures && strokePressuresVary(item.kind.Stroke)) {
         // A pen stroke is one line per short sample along
@@ -355,21 +385,21 @@ function renderStrokesAndConnectors(board: Board): void {
           const line = svgEl2("line", { x1: String(pts[i].x), y1: String(pts[i].y), x2: String(pts[i + 1].x), y2: String(pts[i + 1].y), stroke: color, "stroke-width": String(w), "stroke-linecap": "round" });
           if (transform) line.setAttribute("transform", transform);
           if (marker) line.setAttribute("opacity", "0.45");
-          worldEl.appendChild(line);
+          S.worldEl.appendChild(line);
         }
       } else {
         const path = svgEl2("path", { d, fill: "none", stroke: color, "stroke-width": String(width), "stroke-linecap": "round", "stroke-linejoin": "round" });
         if (transform) path.setAttribute("transform", transform);
         if (marker) path.setAttribute("opacity", "0.45");
-        worldEl.appendChild(path);
+        S.worldEl.appendChild(path);
       }
     }
     if ("Connector" in item.kind) {
-      const ends = api.geometry.clippedEnds(item.kind.Connector.from, item.kind.Connector.to);
+      const ends = S.api.geometry.clippedEnds(item.kind.Connector.from, item.kind.Connector.to);
       if (!ends) continue;
       const [a, b] = ends;
       const sel = selected.includes(item.id);
-      worldEl.appendChild(svgEl2("line", { x1: String(a.x), y1: String(a.y), x2: String(b.x), y2: String(b.y), stroke: sel ? ACCENT : "#333333", "stroke-width": sel ? "3" : "2" }));
+      S.worldEl.appendChild(svgEl2("line", { x1: String(a.x), y1: String(a.y), x2: String(b.x), y2: String(b.y), stroke: sel ? ACCENT : "#333333", "stroke-width": sel ? "3" : "2" }));
       const dx = b.x - a.x, dy = b.y - a.y;
       const len = Math.max(1, Math.hypot(dx, dy));
       const ux = dx / len, uy = dy / len;
@@ -377,7 +407,7 @@ function renderStrokesAndConnectors(board: Board): void {
       const c1 = Math.cos(spread), s1 = Math.sin(spread), c2 = Math.cos(-spread), s2 = Math.sin(-spread);
       const p1 = { x: b.x - head * (ux * c1 - uy * s1), y: b.y - head * (ux * s1 + uy * c1) };
       const p2 = { x: b.x - head * (ux * c2 - uy * s2), y: b.y - head * (ux * s2 + uy * c2) };
-      worldEl.appendChild(svgEl2("polyline", { points: `${p1.x},${p1.y} ${b.x},${b.y} ${p2.x},${p2.y}`, fill: "none", stroke: sel ? ACCENT : "#333333", "stroke-width": sel ? "3" : "2" }));
+      S.worldEl.appendChild(svgEl2("polyline", { points: `${p1.x},${p1.y} ${b.x},${b.y} ${p2.x},${p2.y}`, fill: "none", stroke: sel ? ACCENT : "#333333", "stroke-width": sel ? "3" : "2" }));
     }
   }
   // Live stroke, connector preview and marquee are fast-path SVG
@@ -394,8 +424,8 @@ function renderStrokesAndConnectors(board: Board): void {
 // frame sits this far outside the group's cards, so the
 // dashed border never touches them.
 function renderGroupFrames(board: Board): void {
-  if (!groupsEl) return;
-  const selected = api.board.getSelected();
+  if (!S.groupsEl) return;
+  const selected = S.api.board.getSelected();
   const v = visibleRect();
   let html = "";
   // One pass over the items, grouped by group id: the old
@@ -411,59 +441,59 @@ function renderGroupFrames(board: Board): void {
   }
   for (const [g, members] of byGroup) {
     if (members.length < 2) continue;
-    const b = groupBounds(members, api.geometry.itemBounds);
+    const b = groupBounds(members, S.api.geometry.itemBounds);
     if (!b) continue;
     if (b.x > v.x1 || b.y > v.y1 || b.x + b.w < v.x0 || b.y + b.h < v.y0) continue;
     const isSel = members.some((it) => selected.includes(it.id));
     const label = board.groups?.[g]?.label ?? `Section ${g}`;
-    html += `<div class="group-frame${isSel ? " selected" : ""}" data-group="${g}" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px"><span class="group-label" data-group="${g}">${api.text.escapeHtml(label)}</span></div>`;
+    html += `<div class="group-frame${isSel ? " selected" : ""}" data-group="${g}" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px"><span class="group-label" data-group="${g}">${S.api.text.escapeHtml(label)}</span></div>`;
   }
-  groupsEl.innerHTML = html;
+  S.groupsEl.innerHTML = html;
 }
 
 function render(): void {
   // A render requested before the board DOM exists (during
   // plugin activation) finds nothing to draw; init() renders
   // once the elements exist. Skip, do not throw.
-  if (!boardEl) return;
-  const board = api.board.get();
-  cachedBoard = board;
-  boardEl.style.background = board.bg;
+  if (!S.boardEl) return;
+  const board = S.api.board.get();
+  S.cachedBoard = board;
+  S.boardEl.style.background = board.bg;
   // A playing (or paused mid-way) video used to restart from 0 on
   // every render, because render() rebuilds the card DOM and the
   // <video> node with it. Capture position and playing state first,
   // and restore them onto the rebuilt nodes below.
   const videoState = new Map<number, { t: number; playing: boolean }>();
-  for (const v of Array.from(cardsEl.querySelectorAll("video"))) {
+  for (const v of Array.from(S.cardsEl.querySelectorAll("video"))) {
     const card = v.closest(".card") as HTMLElement | null;
     if (!card || !card.dataset.id) continue;
     if (!v.paused || (isFinite(v.currentTime) && v.currentTime > 0)) {
       videoState.set(Number(card.dataset.id), { t: v.currentTime, playing: !v.paused });
     }
   }
-  worldEl.innerHTML = "";
+  S.worldEl.innerHTML = "";
   renderStrokesAndConnectors(board);
   renderGroupFrames(board);
   // Cards: rebuild, except the note being edited (its textarea stays).
   // Only visible cards are built (see visibleRect).
-  const editingEl = editingId !== null ? cardsEl.querySelector(`[data-id="${editingId}"]`) : null;
+  const editingEl = S.editingId !== null ? S.cardsEl.querySelector(`[data-id="${S.editingId}"]`) : null;
   const editingHtml = editingEl ? editingEl.outerHTML : null;
   const v = visibleRect();
   let html = "";
   for (const item of board.items) {
     if ("Stroke" in item.kind || "Connector" in item.kind) continue;
-    if (editingId === item.id) continue;
+    if (S.editingId === item.id) continue;
     if (!isVisibleItem(item, v)) continue;
-    html += api.board.renderCardAt(item.id) ?? "";
+    html += S.api.board.renderCardAt(item.id) ?? "";
   }
-  cardsEl.innerHTML = html;
+  S.cardsEl.innerHTML = html;
   // Cards are options in the board's listbox: give them the
   // role and the selected state here, since render rebuilds
   // them. updateSelectionInner keeps aria-selected in sync
   // on a plain click, which does not re-render.
   {
-    const selected = api.board.getSelected();
-    for (const child of Array.from(cardsEl.children)) {
+    const selected = S.api.board.getSelected();
+    for (const child of Array.from(S.cardsEl.children)) {
       const el = child as HTMLElement;
       if (!el.classList.contains("card")) continue;
       el.setAttribute("role", "option");
@@ -475,12 +505,12 @@ function render(): void {
   // drop views whose card is gone or off-screen. The shared
   // WebGL layer lives in #board, not #cards, so a render
   // never touches it.
-  syncModel3DViews(boardEl, cardsEl, board.items, {
-    fileUrl: (p) => api.files.fileUrl(p),
-    onSelect: (id, additive) => api.board.setSelected(api.board.selectCard(api.board.getSelected(), id, additive)),
+  syncModel3DViews(S.boardEl, S.cardsEl, board.items, {
+    fileUrl: (p) => S.api.files.fileUrl(p),
+    onSelect: (id, additive) => S.api.board.setSelected(S.api.board.selectCard(S.api.board.getSelected(), id, additive)),
   });
   for (const [id, st] of videoState) {
-    const v = cardsEl.querySelector(`[data-id="${id}"] video`) as HTMLVideoElement | null;
+    const v = S.cardsEl.querySelector(`[data-id="${id}"] video`) as HTMLVideoElement | null;
     if (!v) continue;
     const restore = () => {
       try { v.currentTime = st.t; } catch { /* not ready yet */ }
@@ -493,12 +523,12 @@ function render(): void {
   // element to restore from: start it. (No autoplay attribute
   // on the element: that would restart a video the user
   // paused with the native controls on every render.)
-  const activeVideo = api.media.getVideoState().id;
+  const activeVideo = S.api.media.getVideoState().id;
   if (activeVideo !== null && !videoState.has(activeVideo)) {
-    const v = cardsEl.querySelector(`[data-id="${activeVideo}"] video`) as HTMLVideoElement | null;
+    const v = S.cardsEl.querySelector(`[data-id="${activeVideo}"] video`) as HTMLVideoElement | null;
     if (v) v.play().catch(() => undefined);
   }
-  if (editingHtml) cardsEl.insertAdjacentHTML("beforeend", editingHtml);
+  if (editingHtml) S.cardsEl.insertAdjacentHTML("beforeend", editingHtml);
   // Drag path cache: updateDraggedCards runs on every
   // pointermove, and the old version did three
   // attribute-selector queries per dragged card per move.
@@ -507,54 +537,54 @@ function render(): void {
   // its decorations removed (see startTextEdit) and is
   // never dragged, so a stale entry there is harmless;
   // updateDraggedCards still checks isConnected.
-  cardEls.clear();
-  for (const child of Array.from(cardsEl.children)) {
+  S.cardEls.clear();
+  for (const child of Array.from(S.cardsEl.children)) {
     const el = child as HTMLElement;
     if (el.classList.contains("card") && el.dataset.id) {
       const id = Number(el.dataset.id);
-      const entry = cardEls.get(id) ?? { card: el };
+      const entry = S.cardEls.get(id) ?? { card: el };
       entry.card = el;
-      cardEls.set(id, entry);
+      S.cardEls.set(id, entry);
     } else if (el.classList.contains("card-decorations") && el.dataset.for) {
       const id = Number(el.dataset.for);
-      const entry = cardEls.get(id);
+      const entry = S.cardEls.get(id);
       if (!entry) continue;
       if (el.classList.contains("card-decorations-right")) entry.right = el;
       else entry.left = el;
     }
   }
-  api.view.refresh();
-  lastContentKey = visibleKey();
+  S.api.view.refresh();
+  S.lastContentKey = visibleKey();
   applyCamera();
-  api.search.update();
+  S.api.search.update();
 }
 
 function updateResizeHandle(): void {
   const el = document.getElementById("resize-handle") as HTMLDivElement;
   const rotEl = document.getElementById("rotate-handle") as HTMLDivElement | null;
-  const selected = api.board.getSelected();
+  const selected = S.api.board.getSelected();
   // A plugin view owns the screen: the board's resize handle is
   // not part of that view, so it must never float over it — it
   // did, at the selected card's corner, while playing a slide.
-  if (api.view.getView() !== "board" || selected.length !== 1 || api.ui.isSettingsOpen() || editingId !== null) {
+  if (S.api.view.getView() !== "board" || selected.length !== 1 || S.api.ui.isSettingsOpen() || S.editingId !== null) {
     el.style.display = "none";
     if (rotEl) rotEl.style.display = "none";
     return;
   }
   // The board, fresh: the selected item's position is what
   // the handle follows, and it moves during a drag.
-  const it = api.board.getItem(selected[0]);
+  const it = S.api.board.getItem(selected[0]);
   if (!it || "Connector" in it.kind) {
     el.style.display = "none";
     if (rotEl) rotEl.style.display = "none";
     return;
   }
-  const [p, s] = api.geometry.itemBounds(it);
-  const c = api.geometry.centre(it);
-  const rot = api.geometry.itemRotation(it);
+  const [p, s] = S.api.geometry.itemBounds(it);
+  const c = S.api.geometry.centre(it);
+  const rot = S.api.geometry.itemRotation(it);
   // Corners follow the rotation, so the handles sit on the
   // card as drawn, not on its unrotated bounding box.
-  const corner = api.geometry.rotatePoint({ x: p.x + s.w, y: p.y + s.h }, c, rot);
+  const corner = S.api.geometry.rotatePoint({ x: p.x + s.w, y: p.y + s.h }, c, rot);
   const screen = toScreen(corner);
   const bs = boardSize();
   if (screen.x < 0 || screen.y < 0 || screen.x > bs.x || screen.y > bs.y) {
@@ -566,7 +596,7 @@ function updateResizeHandle(): void {
   }
   if (rotEl) {
     if (!isRotatable(it, isFrameCard)) { rotEl.style.display = "none"; return; }
-    const rs = toScreen(rotateHandleWorld(it, api.view.getCamera()));
+    const rs = toScreen(rotateHandleWorld(it, S.api.view.getCamera()));
     if (rs.x < 0 || rs.y < 0 || rs.x > bs.x || rs.y > bs.y) {
       rotEl.style.display = "none"; return;
     }
@@ -592,8 +622,8 @@ function updateResizeHandle(): void {
 // Chromium. Stacking is therefore done with z-index, which changes
 // paint order without touching the node at all.
 function updateSelectionInner(): void {
-  const selected = api.board.getSelected();
-  for (const child of Array.from(cardsEl.children)) {
+  const selected = S.api.board.getSelected();
+  for (const child of Array.from(S.cardsEl.children)) {
     const el = child as HTMLElement;
     const isSel = selected.includes(Number(el.dataset.id));
     el.classList.toggle("selected", isSel);
@@ -609,8 +639,8 @@ function updateSelectionInner(): void {
   }
   // Group frames follow the selection too: a frame reads as
   // selected when any of its members is.
-  const board = cachedBoard ?? api.board.get();
-  for (const child of Array.from(groupsEl.children)) {
+  const board = S.cachedBoard ?? S.api.board.get();
+  for (const child of Array.from(S.groupsEl.children)) {
     const el = child as HTMLElement;
     const g = Number(el.dataset.group);
     el.classList.toggle("selected", board.items.some((it) => it.group === g && selected.includes(it.id)));
@@ -626,14 +656,13 @@ function updateSelection(): void {
   // The toolbar plugin follows the selection through the
   // "selection" plugin event, so its note-colours flyout
   // appears when a text note is selected.
-  api.events.emit("selection");
+  S.api.events.emit("selection");
 }
 
 // Announce the selection to a screen reader through the
 // live region. Only when it changed: updateSelection runs
 // on every click and drag, and repeating the same line
 // would spam the reader.
-let lastAnnouncedSelection = "";
 // Kind is a single-key externally-tagged enum, so the
 // first key is the discriminant. Shape, Model3D and
 // Plugin have no entry and fall to "Card selected".
@@ -651,24 +680,24 @@ const KIND_SELECTION_LABELS: Record<string, string> = {
 function announceSelection(): void {
   const announcer = document.getElementById("sr-announcer");
   if (!announcer) return;
-  const selected = api.board.getSelected();
+  const selected = S.api.board.getSelected();
   let text: string;
   if (selected.length === 0) {
     text = "";
   } else if (selected.length === 1) {
-    const it = api.board.getItem(selected[0]);
+    const it = S.api.board.getItem(selected[0]);
     if (!it) text = "1 card selected";
     else text = KIND_SELECTION_LABELS[Object.keys(it.kind)[0]] ?? "Card selected";
     if (it && it.group !== null) {
-      const board = api.board.get();
+      const board = S.api.board.get();
       const label = board.groups?.[it.group]?.label;
       if (label) text += `, in group ${label}`;
     }
   } else {
     text = `${selected.length} cards selected`;
   }
-  if (text === lastAnnouncedSelection) return;
-  lastAnnouncedSelection = text;
+  if (text === S.lastAnnouncedSelection) return;
+  S.lastAnnouncedSelection = text;
   announcer.textContent = text;
 }
 
@@ -681,7 +710,7 @@ function applyStacking(): void {
   // including thousands of off-screen items that have no
   // DOM node and need no z-index at all.
   let i = 0;
-  for (const child of Array.from(cardsEl.children)) {
+  for (const child of Array.from(S.cardsEl.children)) {
     (child as HTMLElement).style.zIndex = String(i++);
   }
 }
@@ -689,7 +718,7 @@ function applyStacking(): void {
 // ---------------------------------------------------------------- editing
 
 function createTextNoteAt(world: Pt): void {
-  const id = api.board.addItemSilent({ Text: { text: "", bold: false, size: 16, color: "#1A1A1A" } }, world, { w: 260, h: 48 });
+  const id = S.api.board.addItemSilent({ Text: { text: "", bold: false, size: 16, color: "#1A1A1A" } }, world, { w: 260, h: 48 });
   // No save here: the commit saves the typed text, or
   // removes the note if it is empty, so an empty note
   // leaves no board change and no undo step behind.
@@ -697,7 +726,7 @@ function createTextNoteAt(world: Pt): void {
 }
 
 function startTextEdit(id: number, isNew = false): void {
-  const item = api.board.getItem(id);
+  const item = S.api.board.getItem(id);
   if (!item || !("Text" in item.kind)) return;
   // Render first, then mark the note as editing: render() skips
   // the editing note, so setting editingId before it would
@@ -706,9 +735,9 @@ function startTextEdit(id: number, isNew = false): void {
   // appeared after the next click. A later render preserves
   // the textarea through editingHtml, as before.
   render();
-  editingId = id;
-  const card = cardsEl.querySelector(`[data-id="${id}"]`);
-  if (!card) { editingId = null; return; }
+  S.editingId = id;
+  const card = S.cardsEl.querySelector(`[data-id="${id}"]`);
+  if (!card) { S.editingId = null; return; }
   const { size } = item.kind.Text;
   const ta = document.createElement("textarea");
   ta.className = "note-edit";
@@ -727,7 +756,7 @@ function startTextEdit(id: number, isNew = false): void {
   // double-click point for a new note).
   const row = document.createElement("div");
   row.className = "note-edit-row";
-  const actions = api.ui.listCreateActions();
+  const actions = S.api.ui.listCreateActions();
   if (isNew && actions.length > 0) {
     const a = actions[0];
     const mic = document.createElement("button");
@@ -751,14 +780,14 @@ function startTextEdit(id: number, isNew = false): void {
     // The button never takes focus; the click still runs.
     mic.addEventListener("mousedown", (e) => e.preventDefault());
     mic.addEventListener("click", () => {
-      const it = api.board.getItem(id);
+      const it = S.api.board.getItem(id);
       if (!it) return;
       const point = { x: it.pos.x, y: it.pos.y };
       commitEditingIfAny();
       try {
         void a.run(point);
       } catch (e) {
-        api.ui.toast(`Could not start ${a.label}: ${String(e)}`);
+        S.api.ui.toast(`Could not start ${a.label}: ${String(e)}`);
       }
     });
     row.appendChild(mic);
@@ -771,12 +800,12 @@ function startTextEdit(id: number, isNew = false): void {
   // the render before editing started; they sit over the
   // text box and would cover the mic on its left. They
   // come back on the next render.
-  cardsEl.querySelector(`.card-decorations[data-for="${id}"]`)?.remove();
-  cardsEl.querySelector(`.card-decorations-right[data-for="${id}"]`)?.remove();
+  S.cardsEl.querySelector(`.card-decorations[data-for="${id}"]`)?.remove();
+  S.cardsEl.querySelector(`.card-decorations-right[data-for="${id}"]`)?.remove();
   ta.focus();
   ta.setSelectionRange(ta.value.length, ta.value.length);
   const commit = () => {
-    if (editingId !== id) return;
+    if (S.editingId !== id) return;
     const text = ta.value;
     // An empty note is not a note: double-clicking empty
     // space creates a text box, and if nothing is typed
@@ -786,15 +815,15 @@ function startTextEdit(id: number, isNew = false): void {
     if (text.trim() === "") {
       // Remove without saving, then save once: the empty
       // note leaves no board change and no undo step.
-      api.board.removeItems([id]);
-      editingId = null;
-      api.board.save();
+      S.api.board.removeItems([id]);
+      S.editingId = null;
+      S.api.board.save();
       render();
       return;
     }
-    api.board.setTextContent(id, text);
-    editingId = null;
-    api.board.save();
+    S.api.board.setTextContent(id, text);
+    S.editingId = null;
+    S.api.board.save();
     render();
   };
   ta.addEventListener("blur", commit);
@@ -832,9 +861,9 @@ function wireRenameInput(input: HTMLInputElement, onCommit: () => void): void {
 }
 
 function startGroupRename(group: number): void {
-  const board = api.board.get();
+  const board = S.api.board.get();
   const label = board.groups?.[group]?.label ?? `Section ${group}`;
-  const chip = groupsEl.querySelector(`.group-label[data-group="${group}"]`) as HTMLElement | null;
+  const chip = S.groupsEl.querySelector(`.group-label[data-group="${group}"]`) as HTMLElement | null;
   if (!chip) return;
   const input = document.createElement("input");
   input.className = "group-rename";
@@ -844,7 +873,7 @@ function startGroupRename(group: number): void {
   chip.textContent = "";
   chip.appendChild(input);
   wireRenameInput(input, () => {
-    if (input.value.trim() !== "" && input.value !== label) api.board.setGroupLabel(group, input.value);
+    if (input.value.trim() !== "" && input.value !== label) S.api.board.setGroupLabel(group, input.value);
   });
 }
 
@@ -854,7 +883,7 @@ function startGroupRename(group: number): void {
 // #cards target — the DOM target cannot say which part of
 // the card was clicked. The title's screen rect can.
 function audioTitleHit(id: number, clientX: number, clientY: number): boolean {
-  const titleEl = cardsEl.querySelector(`.card[data-id="${id}"] .col .title`) as HTMLElement | null;
+  const titleEl = S.cardsEl.querySelector(`.card[data-id="${id}"] .col .title`) as HTMLElement | null;
   if (!titleEl) return false;
   const r = titleEl.getBoundingClientRect();
   return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
@@ -866,10 +895,10 @@ function audioTitleHit(id: number, clientX: number, clientY: number): boolean {
 // cancels. An empty name clears the title, so the card
 // falls back to the file's name.
 function startAudioRename(id: number): void {
-  const it = api.board.getItem(id);
+  const it = S.api.board.getItem(id);
   if (!it || !("Audio" in it.kind)) return;
   const current = (it.kind.Audio.title?.trim() ?? "") || (it.kind.Audio.path.split("/").pop() ?? it.kind.Audio.path);
-  const cardEl = cardsEl.querySelector(`.card[data-id="${id}"]`) as HTMLElement | null;
+  const cardEl = S.cardsEl.querySelector(`.card[data-id="${id}"]`) as HTMLElement | null;
   const titleEl = cardEl?.querySelector(".col .title") as HTMLElement | null;
   if (!titleEl) return;
   const input = document.createElement("input");
@@ -878,31 +907,31 @@ function startAudioRename(id: number): void {
   input.setAttribute("aria-label", "Voice note name");
   titleEl.textContent = "";
   titleEl.appendChild(input);
-  wireRenameInput(input, () => { api.board.setAudioTitle(id, input.value); });
+  wireRenameInput(input, () => { S.api.board.setAudioTitle(id, input.value); });
 }
 
 function commitEditingIfAny(): void {
-  if (editingId === null) return;
-  const ta = cardsEl.querySelector("textarea.note-edit") as HTMLTextAreaElement | null;
+  if (S.editingId === null) return;
+  const ta = S.cardsEl.querySelector("textarea.note-edit") as HTMLTextAreaElement | null;
   if (ta) ta.blur();
-  else { editingId = null; render(); }
+  else { S.editingId = null; render(); }
 }
 
 // ---------------------------------------------------------------- tools
 
 function setTool(t: Tool): void {
-  tool = t;
+  S.tool = t;
   // Every tool switch leaves lasso mode: it belongs to
   // Select only. The L handler turns it back on after
   // switching to Select.
-  lassoMode = false;
-  drag = null;
+  S.lassoMode = false;
+  S.drag = null;
   updateEraserRing(0, 0, false);
   // The toolbar plugin follows the tool through the "tool"
   // plugin event, so it can highlight the active tool and
   // show the right flyout without polling. The plugin
   // system syncs its own tool buttons on the same event.
-  api.events.emit("tool");
+  S.api.events.emit("tool");
 }
 
 // Selection actions, shared by the keyboard shortcuts and by the
@@ -914,64 +943,64 @@ function setTool(t: Tool): void {
 // delegates its groupSelection/ungroupSelection/deleteSelection
 // here, so a plugin groups exactly as the keyboard does.
 function groupSelected(): boolean {
-  const selected = api.board.getSelected();
+  const selected = S.api.board.getSelected();
   if (selected.length < 2) return false;
   // The group id comes from the board's next_group, which
   // the core owns: createGroup bumps it, assigns it, and
   // saves, so a later group can never collide with it.
-  return api.board.createGroup(selected) !== null;
+  return S.api.board.createGroup(selected) !== null;
 }
 
 function ungroupSelected(): boolean {
-  const selected = api.board.getSelected();
-  const board = api.board.get();
-  const groups = new Set(selected.map((id) => api.board.getItem(id)?.group).filter((g): g is number => g !== null && g !== undefined));
+  const selected = S.api.board.getSelected();
+  const board = S.api.board.get();
+  const groups = new Set(selected.map((id) => S.api.board.getItem(id)?.group).filter((g): g is number => g !== null && g !== undefined));
   if (groups.size === 0) return false;
   const patches = board.items
     .filter((it) => it.group !== null && groups.has(it.group))
     .map((it) => ({ id: it.id, group: null as number | null }));
-  api.board.updateItems(patches);
+  S.api.board.updateItems(patches);
   return true;
 }
 
 function deleteSelected(): boolean {
-  const selected = api.board.getSelected();
+  const selected = S.api.board.getSelected();
   if (selected.length === 0) return false;
-  api.board.removeItems(selected);
-  api.board.setSelected([]);
-  api.board.save();
+  S.api.board.removeItems(selected);
+  S.api.board.setSelected([]);
+  S.api.board.save();
   render();
   return true;
 }
 
 function cornerHit(id: number, world: Pt): boolean {
-  const cam = api.view.getCamera();
-  const it = api.board.getItem(id);
+  const cam = S.api.view.getCamera();
+  const it = S.api.board.getItem(id);
   if (!it || "Connector" in it.kind) return false;
-  const [p, s] = api.geometry.itemBounds(it);
-  const corner = api.geometry.rotatePoint({ x: p.x + s.w, y: p.y + s.h }, api.geometry.centre(it), api.geometry.itemRotation(it));
+  const [p, s] = S.api.geometry.itemBounds(it);
+  const corner = S.api.geometry.rotatePoint({ x: p.x + s.w, y: p.y + s.h }, S.api.geometry.centre(it), S.api.geometry.itemRotation(it));
   const tol = 16 / cam.zoom;
   return Math.hypot(world.x - corner.x, world.y - corner.y) <= tol;
 }
 function rotateHit(id: number, world: Pt): boolean {
-  const cam = api.view.getCamera();
-  const it = api.board.getItem(id);
+  const cam = S.api.view.getCamera();
+  const it = S.api.board.getItem(id);
   if (!it || !isRotatable(it, isFrameCard)) return false;
-  const h = rotateHandleWorld(it, api.view.getCamera());
+  const h = rotateHandleWorld(it, S.api.view.getCamera());
   const tol = 18 / cam.zoom;
   return Math.hypot(world.x - h.x, world.y - h.y) <= tol;
 }
 function rotateSelected(delta: number): boolean {
-  const selected = api.board.getSelected();
+  const selected = S.api.board.getSelected();
   let changed = false;
   for (const id of selected) {
-    const it = api.board.getItem(id);
+    const it = S.api.board.getItem(id);
     if (!it || !isRotatable(it, isFrameCard)) continue;
-    api.board.setItemRotation(id, normAngle(api.geometry.itemRotation(it) + delta));
+    S.api.board.setItemRotation(id, normAngle(S.api.geometry.itemRotation(it) + delta));
     changed = true;
   }
   if (!changed) return false;
-  api.board.save();
+  S.api.board.save();
   render();
   return true;
 }
@@ -984,10 +1013,10 @@ function rotateSelected(delta: number): boolean {
 // are drawings and lines, not elements to find. A grouped item
 // selects its whole group and centres on the group's bounds.
 function navigateElements(dir: 1 | -1): void {
-  const board = api.board.get();
+  const board = S.api.board.get();
   const navigable = board.items.filter((it) => !("Stroke" in it.kind) && !("Connector" in it.kind));
   if (navigable.length === 0) return;
-  const selected = api.board.getSelected();
+  const selected = S.api.board.getSelected();
   // Advance from the edge of the selection in the direction
   // of travel: from the last member going forward, from the
   // first going back. Advancing from the first member in
@@ -1004,18 +1033,18 @@ function navigateElements(dir: 1 | -1): void {
     ? (dir === 1 ? 0 : navigable.length - 1)
     : (idx + dir + navigable.length) % navigable.length;
   const target = navigable[next];
-  api.board.setSelected(api.board.selectCard([], target.id, false));
+  S.api.board.setSelected(S.api.board.selectCard([], target.id, false));
   let c: Pt;
   if (target.group !== null) {
     const members = board.items.filter((it) => it.group === target.group);
-    const b = membersBounds(members, api.geometry.itemBounds);
-    c = b ? { x: b.x + b.w / 2, y: b.y + b.h / 2 } : api.geometry.centre(target);
+    const b = membersBounds(members, S.api.geometry.itemBounds);
+    c = b ? { x: b.x + b.w / 2, y: b.y + b.h / 2 } : S.api.geometry.centre(target);
   } else {
-    c = api.geometry.centre(target);
+    c = S.api.geometry.centre(target);
   }
   const bs = boardSize();
-  const cam = api.view.getCamera();
-  api.view.setCamera({ x: c.x - bs.x / 2 / cam.zoom, y: c.y - bs.y / 2 / cam.zoom, zoom: cam.zoom });
+  const cam = S.api.view.getCamera();
+  S.api.view.setCamera({ x: c.x - bs.x / 2 / cam.zoom, y: c.y - bs.y / 2 / cam.zoom, zoom: cam.zoom });
 }
 
 // ---------------------------------------------------------------- input
@@ -1024,7 +1053,7 @@ function navigateElements(dir: 1 | -1): void {
 // from the card's centre to the pointer, +90 so the
 // handle sits at the top, snapped to 15° with Shift.
 function attachBoardListeners(): void {
-boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
+S.boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
   const target = e.target as HTMLElement;
   if (target.closest("#toolbar, #settings-backdrop, #toast, #plugin-overlays, #search-box, #title-bar, video, input, canvas.model3d")) return;
   // A board click or drag must never start a native text selection
@@ -1032,7 +1061,7 @@ boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
   if (!target.closest("textarea.note-edit")) window.getSelection()?.removeAllRanges();
   if (e.button !== 0) return;
   const winPt: Pt = boardPoint(e.clientX, e.clientY);
-  if (editingId !== null && !target.closest("textarea.note-edit")) {
+  if (S.editingId !== null && !target.closest("textarea.note-edit")) {
     commitEditingIfAny();
     render();
     return;
@@ -1041,50 +1070,50 @@ boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
   // A plugin view owns its own viewport: core board clicks, pan and
   // tools must not run while it is active. The plugin's own
   // listeners on its container handle clicks there.
-  if (api.view.getView() !== "board" && target.closest("#plugin-view")) return;
-  if (tool.startsWith("plugin:")) {
-    const pt = api.ui.getToolDef(tool);
+  if (S.api.view.getView() !== "board" && target.closest("#plugin-view")) return;
+  if (S.tool.startsWith("plugin:")) {
+    const pt = S.api.ui.getToolDef(S.tool);
     if (pt?.onMouseDown) {
-      try { pt.onMouseDown(world); } catch (e) { api.ui.toast(`Plugin tool failed: ${String(e)}`); }
-      pluginToolDown = true;
+      try { pt.onMouseDown(world); } catch (e) { S.api.ui.toast(`Plugin tool failed: ${String(e)}`); }
+      S.pluginToolDown = true;
       return;
     }
     return;
   }
-  if (spaceDown) { drag = { kind: "pan", last: winPt }; return; }
-  if (isShapeTool(tool)) {
-    drag = { kind: "shape", shape: tool as ShapeKind, start: world, current: world };
+  if (S.spaceDown) { S.drag = { kind: "pan", last: winPt }; return; }
+  if (isShapeTool(S.tool)) {
+    S.drag = { kind: "shape", shape: S.tool as ShapeKind, start: world, current: world };
     return;
   }
-  if (tool === "pen") {
+  if (S.tool === "pen") {
     // A stylus records its pressure per point, so the
     // stroke can thicken and thin with the press; a mouse
     // or finger records none, and draws a uniform stroke.
-    drag = { kind: "stroke", points: [world], pressures: e.pointerType === "pen" ? [e.pressure] : [] };
+    S.drag = { kind: "stroke", points: [world], pressures: e.pointerType === "pen" ? [e.pressure] : [] };
     return;
   }
-  if (tool === "select" && lassoMode) {
-    drag = { kind: "lasso", points: [world] };
+  if (S.tool === "select" && S.lassoMode) {
+    S.drag = { kind: "lasso", points: [world] };
     return;
   }
-  if (tool === "eraser") {
-    drag = { kind: "erase", erased: false };
-    if (eraseAt(world)) drag.erased = true;
+  if (S.tool === "eraser") {
+    S.drag = { kind: "erase", erased: false };
+    if (eraseAt(world)) S.drag.erased = true;
     return;
   }
-  if (tool === "connector") {
-    const hit = api.board.hitTest(world);
-    const hitItem = hit !== null ? api.board.getItem(hit) : null;
+  if (S.tool === "connector") {
+    const hit = S.api.board.hitTest(world);
+    const hitItem = hit !== null ? S.api.board.getItem(hit) : null;
     const anchorable = hitItem && !("Stroke" in hitItem.kind) && !("Connector" in hitItem.kind);
-    drag = { kind: "connector", from: hitItem && anchorable ? { Item: hitItem.id } : { Point: world }, current: world };
+    S.drag = { kind: "connector", from: hitItem && anchorable ? { Item: hitItem.id } : { Point: world }, current: world };
     return;
   }
   // Select tool.
   const now = Date.now();
   const isDoubleClick =
-    now - lastPointerDown.t < 500 &&
-    Math.hypot(winPt.x - lastPointerDown.x, winPt.y - lastPointerDown.y) < 5;
-  lastPointerDown = { x: winPt.x, y: winPt.y, t: now };
+    now - S.lastPointerDown.t < 500 &&
+    Math.hypot(winPt.x - S.lastPointerDown.x, winPt.y - S.lastPointerDown.y) < 5;
+  S.lastPointerDown = { x: winPt.x, y: winPt.y, t: now };
   if (isDoubleClick) {
     // Without this, the browser's default mousedown focus runs after
     // this handler and steals focus from a textarea created here, so
@@ -1095,10 +1124,10 @@ boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
     // in the frame's padding, which is empty board space).
     const labelEl = target.closest(".group-label") as HTMLElement | null;
     if (labelEl) { startGroupRename(Number(labelEl.dataset.group)); return; }
-    const hit = api.board.hitTest(world);
+    const hit = S.api.board.hitTest(world);
     if (hit !== null) {
-      const it = api.board.getItem(hit);
-      if (it && "Plugin" in it.kind && api.cards.dispatchDoubleClick(it)) return;
+      const it = S.api.board.getItem(hit);
+      if (it && "Plugin" in it.kind && S.api.cards.dispatchDoubleClick(it)) return;
       if (it && "Text" in it.kind) { startTextEdit(hit); return; }
       // Double-clicking a voice note's name renames it,
       // like a section label renames its group. Anywhere
@@ -1113,49 +1142,49 @@ boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
       return;
     }
   }
-  const clicked = api.board.hitTest(world);
-  const selected = api.board.getSelected();
+  const clicked = S.api.board.hitTest(world);
+  const selected = S.api.board.getSelected();
   if (selected.length === 1 && rotateHit(selected[0], world)) {
-    const it = api.board.getItem(selected[0]);
-    drag = { kind: "rotate", id: selected[0], origRot: it ? api.geometry.itemRotation(it) : 0, moved: false };
+    const it = S.api.board.getItem(selected[0]);
+    S.drag = { kind: "rotate", id: selected[0], origRot: it ? S.api.geometry.itemRotation(it) : 0, moved: false };
     return;
   }
   if (selected.length === 1 && cornerHit(selected[0], world)) {
     const sel = selected[0];
-    const it = api.board.getItem(sel);
-    drag = { kind: "resize", id: sel, startWorld: world, origW: it?.size.w ?? 100, origH: it?.size.h ?? 100, moved: false };
+    const it = S.api.board.getItem(sel);
+    S.drag = { kind: "resize", id: sel, startWorld: world, origW: it?.size.w ?? 100, origH: it?.size.h ?? 100, moved: false };
     return;
   }
   if (clicked !== null && cornerHit(clicked, world)) {
-    api.board.setSelected(api.board.selectCard(api.board.getSelected(), clicked, false));
-    api.board.bringToFront(api.board.getSelected());
+    S.api.board.setSelected(S.api.board.selectCard(S.api.board.getSelected(), clicked, false));
+    S.api.board.bringToFront(S.api.board.getSelected());
     applyStacking();
     updateSelection();
-    const it = api.board.getItem(clicked);
-    drag = { kind: "resize", id: clicked, startWorld: world, origW: it?.size.w ?? 100, origH: it?.size.h ?? 100, moved: false };
+    const it = S.api.board.getItem(clicked);
+    S.drag = { kind: "resize", id: clicked, startWorld: world, origW: it?.size.w ?? 100, origH: it?.size.h ?? 100, moved: false };
     return;
   }
   if (clicked !== null) {
-    api.board.setSelected(api.board.selectCard(api.board.getSelected(), clicked, e.shiftKey));
-    api.board.bringToFront(api.board.getSelected());
+    S.api.board.setSelected(S.api.board.selectCard(S.api.board.getSelected(), clicked, e.shiftKey));
+    S.api.board.bringToFront(S.api.board.getSelected());
     applyStacking();
     updateSelection();
-    drag = { kind: "move", lastWorld: world, moved: false };
+    S.drag = { kind: "move", lastWorld: world, moved: false };
     return;
   }
-  if (!e.shiftKey) api.board.setSelected([]);
-  drag = { kind: "marquee", start: world, current: world };
+  if (!e.shiftKey) S.api.board.setSelected([]);
+  S.drag = { kind: "marquee", start: world, current: world };
 });
 
-cardsEl.addEventListener("click", (e: MouseEvent) => {
+S.cardsEl.addEventListener("click", (e: MouseEvent) => {
   const target = e.target as HTMLElement;
   const link = target.closest("a[data-url]") as HTMLElement | null;
   if (link) { e.preventDefault(); openExternal(link.dataset.url ?? ""); return; }
   const pbtn = target.closest("[data-plugin-action]") as HTMLElement | null;
   if (pbtn) {
     const pid = Number(pbtn.dataset.id);
-    const pit = api.board.getItem(pid);
-    if (pit && api.cards.dispatchAction(pbtn.dataset.pluginAction ?? "", pit)) return;
+    const pit = S.api.board.getItem(pid);
+    if (pit && S.api.cards.dispatchAction(pbtn.dataset.pluginAction ?? "", pit)) return;
   }
   const task = target.closest("[data-action=\"toggle-task\"]") as HTMLElement | null;
   if (task) {
@@ -1164,15 +1193,15 @@ cardsEl.addEventListener("click", (e: MouseEvent) => {
     // suppress that and let the text be the state instead.
     e.preventDefault();
     const cardEl = task.closest(".card") as HTMLElement | null;
-    const it = api.board.getItem(Number(cardEl?.dataset.id));
+    const it = S.api.board.getItem(Number(cardEl?.dataset.id));
     if (!it || !("Text" in it.kind)) return;
     const lineNo = Number(task.dataset.line);
     const lines = it.kind.Text.text.split("\n");
-    const next = api.text.toggleTaskLine(lines[lineNo] ?? "");
+    const next = S.api.text.toggleTaskLine(lines[lineNo] ?? "");
     if (next === null) return;
     lines[lineNo] = next;
-    api.board.setTextContent(it.id, lines.join("\n"));
-    api.board.save();
+    S.api.board.setTextContent(it.id, lines.join("\n"));
+    S.api.board.save();
     render();
     return;
   }
@@ -1180,41 +1209,41 @@ cardsEl.addEventListener("click", (e: MouseEvent) => {
   if (!btn) return;
   const id = Number(btn.dataset.id);
   const action = btn.dataset.action;
-  const it = api.board.getItem(id);
+  const it = S.api.board.getItem(id);
   if (!it) return;
   if (action === "open-link" && "UrlCard" in it.kind) openExternal(it.kind.UrlCard.url);
-  if (action === "play-audio" && "Audio" in it.kind) api.media.toggleAudio(id, it.kind.Audio.path);
+  if (action === "play-audio" && "Audio" in it.kind) S.api.media.toggleAudio(id, it.kind.Audio.path);
   if (action === "toggle-transcript" && "Audio" in it.kind) {
     // The card's height is the state: taller than the hidden
     // height, the transcript shows; at it or below, only the
     // toggle does. A normal resize, so one undo step.
-    const expanded = it.size.h > api.cards.audioHeights.transcriptHidden;
-    const h = expanded ? api.cards.audioHeights.transcriptHidden : api.cards.audioHeights.transcriptShown;
-    api.board.updateItem(id, { size: { w: it.size.w, h } });
+    const expanded = it.size.h > S.api.cards.audioHeights.transcriptHidden;
+    const h = expanded ? S.api.cards.audioHeights.transcriptHidden : S.api.cards.audioHeights.transcriptShown;
+    S.api.board.updateItem(id, { size: { w: it.size.w, h } });
   }
   if ((action === "pdf-prev" || action === "pdf-next") && "PdfCard" in it.kind) {
     const pdfPath = it.kind.PdfCard.path;
-    const cur = api.media.getPdfPage(id);
+    const cur = S.api.media.getPdfPage(id);
     const nextPage = action === "pdf-prev" ? cur - 1 : cur + 1;
-    void api.media.setPdfPage(id, pdfPath, nextPage);
+    void S.api.media.setPdfPage(id, pdfPath, nextPage);
   }
   if (action === "play-video" && "Video" in it.kind) {
     // A local video plays on the board (its poster becomes
     // the live element); a remote link or an unplayable
     // format opens outside the app, as before.
     const v = it.kind.Video;
-    if (isInlineVideo(v.source, v.remote)) api.media.playVideo(id);
+    if (isInlineVideo(v.source, v.remote)) S.api.media.playVideo(id);
     else openExternal(v.source);
   }
 });
 
-cardsEl.addEventListener("input", (e: Event) => {
+S.cardsEl.addEventListener("input", (e: Event) => {
   const seek = (e.target as HTMLElement).closest("[data-audio-seek]") as HTMLInputElement | null;
   if (!seek) return;
   const id = Number(seek.dataset.audioSeek);
-  const state = api.media.getAudioState();
+  const state = S.api.media.getAudioState();
   if (state.id !== id || !isFinite(state.duration) || state.duration <= 0) return;
-  api.media.seekAudio(id, (Number(seek.value) / 1000) * state.duration);
+  S.api.media.seekAudio(id, (Number(seek.value) / 1000) * state.duration);
 });
 }
 
@@ -1222,11 +1251,11 @@ cardsEl.addEventListener("input", (e: Event) => {
 // the API hands out. The toolbar's shape picker and this
 // drag check both read the same table.
 function isShapeTool(t: string): boolean {
-  return api.shapes.list().some((s) => s.kind === t);
+  return S.api.shapes.list().some((s) => s.kind === t);
 }
 
 function openExternal(target: string): void {
-  api.files.openExternal(target).catch((e) => api.ui.toast(`Could not open ${target}: ${String(e)}`));
+  S.api.files.openExternal(target).catch((e) => S.api.ui.toast(`Could not open ${target}: ${String(e)}`));
 }
 
 // ---------------------------------------------------------------- mouse
@@ -1236,10 +1265,10 @@ function openExternal(target: string): void {
 // The node is cleared by the next full render (mouseup), so it never
 // needs its own removal.
 function dragPreview(id: string, tag: string): SVGElement {
-  let el = worldEl.querySelector(`#${id}`) as SVGElement | null;
+  let el = S.worldEl.querySelector(`#${id}`) as SVGElement | null;
   if (!el) {
     el = svgEl2(tag, { id }) as SVGElement;
-    worldEl.appendChild(el);
+    S.worldEl.appendChild(el);
   }
   return el;
 }
@@ -1256,10 +1285,10 @@ function updateLiveStroke(points: Pt[], pressures: number[]): void {
     const prs = smoothStrokePressures(pressures);
     for (let i = 0; i + 1 < pts.length; i++) {
       const w = pressureWidth(3, (prs[i] + prs[i + 1]) / 2);
-      el.appendChild(svgEl2("line", { x1: String(pts[i].x), y1: String(pts[i].y), x2: String(pts[i + 1].x), y2: String(pts[i + 1].y), stroke: api.pen.getColor(), "stroke-width": String(w), "stroke-linecap": "round" }));
+      el.appendChild(svgEl2("line", { x1: String(pts[i].x), y1: String(pts[i].y), x2: String(pts[i + 1].x), y2: String(pts[i + 1].y), stroke: S.api.pen.getColor(), "stroke-width": String(w), "stroke-linecap": "round" }));
     }
   } else {
-    el.appendChild(svgEl2("path", { d: smoothStrokePath(points), fill: "none", stroke: api.pen.getColor(), "stroke-width": "3", "stroke-linecap": "round", "stroke-linejoin": "round" }));
+    el.appendChild(svgEl2("path", { d: smoothStrokePath(points), fill: "none", stroke: S.api.pen.getColor(), "stroke-width": "3", "stroke-linecap": "round", "stroke-linejoin": "round" }));
   }
 }
 // The lasso loop, drawn live while dragging. The path is
@@ -1281,12 +1310,12 @@ function updateDraggedCards(ids: number[]): void {
   // last render had its decorations removed) falls back to a
   // live query, so the drag never moves a detached node.
   for (const id of ids) {
-    const it = api.board.getItem(id);
+    const it = S.api.board.getItem(id);
     if (!it) continue;
-    const cached = cardEls.get(id);
+    const cached = S.cardEls.get(id);
     const el = cached?.card.isConnected
       ? cached.card
-      : (cardsEl.querySelector(`[data-id="${id}"]`) as HTMLElement | null);
+      : (S.cardsEl.querySelector(`[data-id="${id}"]`) as HTMLElement | null);
     if (!el) continue;
     el.style.left = `${it.pos.x}px`;
     el.style.top = `${it.pos.y}px`;
@@ -1301,7 +1330,7 @@ function updateDraggedCards(ids: number[]): void {
     const top = Math.max(it.pos.y + 4, it.pos.y + it.size.h - 36);
     const leftDeco = cached?.left?.isConnected
       ? cached.left
-      : (cardsEl.querySelector(`.card-decorations:not(.card-decorations-right)[data-for="${id}"]`) as HTMLElement | null);
+      : (S.cardsEl.querySelector(`.card-decorations:not(.card-decorations-right)[data-for="${id}"]`) as HTMLElement | null);
     if (leftDeco) {
       leftDeco.style.left = `${it.pos.x + 8}px`;
       leftDeco.style.top = `${top}px`;
@@ -1309,7 +1338,7 @@ function updateDraggedCards(ids: number[]): void {
     }
     const rightDeco = cached?.right?.isConnected
       ? cached.right
-      : (cardsEl.querySelector(`.card-decorations-right[data-for="${id}"]`) as HTMLElement | null);
+      : (S.cardsEl.querySelector(`.card-decorations-right[data-for="${id}"]`) as HTMLElement | null);
     if (rightDeco) {
       rightDeco.style.left = `${it.pos.x + it.size.w - 8}px`;
       rightDeco.style.top = `${top}px`;
@@ -1325,10 +1354,10 @@ function updateDraggedCards(ids: number[]): void {
 // group is dragged. A resize moves it too (a member's size
 // changes the union), so this covers both.
 function updateDraggedGroupFrames(ids: number[]): void {
-  if (!groupsEl) return;
+  if (!S.groupsEl) return;
   const groups = new Set<number>();
   for (const id of ids) {
-    const it = api.board.getItem(id);
+    const it = S.api.board.getItem(id);
     if (it && it.group !== null) groups.add(it.group);
   }
   if (groups.size === 0) return;
@@ -1339,18 +1368,18 @@ function updateDraggedGroupFrames(ids: number[]): void {
   // old version called api.board.get() — a full deep copy
   // of the board — on every pointermove, and then scanned
   // that copy once per group inside groupBounds.
-  const source = cachedBoard ?? api.board.get();
+  const source = S.cachedBoard ?? S.api.board.get();
   for (const g of groups) {
     const memberIds = source.items.filter((it) => it.group === g).map((it) => it.id);
     if (memberIds.length < 2) continue;
     const members: Item[] = [];
     for (const id of memberIds) {
-      const it = api.board.getItem(id);
+      const it = S.api.board.getItem(id);
       if (it) members.push(it);
     }
-    const b = groupBounds(members, api.geometry.itemBounds);
+    const b = groupBounds(members, S.api.geometry.itemBounds);
     if (!b) continue;
-    const frame = groupsEl.querySelector(`.group-frame[data-group="${g}"]`) as HTMLElement | null;
+    const frame = S.groupsEl.querySelector(`.group-frame[data-group="${g}"]`) as HTMLElement | null;
     if (!frame) continue;
     frame.style.left = `${b.x}px`;
     frame.style.top = `${b.y}px`;
@@ -1360,39 +1389,39 @@ function updateDraggedGroupFrames(ids: number[]): void {
 }
 
 function attachWindowListeners(): void {
-  if (listenersAttached) return;
-  listenersAttached = true;
+  if (S.listenersAttached) return;
+  S.listenersAttached = true;
 
 window.addEventListener("pointermove", (e: PointerEvent) => {
   const winPt: Pt = boardPoint(e.clientX, e.clientY);
   const world = toWorld(winPt);
-  if (!drag) {
+  if (!S.drag) {
     // Cursor hints run at most once per frame: hitTest walks every
     // item, and mousemove can fire far faster than the display.
-    pendingCursor = world;
-    if (!cursorRaf) {
-      cursorRaf = requestAnimationFrame(() => {
-        cursorRaf = 0;
-        const w = pendingCursor;
+    S.pendingCursor = world;
+    if (!S.cursorRaf) {
+      S.cursorRaf = requestAnimationFrame(() => {
+        S.cursorRaf = 0;
+        const w = S.pendingCursor;
         if (!w) return;
-        const selected = api.board.getSelected();
-        if (api.ui.isSettingsOpen() || editingId !== null) {
-          boardEl.style.cursor = "default";
-        } else if (tool === "pen" || tool === "connector" || isShapeTool(tool) || (tool === "select" && lassoMode)) {
-          boardEl.style.cursor = "crosshair";
-        } else if (tool === "eraser") {
+        const selected = S.api.board.getSelected();
+        if (S.api.ui.isSettingsOpen() || S.editingId !== null) {
+          S.boardEl.style.cursor = "default";
+        } else if (S.tool === "pen" || S.tool === "connector" || isShapeTool(S.tool) || (S.tool === "select" && S.lassoMode)) {
+          S.boardEl.style.cursor = "crosshair";
+        } else if (S.tool === "eraser") {
           // The ring is the cursor while erasing.
-          boardEl.style.cursor = "none";
-        } else if (spaceDown) {
-          boardEl.style.cursor = "grab";
+          S.boardEl.style.cursor = "none";
+        } else if (S.spaceDown) {
+          S.boardEl.style.cursor = "grab";
         } else if (selected.length === 1 && rotateHit(selected[0], w)) {
-          boardEl.style.cursor = "grab";
+          S.boardEl.style.cursor = "grab";
         } else if (selected.length === 1 && cornerHit(selected[0], w)) {
-          boardEl.style.cursor = "nwse-resize";
-        } else if (api.board.hitTest(w) !== null) {
-          boardEl.style.cursor = "move";
+          S.boardEl.style.cursor = "nwse-resize";
+        } else if (S.api.board.hitTest(w) !== null) {
+          S.boardEl.style.cursor = "move";
         } else {
-          boardEl.style.cursor = "default";
+          S.boardEl.style.cursor = "default";
         }
       });
     }
@@ -1401,66 +1430,66 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
     // not lag a frame. It shows only over the board itself,
     // never over the toolbar, panels, title bar or settings.
     const overBoard = !(e.target as HTMLElement).closest("#toolbar, #settings-backdrop, #plugin-panels, #title-bar, #plugin-overlays, #plugin-view, input, textarea, select");
-    const showRing = tool === "eraser" && overBoard && !api.ui.isSettingsOpen() && editingId === null && api.view.getView() === "board";
+    const showRing = S.tool === "eraser" && overBoard && !S.api.ui.isSettingsOpen() && S.editingId === null && S.api.view.getView() === "board";
     updateEraserRing(e.clientX, e.clientY, showRing);
     return;
   }
-  boardEl.style.cursor = drag.kind === "resize" ? "nwse-resize" : drag.kind === "rotate" ? "grabbing" : drag.kind === "pan" ? "grabbing" : drag.kind === "move" ? "move" : drag.kind === "erase" ? "none" : "default";
-  if (drag.kind === "pan") {
-    const cam = api.view.getCamera();
-    api.view.setCameraSilent({
-      x: cam.x - (winPt.x - drag.last.x) / cam.zoom,
-      y: cam.y - (winPt.y - drag.last.y) / cam.zoom,
+  S.boardEl.style.cursor = S.drag.kind === "resize" ? "nwse-resize" : S.drag.kind === "rotate" ? "grabbing" : S.drag.kind === "pan" ? "grabbing" : S.drag.kind === "move" ? "move" : S.drag.kind === "erase" ? "none" : "default";
+  if (S.drag.kind === "pan") {
+    const cam = S.api.view.getCamera();
+    S.api.view.setCameraSilent({
+      x: cam.x - (winPt.x - S.drag.last.x) / cam.zoom,
+      y: cam.y - (winPt.y - S.drag.last.y) / cam.zoom,
       zoom: cam.zoom,
     });
-    drag.last = winPt;
+    S.drag.last = winPt;
     applyCamera();
     refreshContentIfVisibleChanged();
-  } else if (drag.kind === "move") {
-    const dx = world.x - drag.lastWorld.x, dy = world.y - drag.lastWorld.y;
-    if (Math.hypot(dx, dy) > 0.5) drag.moved = true;
-    api.board.moveItems(api.board.getSelected(), dx, dy);
-    drag.lastWorld = world;
-    updateDraggedCards(api.board.getSelected());
+  } else if (S.drag.kind === "move") {
+    const dx = world.x - S.drag.lastWorld.x, dy = world.y - S.drag.lastWorld.y;
+    if (Math.hypot(dx, dy) > 0.5) S.drag.moved = true;
+    S.api.board.moveItems(S.api.board.getSelected(), dx, dy);
+    S.drag.lastWorld = world;
+    updateDraggedCards(S.api.board.getSelected());
     // Strokes do not move when a card moves, so the SVG layer
     // only changes when a connector follows a dragged card.
     // Skipping the redraw on a board with no connectors also
     // skips the full api.board.get() deep copy renderSvgOnly
     // does on every pointermove. (cachedBoard is set on every
     // render; if it is somehow null, redraw as before.)
-    if (!cachedBoard || cachedBoard.items.some((it) => "Connector" in it.kind)) renderSvgOnly();
+    if (!S.cachedBoard || S.cachedBoard.items.some((it) => "Connector" in it.kind)) renderSvgOnly();
     updateResizeHandle();
-  } else if (drag.kind === "resize") {
-    const it = api.board.getItem(drag.id);
-    api.board.resizeItem(drag.id, drag.origW + (world.x - drag.startWorld.x), drag.origH + (world.y - drag.startWorld.y));
-    if (Math.hypot(world.x - drag.startWorld.x, world.y - drag.startWorld.y) > 2) drag.moved = true;
-    updateDraggedCards([drag.id]);
+  } else if (S.drag.kind === "resize") {
+    const it = S.api.board.getItem(S.drag.id);
+    S.api.board.resizeItem(S.drag.id, S.drag.origW + (world.x - S.drag.startWorld.x), S.drag.origH + (world.y - S.drag.startWorld.y));
+    if (Math.hypot(world.x - S.drag.startWorld.x, world.y - S.drag.startWorld.y) > 2) S.drag.moved = true;
+    updateDraggedCards([S.drag.id]);
     // Strokes have no card element to resize live, so rebuild
     // the SVG layer instead: the stroke visibly follows the
     // handle, like a card does. Same as the rotate drag below.
     if (it && "Stroke" in it.kind) renderSvgOnly();
     updateResizeHandle();
-  } else if (drag.kind === "stroke") {
-    const cam = api.view.getCamera();
-    const last = drag.points[drag.points.length - 1];
+  } else if (S.drag.kind === "stroke") {
+    const cam = S.api.view.getCamera();
+    const last = S.drag.points[S.drag.points.length - 1];
     if (Math.hypot(world.x - last.x, world.y - last.y) > 2 / cam.zoom) {
-      drag.points.push(world);
-      if (e.pointerType === "pen") drag.pressures.push(e.pressure);
-      updateLiveStroke(drag.points, drag.pressures);
+      S.drag.points.push(world);
+      if (e.pointerType === "pen") S.drag.pressures.push(e.pressure);
+      updateLiveStroke(S.drag.points, S.drag.pressures);
     }
-  } else if (drag.kind === "lasso") {
-    const cam = api.view.getCamera();
-    const last = drag.points[drag.points.length - 1];
+  } else if (S.drag.kind === "lasso") {
+    const cam = S.api.view.getCamera();
+    const last = S.drag.points[S.drag.points.length - 1];
     if (Math.hypot(world.x - last.x, world.y - last.y) > 2 / cam.zoom) {
-      drag.points.push(world);
-      updateLassoPreview(drag.points);
+      S.drag.points.push(world);
+      updateLassoPreview(S.drag.points);
     }
-  } else if (drag.kind === "erase") {
-    if (eraseAt(world)) drag.erased = true;
+  } else if (S.drag.kind === "erase") {
+    if (eraseAt(world)) S.drag.erased = true;
     updateEraserRing(e.clientX, e.clientY, true);
-  } else if (drag.kind === "connector") {
-    drag.current = world;
-    const a = api.geometry.anchorPoint(drag.from);
+  } else if (S.drag.kind === "connector") {
+    S.drag.current = world;
+    const a = S.api.geometry.anchorPoint(S.drag.from);
     if (a) {
       const el = dragPreview("connector-preview", "line");
       el.setAttribute("x1", String(a.x));
@@ -1470,34 +1499,34 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
       el.setAttribute("stroke", "#333333");
       el.setAttribute("stroke-width", "2");
     }
-  } else if (drag.kind === "shape") {
-    drag.current = world;
-    const penColor = api.pen.getColor();
-    const x0 = Math.min(drag.start.x, world.x), y0 = Math.min(drag.start.y, world.y);
-    const w = Math.abs(world.x - drag.start.x), h = Math.abs(world.y - drag.start.y);
-    if (drag.shape === "rect") {
+  } else if (S.drag.kind === "shape") {
+    S.drag.current = world;
+    const penColor = S.api.pen.getColor();
+    const x0 = Math.min(S.drag.start.x, world.x), y0 = Math.min(S.drag.start.y, world.y);
+    const w = Math.abs(world.x - S.drag.start.x), h = Math.abs(world.y - S.drag.start.y);
+    if (S.drag.shape === "rect") {
       const el = dragPreview("shape-preview", "rect");
       el.setAttribute("x", String(x0)); el.setAttribute("y", String(y0));
       el.setAttribute("width", String(w)); el.setAttribute("height", String(h));
       el.setAttribute("rx", "12");
       el.setAttribute("fill", penColor); el.setAttribute("fill-opacity", "0.85");
-    } else if (drag.shape === "ellipse") {
+    } else if (S.drag.shape === "ellipse") {
       const el = dragPreview("shape-preview", "ellipse");
       el.setAttribute("cx", String(x0 + w / 2)); el.setAttribute("cy", String(y0 + h / 2));
       el.setAttribute("rx", String(w / 2)); el.setAttribute("ry", String(h / 2));
       el.setAttribute("fill", penColor); el.setAttribute("fill-opacity", "0.85");
     } else {
       const el = dragPreview("shape-preview", "polygon");
-      el.setAttribute("points", api.shapes.previewPoints(drag.shape, x0, y0, w, h));
+      el.setAttribute("points", S.api.shapes.previewPoints(S.drag.shape, x0, y0, w, h));
       el.setAttribute("fill", penColor); el.setAttribute("fill-opacity", "0.85");
     }
-  } else if (drag.kind === "rotate") {
-    const it = api.board.getItem(drag.id);
+  } else if (S.drag.kind === "rotate") {
+    const it = S.api.board.getItem(S.drag.id);
     if (it) {
       const rot = rotateAngleFor(world, it, e.shiftKey);
-      if (Math.abs(rot - drag.origRot) > 1) drag.moved = true;
-      api.board.setItemRotation(drag.id, rot);
-      const el = cardsEl.querySelector(`[data-id="${drag.id}"]`) as HTMLElement | null;
+      if (Math.abs(rot - S.drag.origRot) > 1) S.drag.moved = true;
+      S.api.board.setItemRotation(S.drag.id, rot);
+      const el = S.cardsEl.querySelector(`[data-id="${S.drag.id}"]`) as HTMLElement | null;
       if (el) el.style.transform = rot ? `rotate(${rot}deg)` : "";
       // Strokes have no card element to transform live,
       // so rebuild the SVG layer instead: the stroke
@@ -1505,14 +1534,14 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
       if ("Stroke" in it.kind) renderSvgOnly();
       updateResizeHandle();
     }
-  } else if (drag.kind === "marquee") {
-    drag.current = world;
+  } else if (S.drag.kind === "marquee") {
+    S.drag.current = world;
     const el = dragPreview("marquee-preview", "rect");
-    const x0 = Math.min(drag.start.x, world.x), y0 = Math.min(drag.start.y, world.y);
+    const x0 = Math.min(S.drag.start.x, world.x), y0 = Math.min(S.drag.start.y, world.y);
     el.setAttribute("x", String(x0));
     el.setAttribute("y", String(y0));
-    el.setAttribute("width", String(Math.abs(world.x - drag.start.x)));
-    el.setAttribute("height", String(Math.abs(world.y - drag.start.y)));
+    el.setAttribute("width", String(Math.abs(world.x - S.drag.start.x)));
+    el.setAttribute("height", String(Math.abs(world.y - S.drag.start.y)));
     el.setAttribute("fill", "none");
     el.setAttribute("stroke", ACCENT);
     el.setAttribute("stroke-width", "1");
@@ -1520,24 +1549,24 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
 });
 
 window.addEventListener("pointerup", (e: PointerEvent) => {
-  if (pluginToolDown) {
-    pluginToolDown = false;
-    const pt = api.ui.getToolDef(tool);
+  if (S.pluginToolDown) {
+    S.pluginToolDown = false;
+    const pt = S.api.ui.getToolDef(S.tool);
     if (pt?.onMouseUp) {
-      try { pt.onMouseUp(toWorld(boardPoint(e.clientX, e.clientY))); } catch (err) { api.ui.toast(`Plugin tool failed: ${String(err)}`); }
+      try { pt.onMouseUp(toWorld(boardPoint(e.clientX, e.clientY))); } catch (err) { S.api.ui.toast(`Plugin tool failed: ${String(err)}`); }
     }
     return;
   }
-  if (!drag) return;
+  if (!S.drag) return;
   const world = toWorld(boardPoint(e.clientX, e.clientY));
-  const d = drag;
-  drag = null;
+  const d = S.drag;
+  S.drag = null;
   if (d.kind === "stroke") {
     if (d.points.length >= 2) {
       const xs = d.points.map((p) => p.x), ys = d.points.map((p) => p.y);
       const pos = { x: Math.min(...xs), y: Math.min(...ys) };
       const size = { w: Math.max(1, Math.max(...xs) - pos.x), h: Math.max(1, Math.max(...ys) - pos.y) };
-      api.board.addItem({ Stroke: { points: d.points, color: api.pen.getColor(), width: 3, marker: false, ...(d.pressures.length > 0 ? { pressures: d.pressures } : {}) } }, pos, size);
+      S.api.board.addItem({ Stroke: { points: d.points, color: S.api.pen.getColor(), width: 3, marker: false, ...(d.pressures.length > 0 ? { pressures: d.pressures } : {}) } }, pos, size);
     }
   } else if (d.kind === "lasso") {
     // A click, not a loop: select what is under the cursor,
@@ -1547,21 +1576,21 @@ window.addEventListener("pointerup", (e: PointerEvent) => {
     const xs = d.points.map((p) => p.x), ys = d.points.map((p) => p.y);
     const w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys);
     if (d.points.length < 3 || (w < 4 && h < 4)) {
-      const hit = api.board.hitTest(world);
-      api.board.setSelected(hit !== null ? [hit] : []);
+      const hit = S.api.board.hitTest(world);
+      S.api.board.setSelected(hit !== null ? [hit] : []);
     } else {
-      api.board.setSelected(api.board.lassoSelect(d.points));
+      S.api.board.setSelected(S.api.board.lassoSelect(d.points));
     }
   } else if (d.kind === "erase") {
     // A sweep that erased anything is one undo step. A
     // click that erased nothing leaves no step behind.
-    if (d.erased) api.board.save();
+    if (d.erased) S.api.board.save();
   } else if (d.kind === "connector") {
-    const to = api.board.hitTest(world);
-    const toItem = to !== null ? api.board.getItem(to) : null;
+    const to = S.api.board.hitTest(world);
+    const toItem = to !== null ? S.api.board.getItem(to) : null;
     const toAnchorable = toItem && !("Stroke" in toItem.kind) && !("Connector" in toItem.kind);
     const toAnchor: Anchor = toItem && toAnchorable ? { Item: toItem.id } : { Point: world };
-    const a = api.geometry.anchorPoint(d.from);
+    const a = S.api.geometry.anchorPoint(d.from);
     const degenerate = a !== null && "Point" in toAnchor && Math.hypot(a.x - toAnchor.Point.x, a.y - toAnchor.Point.y) < 4;
     // A connector from a card to itself is a click, not a connection:
     // it renders as a 1x1 invisible item that can never be selected
@@ -1571,43 +1600,43 @@ window.addEventListener("pointerup", (e: PointerEvent) => {
       const aPt = a ?? { x: 0, y: 0 };
       // toAnchor is an Item exactly when toItem exists, so
       // its centre comes from toItem — no second lookup.
-      const bPt = "Point" in toAnchor ? toAnchor.Point : (toItem ? api.geometry.centre(toItem) : { x: 0, y: 0 });
+      const bPt = "Point" in toAnchor ? toAnchor.Point : (toItem ? S.api.geometry.centre(toItem) : { x: 0, y: 0 });
       const { pos, size } = rectFromPoints(aPt, bPt);
-      api.board.addItem({ Connector: { from: d.from, to: toAnchor, color: "#333333" } }, pos, size);
+      S.api.board.addItem({ Connector: { from: d.from, to: toAnchor, color: "#333333" } }, pos, size);
     }
   } else if (d.kind === "shape") {
     const w = Math.abs(world.x - d.start.x), h = Math.abs(world.y - d.start.y);
     if (w >= 10 && h >= 10) {
       const pos = { x: Math.min(d.start.x, world.x), y: Math.min(d.start.y, world.y) };
-      api.board.addItem({ Shape: { shape: d.shape, fill: api.pen.getColor() } }, pos, { w, h });
+      S.api.board.addItem({ Shape: { shape: d.shape, fill: S.api.pen.getColor() } }, pos, { w, h });
     }
   } else if (d.kind === "rotate") {
     // Apply the final point too: a drag's last mousemove
     // may not be at the mouseup point, so the rotation
     // would otherwise stop one step short of where the
     // user actually released.
-    const it = api.board.getItem(d.id);
+    const it = S.api.board.getItem(d.id);
     if (it) {
       const rot = rotateAngleFor(world, it, e.shiftKey);
       if (Math.abs(rot - d.origRot) > 1) d.moved = true;
-      api.board.setItemRotation(d.id, rot);
+      S.api.board.setItemRotation(d.id, rot);
     }
-    if (d.moved) api.board.save();
+    if (d.moved) S.api.board.save();
   } else if (d.kind === "marquee") {
-    api.board.setSelected(api.board.marqueeSelect(d.start, world));
+    S.api.board.setSelected(S.api.board.marqueeSelect(d.start, world));
   } else if (d.kind === "pan") {
     // A Space+drag pan changes only the camera, so it must not
     // become an undo step — but it must reach disk, or closing
     // the window without another save loses the view.
-    api.board.saveWithoutUndo();
+    S.api.board.saveWithoutUndo();
   } else if (d.kind === "move" || d.kind === "resize") {
     // A drag that actually moved is a board change and an undo
     // step. A click that never moved only brought a card to the
     // front: that stacking change still saves to disk, but it
     // must not become an undo step, or every click would take
     // a Ctrl+Z to get past before the real change undoes.
-    if (d.moved) api.board.save();
-    else api.board.saveWithoutUndo();
+    if (d.moved) S.api.board.save();
+    else S.api.board.saveWithoutUndo();
   }
   // A move/resize that actually moved is safe to rebuild once at
   // the end (it refreshes truncation and connector endpoints with
@@ -1686,34 +1715,34 @@ window.addEventListener("wheel", (e: WheelEvent) => {
     // lines) and a pixel-based trackpad pinch both land
     // on the same scale.
     const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
-    pendingZoomFactor *= Math.exp(-dy * 0.003);
-    pendingZoomAnchor = boardPoint(e.clientX, e.clientY);
-    if (zoomFrame === null) {
-      zoomFrame = requestAnimationFrame(() => {
-        zoomFrame = null;
-        if (pendingZoomAnchor && pendingZoomFactor !== 1) {
-          zoomAt(pendingZoomAnchor, pendingZoomFactor);
+    S.pendingZoomFactor *= Math.exp(-dy * 0.003);
+    S.pendingZoomAnchor = boardPoint(e.clientX, e.clientY);
+    if (S.zoomFrame === null) {
+      S.zoomFrame = requestAnimationFrame(() => {
+        S.zoomFrame = null;
+        if (S.pendingZoomAnchor && S.pendingZoomFactor !== 1) {
+          zoomAt(S.pendingZoomAnchor, S.pendingZoomFactor);
         }
-        pendingZoomFactor = 1;
-        pendingZoomAnchor = null;
+        S.pendingZoomFactor = 1;
+        S.pendingZoomAnchor = null;
         applyCamera();
         const now = performance.now();
-        const cam = api.view.getCamera();
-        const ratio = cam.zoom / lastZoomRefreshZoom;
-        if (now - lastZoomRefreshTime > 250 || ratio > 1.25 || ratio < 0.8) {
+        const cam = S.api.view.getCamera();
+        const ratio = cam.zoom / S.lastZoomRefreshZoom;
+        if (now - S.lastZoomRefreshTime > 250 || ratio > 1.25 || ratio < 0.8) {
           refreshContentIfVisibleChanged();
-          lastZoomRefreshZoom = cam.zoom;
-          lastZoomRefreshTime = now;
+          S.lastZoomRefreshZoom = cam.zoom;
+          S.lastZoomRefreshTime = now;
         }
       });
     }
-    if (zoomSettleTimer) clearTimeout(zoomSettleTimer);
-    zoomSettleTimer = setTimeout(() => {
+    if (S.zoomSettleTimer) clearTimeout(S.zoomSettleTimer);
+    S.zoomSettleTimer = setTimeout(() => {
       refreshContentIfVisibleChanged();
-      const cam = api.view.getCamera();
-      lastZoomRefreshZoom = cam.zoom;
-      lastZoomRefreshTime = performance.now();
-      api.board.save();
+      const cam = S.api.view.getCamera();
+      S.lastZoomRefreshZoom = cam.zoom;
+      S.lastZoomRefreshTime = performance.now();
+      S.api.board.save();
     }, 120);
     return;
   }
@@ -1723,8 +1752,8 @@ window.addEventListener("wheel", (e: WheelEvent) => {
   // which is the opposite of what a Mac trackpad user expects.
   // (Dragging with Space still grabs the paper and moves it
   // with the pointer — that is a grab, not a scroll, and stays.)
-  const cam = api.view.getCamera();
-  api.view.setCameraSilent({
+  const cam = S.api.view.getCamera();
+  S.api.view.setCameraSilent({
     x: cam.x + e.deltaX / cam.zoom,
     y: cam.y + e.deltaY / cam.zoom,
     zoom: cam.zoom,
@@ -1734,8 +1763,8 @@ window.addEventListener("wheel", (e: WheelEvent) => {
   // Save once, 400ms after the last wheel event instead. Content
   // edits still save immediately (move/resize mouseup, note commit),
   // and Close saves explicitly before closing.
-  if (wheelSaveTimer) clearTimeout(wheelSaveTimer);
-  wheelSaveTimer = setTimeout(() => api.board.save(), 400);
+  if (S.wheelSaveTimer) clearTimeout(S.wheelSaveTimer);
+  S.wheelSaveTimer = setTimeout(() => S.api.board.save(), 400);
   applyCamera();
   refreshContentIfVisibleChanged();
 }, { passive: false });
@@ -1748,10 +1777,10 @@ window.addEventListener("resize", () => { applyCamera(); refreshContentIfVisible
 // when a save is actually pending — an idle window writes
 // nothing.
 window.addEventListener("beforeunload", () => {
-  if (!wheelSaveTimer && !zoomSettleTimer) return;
-  if (wheelSaveTimer) { clearTimeout(wheelSaveTimer); wheelSaveTimer = null; }
-  if (zoomSettleTimer) { clearTimeout(zoomSettleTimer); zoomSettleTimer = null; }
-  try { api.board.saveSync(); } catch { /* the board is gone; nothing to flush */ }
+  if (!S.wheelSaveTimer && !S.zoomSettleTimer) return;
+  if (S.wheelSaveTimer) { clearTimeout(S.wheelSaveTimer); S.wheelSaveTimer = null; }
+  if (S.zoomSettleTimer) { clearTimeout(S.zoomSettleTimer); S.zoomSettleTimer = null; }
+  try { S.api.board.saveSync(); } catch { /* the board is gone; nothing to flush */ }
 });
 // A media file that is missing shows as a blank card, which
 // looks like a rendering bug and tells the user nothing.
@@ -1779,7 +1808,7 @@ window.addEventListener("error", (e: Event) => {
   if (!path) return;
   if (el.dataset?.fallback !== "1") {
     el.dataset.fallback = "1";
-    void api.files.readFileBase64(path).then(({ mime, base64 }) => {
+    void S.api.files.readFileBase64(path).then(({ mime, base64 }) => {
       el.src = `data:${mime};base64,${base64}`;
     }).catch(() => {
       // The read failed, so the data URL never loads
@@ -1840,10 +1869,10 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   // switched tools, and +/- zoomed, all while the user thought
   // they were in Settings. Esc still closes the sheet (handled
   // below), and Tab keeps its normal focus job in the sheet.
-  if (api.ui.isSettingsOpen() && e.key !== "Escape" && e.key !== "Tab") return;
+  if (S.api.ui.isSettingsOpen() && e.key !== "Escape" && e.key !== "Tab") return;
   // Tab cycles elements, unless Settings is open, where Tab keeps
   // its normal job of moving focus around the sheet.
-  if (e.key === "Tab" && !api.ui.isSettingsOpen()) {
+  if (e.key === "Tab" && !S.api.ui.isSettingsOpen()) {
     // Tab in a text input keeps its normal focus job too: a
     // panel input (a section rename, a search) commits on
     // blur, and Tab is how the user leaves it. Cycling here
@@ -1861,22 +1890,22 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
     return;
   }
   const ctrl = e.ctrlKey || e.metaKey;
-  if (e.key === " " || e.key === " ") spaceDown = true;
+  if (e.key === " " || e.key === " ") S.spaceDown = true;
   // Ctrl/Cmd+, is the standard preferences shortcut on the
   // Mac (and in many apps elsewhere). Guarded the same way
   // as the other board keys: Settings being open already
   // returns above, and textareas and the search box return
   // before this, so typing a comma never opens the sheet.
-  if (ctrl && e.key === ",") { api.ui.openSettings(); return; }
+  if (ctrl && e.key === ",") { S.api.ui.openSettings(); return; }
   if (e.key === "Escape") {
-    if (api.ui.isSettingsOpen()) { api.ui.closeSettings(); return; }
+    if (S.api.ui.isSettingsOpen()) { S.api.ui.closeSettings(); return; }
     // An active search is cleared first; the next Esc clears the
     // selection, as before. Searching must not eat the selection
     // clear entirely, and clearing the selection must not eat a
     // search the user is still looking at.
     const searchInput = document.getElementById("search-input") as HTMLInputElement | null;
-    if (searchInput && searchInput.value.trim() !== "") { api.search.clear(); return; }
-    api.board.setSelected([]);
+    if (searchInput && searchInput.value.trim() !== "") { S.api.search.clear(); return; }
+    S.api.board.setSelected([]);
     // Focus was on a control (a toolbar button, say): blur it
     // so focus returns to the board and Tab cycles cards again.
     if (active && active instanceof HTMLElement) active.blur();
@@ -1889,13 +1918,13 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   // Ctrl+Z there would undo a board change instead of the text.
   if (e.key.toLowerCase() === "z" && ctrl && !e.shiftKey && !(active && active.tagName === "INPUT")) {
     e.preventDefault();
-    api.board.undo();
+    S.api.board.undo();
   } else if (e.key.toLowerCase() === "z" && ctrl && e.shiftKey && !(active && active.tagName === "INPUT")) {
     e.preventDefault();
-    api.board.redo();
+    S.api.board.redo();
   } else if (e.key.toLowerCase() === "y" && ctrl && !(active && active.tagName === "INPUT")) {
     e.preventDefault();
-    api.board.redo();
+    S.api.board.redo();
   } else if (e.key.toLowerCase() === "v" && !ctrl) setTool("select");
   else if (e.key.toLowerCase() === "p" && !ctrl) setTool("pen");
   else if (e.key.toLowerCase() === "a" && !ctrl) setTool("connector");
@@ -1906,9 +1935,9 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
     // other tool it switches to Select with lasso on; on
     // Select it flips the mode. V, or any other tool
     // switch, turns it off again (setTool clears it).
-    const next = tool !== "select" || !lassoMode;
+    const next = S.tool !== "select" || !S.lassoMode;
     setTool("select");
-    lassoMode = next;
+    S.lassoMode = next;
   }
   else if (e.key.toLowerCase() === "x" && !ctrl) setTool("eraser");
   else if (e.key === "[" && !ctrl) rotateSelected(-15);
@@ -1921,9 +1950,9 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
     ungroupSelected();
   } else if (e.key === "Backspace" || e.key === "Delete") {
     deleteSelected();
-  } else if (e.key === "+" || e.key === "=") { zoomCentre(1.2); api.board.save(); render(); }
-  else if (e.key === "-") { zoomCentre(1 / 1.2); api.board.save(); render(); }
-  else if (e.key === "0") { api.view.setCamera({ x: 0, y: 0, zoom: 1 }); }
+  } else if (e.key === "+" || e.key === "=") { zoomCentre(1.2); S.api.board.save(); render(); }
+  else if (e.key === "-") { zoomCentre(1 / 1.2); S.api.board.save(); render(); }
+  else if (e.key === "0") { S.api.view.setCamera({ x: 0, y: 0, zoom: 1 }); }
   else if (e.key.toLowerCase() === "f" && !ctrl) zoomToFit();
   else if (e.key.toLowerCase() === "b" && ctrl) {
     // Panels toggle: the only keyboard path to the panels.
@@ -1943,13 +1972,13 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
     // single text card edits it; a group selection renames
     // the group.
     e.preventDefault();
-    const selected = api.board.getSelected();
+    const selected = S.api.board.getSelected();
     if (selected.length === 0) {
-      const cam = api.view.getCamera();
-      const rect = boardEl.getBoundingClientRect();
+      const cam = S.api.view.getCamera();
+      const rect = S.boardEl.getBoundingClientRect();
       createTextNoteAt({ x: cam.x + rect.width / 2 / cam.zoom, y: cam.y + rect.height / 2 / cam.zoom });
     } else if (selected.length === 1) {
-      const it = api.board.getItem(selected[0]);
+      const it = S.api.board.getItem(selected[0]);
       if (it && "Text" in it.kind) startTextEdit(selected[0]);
       else if (it && "Video" in it.kind) {
         // The same action as the card's play button: a local
@@ -1959,52 +1988,52 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
         // button itself is not a Tab stop while Tab cycles
         // cards, so the keyboard path runs through here.
         const v = it.kind.Video;
-        if (isInlineVideo(v.source, v.remote)) api.media.playVideo(it.id);
+        if (isInlineVideo(v.source, v.remote)) S.api.media.playVideo(it.id);
         else openExternal(v.source);
-      } else if (it && "Audio" in it.kind) api.media.toggleAudio(it.id, it.kind.Audio.path);
+      } else if (it && "Audio" in it.kind) S.api.media.toggleAudio(it.id, it.kind.Audio.path);
       else if (it && it.group !== null) startGroupRename(it.group);
     } else {
-      const groups = new Set(selected.map((id) => api.board.getItem(id)?.group).filter((g): g is number => g !== null && g !== undefined));
+      const groups = new Set(selected.map((id) => S.api.board.getItem(id)?.group).filter((g): g is number => g !== null && g !== undefined));
       if (groups.size === 1) startGroupRename(groups.values().next().value as number);
     }
   }
   else if (e.key.startsWith("Arrow") && !ctrl) {
     // Nudge the selection: 1 px, or 10 px with Shift.
     e.preventDefault();
-    const selected = api.board.getSelected();
+    const selected = S.api.board.getSelected();
     if (selected.length === 0) return;
     const step = e.shiftKey ? 10 : 1;
     const dx = e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
     const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
     const patches = selected.map((id) => {
-      const it = api.board.getItem(id);
+      const it = S.api.board.getItem(id);
       return it ? { id, pos: { x: it.pos.x + dx, y: it.pos.y + dy } } : null;
     }).filter((p): p is { id: number; pos: { x: number; y: number } } => p !== null);
-    if (patches.length > 0) api.board.updateItems(patches);
+    if (patches.length > 0) S.api.board.updateItems(patches);
   }
   // Plugin shortcuts, last: core keys above win, so a plugin cannot
   // steal V, P, A, Ctrl+G/U, Delete, zoom or reset. The core guards
   // above (textarea, search box, Settings open) already applied.
-  else if (editingId === null && !api.ui.isSettingsOpen() && !ctrl && api.ui.dispatchShortcut(e.key)) { /* plugin handled it */ }
+  else if (S.editingId === null && !S.api.ui.isSettingsOpen() && !ctrl && S.api.ui.dispatchShortcut(e.key)) { /* plugin handled it */ }
 });
 window.addEventListener("keyup", (e: KeyboardEvent) => {
-  if (e.key === " ") spaceDown = false;
+  if (e.key === " ") S.spaceDown = false;
 });
 }
 
 // ---------------------------------------------------------------- activation
 
 export function activate(a: PluginContext): void {
-  api = a;
-  boardEl = document.createElement("div");
-  boardEl.id = "board";
+  S.api = a;
+  S.boardEl = document.createElement("div");
+  S.boardEl.id = "board";
   // The board is a region a screen reader can name, and
   // selection changes are announced through a live region:
   // without these, a screen-reader user hears nothing when
   // the selection changes, and the board itself is unlabelled.
-  boardEl.setAttribute("role", "region");
-  boardEl.setAttribute("aria-label", "Board");
-  boardEl.innerHTML = `
+  S.boardEl.setAttribute("role", "region");
+  S.boardEl.setAttribute("aria-label", "Board");
+  S.boardEl.innerHTML = `
     <div id="grid"></div>
     <svg id="canvas-svg"><g id="world"></g></svg>
     <div id="cards" role="listbox" aria-label="Board cards"></div>
@@ -2020,31 +2049,31 @@ export function activate(a: PluginContext): void {
   // bar (which the core-titlebar plugin inserts before it).
   // Append it to the main column element.
   const mainColumn = document.getElementById("main-column");
-  if (mainColumn) mainColumn.appendChild(boardEl);
-  else document.body.appendChild(boardEl);
+  if (mainColumn) mainColumn.appendChild(S.boardEl);
+  else document.body.appendChild(S.boardEl);
 
-  const grid = boardEl.querySelector<HTMLElement>("#grid");
-  const canvasSvg = boardEl.querySelector<HTMLElement>("#canvas-svg");
-  const cards = boardEl.querySelector<HTMLElement>("#cards");
-  const groups = boardEl.querySelector<HTMLElement>("#groups");
-  const resizeHandle = boardEl.querySelector<HTMLElement>("#resize-handle");
-  const rotateHandle = boardEl.querySelector<HTMLElement>("#rotate-handle");
-  const pluginView = boardEl.querySelector<HTMLElement>("#plugin-view");
-  const overlays = boardEl.querySelector<HTMLElement>("#plugin-overlays");
-  const viewSwitcher = boardEl.querySelector<HTMLElement>("#view-switcher");
-  const toast = boardEl.querySelector<HTMLElement>("#toast");
+  const grid = S.boardEl.querySelector<HTMLElement>("#grid");
+  const canvasSvg = S.boardEl.querySelector<HTMLElement>("#canvas-svg");
+  const cards = S.boardEl.querySelector<HTMLElement>("#cards");
+  const groups = S.boardEl.querySelector<HTMLElement>("#groups");
+  const resizeHandle = S.boardEl.querySelector<HTMLElement>("#resize-handle");
+  const rotateHandle = S.boardEl.querySelector<HTMLElement>("#rotate-handle");
+  const pluginView = S.boardEl.querySelector<HTMLElement>("#plugin-view");
+  const overlays = S.boardEl.querySelector<HTMLElement>("#plugin-overlays");
+  const viewSwitcher = S.boardEl.querySelector<HTMLElement>("#view-switcher");
+  const toast = S.boardEl.querySelector<HTMLElement>("#toast");
   if (grid && canvasSvg && cards && groups && resizeHandle && rotateHandle && pluginView && overlays && viewSwitcher && toast) {
-    gridEl = grid as HTMLDivElement;
+    S.gridEl = grid as HTMLDivElement;
     // The SVG world group, inside the canvas SVG.
     const w = canvasSvg.querySelector("#world") as unknown as SVGGElement | null;
-    if (w) worldEl = w;
-    cardsEl = cards as HTMLDivElement;
-    groupsEl = groups as HTMLDivElement;
+    if (w) S.worldEl = w;
+    S.cardsEl = cards as HTMLDivElement;
+    S.groupsEl = groups as HTMLDivElement;
     // Hand the plugin system the board DOM elements, so the
     // core reads them back through the shell instead of
     // querying them by id.
-    api.ui.setBoardElements({
-      board: boardEl,
+    S.api.ui.setBoardElements({
+      board: S.boardEl,
       canvas: [grid, canvasSvg, cards, resizeHandle, rotateHandle],
       pluginView,
       overlays,
@@ -2058,14 +2087,14 @@ export function activate(a: PluginContext): void {
   // src/plugins/host.ts). Registered now, so the core's host
   // methods and the undo store reach this plugin from the
   // first render after activation.
-  api.board.registerController({
+  S.api.board.registerController({
     render,
     updateSelection,
     commitEditing: commitEditingIfAny,
-    clearEditing: () => { editingId = null; },
-    getEditingId: () => editingId,
+    clearEditing: () => { S.editingId = null; },
+    getEditingId: () => S.editingId,
     setTool,
-    getTool: () => tool,
+    getTool: () => S.tool,
     groupSelected,
     ungroupSelected,
     deleteSelected,
@@ -2080,5 +2109,5 @@ export function activate(a: PluginContext): void {
 
 export function deactivate(): void {
   disposeAllModel3DViewers();
-  boardEl?.remove();
+  S.boardEl?.remove();
 }
