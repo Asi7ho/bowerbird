@@ -4,7 +4,11 @@
    follows the core surface style, so it looks like Bowerbird,
    not like a plugin that brought its own design system. */
 .cmd-palette-root {
-  position: absolute; inset: 0; pointer-events: auto; z-index: 20;
+  /* z-index 100 inside the overlays layer (z-index 60): above
+     the other overlays, and above the note colour bar (40) and
+     toast (30) through the overlays layer itself, so the bar
+     cannot be clicked on top of the palette. */
+  position: absolute; inset: 0; pointer-events: auto; z-index: 100;
 }
 .cmd-palette-backdrop {
   position: absolute; inset: 0;

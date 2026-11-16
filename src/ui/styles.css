@@ -945,9 +945,13 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 /* Plugin overlays (see PLUGIN_API.md): a full-board layer that
    takes no clicks itself, so board clicks pass through everywhere
    except on a plugin's own controls, which set pointer-events:
-   auto on themselves. The Hide plugin's corner button lives here. */
+   auto on themselves. The Hide plugin's corner button lives here.
+   z-index 60: above the note colour bar (40) and the toast (30),
+   so a modal overlay like the command palette actually covers
+   them — below them it stayed clickable on top of the palette.
+   Below the resize handles (100) and the Settings dialog (200). */
 #plugin-overlays {
-  position: absolute; inset: 0; pointer-events: none; z-index: 15;
+  position: absolute; inset: 0; pointer-events: none; z-index: 60;
 }
 .plugin-overlay { position: absolute; inset: 0; pointer-events: none; }
 /* Plugins (see PLUGIN_API.md): a right dock for plugin panels, a
