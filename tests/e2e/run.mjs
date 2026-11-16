@@ -2209,6 +2209,46 @@ async function main() {
       assert.equal(back.selected, 0, "nothing is selected after clicking empty board");
       assert.ok(back.noteZ < back.shapeZ, "deselecting returns the note below the shape");
     });
+    // --- fix/tool-shortcut-bugs: a shortcut keeps the tool in
+    // use, and no toolbar button keeps an outline after one.
+    await check("a shortcut keeps the tool in use and leaves no outline on the toolbar", async () => {
+      const toolOf = () => {
+        const active = (id) => document.getElementById(id)?.classList.contains("active");
+        if (active("tool-select")) return "select";
+        if (active("tool-connector")) return "connector";
+        if (active("tool-draw")) return document.getElementById("tool-draw").dataset.draw;
+        if (active("tool-shape")) return document.getElementById("tool-shape").dataset.shape;
+        return "unknown";
+      };
+      const outlined = () => {
+        const out = [];
+        for (const b of document.querySelectorAll("#toolbar button")) {
+          const cs = getComputedStyle(b);
+          if (cs.outlineStyle !== "none" && cs.outlineWidth !== "0px") out.push(b.id || b.className);
+        }
+        return out;
+      };
+      // Pencil stays pencil through P, not back to the pen.
+      await page.click("#tool-draw");
+      await page.waitForSelector('#draw-picker button[data-draw="pencil"]', { state: "visible" });
+      await page.click('#draw-picker button[data-draw="pencil"]');
+      await page.keyboard.press("p");
+      assert.equal(await page.evaluate(toolOf), "pencil", "P must not switch the pencil back to the pen");
+      // Triangle stays triangle through R and E.
+      await page.click("#tool-shape");
+      await page.waitForSelector('#shape-picker button[data-shape="triangle"]', { state: "visible" });
+      await page.click('#shape-picker button[data-shape="triangle"]');
+      await page.keyboard.press("r");
+      assert.equal(await page.evaluate(toolOf), "triangle", "R must not reset the triangle to a rectangle");
+      await page.keyboard.press("e");
+      assert.equal(await page.evaluate(toolOf), "triangle", "E must not reset the triangle to an ellipse");
+      // No toolbar button shows an outline after a shortcut:
+      // a clicked button is blurred, so it cannot keep focus
+      // and match :focus-visible on the next keypress.
+      await page.click("#tool-draw");
+      await page.keyboard.press("p");
+      assert.deepEqual(await page.evaluate(outlined), [], "no toolbar button may show an outline after a shortcut");
+    });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
     console.log(`  FAIL  setup: ${String(error.message).split("\n")[0]}`);
