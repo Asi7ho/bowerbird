@@ -767,24 +767,40 @@ export const CARD_DECORATIONS_H = 36;
 
 export function estimateTextHeight(text: string, fontSize: number, width: number): number {
   const blocks = parseMarkdown(text);
-  if (blocks.length === 0) return 48;
-  const charsFit = Math.max(20, (width - 24) / (fontSize * 0.55));
-  let h = 24;
-  blocks.forEach((block, idx) => {
-    if (idx > 0) h += 4;
+  // Blank lines are vertical space, in the editor and in the
+  // render alike: the textarea shows them, and the renderer
+  // turns each one into an empty paragraph. Count them here,
+  // or pressing Enter never grows the note.
+  const blankLines = text.split("\n").filter((l) => l.trim() === "").length;
+  if (blocks.length === 0 && blankLines === 0) return 48;
+  // The note body's content width: the card width less its
+  // 14px padding on each side.
+  const charsFit = Math.max(20, (width - 28) / (fontSize * 0.55));
+  const lineH = fontSize * 1.55;
+  // The note body's top padding (14); the card reserves the
+  // checklist row (36) separately, on top of this. Every
+  // block is a paragraph, heading, code block or quote with
+  // a 6px bottom margin, so each one adds its lines plus 6.
+  // These must match the note-body CSS exactly — the old
+  // 1.62 line-height and 4px gap overestimated by a little
+  // per line, so the empty space at a note's bottom grew
+  // with every line typed.
+  let h = 14;
+  blocks.forEach((block) => {
     if ("Heading" in block) {
       const len = block.Heading.segments.reduce((a, s) => a + s.text.length, 0);
       const lines = Math.max(1, Math.ceil(len / charsFit));
-      const extra = block.Heading.level === 1 ? 6 : block.Heading.level === 2 ? 3 : 1;
-      h += lines * (fontSize + extra) * 1.62;
+      const factor = block.Heading.level === 1 ? 1.5 : block.Heading.level === 2 ? 1.25 : 1.1;
+      h += lines * fontSize * factor * 1.3 + 6;
     } else if ("Code" in block) {
-      h += Math.max(1, block.Code.lines.length) * fontSize * 1.62 + 12;
+      h += Math.max(1, block.Code.lines.length) * fontSize * 0.9 * 1.55 + 16 + 6;
     } else {
       const segs = ("Bullet" in block ? block.Bullet.segments : "Ordered" in block ? block.Ordered.segments : "Quote" in block ? block.Quote.segments : block.Paragraph.segments);
       const len = segs.reduce((a, s) => a + s.text.length, 0);
-      h += Math.max(1, Math.ceil(len / charsFit)) * fontSize * 1.62;
+      h += Math.max(1, Math.ceil(len / charsFit)) * lineH + 6;
     }
   });
+  h += blankLines * (lineH + 6);
   return Math.max(48, h);
 }
 
@@ -953,7 +969,13 @@ function renderNoteHtml(text: string): string {
   let html = "", i = 0;
   while (i < lines.length) {
     const line = lines[i];
-    if (line.trim() === "") { i++; continue; }
+    // A blank line is vertical space, not nothing: the
+    // textarea shows it and the height estimate counts it,
+    // so the render must too, or the note's text would
+    // overflow the card it was sized for. An empty
+    // paragraph is one line-height plus the usual 6px
+    // bottom margin, exactly what the estimate counts.
+    if (line.trim() === "") { html += `<p>&nbsp;</p>`; i++; continue; }
     if (line.startsWith("```")) {
       const lang = line.slice(3).trim();
       const codeLines: string[] = []; i++;
