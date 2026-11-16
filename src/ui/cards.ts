@@ -177,7 +177,7 @@ export function activate(api: PluginContext): void {
       // for a triangle. A shape saved before outlines
       // existed has no outline flag, and draws filled.
       if (outline) {
-        return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}background:transparent;border:none;border-radius:${radius}"><div class="inner" style="width:100%;height:100%">${shapeOutlineSvg(shape, item.size.w, item.size.h, fillColor)}</div></div>`;
+        return `<div class="${c.cls} shape" data-id="${c.id}" style="${c.style}background:transparent;border:none;border-radius:${radius}"><div class="inner" style="width:100%;height:100%">${shapeOutlineSvg(shape, item.size.w, item.size.h, fillColor)}</div></div>`;
       }
       // Outer card is transparent with no hairline border,
       // so an ellipse is really an ellipse: a filled outer
@@ -188,7 +188,7 @@ export function activate(api: PluginContext): void {
       // rect, which is how a polygon selection reads.
       const clip = shapeClipPath(shape);
       const clipStyle = clip ? `clip-path:${clip};` : "";
-      return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}background:transparent;border:none;border-radius:${radius}"><div class="inner" style="background:${fillColor};border-radius:${radius};${clipStyle}width:100%;height:100%;box-shadow:var(--shadow-sm)"></div></div>`;
+      return `<div class="${c.cls} shape" data-id="${c.id}" style="${c.style}background:transparent;border:none;border-radius:${radius}"><div class="inner" style="background:${fillColor};border-radius:${radius};${clipStyle}width:100%;height:100%"></div></div>`;
     },
   });
 
