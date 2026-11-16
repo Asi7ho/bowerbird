@@ -10,6 +10,7 @@ import {
   boardSize, isFrameCard, toScreen,
 } from "./board-state";
 import { groupBounds, isRotatable, rotateHandleWorld, strokePath, svgEl2 } from "./board-geometry";
+import { rectsOverlap } from "./overlay-placement";
 import {
   Board, GRID, Item,
   pressureWidth, smoothStrokePressures, smoothStrokeSamples, strokeMaxWidth, strokePressuresVary,
@@ -445,13 +446,11 @@ export function updateResizeHandle(): void {
   const boardRect = S.boardEl.getBoundingClientRect();
   const tb = toolbarEl ? toolbarEl.getBoundingClientRect() : null;
   const toolbarInBoard = tb ? {
-    left: tb.left - boardRect.left, right: tb.right - boardRect.left,
-    top: tb.top - boardRect.top, bottom: tb.bottom - boardRect.top,
+    x: tb.left - boardRect.left, y: tb.top - boardRect.top,
+    w: tb.width, h: tb.height,
   } : null;
   const coversToolbar = (x: number, y: number, w: number, h: number) =>
-    toolbarInBoard !== null &&
-    x < toolbarInBoard.right && x + w > toolbarInBoard.left &&
-    y < toolbarInBoard.bottom && y + h > toolbarInBoard.top;
+    toolbarInBoard !== null && rectsOverlap({ x, y, w, h }, toolbarInBoard);
   if (screen.x < 0 || screen.y < 0 || screen.x > bs.x || screen.y > bs.y || coversToolbar(screen.x - 7, screen.y - 7, 14, 14)) {
     el.style.display = "none";
   } else {
