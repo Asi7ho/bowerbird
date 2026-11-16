@@ -478,14 +478,14 @@ async function main() {
         const box = await el.boundingBox();
         return box ? { box } : null;
       });
-      // The union of the two cards is (100,100)-(860,638):
-      // the note is 86 tall now (its text plus 36 of room
-      // for the bottom row), so its bottom is 638. The
+      // The union of the two cards is (100,100)-(860,636):
+      // the note is 84 tall now (its text plus 36 of room
+      // for the bottom row), so its bottom is 636. The
       // frame sits 24px outside it, at client y + 48.
       assert.equal(Math.round(frame.box.x), 76);
       assert.equal(Math.round(frame.box.y), 124);
       assert.equal(Math.round(frame.box.width), 808);
-      assert.equal(Math.round(frame.box.height), 586);
+      assert.equal(Math.round(frame.box.height), 584);
       assert.equal(await page.locator(".group-label").first().textContent(), "Section 1");
       const grouped = await waitFor("group label on disk", () => {
         const b = readBoard();
