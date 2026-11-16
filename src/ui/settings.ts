@@ -478,6 +478,8 @@ export function activate(context: PluginContext): void {
             <h3>Data</h3>
             <p class="meta" id="board-dir-meta"></p>
             <p class="meta" id="build-meta"></p>
+            <button id="btn-export-data">Export data</button>
+            <button id="btn-import-data">Import data</button>
             <button id="btn-factory-reset">Factory reset</button>
             <div id="factory-reset-confirm" style="display:none">
               <p class="meta">Boards, settings, plugins and keys — everything. This cannot be undone.</p>
@@ -540,6 +542,25 @@ export function activate(context: PluginContext): void {
   for (const btn of Array.from(backdrop.querySelectorAll("[data-settings-tab]"))) {
     (btn as HTMLElement).addEventListener("click", () => setSettingsTab((btn as HTMLElement).dataset.settingsTab ?? "general"));
   }
+  // Export data: download the current board as a ZIP — its
+  // board.json with relative asset paths, plus every media
+  // file its cards reference — so the board comes back whole
+  // in a fresh install. Import data installs a board export
+  // (a ZIP, or the folder it unzips to) and loads it.
+  // Cancelling either dialog is not an error, so nothing is
+  // shown; a failed export or import is reported by the
+  // toast the board helper raises.
+  el("btn-export-data")?.addEventListener("click", async () => {
+    try {
+      const saved = await context.exportBoard();
+      if (saved) context.ui.toast(`Exported to ${saved}`);
+    } catch (e) {
+      context.ui.toast(`Could not export board: ${String(e)}`);
+    }
+  });
+  el("btn-import-data")?.addEventListener("click", async () => {
+    await context.importBoard();
+  });
   // Factory reset: two-click confirm, like the old board-data
   // reset. The first click arms it; the second wipes everything
   // (boards, settings, plugins, plugin storage, secure storage)
