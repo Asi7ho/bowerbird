@@ -11,11 +11,12 @@
 // The board file format is unchanged from the GPUI board, so existing
 // boards load as-is (an old embed:true flag is simply ignored).
 
-import { app, BaseWindow, BrowserWindow, WebContentsView, ipcMain, shell, protocol, screen, safeStorage } from "electron";
+import { app, BaseWindow, BrowserWindow, WebContentsView, dialog, ipcMain, shell, protocol, screen, safeStorage } from "electron";
 import type { Rectangle } from "electron";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { createBackups } from "./backups";
+import { createExport, resolveBoardAssetPaths } from "./export";
 import { handleAppFileRequest, MIME } from "./appFile";
 import * as context from "./context";
 import { isPrivateHost, linkHref, metaContent, readCappedText, tagContent } from "./link-preview";
@@ -444,6 +445,17 @@ const { maybeBackup, listBackups, restoreBackup, makeBackup } = createBackups({
   boardItemCount: (file: string) => boardItemCount(file),
 });
 
+// Export and import live in electron/export.ts. The factory
+// reads the current board through these, so an export always
+// snapshots the board the app is on now.
+const { buildExportZip, importExport } = createExport({
+  boardPath: () => boardPath(),
+  boardDir: () => boardDir(),
+  boardsDir: () => boardsDir(),
+  displayName: (dir: string) => boardDisplayName(dir),
+  sanitise: (name: string) => sanitise(name),
+});
+
 // ---------------------------------------------------------------- window
 
 function iconPath(): string | null {
@@ -850,7 +862,14 @@ function registerIpc(): void {
     // different content on disk knows an external writer
     // changed it since.
     if (json) lastSavedJson = json;
-    return { json, board_path: file, board_dir: dir, panelOrder: [...panelOrder], buildId: buildId(), ...showcase };
+    // The renderer gets the board with relative asset paths
+    // resolved against its folder, so a board carried over
+    // from another machine loads with absolute paths it can
+    // serve. lastSavedJson stays the raw on-disk content,
+    // or the guard would mistake the resolution for an
+    // external edit and refuse the next save.
+    const resolvedJson = json ? resolveBoardAssetPaths(json, dir) : json;
+    return { json: resolvedJson, board_path: file, board_dir: dir, panelOrder: [...panelOrder], buildId: buildId(), ...showcase };
   });
 
   // Write the board JSON to disk (tmp + rename), with the
@@ -1329,7 +1348,7 @@ function registerIpc(): void {
     return listBoards();
   });
   ipcMain.handle("bowerbird:create-board", (_event, name: unknown) => createBoard(name));
-  ipcMain.handle("bowerbird:switch-board", (_event, name: unknown) => { const out = switchBoard(name); lastSavedJson = out.json; startBoardWatcher(); return out; });
+  ipcMain.handle("bowerbird:switch-board", (_event, name: unknown) => { const out = switchBoard(name); lastSavedJson = out.json; startBoardWatcher(); return { ...out, json: resolveBoardAssetPaths(out.json, out.board_dir) }; });
   ipcMain.handle("bowerbird:rename-board", (_event, oldName: unknown, newName: unknown) => { const out = renameBoard(oldName, newName); startBoardWatcher(); return out; });
   ipcMain.handle("bowerbird:delete-board", (_event, name: unknown, opts?: { confirmed?: boolean }) => {
     // Destructive: the caller must pass { confirmed: true } after
@@ -1347,7 +1366,7 @@ function registerIpc(): void {
     // misleading "Board updated on disk" toast) right after
     // "Backup restored".
     lastSavedJson = out.json;
-    return out;
+    return { ...out, json: resolveBoardAssetPaths(out.json, out.board_dir) };
   });
   ipcMain.handle("bowerbird:open-backups-folder", () => {
     // The Settings UI lists only the newest backup, so the
@@ -1357,6 +1376,47 @@ function registerIpc(): void {
     const dir = path.join(boardDir(), "backups");
     fs.mkdirSync(dir, { recursive: true });
     return shell.openPath(dir);
+  });
+  ipcMain.handle("bowerbird:export-board", async () => {
+    // Export the current board as a ZIP: board.json with
+    // relative asset paths, the display name, and every
+    // referenced media file. The user picks where it goes;
+    // cancelling returns null, not an error.
+    const name = boardDisplayName(boardDir());
+    const d = new Date();
+    const p = (n: number): string => String(n).padStart(2, "0");
+    const stamp = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    const picked = await dialog.showSaveDialog({
+      defaultPath: `bowerbird-${sanitise(name)}-${stamp}.zip`,
+      filters: [{ name: "Bowerbird board export", extensions: ["zip"] }],
+    });
+    if (picked.canceled || !picked.filePath) return null;
+    const zip = await buildExportZip();
+    fs.writeFileSync(picked.filePath, zip);
+    return picked.filePath;
+  });
+  ipcMain.handle("bowerbird:import-board", async () => {
+    // Import a board export: a ZIP file, or the folder it
+    // unzips to. Cancelling returns null. The import
+    // installs the board under the boards directory and
+    // returns it resolved to this machine, ready to load;
+    // the board.json on disk keeps its relative paths, so
+    // the folder stays portable. lastSavedJson is the raw
+    // on-disk content, or the guard would mistake the
+    // resolution for an external edit.
+    const picked = await dialog.showOpenDialog({
+      properties: ["openFile", "openDirectory"],
+      filters: [{ name: "Bowerbird board export", extensions: ["zip"] }],
+    });
+    if (picked.canceled || picked.filePaths.length === 0) return null;
+    const out = await importExport(picked.filePaths[0]);
+    try {
+      lastSavedJson = fs.readFileSync(out.board_path, "utf8");
+    } catch {
+      lastSavedJson = null;
+    }
+    startBoardWatcher();
+    return out;
   });
   ipcMain.handle("bowerbird:set-panel-order", (_event, order: unknown) => {
     if (!Array.isArray(order)) return panelOrder;
