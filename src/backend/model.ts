@@ -356,6 +356,34 @@ function itemHit(board: Board, item: Item, world: Pt): boolean {
   // as an ellipse.
   if ("Shape" in item.kind) {
     const shape = item.kind.Shape.shape;
+    // An outline shape is a stroked edge, not a filled
+    // area: its interior is empty, so only the edge
+    // selects it. The outline stroke is 4px wide; the
+    // tolerance matches the stroke convention (half the
+    // width + 6, floored at 8), so the edge is as easy to
+    // grab as a pen stroke.
+    if (item.kind.Shape.outline === true) {
+      const tol = 8;
+      if (shape === "rect") {
+        const { x, y } = item.pos, { w, h } = item.size;
+        const inOuter = p.x >= x - tol && p.x <= x + w + tol && p.y >= y - tol && p.y <= y + h + tol;
+        const inInner = p.x > x + tol && p.x < x + w - tol && p.y > y + tol && p.y < y + h - tol;
+        return inOuter && !inInner;
+      }
+      if (shape === "ellipse") {
+        const rx = item.size.w / 2, ry = item.size.h / 2;
+        const dx = (p.x - (item.pos.x + rx)) / rx;
+        const dy = (p.y - (item.pos.y + ry)) / ry;
+        return Math.abs(Math.hypot(dx, dy) - 1) * Math.min(rx, ry) <= tol;
+      }
+      const poly = shapePolygon(shape, item.pos.x, item.pos.y, item.size.w, item.size.h);
+      if (poly) {
+        for (let i = 0; i < poly.length; i++) {
+          if (distToSegment(p, poly[i], poly[(i + 1) % poly.length]) <= tol) return true;
+        }
+        return false;
+      }
+    }
     if (shape === "ellipse") {
       const dx = (p.x - (item.pos.x + item.size.w / 2)) / (item.size.w / 2);
       const dy = (p.y - (item.pos.y + item.size.h / 2)) / (item.size.h / 2);
