@@ -734,6 +734,36 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   display: none; align-items: center; justify-content: center; padding: 24px; z-index: 200;
 }
 #settings-backdrop.open { display: flex; }
+/* Recovery offer: the same centred sheet as Settings — opaque,
+   16px radius, soft shadow — but compact, one decision. The
+   backdrop never dismisses it: discarding unsaved work by
+   accident is the failure the dialog exists to prevent. */
+#recovery-backdrop {
+  position: absolute; inset: 0; background: rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 200;
+}
+#recovery-dialog {
+  width: min(420px, 92vw); background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 16px;
+  padding: 20px 24px 24px; box-shadow: var(--shadow-lg);
+}
+#recovery-dialog h2 { margin: 0 0 8px; font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
+#recovery-dialog p { margin: 0 0 20px; font-size: 13px; line-height: 1.55; color: var(--grey); }
+#recovery-dialog .recovery-actions { display: flex; justify-content: flex-end; gap: 8px; }
+#recovery-dialog .recovery-restore {
+  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
+  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
+  color: var(--ink); box-shadow: var(--shadow-sm);
+}
+#recovery-dialog .recovery-restore:hover { background: var(--fill); }
+#recovery-dialog .recovery-restore:disabled { opacity: 0.5; cursor: default; }
+#recovery-dialog .recovery-discard {
+  border: none; background: transparent; border-radius: 9px;
+  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--grey);
+}
+#recovery-dialog .recovery-discard:hover { background: var(--fill); color: var(--ink); }
+#recovery-dialog .recovery-discard:disabled { opacity: 0.5; cursor: default; }
 /* Settings as a proper two-pane window, not a popup that
    resizes to its content: a fixed height, a header with a
    hairline underneath, a clean tab list on the left with a
