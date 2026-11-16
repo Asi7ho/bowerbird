@@ -50,7 +50,12 @@ import { multiplyMatrix, type Matrix } from "./svg-import";
 export const AI_OPS = {
   dependency: 1,
   setLineWidth: 2,
+  setLineCap: 3,
+  setLineJoin: 4,
+  setMiterLimit: 5,
   setDash: 6,
+  setRenderingIntent: 7,
+  setFlatness: 8,
   setGState: 9,
   save: 10,
   restore: 11,
@@ -74,6 +79,8 @@ export const AI_OPS = {
   showSpacedText: 45,
   nextLineShowText: 46,
   nextLineSetSpacingShowText: 47,
+  setCharWidth: 48,
+  setCharWidthAndBounds: 49,
   setStrokeColorSpace: 50,
   setFillColorSpace: 51,
   setStrokeColor: 52,
@@ -91,8 +98,17 @@ export const AI_OPS = {
   beginImageData: 64,
   endInlineImage: 65,
   paintXObject: 66,
+  markPoint: 67,
+  markPointProps: 68,
+  beginMarkedContent: 69,
+  beginMarkedContentProps: 70,
+  endMarkedContent: 71,
+  beginCompat: 72,
+  endCompat: 73,
   beginGroup: 76,
   endGroup: 77,
+  beginAnnotation: 80,
+  endAnnotation: 81,
   paintImageMaskXObject: 83,
   paintImageMaskXObjectGroup: 84,
   paintImageXObject: 85,
@@ -722,9 +738,13 @@ export function extractAiPage(ops: AiOpList, pageHeight: number): AiExtractResul
       // board's strokes do not carry.
       case AI_OPS.dependency: case AI_OPS.beginText: case AI_OPS.endText:
       case AI_OPS.beginGroup: case AI_OPS.endGroup:
-      case 3: case 4: case 5: case 7: case 8: case 67: case 68:
-      case 69: case 70: case 71: case 72: case 73: case 80: case 81:
-      case 48: case 49:
+      case AI_OPS.setLineCap: case AI_OPS.setLineJoin: case AI_OPS.setMiterLimit:
+      case AI_OPS.setRenderingIntent: case AI_OPS.setFlatness:
+      case AI_OPS.markPoint: case AI_OPS.markPointProps:
+      case AI_OPS.beginMarkedContent: case AI_OPS.beginMarkedContentProps:
+      case AI_OPS.endMarkedContent: case AI_OPS.beginCompat: case AI_OPS.endCompat:
+      case AI_OPS.beginAnnotation: case AI_OPS.endAnnotation:
+      case AI_OPS.setCharWidth: case AI_OPS.setCharWidthAndBounds:
         break;
       default:
         flag(`unsupported operator ${fn}`);
