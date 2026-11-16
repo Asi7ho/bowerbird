@@ -408,6 +408,12 @@ export interface PluginHost {
   // filling in. The file still saves, so closing the
   // window keeps the change; undo never steps to it.
   saveWithoutUndo: () => void;
+  // Synchronous flush for unload: write the board only if
+  // it changed since the last save (see undo.ts saveSync).
+  // True when it wrote. A board that did not change is
+  // not written, so the unload flush can never overwrite
+  // a restore with the stale board it replaced.
+  saveSync: () => boolean;
   render: () => void;
   switchBoard: (name: string, preserveUndo?: boolean) => Promise<boolean>;
   setTool: (tool: string) => void;
@@ -642,8 +648,10 @@ export interface PluginContext {
     // window keeps the change; undo never steps to it.
     saveWithoutUndo: () => void;
     // Synchronous save, for the unload flush only: an async
-    // save may not complete before the window closes. Writes
-    // the live board as-is (no undo step, no change check).
+    // save may not complete before the window closes. Only
+    // a board that changed since the last save is written
+    // (see PluginHost.saveSync): a board restored on disk
+    // but not yet reloaded in memory is not written back.
     saveSync: () => void;
     render: () => void;
     commitEditing: () => void;

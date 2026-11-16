@@ -31,6 +31,7 @@ describe("createUndoStore", () => {
   let board: Board;
   let selected: number[];
   let saveBoard: ReturnType<typeof vi.fn>;
+  let saveBoardSync: ReturnType<typeof vi.fn>;
   let ctx: {
     getBoard: () => Board;
     getSelected: () => number[];
@@ -48,9 +49,11 @@ describe("createUndoStore", () => {
     board = emptyBoard();
     selected = [];
     saveBoard = vi.fn(async () => true);
+    saveBoardSync = vi.fn(() => true);
     vi.stubGlobal("window", {
       bowerbird: {
         saveBoard,
+        saveBoardSync,
         recoveryWriteSync: vi.fn(() => true),
         recoveryClear: vi.fn(async () => true),
       },
@@ -143,5 +146,40 @@ describe("createUndoStore", () => {
     expect(bridge.recoveryWriteSync).toHaveBeenCalledTimes(1);
     await new Promise((r) => setTimeout(r, 0));
     expect(bridge.recoveryClear).not.toHaveBeenCalled();
+  });
+
+  it("saveSync writes a board that changed since the last save", () => {
+    store.save();
+    board.items.push(textItem(1, "hello"));
+    board.next_id = 2;
+    expect(store.saveSync()).toBe(true);
+    expect(saveBoardSync).toHaveBeenCalledTimes(1);
+    expect(saveBoardSync).toHaveBeenCalledWith(JSON.stringify(board));
+  });
+
+  it("saveSync does not write a board that did not change", () => {
+    // The restore case: after a backup restore the disk board
+    // is the snapshot while memory still holds the board it
+    // replaced — memory equals the last saved state, so the
+    // unload flush must not write the stale board back.
+    store.save();
+    expect(store.saveSync()).toBe(false);
+    expect(saveBoardSync).not.toHaveBeenCalled();
+  });
+
+  it("saveSync writes a camera-only change", () => {
+    store.save();
+    board.camera = { x: 10, y: 20, zoom: 1.5 };
+    expect(store.saveSync()).toBe(true);
+    expect(saveBoardSync).toHaveBeenCalledTimes(1);
+    expect(saveBoardSync).toHaveBeenCalledWith(JSON.stringify(board));
+  });
+
+  it("saveSync does not throw when the bridge has no saveBoardSync", () => {
+    const bridge = (window as unknown as { bowerbird: Record<string, unknown> }).bowerbird;
+    delete bridge.saveBoardSync;
+    board.items.push(textItem(1, "hello"));
+    board.next_id = 2;
+    expect(store.saveSync()).toBe(false);
   });
 });
