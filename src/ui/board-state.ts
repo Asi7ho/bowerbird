@@ -70,6 +70,13 @@ export interface BoardState {
   lassoMode: boolean;
   tool: Tool;
   editingId: number | null;
+  // Set while a render moves the editing card out of #cards
+  // and back (see board-render): moving the card blurs its
+  // textarea, and the blur would commit the edit mid-render
+  // and kick the user out of the text box. While this is
+  // set, the commit is a no-op; the render restores focus
+  // to the textarea afterwards.
+  suppressEditCommit: boolean;
   spaceDown: boolean;
   drag: DragState;
   pluginToolDown: boolean;
@@ -114,6 +121,7 @@ export const S: BoardState = {
   lassoMode: false,
   tool: "select",
   editingId: null,
+  suppressEditCommit: false,
   spaceDown: false,
   drag: null,
   pluginToolDown: false,

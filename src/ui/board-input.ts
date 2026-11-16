@@ -198,6 +198,11 @@ export function startTextEdit(id: number, isNew = false): void {
   grow();
   const commit = () => {
     if (S.editingId !== id) return;
+    // A render moves the editing card out of #cards and back,
+    // which blurs the textarea; the blur must not commit the
+    // edit mid-render (see suppressEditCommit). The render
+    // restores focus afterwards, so the user keeps typing.
+    if (S.suppressEditCommit) return;
     const text = ta.value;
     // An empty note is not a note: double-clicking empty
     // space creates a text box, and if nothing is typed
