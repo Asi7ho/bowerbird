@@ -762,9 +762,12 @@ export function updateDraggedCards(ids: number[]): void {
 // its bounds from the live board (the cards already moved)
 // and move the frame to match, or it stays behind while the
 // group is dragged. A resize moves it too (a member's size
-// changes the union), so this covers both.
+// changes the union), so this covers both. The label is a
+// separate element in #groups now, so it moves too — it
+// sits at the frame's top-left plus the same offset it
+// had as the frame's child.
 export function updateDraggedGroupFrames(ids: number[]): void {
-  if (!S.groupsEl) return;
+  if (!S.groupsEl || !S.groupFramesEl) return;
   const groups = new Set<number>();
   for (const id of ids) {
     const it = S.api.board.getItem(id);
@@ -789,12 +792,17 @@ export function updateDraggedGroupFrames(ids: number[]): void {
     }
     const b = groupBounds(members, S.api.geometry.itemBounds);
     if (!b) continue;
-    const frame = S.groupsEl.querySelector(`.group-frame[data-group="${g}"]`) as HTMLElement | null;
+    const frame = S.groupFramesEl.querySelector(`.group-frame[data-group="${g}"]`) as HTMLElement | null;
     if (!frame) continue;
     frame.style.left = `${b.x}px`;
     frame.style.top = `${b.y}px`;
     frame.style.width = `${b.w}px`;
     frame.style.height = `${b.h}px`;
+    const label = S.groupsEl.querySelector(`.group-label[data-group="${g}"]`) as HTMLElement | null;
+    if (label) {
+      label.style.left = `${b.x + 12}px`;
+      label.style.top = `${b.y - 11}px`;
+    }
   }
 }
 

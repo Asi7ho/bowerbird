@@ -486,7 +486,7 @@ async function main() {
       assert.equal(Math.round(frame.box.y), 124);
       assert.equal(Math.round(frame.box.width), 808);
       assert.equal(Math.round(frame.box.height), 586);
-      assert.equal(await page.locator(".group-frame .group-label").first().textContent(), "Section 1");
+      assert.equal(await page.locator(".group-label").first().textContent(), "Section 1");
       const grouped = await waitFor("group label on disk", () => {
         const b = readBoard();
         const note = b.items.find((it) => "Text" in it.kind);
@@ -501,7 +501,7 @@ async function main() {
       await page.keyboard.type("Reading");
       await page.keyboard.press("Enter");
       await waitFor("renamed label in the DOM", async () => {
-        const t = await page.locator(".group-frame .group-label").first().textContent();
+        const t = await page.locator(".group-label").first().textContent();
         return t === "Reading" ? true : null;
       });
       await waitFor("renamed label on disk", () => readBoard().groups?.[1]?.label === "Reading");

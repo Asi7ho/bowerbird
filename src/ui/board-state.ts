@@ -48,6 +48,12 @@ export interface BoardState {
   worldEl: SVGGElement;
   cardsEl: HTMLDivElement;
   groupsEl: HTMLDivElement;
+  // The group frames' dashed borders live in their own layer
+  // BELOW the cards, so a card placed over a frame's edge
+  // covers the border instead of the border painting over
+  // the card. The labels stay in #groups above the cards,
+  // so they keep taking clicks for rename.
+  groupFramesEl: HTMLDivElement;
   // The board as last rendered (a copy from api.board.get()).
   // The render loop reads bg/grid/items from this; the
   // visible-set check reads it too, so panning does not pay
@@ -101,6 +107,7 @@ export const S: BoardState = {
   worldEl: undefined as unknown as SVGGElement,
   cardsEl: undefined as unknown as HTMLDivElement,
   groupsEl: undefined as unknown as HTMLDivElement,
+  groupFramesEl: undefined as unknown as HTMLDivElement,
   cachedBoard: null,
   cardEls: new Map(),
   lastContentKey: 0,

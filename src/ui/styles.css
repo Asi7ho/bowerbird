@@ -214,14 +214,18 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    (#board is untransformed and overflow:hidden), which clips in
    screen space after the transform. */
 #cards { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }
-/* #groups holds the group frames. Same no-overflow rule
-   as #cards: frames live in world coordinates. The layer
+/* #group-frames holds the group frames' dashed borders. Same
+   no-overflow rule as #cards: frames live in world coordinates.
+   It sits BEFORE #cards in the DOM, so it paints below them:
+   a card placed over a frame's edge covers the dashed line,
+   instead of the line painting over the card. #groups, after
+   #cards, holds only the labels, so they keep taking clicks. */
+#group-frames { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; pointer-events: none; }
+/* #groups holds the group labels. Same no-overflow rule
+   as #cards: labels live in world coordinates. The layer
    sits above the cards so a frame's label takes clicks —
    but the layer itself never takes them (pointer-events
-   none, only the label re-enables them), and the frames
-   never overlap a card: they sit 24px outside the group's
-   bounds, so painting them above the cards changes nothing
-   visually. */
+   none, only the label re-enables them). */
 #groups { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; pointer-events: none; }
 /* Text inside cards is never selected by a board click or drag — the
    board is a canvas, not a document. The note editor and Settings are
@@ -304,9 +308,12 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    left. It sits astride the top border, half above it, so
    it never overlaps the cards inside the group — they
    start 24px below the border. Double-click it to rename
-   the section. */
-.group-frame .group-label {
-  position: absolute; top: -11px; left: 12px;
+   the section. It is a direct child of #groups (not of
+   the frame), positioned at the frame's top-left, so the
+   frame can live below the cards while the label stays
+   above them. */
+.group-label {
+  position: absolute;
   background: #fff; border: 1px solid var(--hairline);
   border-radius: 6px; padding: 2px 8px;
   font-size: 12px; font-weight: 600; color: var(--ink);

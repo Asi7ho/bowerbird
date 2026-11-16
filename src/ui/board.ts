@@ -58,6 +58,7 @@ export function activate(a: PluginContext): void {
   S.boardEl.innerHTML = `
     <div id="grid"></div>
     <svg id="canvas-svg"><g id="world"></g></svg>
+    <div id="group-frames"></div>
     <div id="cards" role="listbox" aria-label="Board cards"></div>
     <div id="groups"></div>
     <div id="plugin-view" style="display:none"></div>
@@ -76,6 +77,7 @@ export function activate(a: PluginContext): void {
 
   const grid = S.boardEl.querySelector<HTMLElement>("#grid");
   const canvasSvg = S.boardEl.querySelector<HTMLElement>("#canvas-svg");
+  const groupFrames = S.boardEl.querySelector<HTMLElement>("#group-frames");
   const cards = S.boardEl.querySelector<HTMLElement>("#cards");
   const groups = S.boardEl.querySelector<HTMLElement>("#groups");
   const resizeHandle = S.boardEl.querySelector<HTMLElement>("#resize-handle");
@@ -84,11 +86,12 @@ export function activate(a: PluginContext): void {
   const overlays = S.boardEl.querySelector<HTMLElement>("#plugin-overlays");
   const viewSwitcher = S.boardEl.querySelector<HTMLElement>("#view-switcher");
   const toast = S.boardEl.querySelector<HTMLElement>("#toast");
-  if (grid && canvasSvg && cards && groups && resizeHandle && rotateHandle && pluginView && overlays && viewSwitcher && toast) {
+  if (grid && canvasSvg && groupFrames && cards && groups && resizeHandle && rotateHandle && pluginView && overlays && viewSwitcher && toast) {
     S.gridEl = grid as HTMLDivElement;
     // The SVG world group, inside the canvas SVG.
     const w = canvasSvg.querySelector("#world") as unknown as SVGGElement | null;
     if (w) S.worldEl = w;
+    S.groupFramesEl = groupFrames as HTMLDivElement;
     S.cardsEl = cards as HTMLDivElement;
     S.groupsEl = groups as HTMLDivElement;
     // Hand the plugin system the board DOM elements, so the
