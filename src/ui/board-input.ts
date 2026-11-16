@@ -1258,9 +1258,12 @@ window.addEventListener("resize", () => { applyCamera(); refreshContentIfVisible
 // just before quitting is kept: commit any in-progress edit,
 // then write the board as-is. Only the unload flush uses
 // the synchronous save; ordinary saves stay async. The
-// write is unconditional — one tmp+rename at quit —
-// because the unload handler cannot cheaply tell whether
-// a save is pending, and a no-op rewrite is harmless.
+// flush writes only when the board changed since the last
+// save (see undo.ts saveSync): a board restored on disk
+// but not yet reloaded in memory is not dirty, so the
+// flush never overwrites the restore with the stale board
+// it replaced — and a content save already dispatched is
+// covered by the journal it wrote before the async save.
 window.addEventListener("beforeunload", () => {
   if (S.wheelSaveTimer) { clearTimeout(S.wheelSaveTimer); S.wheelSaveTimer = null; }
   if (S.zoomSettleTimer) { clearTimeout(S.zoomSettleTimer); S.zoomSettleTimer = null; }

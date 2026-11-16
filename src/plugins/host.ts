@@ -380,7 +380,11 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
       },
       saveSync: () => {
         require("board:write");
-        bridge!.saveBoardSync(JSON.stringify(host!.getBoard()));
+        // Change-detecting (see undo.ts saveSync): only a
+        // board that changed since the last save is written,
+        // so the unload flush can never overwrite a restore
+        // with the stale board it replaced.
+        host!.saveSync();
       },
       render: () => host!.render(),
       commitEditing: () => {

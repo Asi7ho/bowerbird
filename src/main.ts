@@ -613,6 +613,7 @@ async function init(): Promise<void> {
     },
     save: () => C.undoStore.save(),
     saveWithoutUndo: () => C.undoStore.saveWithoutUndo(),
+    saveSync: () => C.undoStore.saveSync(),
     render: () => boardRender(),
     switchBoard: (name: string, preserveUndo = false) => switchToBoard(C, name, preserveUndo),
     setTool: (toolName: string) => boardSetTool(toolName),

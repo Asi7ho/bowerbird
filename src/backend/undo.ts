@@ -43,6 +43,13 @@ export interface UndoContext {
 export interface UndoStore {
   save(): { itemsJson: string; contentKey: string };
   saveWithoutUndo(): void;
+  // Synchronous flush for unload: write the board to disk
+  // only if it changed since the last save. Returns whether
+  // it wrote. A board that did not change — including a
+  // board restored on disk but not yet reloaded in memory —
+  // is not written, so the unload flush can never overwrite
+  // a restore with the stale board it replaced.
+  saveSync(): boolean;
   undo(): boolean;
   redo(): boolean;
   canUndo(): boolean;
@@ -150,6 +157,48 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
       onSaveFailed,
     );
     return { itemsJson, contentKey };
+  }
+
+  // Synchronous flush for unload (see board-input.ts
+  // beforeunload): the same change check as save(), but
+  // the write is synchronous because an async save may
+  // not complete before the window closes. Only a board
+  // that changed since the last save is written — a
+  // pending wheel/zoom camera save, or an edit not yet
+  // saved. A board that did not change is not written:
+  // after a backup restore the disk board is the
+  // snapshot while memory still holds the board it
+  // replaced, and an unconditional write would put the
+  // old board back on disk. A content save already
+  // dispatched is not dirty here either: its async write
+  // was sent, and the journal written before it preserves
+  // the edit if the window closes first. No undo step,
+  // no search bump, no events: this is a flush, and the
+  // seen keys are left alone so a later save still
+  // captures the undo step for the change.
+  function saveSync(): boolean {
+    const itemsJson = JSON.stringify(ctx.getBoard().items);
+    const contentKey = contentKeyFor(itemsJson);
+    const cameraJson = JSON.stringify(ctx.getBoard().camera);
+    if (contentKey === lastSeenContentKey && cameraJson === lastSeenCameraJson) return false;
+    if (typeof api.saveBoardSync !== "function") return false;
+    const boardJson = JSON.stringify(ctx.getBoard());
+    // The journal is the write-ahead copy, as in save():
+    // a refused sync write keeps the edit for the next
+    // launch instead of losing it.
+    try {
+      api.recoveryWriteSync(boardJson);
+    } catch { /* the save below still proceeds */ }
+    let ok = false;
+    try {
+      ok = api.saveBoardSync(boardJson);
+    } catch {
+      return false;
+    }
+    if (ok && typeof api.recoveryClear === "function") {
+      void api.recoveryClear(boardJson).catch(() => undefined);
+    }
+    return ok;
   }
 
   // ---------------------------------------------------------------- undo / redo
@@ -393,6 +442,7 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
   return {
     save,
     saveWithoutUndo,
+    saveSync,
     undo,
     redo,
     canUndo,
