@@ -7,8 +7,12 @@
 // original cannot break the card. Preview fills are background
 // work, not user changes: they save without an undo step.
 import { api } from "./api";
-import { boardGet, domainOf, estimateTextHeight, normaliseHex, type Board, type Kind, type Pt, type Size } from "./model";
+import { isPdfCompatible } from "./ai-import";
+import type { ImportedItem } from "./import-types";
+import { boardGet, domainOf, estimateTextHeight, normaliseHex, type Board, type Item, type Kind, type Pt, type Size } from "./model";
 import { ensureVideoPoster } from "./poster";
+import { imageDataToPngBytes, parsePsd, psdLayersToItems } from "./psd-import";
+import { parseSvgToItems } from "./svg-import";
 
 export interface DropsContext {
   getBoard(): Board;
@@ -47,7 +51,12 @@ export function createDrops(ctx: DropsContext): Drops {
 
   function dropKindForExt(ext: string): string {
     const e = ext.toLowerCase();
-    if (["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"].includes(e)) return "image";
+    if (["png", "jpg", "jpeg", "gif", "webp", "bmp"].includes(e)) return "image";
+    // SVG is parsed into cards (shapes, strokes, text),
+    // not landed as one image — see the svg branch below.
+    if (e === "svg") return "svg";
+    if (e === "psd") return "psd";
+    if (e === "ai") return "ai";
     if (e === "pdf") return "pdf";
     if (["mp3", "wav", "flac", "ogg", "m4a"].includes(e)) return "audio";
     if (["mp4", "mov", "webm", "mkv", "avi", "m4v"].includes(e)) return "video";
@@ -152,20 +161,94 @@ export function createDrops(ctx: DropsContext): Drops {
     // in electron/main.ts).
     let at = ctx.toWorld(atScreen);
     let added = 0;
+
+    // Land a raster image file as one Image card at its
+    // natural size (capped at 320 wide). Shared by the image
+    // branch and the SVG fallback below.
+    async function addImageCard(file: File, atWorld: Pt): Promise<boolean> {
+      const stored = await api.embedFileBytes(file.name, await file.arrayBuffer());
+      const img = new Image();
+      await new Promise<void>((resolve) => { img.onload = () => resolve(); img.onerror = () => resolve(); img.src = api.fileUrl(stored); });
+      if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return false; }
+      const nw = img.naturalWidth || 320, nh = img.naturalHeight || 240;
+      const scale = nw > 320 ? 320 / nw : 1;
+      const id = ctx.allocId();
+      board.items.push({ id, pos: atWorld, size: { w: Math.max(40, nw * scale), h: Math.max(40, nh * scale) }, group: null, kind: { Image: { path: stored } } });
+      return true;
+    }
+
+    // Store an imported item's raster bytes and push it onto
+    // the board. An Image card arrives with a placeholder
+    // path; the bytes behind it are embedded here and the
+    // path rewritten to the stored copy. Returns false if
+    // the board switched mid-import, so the caller stops.
+    async function addImportedItem(item: ImportedItem, fileName: string): Promise<boolean> {
+      const kind = item.kind;
+      if (item.embed && "Image" in kind) {
+        kind.Image.path = await api.embedFileBytes(item.embed.name, item.embed.data);
+      } else if (item.pixels && "Image" in kind) {
+        const png = await imageDataToPngBytes(item.pixels);
+        const stem = fileName.replace(/\.[^.]*$/, "") || "psd";
+        kind.Image.path = await api.embedFileBytes(`${stem}-layer.png`, png);
+      }
+      if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return false; }
+      const id = ctx.allocId();
+      const newItem: Item = { id, pos: item.pos, size: item.size, group: null, kind };
+      if (item.rotation !== undefined) newItem.rotation = item.rotation;
+      board.items.push(newItem);
+      return true;
+    }
+
     for (const file of files) {
       const ext = file.name.split(".").pop() ?? "";
       const kind = dropKindForExt(ext);
       try {
         if (kind === "image") {
-          const stored = await api.embedFileBytes(file.name, await file.arrayBuffer());
-          const img = new Image();
-          await new Promise<void>((resolve) => { img.onload = () => resolve(); img.onerror = () => resolve(); img.src = api.fileUrl(stored); });
+          if (await addImageCard(file, at)) added++;
+        } else if (kind === "svg") {
+          const items = parseSvgToItems(await file.text(), at);
           if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
-          const nw = img.naturalWidth || 320, nh = img.naturalHeight || 240;
-          const scale = nw > 320 ? 320 / nw : 1;
-          const id = ctx.allocId();
-          ctx.getBoard().items.push({ id, pos: at, size: { w: Math.max(40, nw * scale), h: Math.max(40, nh * scale) }, group: null, kind: { Image: { path: stored } } });
-          added++;
+          if (items.length === 0) {
+            // Nothing mappable (a <use>-only file, say): keep
+            // the old behaviour and land the whole SVG as
+            // one image card.
+            if (await addImageCard(file, at)) added++;
+          } else {
+            for (const item of items) {
+              if (!(await addImportedItem(item, file.name))) return;
+            }
+            added += items.length;
+          }
+        } else if (kind === "psd") {
+          const parsed = parsePsd(await file.arrayBuffer());
+          if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
+          const items = psdLayersToItems(parsed, at);
+          if (items.length === 0) {
+            ctx.toast(`No layers could be imported from ${file.name}`);
+          } else {
+            for (const item of items) {
+              if (!(await addImportedItem(item, file.name))) return;
+            }
+            added += items.length;
+          }
+        } else if (kind === "ai") {
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          if (!isPdfCompatible(bytes)) {
+            // A file saved without PDF compatibility is
+            // PostScript, which the app cannot read: say so
+            // rather than landing a broken card.
+            ctx.toast(`${file.name} was saved without PDF compatibility, so it can't be imported`);
+          } else {
+            // A PDF-compatible .ai file IS a PDF: embed it
+            // as-is and let the existing PDF card render
+            // the vector artwork.
+            const stored = await api.embedFileBytes(file.name, bytes);
+            const size = await api.fileSize(stored).catch(() => 0);
+            if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
+            const id = ctx.allocId();
+            board.items.push({ id, pos: at, size: { w: 260, h: 360 }, group: null, kind: { PdfCard: { path: stored, size_bytes: size } } });
+            added++;
+          }
         } else if (kind in STORED_KINDS) {
           const desc = STORED_KINDS[kind];
           const stored = await api.embedFileBytes(file.name, await file.arrayBuffer());
