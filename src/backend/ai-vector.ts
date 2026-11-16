@@ -145,11 +145,19 @@ export interface AiImageRequest {
   rotation?: number;
 }
 
+export interface AiRawItem extends ImportedItem {
+  // Text cards carry their font size separately while the
+  // import is still in page units, so the final scale step
+  // can shrink it with the card (same pattern as the SVG
+  // import's RawItem).
+  fontSize?: number;
+}
+
 export interface AiExtractResult {
   // Items in board page coordinates: y-down, origin at the
   // page's top-left. The caller stacks pages and scales the
   // union to the board (see ai-import.ts).
-  items: ImportedItem[];
+  items: AiRawItem[];
   // Embedded images, with their placement. The caller
   // resolves each objId through page.objs and turns it into
   // an Image card; if one cannot be resolved, the whole page
@@ -393,15 +401,8 @@ function freshState(): GState {
   };
 }
 
-interface RawItem extends ImportedItem {
-  // Text cards carry their font size separately while the
-  // import is still in page units, so the final scale step
-  // can shrink it with the card.
-  fontSize?: number;
-}
-
 export function extractAiPage(ops: AiOpList, pageHeight: number): AiExtractResult {
-  const items: RawItem[] = [];
+  const items: AiRawItem[] = [];
   const images: AiImageRequest[] = [];
   const reasons: string[] = [];
   let unmappable = false;
