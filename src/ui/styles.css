@@ -37,31 +37,239 @@ body { display: flex; flex-direction: row; }
 #main-column { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; min-height: 0; }
 button { font-family: inherit; }
 
-/* Components: the reusable UI pieces. An action button is
-   .btn — never a bare <button>, which falls back to the
-   browser default, and never a per-id rule, which is how a
-   new button ships unstyled. The class is the component:
-   use it in HTML, or build the button with createButton in
-   src/ui/components.ts, which puts the class on for you.
-   Variants: .btn-danger (red text, for an action that undoes
-   work), .btn-danger-filled (red background, for the confirm
-   step of a destructive action), .btn-lg (8px 16px, for the
-   destructive buttons, which read bigger), .btn.armed (the
-   confirm state: red text and red border, a deliberate second
-   click). The margin and flex are on the base class so a
-   button in a row (Restore, Open folder, Enable) does not
-   shrink or gain a gap. */
-.btn {
+/* Components: the reusable UI pieces. A new control gets
+   the app style by construction instead of by remembering a
+   CSS rule. A bare <button> falls back to the browser
+   default, and a per-id or per-context rule is how a new
+   control ships unstyled — so every control is one of these
+   classes, and src/ui/components.ts is the one place that
+   builds them. The kit, by family:
+   - Buttons: .btn (action), .icon-btn (square icon),
+     .swatch (colour), .picker-option (icon in a palette),
+     .seg-btn (segmented text).
+   - Surfaces: .frosted (the macOS material), .palette
+     (floating panel), .dialog + .dialog-backdrop (sheet),
+     .card (board card), .segmented (pill container).
+   - Text & inputs: .meta, .text-field, .kbd, .search-field.
+   - Layout: .row, .divider, .toast.
+   - Navigation: .tab (Settings), .plugin-tab (dock). */
+.btn, .plugin-panel-body button {
   border: 1px solid var(--separator); background: #fff; border-radius: 9px;
   padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
   color: var(--ink); box-shadow: var(--shadow-sm); margin: 0; flex: none;
 }
-.btn:hover { background: var(--fill); }
+.btn:hover, .plugin-panel-body button:hover { background: var(--fill); }
 .btn-lg { padding: 8px 16px; }
 .btn-danger { color: #e63946; }
 .btn-danger:hover { background: rgba(230, 57, 70, 0.06); }
 .btn-danger-filled { border: none; background: #e63946; color: #fff; }
 .btn.armed { color: #e63946; border-color: rgba(230, 57, 70, 0.4); }
+
+/* The frosted macOS material: translucent white over a
+   blur, a hairline border and the toolbar shadow. The
+   toolbar, palettes, note bar and view switcher all share
+   it; each sets its own radius and layout. */
+.frosted {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-md);
+}
+
+/* An icon button: a square button with a centred icon.
+   Borderless, transparent, 9px radius; hover a quiet black
+   tint, active white with the toolbar shadow, dim (opacity
+   0.35, no hover) when unavailable. 40px by default (the
+   toolbar tools); .icon-btn-sm is 32px (title bar, dock
+   tabs). The icon is a 20px SVG stroked in currentColor. */
+.icon-btn {
+  border: none; background: transparent; border-radius: 9px;
+  width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--ink); -webkit-app-region: no-drag;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.icon-btn:hover { background: rgba(0, 0, 0, 0.05); }
+.icon-btn:active { background: rgba(0, 0, 0, 0.09); }
+.icon-btn.active {
+  background: #fff; color: var(--ink);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+}
+.icon-btn.dim { opacity: 0.35; cursor: default; }
+.icon-btn.dim:hover { background: transparent; }
+.icon-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.icon-btn-sm { width: 32px; height: 32px; }
+.icon-btn-xs { width: 22px; height: 22px; }
+.icon-btn-round { border-radius: 50%; }
+
+/* A colour swatch: a 22px circle. Hover grows it; the
+   active one is 26px with an accent ring. The colour itself
+   is the background, set inline. */
+.swatch {
+  width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.12);
+  cursor: pointer; -webkit-app-region: no-drag; padding: 0;
+  appearance: none; -webkit-appearance: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.swatch:hover { transform: scale(1.1); }
+.swatch.active {
+  width: 26px; height: 26px;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent);
+}
+
+/* A floating palette: the frosted surface as a panel, a
+   column of controls with a 6px gap and 8px padding, 16px
+   radius. Positioning is per instance (beside the toolbar,
+   or fixed next to a note). */
+.palette {
+  display: flex; flex-direction: column; gap: 6px; align-items: center;
+  padding: 8px; border-radius: 16px;
+}
+
+/* An option inside a palette: a 36px icon button, in
+   toolbar-button style. Active is white with the toolbar
+   shadow. */
+.picker-option {
+  width: 36px; height: 36px; padding: 0;
+  border: none; background: transparent; border-radius: 9px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: var(--ink); -webkit-app-region: no-drag;
+}
+.picker-option:hover { background: rgba(0, 0, 0, 0.05); }
+.picker-option.active {
+  background: #fff; color: var(--ink);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+}
+.picker-option svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* A segmented text button: one choice in a segmented
+   control (the shape picker's Filled/Outline switch, the
+   view switcher). Transparent, grey text; the active one
+   is a white pill with the toolbar shadow and ink text.
+   .seg-btn-sm is the small one (11px, 64x28). */
+.seg-btn {
+  border: none; background: transparent; border-radius: 9px;
+  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
+  color: var(--grey); -webkit-app-region: no-drag;
+}
+.seg-btn:hover { background: var(--fill); }
+.seg-btn.active {
+  background: #fff; color: var(--ink);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+}
+.seg-btn-sm { width: 64px; height: 28px; padding: 0; font-size: 11px; border-radius: 8px; }
+
+/* A tab in the Settings tab list: quiet grey text, left
+   aligned; hover and active are a light fill, active also
+   ink text and semibold. */
+.tab {
+  border: none; background: transparent; border-radius: 8px;
+  padding: 8px 12px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--grey);
+  text-align: left;
+}
+.tab:hover { background: var(--fill); }
+.tab.active { background: var(--fill); color: var(--ink); font-weight: 600; box-shadow: none; }
+
+/* A dock tab: one panel's tab in the plugin dock's tab
+   bar. Text, or a 32px icon square (.has-icon); active is
+   a white pill with the toolbar shadow. */
+.plugin-tab {
+  flex: none; border: none; background: transparent;
+  border-radius: 7px; padding: 4px 10px; cursor: pointer;
+  font-size: 13px; font-weight: 500; color: var(--ink);
+  white-space: nowrap;
+}
+.plugin-tab.has-icon {
+  width: 32px; height: 32px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.plugin-tab.has-icon svg { width: 20px; height: 20px; display: block; }
+.plugin-tab.dragging { opacity: 0.5; cursor: grabbing; }
+.plugin-tab:hover { background: var(--fill); }
+.plugin-tab.active {
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+}
+
+/* A modal sheet: opaque white, 16px radius, the large
+   shadow, a hairline border. Size is per instance. The
+   backdrop dims and blurs the board behind it. */
+.dialog {
+  display: flex; flex-direction: column; overflow: hidden;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+}
+.dialog-backdrop {
+  position: absolute; inset: 0; background: rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+  display: none; align-items: center; justify-content: center; padding: 24px; z-index: 200;
+}
+.dialog-backdrop.open { display: flex; }
+
+/* A bordered text field: white, hairline border, 9px
+   radius, 13px. Focus is the accent border. */
+.text-field {
+  display: block; width: 100%; box-sizing: border-box;
+  padding: 8px 10px; resize: none;
+  font-family: inherit; font-size: 13px; line-height: 1.5; color: var(--ink);
+  background: #fff; border: 1px solid var(--separator); border-radius: 9px;
+  outline: none;
+}
+.text-field:focus { border-color: var(--accent); }
+
+/* A search field: the grey container with an input inside.
+   34px, quiet grey, 8px radius; the input is borderless
+   and transparent, the field opts out of dragging. Relative,
+   so the results dropdown anchors to it. */
+.search-field {
+  position: relative;
+  display: flex; align-items: center; gap: 6px; width: min(360px, 60vw);
+  height: 34px; padding: 6px 8px 6px 12px;
+  background: var(--bg-system); border: none; border-radius: 8px;
+  -webkit-app-region: no-drag;
+}
+.search-field input {
+  flex: 1; min-width: 0; border: none; background: transparent;
+  font-size: 14px; color: var(--ink); outline: none;
+}
+.search-field input::placeholder { color: var(--grey); }
+
+/* Quiet grey meta text: 12px, the small print under a
+   heading or beside a button. */
+.meta { color: var(--grey); font-size: 12px; line-height: 1.5; margin: 0 0 12px; }
+
+/* A keyboard shortcut chip: white, hairline border, 5px
+   radius, 12px, the small shadow. */
+.kbd {
+  background: #fff; border: 1px solid var(--separator); border-bottom-width: 2px;
+  border-radius: 5px; padding: 1px 6px; font-family: inherit; font-size: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+/* A hairline divider: a 32px line in the separator colour. */
+.divider { width: 32px; height: 1px; background: var(--separator); flex: none; }
+
+/* A row: info on the left, actions on the right, 12px gap. */
+.row { display: flex; align-items: center; gap: 12px; }
+
+/* A segmented container: the fill-grey pill that holds a
+   row of .seg-btn or .plugin-tab buttons. */
+.segmented {
+  display: flex; gap: 2px; background: var(--fill);
+  border-radius: 9px; padding: 2px;
+}
+
+/* A toast: a dark pill at the board's bottom-left, 13px
+   white text on translucent ink, the toolbar shadow. */
+.toast {
+  position: absolute; left: 16px; bottom: 16px;
+  background: rgba(28, 28, 30, 0.88); backdrop-filter: blur(12px);
+  color: #fff; font-size: 13px; padding: 10px 14px; border-radius: 12px;
+  display: none; z-index: 30; max-width: 70vw; box-shadow: var(--shadow-md);
+}
+.toast.show { display: block; }
 
 #board { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: none; }
 
@@ -94,26 +302,10 @@ button { font-family: inherit; }
   display: flex; align-items: center; justify-content: flex-end; gap: 2px;
   -webkit-app-region: drag;
 }
-/* Title-bar icon buttons (undo, redo, panels toggle), as a
-   toolbar icon button: borderless, 32px, 9px radius, hover a
-   quiet black tint, active white with the toolbar active
-   shadow, dim (opacity 0.35, no hover) when unavailable.
-   Every button opts out of the title bar's drag region, or a
-   click on it would move the window instead of acting. */
-#title-bar button {
-  border: none; background: transparent; border-radius: 9px;
-  width: 32px; height: 32px; display: flex; align-items: center;
-  justify-content: center; cursor: pointer; color: var(--ink);
-  -webkit-app-region: no-drag;
-}
-#title-bar button:hover { background: rgba(0, 0, 0, 0.05); }
-#panels-toggle.active {
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
-}
-#title-bar button.dim { opacity: 0.35; cursor: default; }
-#title-bar button.dim:hover { background: transparent; }
-#title-bar button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+/* The panels toggle is an .icon-btn; its active state is
+   the component's. Every button opts out of the title
+   bar's drag region, or a click on it would move the
+   window instead of acting — .icon-btn does that. */
 /* Focus: the header comment promises a 2px ring, and
    only audio seek had one. Every button, input and
    tab now gets the same accent ring on keyboard
@@ -604,108 +796,37 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   position: relative;
   pointer-events: auto; display: flex; flex-direction: column; align-items: center;
   gap: 10px; padding: 12px 8px; width: 56px;
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 16px;
-  box-shadow: var(--shadow-md);
+  border-radius: 16px;
   -webkit-app-region: drag;
 }
+/* The seg is the segmented container, vertical: its
+   buttons fill the 36px left after the 2px padding. */
 #toolbar .seg {
-  display: flex; flex-direction: column; background: var(--fill);
-  border-radius: 10px; padding: 2px; gap: 2px; width: 100%;
+  flex-direction: column; width: 100%; border-radius: 10px;
 }
 /* The seg is 40px wide including its 2px padding, so its buttons must
    fill the remaining 36px — a fixed 40px button overflowed the grey
    container by 2px on each side and sat off-centre. */
 #toolbar .seg button { width: 100%; height: 40px; }
-#toolbar button {
-  border: none; background: transparent; border-radius: 9px;
-  width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
-  cursor: pointer; color: var(--ink); -webkit-app-region: no-drag;
-  transition: background 0.15s ease, color 0.15s ease;
-}
-#toolbar button:hover { background: rgba(0, 0, 0, 0.05); }
-#toolbar button:active { background: rgba(0, 0, 0, 0.09); }
-#toolbar button.active {
-  background: #fff; color: var(--ink);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
-}
-#toolbar button.dim { opacity: 0.35; cursor: default; }
-#toolbar button.dim:hover { background: transparent; }
-#toolbar button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-#toolbar .divider { width: 32px; height: 1px; background: var(--separator); flex: none; }
 #toolbar .zoom-group { display: flex; flex-direction: column; gap: 2px; width: 100%; }
 #toolbar .zoom-group button { width: 100%; }
 #toolbar button.zoom-label { width: 100%; height: auto; padding: 2px 0; font-size: 11px; font-weight: 600; color: var(--grey); }
 #title-bar-left .saved-label { font-size: 12px; color: var(--grey); white-space: nowrap; }
+/* A toolbar palette sits beside the toolbar, to its right. */
 #toolbar .palette {
   position: absolute; left: calc(100% + 8px); top: 12px;
-  display: flex; flex-direction: column; gap: 6px; align-items: center;
-  padding: 8px; background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 16px;
-  box-shadow: var(--shadow-md);
-}
-#toolbar .swatch {
-  width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.12);
-  cursor: pointer; -webkit-app-region: no-drag; padding: 0;
-  appearance: none; -webkit-appearance: none;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-#toolbar .swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-#toolbar .swatch:hover { transform: scale(1.1); }
-#toolbar .swatch.active {
-  width: 26px; height: 26px;
-  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent);
 }
 /* Shape picker: the same floating .palette surface as the
    pen colours, but lower, so it sits beside the shape
    button (the fourth tool) instead of at the top, and so
    it never overlaps the note-colours flyout, which sits
-   at the top when a text note is selected. Its options
-   are icon buttons, not swatches, in toolbar-button style. */
-/* The note-colours bar: a floating bar that sits next to
-   the selected text note. The same frosted surface as the
-   toolbar's palettes, but horizontal and positioned in
-   screen coordinates, so it stays a usable size at any
-   zoom. Its swatches are the toolbar's .swatch buttons. */
+   at the top when a text note is selected. */
+#toolbar .palette#shape-picker { top: 140px; }
+/* The note-colours bar: a floating palette that sits next
+   to the selected text note, positioned in screen
+   coordinates, so it stays a usable size at any zoom. */
 .note-colour-bar {
   position: fixed; z-index: 40;
-  display: flex; flex-direction: column; gap: 6px; align-items: center;
-  padding: 8px; background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 16px;
-  box-shadow: var(--shadow-md);
-}
-.note-colour-bar .swatch {
-  width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.12);
-  cursor: pointer; -webkit-app-region: no-drag; padding: 0;
-  appearance: none; -webkit-appearance: none;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-.note-colour-bar .swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.note-colour-bar .swatch:hover { transform: scale(1.1); }
-.note-colour-bar .swatch.active {
-  width: 26px; height: 26px;
-  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent);
-}
-#toolbar .palette#shape-picker { top: 140px; }
-#toolbar .palette .shape-option {
-  width: 36px; height: 36px; padding: 0;
-}
-/* The shape picker's filled/outline switch: two small
-   text buttons at the top of the flyout. */
-#toolbar .palette .shape-mode {
-  width: 64px; height: 28px; padding: 0;
-  font-size: 11px; font-weight: 600; color: var(--grey);
-  background: transparent; border-radius: 8px;
-}
-#toolbar .palette .shape-mode.active {
-  background: #fff; color: var(--ink);
-  box-shadow: var(--shadow-sm);
 }
 /* The colour swatch in the toolbar: the pen colour in
    use, as a round swatch. Clicking it opens the colour
@@ -722,10 +843,6 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #toolbar button.colour-swatch.active::before {
   box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent);
 }
-#toolbar .palette .shape-option.active {
-  background: #fff; color: var(--ink);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
-}
 #toolbar .palette .shape-option svg {
   width: 20px; height: 20px; fill: none; stroke: currentColor;
   stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
@@ -740,12 +857,6 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    It used to be frosted (white at 0.92 over a blurred board), so board
    content showed through the text and made it harder to read. Opaque
    also drops a full-board backdrop blur while Settings is open. */
-#settings-backdrop {
-  position: absolute; inset: 0; background: rgba(0, 0, 0, 0.22);
-  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
-  display: none; align-items: center; justify-content: center; padding: 24px; z-index: 200;
-}
-#settings-backdrop.open { display: flex; }
 /* Settings as a proper two-pane window, not a popup that
    resizes to its content: a fixed height, a header with a
    hairline underneath, a clean tab list on the left with a
@@ -753,13 +864,11 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    right. The window never jumps when switching tabs, and
    the tabs never scroll away. The tab list is quiet text,
    not a grey pill block: inactive tabs are grey, the active
-   one is black on a light fill, with no shadow. */
+   one is black on a light fill, with no shadow. The sheet
+   itself is the .dialog component; only its size stays here. */
 #settings {
   width: min(760px, 92vw); height: min(680px, calc(100% - 48px));
-  display: flex; flex-direction: column; overflow: hidden;
-  background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 16px;
-  padding: 20px 24px 24px; box-shadow: var(--shadow-lg);
+  padding: 20px 24px 24px;
 }
 #settings-header {
   display: flex; align-items: center; justify-content: space-between;
@@ -781,16 +890,6 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   flex: none; width: 180px; padding-right: 16px;
   border-right: 1px solid var(--separator);
 }
-#settings-tabs button {
-  border: none; background: transparent; border-radius: 8px;
-  padding: 8px 12px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--grey);
-  text-align: left;
-}
-#settings-tabs button:hover { background: var(--fill); }
-#settings-tabs button.active {
-  background: var(--fill); color: var(--ink); font-weight: 600;
-  box-shadow: none;
-}
 #settings .close {
   border: none; background: var(--fill); width: 26px; height: 26px; flex: none;
   border-radius: 50%; font-size: 16px; line-height: 1; cursor: pointer; color: var(--grey);
@@ -800,11 +899,6 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #settings table { width: 100%; border-collapse: collapse; font-size: 13px; }
 #settings td { padding: 6px 0; vertical-align: top; }
 #settings td:first-child { width: 42%; color: var(--grey); }
-#settings td kbd {
-  background: #fff; border: 1px solid var(--separator); border-bottom-width: 2px;
-  border-radius: 5px; padding: 1px 6px; font-family: inherit; font-size: 12px;
-  box-shadow: var(--shadow-sm);
-}
 /* Canvas options are previews, not text: a swatch of the colour,
    or a tile showing the grid pattern. The button is the control
    and the preview sits inside it, so the active option uses the
@@ -816,15 +910,9 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #settings .canvas-opt {
   display: inline-flex; gap: 8px; margin: 4px 20px 4px 0;
 }
-#settings .canvas-opt button {
-  width: 36px; height: 36px; border: none; background: transparent;
-  border-radius: 9px; padding: 5px; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-}
-#settings .canvas-opt button.active {
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
-}
+/* The preview sits inside the option, so the option
+   needs 5px of padding around the 26px preview. */
+#settings .canvas-opt .picker-option { padding: 5px; }
 #settings .canvas-opt .bg-swatch {
   width: 26px; height: 26px; border-radius: 50%;
   border: 1px solid rgba(0, 0, 0, 0.12); flex: none;
@@ -841,44 +929,23 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   background-image: linear-gradient(to right, rgba(0, 0, 0, 0.16) 0 1px, transparent 1px), linear-gradient(to bottom, rgba(0, 0, 0, 0.16) 0 1px, transparent 1px);
   background-size: 6px 6px; background-position: 2px 2px;
 }
-#settings .meta { color: var(--grey); font-size: 12px; line-height: 1.5; word-break: break-all; margin: 0 0 12px; }
+#settings .meta { word-break: break-all; }
 /* An email address inside a .meta line keeps together: the
    break-all above would split it mid-word ("w\nren7762@…"). */
 #settings .meta .email { word-break: normal; }
 #settings #reset-confirm { margin-top: 12px; }
-/* Feedback box: a plain textarea in the core style — white, hairline
-   border, the same radius as a card, system font. Fixed height: it
-   never resizes, and long text scrolls inside it. */
-#feedback-text {
-  display: block; width: 100%; box-sizing: border-box;
-  margin: 0 0 12px; padding: 8px 10px; resize: none; overflow-y: auto;
-  font-family: inherit; font-size: 13px; line-height: 1.5; color: var(--ink);
-  background: #fff; border: 1px solid var(--separator); border-radius: 9px;
-  outline: none;
-}
-#feedback-text:focus { border-color: var(--accent); }
+/* Feedback box: a .text-field. Fixed height: it never
+   resizes, and long text scrolls inside it. */
+#feedback-text { margin: 0 0 12px; overflow-y: auto; }
 /* Backups: one row, last backup only — info on the left,
-   Restore on the right, in the same button style as the
-   plugin rows in Settings (white, hairline border, 9px
-   radius), not a browser-default button. The armed
-   confirm state reads red, like other confirm states. */
-#settings .backup-row {
-  display: flex; align-items: center; gap: 12px; margin: 6px 0;
-}
+   Restore on the right. */
+#settings .backup-row { margin: 6px 0; }
 #settings .backup-row .meta { flex: 1 1 auto; margin: 0; }
 
 
 /* Visually hidden but still announced: the live region
    that tells a screen reader what the selection is. */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
-
-#toast {
-  position: absolute; left: 16px; bottom: 16px;
-  background: rgba(28, 28, 30, 0.88); backdrop-filter: blur(12px);
-  color: #fff; font-size: 13px; padding: 10px 14px; border-radius: 12px;
-  display: none; z-index: 30; max-width: 70vw; box-shadow: var(--shadow-md);
-}
-#toast.show { display: block; }
 
 /* The eraser's reach, drawn at the cursor while the eraser
    tool is active. A white ring with a dark outline, so it
@@ -896,17 +963,8 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    quiet grey field on the opaque white bar, not a floating
    frosted card over the board. The field and its controls
    opt out of the bar's drag region, so typing, clearing and
-   clicking the count never move the window. */
-#search-box {
-  position: relative;
-  display: flex; align-items: center; gap: 6px; width: min(360px, 60vw);
-  /* Fixed height: the bar must not grow when the clear button or the
-     match count appear. 34px = 22px clear button + 6px padding each side. */
-  height: 34px;
-  padding: 6px 8px 6px 12px;
-  background: var(--bg-system); border: none; border-radius: 8px;
-  -webkit-app-region: no-drag;
-}
+   clicking the count never move the window. The box itself
+   is the .search-field component. */
 /* Search results list: a ranked list under the search
    field, styled like the rest of the app, not like a web
    dropdown. Opaque white, like a board card and like the
@@ -936,12 +994,6 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
 .search-result-excerpt strong { font-weight: 600; color: var(--ink); }
-#search-box input, #search-box button { -webkit-app-region: no-drag; }
-#search-input {
-  flex: 1; min-width: 0; border: none; background: transparent;
-  font-size: 14px; color: var(--ink); outline: none;
-}
-#search-input::placeholder { color: var(--grey); }
 #search-count { font-size: 12px; color: var(--grey); white-space: nowrap; flex: none;
   /* Fixed width, right-aligned: the count text ("No matches", "3 of 299", …)
      changes length as you type, and the input must not resize with it. A
@@ -950,11 +1002,11 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   width: 96px; text-align: right; overflow: hidden; text-overflow: ellipsis; }
 #search-box #search-clear {
   /* Always in the layout (hidden, not removed): toggling it in and out
-     resized the input on every keystroke. Scoped to #search-box so this
-     beats #title-bar button, which would otherwise force it to 32px. */
-  display: flex; visibility: hidden; border: none; background: var(--fill); width: 22px; height: 22px;
-  border-radius: 50%; font-size: 15px; line-height: 1; cursor: pointer; color: var(--grey);
-  flex: none; align-items: center; justify-content: center;
+     resized the input on every keystroke. The button itself is an
+     .icon-btn (22px, round); only its fill, grey text and hidden
+     state stay here. */
+  visibility: hidden; background: var(--fill);
+  font-size: 15px; line-height: 1; color: var(--grey);
 }
 #search-clear:hover { background: rgba(0, 0, 0, 0.1); }
 /* Search hits: an accent outline on matches, the rest dimmed. The
@@ -1034,38 +1086,17 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   pointer-events: auto; overflow: hidden;
 }
 .plugin-tabs-list {
-  display: flex; gap: 2px; background: var(--fill);
-  border-radius: 9px; padding: 2px; overflow-x: auto;
+  overflow-x: auto;
   scrollbar-width: none;
 }
 .plugin-tabs-list::-webkit-scrollbar { display: none; }
-.plugin-tab {
-  flex: none; border: none; background: transparent;
-  border-radius: 7px; padding: 4px 10px; cursor: pointer;
-  font-size: 13px; font-weight: 500; color: var(--ink);
-  white-space: nowrap;
-}
 /* Icon tab: a 32px square, icon centred, as a toolbar
    button at tab-bar size. The SVG itself sets its own
    colours (Palette dots are coloured, Visual Library
    is ink stroke via currentColor), so the core only
    sets size here, never a fill or stroke override. */
-.plugin-tab.has-icon {
-  width: 32px; height: 32px; padding: 0;
-  display: flex; align-items: center; justify-content: center;
-}
-.plugin-tab.has-icon svg { width: 20px; height: 20px; display: block; }
-.plugin-tab.dragging { opacity: 0.5; cursor: grabbing; }
-.plugin-tab:hover { background: var(--fill); }
-.plugin-tab.active {
-  background: #fff;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
-}
 .plugin-tabs-close {
-  flex: none; border: none; background: transparent; cursor: pointer;
   font-size: 16px; line-height: 1; color: var(--grey);
-  width: 22px; height: 22px; padding: 0; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
 }
 .plugin-tabs-close:hover { background: rgba(0, 0, 0, 0.1); }
 .plugin-panel {
@@ -1082,44 +1113,32 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   border-radius: 0; box-shadow: none; overflow: hidden;
 }
 .plugin-panel-body { padding: 12px; font-size: 13px; line-height: 1.5; }
-.plugin-panel-body button {
-  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
-  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
-}
-.plugin-panel-body button:hover { background: var(--fill); }
+/* A plugin panel's buttons are the .btn component too:
+   plugins create bare buttons, so the panel body rule
+   shares the .btn declarations above. */
 #plugin-view {
   position: absolute; inset: 0; background: #fff; overflow: auto; z-index: 5;
   padding: 24px; font-size: 14px; line-height: 1.6;
 }
 #view-switcher {
   position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
-  gap: 4px; padding: 4px; z-index: 15;
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 12px;
-  box-shadow: var(--shadow-md);
+  display: flex; gap: 4px; padding: 4px; z-index: 15;
+  border-radius: 12px;
 }
-#view-switcher button {
-  border: 1px solid transparent; background: transparent; border-radius: 9px;
-  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
-  color: var(--grey);
-}
+#view-switcher .seg-btn { border: 1px solid transparent; }
 /* The bar itself is frosted white over a white board, so a
    white active button on it was white on white — the selected
    view was invisible. Same frosted pill style, but the active
    button now reads as a pill: a hairline border, a stronger
    shadow, and full-strength text, while inactive buttons stay
    dimmed. No new colour, no new shape, just contrast. */
-#view-switcher button.active {
-  background: #fff; color: #1d1d1f;
+#view-switcher .seg-btn.active {
   border-color: rgba(0, 0, 0, 0.10); box-shadow: var(--shadow-md);
 }
 /* Plugin rows as a list, not bordered cards: name and
    description on the left, the toggle on the right, rows
    separated by a hairline. */
-#settings .plugin-row { 
-  display: flex; align-items: center; gap: 12px;
+#settings .plugin-row {
   border-bottom: 1px solid var(--separator);
   padding: 12px 0; margin: 0;
 }

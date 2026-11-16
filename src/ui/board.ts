@@ -63,11 +63,11 @@ export function activate(a: PluginContext): void {
     <div id="cards" role="listbox" aria-label="Board cards"></div>
     <div id="plugin-view" style="display:none"></div>
     <div id="plugin-overlays"></div>
-    <div id="view-switcher" style="display:none"></div>
+    <div id="view-switcher" class="frosted" style="display:none"></div>
     <div id="resize-handle" aria-hidden="true"></div>
     <div id="rotate-handle" aria-hidden="true"></div>
     <div id="sr-announcer" class="sr-only" aria-live="polite"></div>
-    <div id="toast"></div>`;
+    <div id="toast" class="toast"></div>`;
   // The board sits inside the main column, below the title
   // bar (which the core-titlebar plugin inserts before it).
   // Append it to the main column element.

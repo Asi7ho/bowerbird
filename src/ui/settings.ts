@@ -122,7 +122,7 @@ function renderShortcutsTable(): void {
   if (!table) return;
   const allShortcuts: Array<[string, string]> = [...SHORTCUTS];
   for (const s of api.ui.listShortcuts()) allShortcuts.push([s.key.toUpperCase(), `${s.title} (${s.pluginName})`]);
-  table.innerHTML = allShortcuts.map(([k, v]) => `<tr><td><kbd>${api!.text.escapeHtml(k)}</kbd></td><td>${api!.text.escapeHtml(v)}</td></tr>`).join("");
+  table.innerHTML = allShortcuts.map(([k, v]) => `<tr><td><kbd class="kbd">${api!.text.escapeHtml(k)}</kbd></td><td>${api!.text.escapeHtml(v)}</td></tr>`).join("");
 }
 
 // One option row: a set of preview buttons in a
@@ -145,6 +145,7 @@ function renderOpts(
   const cur = current();
   for (const [label, value] of opts) {
     const b = document.createElement("button");
+    b.className = "picker-option";
     b.title = label;
     b.setAttribute("aria-label", label);
     b.appendChild(tile(value));
@@ -209,7 +210,7 @@ async function renderBackups(): Promise<void> {
   const b = list[0];
   container.innerHTML = "";
   const row = document.createElement("div");
-  row.className = "backup-row";
+  row.className = "row backup-row";
   const meta = document.createElement("span");
   meta.className = "meta";
   meta.textContent = `${fmtName(b.name)} · ${b.items} items · ${fmtSize(b.size)}`;
@@ -316,7 +317,7 @@ function renderPluginSettings(): void {
     // trial plugin is not installed yet, so it gets no
     // toggle; a failed plugin shows its error underneath.
     const off = !lp.active;
-    let row = `<div class="plugin-row${off ? " plugin-row-off" : ""}"><span class="plugin-dot" aria-hidden="true"></span><div class="plugin-row-text"><div><strong>${api!.text.escapeHtml(lp.name)}</strong></div>`;
+    let row = `<div class="row plugin-row${off ? " plugin-row-off" : ""}"><span class="plugin-dot" aria-hidden="true"></span><div class="plugin-row-text"><div><strong>${api!.text.escapeHtml(lp.name)}</strong></div>`;
     if (lp.description) row += `<p class="plugin-desc">${api!.text.escapeHtml(lp.description)}</p>`;
     if (lp.failed && lp.error) row += `<p class="meta"><strong>${api!.text.escapeHtml(lp.error)}</strong></p>`;
     // The disable warning: when this plugin is awaiting a
@@ -455,17 +456,18 @@ export function activate(context: PluginContext): void {
 
   backdrop = document.createElement("div");
   backdrop.id = "settings-backdrop";
+  backdrop.className = "dialog-backdrop";
   backdrop.innerHTML = `
-    <div id="settings" role="dialog" aria-modal="true" aria-label="Settings">
+    <div id="settings" class="dialog" role="dialog" aria-modal="true" aria-label="Settings">
       <div id="settings-header">
         <h2>Settings</h2>
         <button class="close" id="settings-close" title="Close (Esc)">×</button>
       </div>
       <div id="settings-layout">
         <div id="settings-tabs">
-          <button data-settings-tab="general" class="active">General</button>
-          <button data-settings-tab="plugins">Plugins</button>
-          <button data-settings-tab="plugin-settings">Plugin settings</button>
+          <button data-settings-tab="general" class="tab active">General</button>
+          <button data-settings-tab="plugins" class="tab">Plugins</button>
+          <button data-settings-tab="plugin-settings" class="tab">Plugin settings</button>
         </div>
         <div id="settings-content">
           <div id="settings-section-general" class="settings-section">
@@ -488,7 +490,7 @@ export function activate(context: PluginContext): void {
             <div id="backups-list"></div>
             <h3>Send feedback</h3>
             <p class="meta">Opens in your email app, addressed to <span class="email">wren7762@gmail.com</span>.</p>
-            <textarea id="feedback-text" rows="4" placeholder="What happened, or what would you like?"></textarea>
+            <textarea id="feedback-text" class="text-field" rows="4" placeholder="What happened, or what would you like?"></textarea>
             <button id="btn-feedback" class="btn">Send feedback</button>
           </div>
           <div id="settings-section-plugins" class="settings-section" style="display:none">

@@ -129,9 +129,9 @@ function ensureTabsBar(): void {
   tabsEl.id = "plugin-tabs";
   tabsEl.className = "plugin-tabs";
   tabsListEl = document.createElement("div");
-  tabsListEl.className = "plugin-tabs-list";
+  tabsListEl.className = "plugin-tabs-list segmented";
   const close = document.createElement("button");
-  close.className = "plugin-tabs-close";
+  close.className = "plugin-tabs-close icon-btn icon-btn-xs icon-btn-round";
   close.textContent = "×";
   close.title = "Hide panels";
   close.setAttribute("aria-label", "Hide panels");
