@@ -1936,7 +1936,7 @@ async function main() {
       fs.renameSync(tmp2, boardPath);
     };
     const shapeRect = (id) => page.evaluate((sid) => {
-      const el = document.querySelector(`.card[data-id="${sid}"]`);
+      const el = document.querySelector(`#cards .card.shape[data-id="${sid}"]`);
       if (!el) return null;
       const r = el.getBoundingClientRect();
       return { x: r.x, y: r.y, w: r.width, h: r.height };
@@ -1959,11 +1959,14 @@ async function main() {
       // fitting: F pressed while the old board is still the
       // model fits the old board, and the shapes land
       // off-screen and culled from the DOM. The 1.5s sleep
-      // the bar checks use is not enough under load.
+      // the bar checks use is not enough under load. The
+      // wait must match a SHAPE card: the old board already
+      // has a card with id 3, so an unscoped id match is a
+      // false positive.
       await waitFor("shape board loaded", async () => (await shapeRect(3)) ? true : null);
       await page.keyboard.press("f");
       await waitFor("all 14 shapes in the DOM", async () => {
-        const ids = await page.evaluate(() => [...document.querySelectorAll("#cards .card")].map((el) => Number(el.dataset.id)));
+        const ids = await page.evaluate(() => [...document.querySelectorAll("#cards .card.shape")].map((el) => Number(el.dataset.id)));
         return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].every((id) => ids.includes(id)) ? true : null;
       });
       // Filled ellipse/triangle/diamond/hexagon/star/arrow
