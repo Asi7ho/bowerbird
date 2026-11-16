@@ -1539,6 +1539,243 @@ async function main() {
       });
       assert.equal(textCards().some((it) => it.kind.Text.text === "Doomed note"), false);
     });
+
+    // The note colour bar and the resize/rotate handles must
+    // never paint over the toolbar, and the bar must stay
+    // attached to its note (PR #49 rounds 6-11). These checks
+    // build their own note so they do not depend on the
+    // restored board's contents, and measure everything at
+    // runtime so they do not assume a window size.
+    const barTestNote = async () => {
+      const board = readBoard();
+      let note = board.items.find((it) => "Text" in it.kind && it.kind.Text.text === "Bar test note");
+      if (!note) {
+        const maxRight = board.items.reduce((m, it) => Math.max(m, it.pos.x + it.size.w), 0);
+        const id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
+        note = { id, pos: { x: maxRight + 200, y: 300 }, size: { w: 260, h: 80 }, group: null, kind: { Text: { text: "Bar test note", bold: false, size: 16, color: "#1A1A1A" } } };
+        board.items.push(note);
+        board.next_id = id + 1;
+        const tmp2 = `${boardPath}.tmp`;
+        fs.writeFileSync(tmp2, JSON.stringify(board));
+        fs.renameSync(tmp2, boardPath);
+        // Give the watcher time to follow the write (the
+        // external-edit check waits the same 1.5s) before
+        // fitting: F pressed before the model updates fits
+        // the old board, and the note — placed clear of the
+        // restored board's cards — stays off-screen and
+        // culled from the DOM.
+        await new Promise((r) => setTimeout(r, 1500));
+        await page.keyboard.press("f");
+        await waitFor("bar test note in the DOM", async () => {
+          const n = await page.evaluate(() => [...document.querySelectorAll("#cards .card .note-body")].some((b) => (b.innerText || "").includes("Bar test note")));
+          return n ? true : null;
+        });
+      }
+      return note;
+    };
+    const barTestCentre = () => page.evaluate(() => {
+      const c = [...document.querySelectorAll("#cards .card .note-body")].find((b) => (b.innerText || "").includes("Bar test note"));
+      if (!c) return null;
+      const r = c.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height };
+    });
+    const barTestState = () => page.evaluate(() => {
+      const bar = document.querySelector("#note-colours");
+      const rh = document.querySelector("#resize-handle");
+      const tb = document.querySelector("#toolbar");
+      const c = [...document.querySelectorAll("#cards .card .note-body")].find((b) => (b.innerText || "").includes("Bar test note"));
+      if (!bar || !c) return null;
+      const br = bar.getBoundingClientRect();
+      const cr = c.getBoundingClientRect();
+      const tr = tb ? tb.getBoundingClientRect() : null;
+      const rhr = rh ? rh.getBoundingClientRect() : null;
+      const overlaps = (a, b) => a && b && !(a.right <= b.left || a.left >= b.right || a.bottom <= b.top || a.top >= b.bottom);
+      return {
+        barDisplay: getComputedStyle(bar).display,
+        bar: { x: br.left, y: br.top, right: br.right, bottom: br.bottom },
+        note: { x: cr.left, y: cr.top, right: cr.right, bottom: cr.bottom, w: cr.width, h: cr.height },
+        toolbar: tr ? { left: tr.left, right: tr.right, top: tr.top, bottom: tr.bottom } : null,
+        resizeDisplay: rh ? getComputedStyle(rh).display : null,
+        resize: rhr ? { x: rhr.left, y: rhr.top, right: rhr.right, bottom: rhr.bottom } : null,
+        gap: cr.left - br.right,
+        topDiff: br.top - cr.top,
+        barOverToolbar: overlaps(br, tr),
+        resizeOverToolbar: rh && getComputedStyle(rh).display !== "none" ? overlaps(rhr, tr) : false,
+      };
+    });
+    const selectBarTestNote = async () => {
+      const ctr = await barTestCentre();
+      assert.ok(ctr, "bar test note has a centre on screen");
+      await page.mouse.click(ctr.x, ctr.y);
+      await waitFor("colour bar visible", async () => {
+        const s = await barTestState();
+        return s && s.barDisplay === "flex" ? true : null;
+      });
+    };
+
+    await check("the note colour bar stays attached to its note through a pan", async () => {
+      await barTestNote();
+      await new Promise((r) => setTimeout(r, 800));
+      // Drag the note to the centre of the screen in a single
+      // gesture: mousedown selects it and starts the drag.
+      // A separate click to select first would pair with the
+      // drag's press as a double-click and open the editor,
+      // which hides the bar and swallows the drag.
+      const size = await page.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight }));
+      const ctr = await barTestCentre();
+      assert.ok(ctr, "bar test note has a centre on screen");
+      await page.mouse.move(ctr.x, ctr.y);
+      await page.mouse.down();
+      await page.mouse.move(size.w / 2, size.h / 2, { steps: 10 });
+      await page.mouse.up();
+      await new Promise((r) => setTimeout(r, 300));
+      const atCentre = await waitFor("bar attached at centre", async () => {
+        const s = await barTestState();
+        return s && s.barDisplay === "flex" && Math.abs(s.gap - 8) <= 2 && Math.abs(s.topDiff) <= 2 ? s : null;
+      });
+      assert.ok(Math.abs(atCentre.gap - 8) <= 2, `bar gap should be 8, got ${atCentre.gap}`);
+      assert.ok(Math.abs(atCentre.topDiff) <= 2, `bar top should match note top, got ${atCentre.topDiff}`);
+      // Pan down with Space+drag, sampling mid-pan: the bar
+      // must track the note exactly. Both the fixed-Y
+      // experiment and the viewport clamp showed up here as
+      // a topDiff that grew while the note moved.
+      await page.keyboard.down("Space");
+      await page.mouse.move(size.w / 2, size.h / 2);
+      await page.mouse.down();
+      for (let i = 1; i <= 4; i++) {
+        await page.mouse.move(size.w / 2, size.h / 2 + i * 60, { steps: 4 });
+        await new Promise((r) => setTimeout(r, 100));
+        const s = await barTestState();
+        assert.ok(s, "bar and note measurable mid-pan");
+        assert.ok(Math.abs(s.gap - 8) <= 2, `mid-pan gap should stay 8, got ${s.gap}`);
+        assert.ok(Math.abs(s.topDiff) <= 2, `mid-pan topDiff should stay 0, got ${s.topDiff}`);
+      }
+      await page.mouse.up();
+      await page.keyboard.up("Space");
+      const afterPan = await barTestState();
+      assert.ok(Math.abs(afterPan.gap - 8) <= 2, `after-pan gap should be 8, got ${afterPan.gap}`);
+      assert.ok(Math.abs(afterPan.topDiff) <= 2, `after-pan topDiff should be 0, got ${afterPan.topDiff}`);
+      // Pan back up so the next checks start from the centre.
+      await page.keyboard.down("Space");
+      await page.mouse.move(size.w / 2, size.h / 2);
+      await page.mouse.down();
+      await page.mouse.move(size.w / 2, size.h / 2 - 240, { steps: 10 });
+      await page.mouse.up();
+      await page.keyboard.up("Space");
+    });
+
+    await check("the note colour bar never covers the toolbar", async () => {
+      await selectBarTestNote();
+      // Pan right in steps, moving the note left toward the
+      // toolbar: at every step the bar must be on the note's
+      // right side or hidden, never on the toolbar. Panning
+      // (not dragging the note) keeps the board untouched.
+      const start = await barTestState();
+      const tb = start.toolbar;
+      const targetRight = tb.left + (tb.right - tb.left) / 2;
+      const total = start.note.right - targetRight;
+      const size = await page.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight }));
+      await page.keyboard.down("Space");
+      await page.mouse.move(size.w / 2, size.h / 2);
+      await page.mouse.down();
+      for (let i = 1; i <= 6; i++) {
+        await page.mouse.move(size.w / 2 + (total * i) / 6, size.h / 2, { steps: 4 });
+        await new Promise((r) => setTimeout(r, 100));
+        const s = await barTestState();
+        assert.ok(s, "bar and note measurable while panning toward the toolbar");
+        assert.equal(s.barOverToolbar, false, `bar must never cover the toolbar (step ${i}, bar at ${Math.round(s.bar.x)},${Math.round(s.bar.y)})`);
+      }
+      await page.mouse.up();
+      await page.keyboard.up("Space");
+      await new Promise((r) => setTimeout(r, 300));
+      const end = await barTestState();
+      assert.equal(end.barOverToolbar, false, "bar must not cover the toolbar after the pan");
+      // Pan back left so the next checks start centred.
+      await page.keyboard.down("Space");
+      await page.mouse.move(size.w / 2, size.h / 2);
+      await page.mouse.down();
+      await page.mouse.move(size.w / 2 - total, size.h / 2, { steps: 10 });
+      await page.mouse.up();
+      await page.keyboard.up("Space");
+    });
+
+    await check("the resize handle hides over the toolbar and returns", async () => {
+      await selectBarTestNote();
+      const start = await barTestState();
+      assert.equal(start.resizeDisplay, "block", "resize handle shows on a selected note");
+      assert.equal(start.resizeOverToolbar, false, "resize handle starts clear of the toolbar");
+      // Pan right until the note's bottom-right corner (the
+      // resize handle) is over the toolbar: the handle must
+      // hide rather than paint over it.
+      const tb = start.toolbar;
+      const targetRight = tb.left + (tb.right - tb.left) / 2;
+      const total = start.note.right - targetRight;
+      const size = await page.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight }));
+      await page.keyboard.down("Space");
+      await page.mouse.move(size.w / 2, size.h / 2);
+      await page.mouse.down();
+      await page.mouse.move(size.w / 2 + total, size.h / 2, { steps: 10 });
+      await page.mouse.up();
+      await page.keyboard.up("Space");
+      await waitFor("resize handle hidden over the toolbar", async () => {
+        const s = await barTestState();
+        return s && s.resizeDisplay === "none" && !s.resizeOverToolbar ? true : null;
+      });
+      // Pan back left: the handle returns.
+      await page.keyboard.down("Space");
+      await page.mouse.move(size.w / 2, size.h / 2);
+      await page.mouse.down();
+      await page.mouse.move(size.w / 2 - total, size.h / 2, { steps: 10 });
+      await page.mouse.up();
+      await page.keyboard.up("Space");
+      await waitFor("resize handle back", async () => {
+        const s = await barTestState();
+        return s && s.resizeDisplay === "block" ? true : null;
+      });
+      const back = await barTestState();
+      assert.equal(back.resizeOverToolbar, false, "resize handle back clear of the toolbar");
+    });
+
+    await check("the note colour bar hides with a fully off-screen note and returns", async () => {
+      await selectBarTestNote();
+      const size = await page.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight }));
+      // Pan the note fully off-screen to the left. The pan is
+      // the mouse drag, so it cannot start at the note and run
+      // 900px left — the mouse would leave the window at x 0
+      // and clamp, short of moving the note off-screen. Start
+      // near the right edge instead, for a drag long enough
+      // to push the note's right edge past x 0.
+      await page.keyboard.down("Space");
+      await page.mouse.move(size.w - 80, size.h / 2);
+      await page.mouse.down();
+      await page.mouse.move(100, size.h / 2, { steps: 12 });
+      await page.mouse.up();
+      await page.keyboard.up("Space");
+      // The bar is checked directly, not through the note:
+      // a fully off-screen note is culled from the DOM, so
+      // a helper that finds the note's card would return
+      // null and the wait would never see the bar hide.
+      await waitFor("colour bar hidden with the note off-screen", async () => {
+        const d = await page.evaluate(() => {
+          const bar = document.querySelector("#note-colours");
+          return bar ? getComputedStyle(bar).display : null;
+        });
+        return d === "none" ? true : null;
+      });
+      // Pan back: the bar returns, attached to the note.
+      await page.keyboard.down("Space");
+      await page.mouse.move(100, size.h / 2);
+      await page.mouse.down();
+      await page.mouse.move(size.w - 80, size.h / 2, { steps: 12 });
+      await page.mouse.up();
+      await page.keyboard.up("Space");
+      const back = await waitFor("colour bar back and attached", async () => {
+        const s = await barTestState();
+        return s && s.barDisplay === "flex" && Math.abs(s.gap - 8) <= 2 && Math.abs(s.topDiff) <= 2 ? s : null;
+      });
+      assert.ok(Math.abs(back.gap - 8) <= 2, `bar gap should be 8 on return, got ${back.gap}`);
+      assert.ok(Math.abs(back.topDiff) <= 2, `bar top should match note top on return, got ${back.topDiff}`);
+    });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
     console.log(`  FAIL  setup: ${String(error.message).split("\n")[0]}`);
