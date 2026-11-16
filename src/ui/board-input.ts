@@ -17,10 +17,10 @@ import {
 } from "./board-render";
 import {
   Anchor, Item, Pt, ShapeKind,
-  CARD_DECORATIONS_H, estimateTextHeight,
   isInlineVideo, pressureWidth, rectFromPoints, smoothStrokePath, smoothStrokePressures, smoothStrokeSamples, splitStrokeByEraser, strokeMaxWidth, strokePressuresVary,
   zoomCamera,
 } from "../backend/model";
+import { measureNoteCardHeight } from "./text-measure";
 
 // The fallback icon for a creation action that offers
 // none of its own, shown beside the text box.
@@ -185,12 +185,13 @@ export function startTextEdit(id: number, isNew = false): void {
   ta.focus();
   ta.setSelectionRange(ta.value.length, ta.value.length);
   // Grow the note as you type: the card's height follows
-  // the text, using the same estimate the commit path
-  // uses, so the note never jumps when the edit ends.
+  // the text, measured from the text as rendered (see
+  // text-measure.ts), so the note never jumps when the
+  // edit ends and no empty space grows at its bottom.
   // Without this the text box stays at the card's
   // creation height and the text just scrolls inside it.
   const grow = () => {
-    const h = Math.max(40, estimateTextHeight(ta.value, size, item.size.w) + CARD_DECORATIONS_H);
+    const h = measureNoteCardHeight(ta.value, size, item.size.w);
     (card as HTMLElement).style.height = `${h}px`;
   };
   ta.addEventListener("input", grow);
