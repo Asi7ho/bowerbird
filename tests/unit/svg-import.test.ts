@@ -91,6 +91,22 @@ describe("parseSvgToItems", () => {
     const pathStroke = items[5];
     expect("Stroke" in pathStroke.kind && pathStroke.kind.Stroke.color).toBe("#0000ff");
     expect("Stroke" in pathStroke.kind && pathStroke.kind.Stroke.points.length).toBeGreaterThan(2);
+    // Stroke points are absolute, like a hand-drawn
+    // stroke's: the line runs (10,100)-(110,100) in SVG
+    // units, and the union box starts at (10,20), so it
+    // lands at (0,80)-(100,80) with pos (0,80).
+    const line = items[3];
+    expect("Stroke" in line.kind && line.kind.Stroke.points).toEqual([{ x: 0, y: 80 }, { x: 100, y: 80 }]);
+    expect(line.pos).toEqual({ x: 0, y: 80 });
+    // Every imported stroke obeys the board contract:
+    // the min of its points is its pos.
+    for (const it of items) {
+      if (!("Stroke" in it.kind)) continue;
+      const xs = it.kind.Stroke.points.map((p) => p.x);
+      const ys = it.kind.Stroke.points.map((p) => p.y);
+      expect(Math.min(...xs)).toBe(it.pos.x);
+      expect(Math.min(...ys)).toBe(it.pos.y);
+    }
     // The text card keeps its text, size and colour.
     const text = items[6];
     expect("Text" in text.kind && text.kind.Text.text).toBe("Hello SVG");
