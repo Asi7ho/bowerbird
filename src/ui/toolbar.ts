@@ -377,19 +377,23 @@ export function activate(api: PluginContext): void {
       // Position the bar beside the note, in screen
       // coordinates: the board element's rect plus the
       // camera transform of the note's world position.
-      // It sits on the left of the note, top-aligned
-      // with it, and on the right when the left side
-      // would run off the viewport or cover the toolbar;
-      // its top is clamped so the whole column stays on
-      // screen. It is attached to the note: it is
-      // repositioned on every update, so it moves with
-      // the note through a drag, a pan or a zoom, and
-      // never floats on its own. And it belongs to the
-      // note: when the note is panned fully off-screen,
-      // the bar hides with it instead of floating on its
-      // own — but only then, so it does not vanish the
-      // moment the note starts to leave the viewport on
-      // a horizontal pan.
+      // The bar is an extension of the note card: it
+      // sits on the left of the note, top-aligned with
+      // it, and moves with it exactly through a drag, a
+      // pan or a zoom. Its top is the note's top, with
+      // no clamp — clamping it to the viewport made it
+      // slide relative to the note whenever the note
+      // moved near the top or bottom edge. It flips to
+      // the note's right side when the left side would
+      // run off the viewport or cover the toolbar, and
+      // it hides when there is no place to put it
+      // without covering the toolbar or running off
+      // screen. And it belongs to the note: when the
+      // note is panned fully off-screen, the bar hides
+      // with it instead of floating on its own — but
+      // only then, so it does not vanish the moment the
+      // note starts to leave the viewport on a
+      // horizontal pan.
       const item = api.board.getItem(note.id);
       if (item) {
         const [pos, size] = api.geometry.itemBounds(item);
@@ -405,19 +409,35 @@ export function activate(api: PluginContext): void {
         } else {
           const barW = noteBar.offsetWidth;
           const barH = noteBar.offsetHeight;
-          const barTop = Math.max(8, Math.min(top, window.innerHeight - barH - 8));
+          // The bar's top is the note's top, exactly —
+          // no clamp, so it never slides relative to
+          // the note.
+          const barTop = top;
           const leftSide = left - barW - 8;
           const rightSide = left + noteW + 8;
           // The toolbar is a vertical strip on the left
-          // edge; a bar on the note's left side would
-          // cover it when the note is near the left edge,
-          // so the bar flips to the note's right side.
+          // edge. Either side of the note can land on
+          // it — the left side when the note is near
+          // the left edge, the right side when the note
+          // is mostly off-screen to the left — so both
+          // sides are checked, not just the left.
           const toolbarRect = toolbar.getBoundingClientRect();
-          const overlapsToolbar =
-            leftSide < toolbarRect.right && leftSide + barW > toolbarRect.left &&
+          const coversToolbar = (x: number) =>
+            x < toolbarRect.right && x + barW > toolbarRect.left &&
             barTop < toolbarRect.bottom && barTop + barH > toolbarRect.top;
-          noteBar.style.left = `${leftSide >= 8 && !overlapsToolbar ? leftSide : Math.min(rightSide, window.innerWidth - barW - 8)}px`;
-          noteBar.style.top = `${barTop}px`;
+          const leftOk = leftSide >= 8 && !coversToolbar(leftSide);
+          const rightOk = rightSide + barW <= window.innerWidth - 8 && !coversToolbar(rightSide);
+          if (leftOk) {
+            noteBar.style.left = `${leftSide}px`;
+            noteBar.style.top = `${barTop}px`;
+          } else if (rightOk) {
+            noteBar.style.left = `${rightSide}px`;
+            noteBar.style.top = `${barTop}px`;
+          } else {
+            // No place to put the bar without covering
+            // the toolbar or running off-screen.
+            noteBar.style.display = "none";
+          }
         }
       }
     }
