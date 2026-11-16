@@ -2455,23 +2455,40 @@ async function main() {
         await new Promise((r) => setTimeout(r, 500));
       }
       assert.ok(rendered, "the model rendered before the pan (centre pixel is the cube's blue)");
-      // Pan with Space+drag. Mid-pan the layer must carry a
-      // CSS transform (it is being moved, not re-rendered);
-      // after the camera settles it re-renders once, and the
-      // model must show at its new position.
+      // Pan with Space+drag. While the camera moves the layer
+      // must be carried by a CSS transform (it is moved, not
+      // re-rendered); after the camera settles it re-renders
+      // once, and the model must show at its new position.
+      // The transform is observed, not sampled once: under
+      // load the settle re-render can reset it to "" before
+      // a single read lands, so a MutationObserver records
+      // every value it takes during the pan instead.
+      await page.evaluate(() => {
+        window.__layerTransforms = [];
+        const layer = document.querySelector("#model3d-layer");
+        if (!layer) return;
+        const mo = new MutationObserver(() => {
+          window.__layerTransforms.push(layer.style.transform || "");
+        });
+        mo.observe(layer, { attributes: true, attributeFilter: ["style"] });
+        window.__layerTransformObserver = mo;
+      });
       const size = await page.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight }));
       await page.keyboard.down("Space");
       await page.mouse.move(size.w / 2, size.h / 2);
       await page.mouse.down();
       await page.mouse.move(size.w / 2 + 100, size.h / 2, { steps: 5 });
       await page.mouse.move(size.w / 2 + 200, size.h / 2, { steps: 5 });
-      const midTransform = await page.evaluate(() => {
-        const layer = document.querySelector("#model3d-layer");
-        return layer ? layer.style.transform : null;
-      });
       await page.mouse.up();
       await page.keyboard.up("Space");
-      assert.ok(midTransform && midTransform !== "", `layer carried a CSS transform mid-pan, got ${midTransform}`);
+      // Let the observer callbacks flush before reading.
+      await new Promise((r) => setTimeout(r, 300));
+      const transforms = await page.evaluate(() => {
+        window.__layerTransformObserver?.disconnect();
+        return window.__layerTransforms ?? [];
+      });
+      const carried = transforms.some((t) => t !== "" && t !== "translate(0px, 0px) scale(1)");
+      assert.ok(carried, `layer carried a CSS transform mid-pan, saw [${transforms.join(" | ")}]`);
       let afterPan = null;
       for (let i = 0; i < 20; i++) {
         const s = await sample();
