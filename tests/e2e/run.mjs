@@ -23,6 +23,18 @@ const EMPTY_BOARD = {
   grid: "Dots",
 };
 
+// How long a "wait for it to appear" may take before the test
+// calls it a failure. This is a safety net for a genuinely
+// broken app, not a performance budget: the waits return the
+// moment the condition holds, so a generous bound costs a
+// passing run nothing and only slows down a failing one.
+// It has to be generous because the boot is machine-speed
+// dependent — locally #board appears in ~3s, but on the
+// 2-core SwiftShader CI runner it has taken over 15s, and
+// a bound that sits that close to reality flakes. 60s is
+// far above any boot or render the suite has ever seen.
+const READY_TIMEOUT_MS = 60000;
+
 // A short spoken sentence, so the voice-note check records
 // real speech and the transcript assertion proves Whisper
 // actually ran — a tone has no words to transcribe.
@@ -229,7 +241,7 @@ async function doubleClick(page, x, y) {
   }
 }
 
-async function waitFor(label, fn, timeoutMs = 15000) {
+async function waitFor(label, fn, timeoutMs = READY_TIMEOUT_MS) {
   const deadline = Date.now() + timeoutMs;
   let lastError;
   while (Date.now() < deadline) {
@@ -322,14 +334,14 @@ async function main() {
     };
 
     await check("app boots with an empty board", async () => {
-      await page.waitForSelector("#board", { timeout: 15000 });
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
       assert.equal(await page.title(), "Bowerbird");
       assert.equal(readBoard().items.length, 0);
     });
 
     await check("toolbar shows zoom level and title bar shows saved state", async () => {
       const zoom = page.locator("#zoom-label");
-      await zoom.waitFor({ timeout: 10000 });
+      await zoom.waitFor({ timeout: READY_TIMEOUT_MS });
       assert.equal(await zoom.textContent(), "100%");
       assert.equal(await page.locator("#title-bar-left #saved-label").textContent(), "Saved");
       assert.equal(await page.locator("#toolbar #saved-label").count(), 0);
@@ -374,7 +386,7 @@ async function main() {
     await check("double-click creates a text note and typing saves it", async () => {
       await page.keyboard.press("v");
       await doubleClick(page, 600, 600);
-      await page.waitForSelector("textarea.note-edit", { timeout: 10000 });
+      await page.waitForSelector("textarea.note-edit", { timeout: READY_TIMEOUT_MS });
       await page.keyboard.type("Hello CI");
       await page.keyboard.press("Escape");
       const note = await waitFor("text note in board.json", () => {
@@ -389,7 +401,7 @@ async function main() {
       // client (730, 624).
       await doubleClick(page, 730, 624);
       const editor = page.locator("textarea.note-edit");
-      await editor.waitFor({ timeout: 10000 });
+      await editor.waitFor({ timeout: READY_TIMEOUT_MS });
       assert.equal(await editor.inputValue(), "Hello CI");
       // The mic is only for new notes: editing an existing
       // note shows the text box alone.
@@ -416,8 +428,8 @@ async function main() {
     await check("a user plugin loads, activates and renders its card", async () => {
       assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("ci-test-plugin", true)), true);
       await page.reload();
-      await page.waitForSelector("#board", { timeout: 15000 });
-      await page.locator("text=CI plugin card").first().waitFor({ timeout: 15000 });
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
+      await page.locator("text=CI plugin card").first().waitFor({ timeout: READY_TIMEOUT_MS });
     });
 
     await check("a plugin without board:write cannot write the board", async () => {
@@ -425,7 +437,7 @@ async function main() {
       // Enabling a plugin only takes effect on reload, like
       // the ci-test-plugin check above.
       await page.reload();
-      await page.waitForSelector("#board", { timeout: 15000 });
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
       const result = await waitFor("permission result on the window", async () => {
         const r = await page.evaluate(() => window.__permTest);
         return r ? r : null;
@@ -443,19 +455,19 @@ async function main() {
     await check("a bundled plugin enables and its panel opens", async () => {
       assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("command-palette", true)), true);
       await page.reload();
-      await page.waitForSelector("#board", { timeout: 15000 });
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
       await page.keyboard.press("Control+k");
-      await page.locator(".cmd-palette").waitFor({ state: "visible", timeout: 10000 });
+      await page.locator(".cmd-palette").waitFor({ state: "visible", timeout: READY_TIMEOUT_MS });
       await page.keyboard.press("Escape");
     });
 
     await check("board survives a reload", async () => {
       await page.reload();
-      await page.waitForSelector("#board", { timeout: 15000 });
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
       await waitFor("text note still on disk after reload", () =>
         textCards().some((it) => it.kind.Text.text === "Hello CI!"),
       );
-      await page.locator("text=CI plugin card").first().waitFor({ timeout: 15000 });
+      await page.locator("text=CI plugin card").first().waitFor({ timeout: READY_TIMEOUT_MS });
     });
 
     await check("grouping cards frames them as a section", async () => {
@@ -498,7 +510,7 @@ async function main() {
       // Rename by double-clicking the label: the chip sits
       // astride the frame's top border — click its centre.
       await doubleClick(page, 123, 123);
-      await page.locator("input.group-rename").waitFor({ timeout: 10000 });
+      await page.locator("input.group-rename").waitFor({ timeout: READY_TIMEOUT_MS });
       await page.keyboard.type("Reading");
       await page.keyboard.press("Enter");
       await waitFor("renamed label in the DOM", async () => {
@@ -615,7 +627,7 @@ async function main() {
       const tmp = `${boardPath}.tmp`;
       fs.writeFileSync(tmp, JSON.stringify(board));
       fs.renameSync(tmp, boardPath);
-      await page.locator("text=From the outside").first().waitFor({ timeout: 15000 });
+      await page.locator("text=From the outside").first().waitFor({ timeout: READY_TIMEOUT_MS });
       // And the app must not clobber the outside edit with its own
       // next save: the card is still on disk a second later.
       await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -626,7 +638,7 @@ async function main() {
       // no enabling needed — the reload below proves it
       // survives a fresh load.
       await page.reload();
-      await page.waitForSelector("#board", { timeout: 15000 });
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
       // A checklist note, written from outside like the agent
       // CLI would: the live-follow watcher reloads it.
       const board = readBoard();
@@ -636,7 +648,7 @@ async function main() {
       const tmp = `${boardPath}.tmp`;
       fs.writeFileSync(tmp, JSON.stringify(board));
       fs.renameSync(tmp, boardPath);
-      await page.locator("text=Checklist card").first().waitFor({ timeout: 15000 });
+      await page.locator("text=Checklist card").first().waitFor({ timeout: READY_TIMEOUT_MS });
       await waitFor("checklist progress shows inside the card", async () => {
         const text = await page.locator(`.card-decorations-right[data-for="${id}"]`).first().textContent().catch(() => "");
         return (text ?? "").includes("1/2");
@@ -704,7 +716,7 @@ async function main() {
       // earlier checks.
       assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("api-test-plugin", true)), true);
       await page.reload();
-      await page.waitForSelector("#board", { timeout: 15000 });
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
       const result = await waitFor("API test result on the page", () => page.evaluate(() => window.__apiTest ?? null));
       assert.equal(result.before.done, 0);
       assert.equal(result.before.total, 2);
@@ -756,7 +768,7 @@ async function main() {
       // trigger each.
       assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("isolation-test-plugin", true)), true);
       await page.reload();
-      await page.waitForSelector("#board", { timeout: 15000 });
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
       const iso = await waitFor("isolation test result on the page", () => page.evaluate(() => window.__isolationTest ?? null));
       // Every cross-plugin attempt threw.
       assert.equal(iso.runCommandThrew, true);
@@ -787,14 +799,14 @@ async function main() {
       // route — its own routeCommand threw and the command
       // did not run.
       await page.reload();
-      await page.waitForSelector("#board", { timeout: 15000 });
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
       const before = await waitFor("API test result on the page", () => page.evaluate(() => window.__apiTest ?? null));
       assert.equal(before.routeThrew, true);
       assert.equal(before.cmdCount, 1);
       await page.keyboard.press("Control+k");
-      await page.locator(".cmd-palette").waitFor({ state: "visible", timeout: 10000 });
+      await page.locator(".cmd-palette").waitFor({ state: "visible", timeout: READY_TIMEOUT_MS });
       await page.keyboard.type("API test command");
-      await page.locator(".cmd-row", { hasText: "API test command" }).first().waitFor({ timeout: 10000 });
+      await page.locator(".cmd-row", { hasText: "API test command" }).first().waitFor({ timeout: READY_TIMEOUT_MS });
       await page.keyboard.press("Enter");
       await waitFor("API command ran via the palette", async () => {
         const ran = await page.evaluate(() => window.__apiCmdRan ?? 0);
@@ -840,7 +852,7 @@ async function main() {
       }, SPEECH_B64);
       assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("voice-notes", true)), true);
       await page.reload();
-      await page.waitForSelector("#board", { timeout: 15000 });
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
       // Let the board finish its first render after the
       // reload before clicking: a double-click into a
       // mid-render board is lost. (No panel tab to wait
@@ -870,11 +882,11 @@ async function main() {
       const cx = noteBox.x + noteBox.width + 60;
       const cy = noteBox.y + noteBox.height / 2;
       await doubleClick(page, cx, cy);
-      await page.locator("textarea.note-edit").waitFor({ timeout: 10000 });
+      await page.locator("textarea.note-edit").waitFor({ timeout: READY_TIMEOUT_MS });
       const mic = page.locator(".note-edit-mic");
       assert.equal(await mic.count(), 1);
       await mic.click();
-      await page.locator(".vn-recording", { hasText: "Recording" }).waitFor({ timeout: 10000 });
+      await page.locator(".vn-recording", { hasText: "Recording" }).waitFor({ timeout: READY_TIMEOUT_MS });
       // Three seconds of speech, so Whisper hears a whole
       // sentence rather than a fragment.
       await new Promise((resolve) => setTimeout(resolve, 3000));
@@ -905,7 +917,7 @@ async function main() {
       // space — below it is off the bottom of the window
       // once the audio card has landed there.
       await doubleClick(page, noteBox.x - 110, noteBox.y + noteBox.height / 2);
-      await page.locator("textarea.note-edit").waitFor({ timeout: 10000 });
+      await page.locator("textarea.note-edit").waitFor({ timeout: READY_TIMEOUT_MS });
       assert.equal(await page.locator(".note-edit-mic").count(), 1);
       await page.keyboard.press("Escape");
     });
@@ -923,7 +935,7 @@ async function main() {
       const tmp = `${boardPath}.tmp`;
       fs.writeFileSync(tmp, JSON.stringify(board));
       fs.renameSync(tmp, boardPath);
-      await page.locator(`.audio-transcript-toggle[data-id="${id}"]`).first().waitFor({ timeout: 15000 });
+      await page.locator(`.audio-transcript-toggle[data-id="${id}"]`).first().waitFor({ timeout: READY_TIMEOUT_MS });
       // Hidden by default: the card is short and the text is not there.
       const hidden = await page.evaluate((cid) => {
         const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
@@ -970,7 +982,7 @@ async function main() {
       // Wait for the live-follow reload first: refitting the
       // camera (F) saves the board, and a save before the
       // reload would clobber this outside write.
-      await page.locator(`#cards .card[data-id="${id}"] .title`).first().waitFor({ timeout: 15000 });
+      await page.locator(`#cards .card[data-id="${id}"] .title`).first().waitFor({ timeout: READY_TIMEOUT_MS });
       // Refit the camera: the board has grown since F, so the
       // new card can sit below the visible area.
       await page.keyboard.press("f");
@@ -978,7 +990,7 @@ async function main() {
       const titleBox = await page.locator(`#cards .card[data-id="${id}"] .title`).first().boundingBox();
       assert.ok(titleBox, "audio title on screen");
       await doubleClick(page, titleBox.x + titleBox.width / 2, titleBox.y + titleBox.height / 2);
-      await page.locator(`#cards .card[data-id="${id}"] input.audio-rename`).waitFor({ timeout: 10000 });
+      await page.locator(`#cards .card[data-id="${id}"] input.audio-rename`).waitFor({ timeout: READY_TIMEOUT_MS });
       // Typing a new name and pressing Enter commits it: the
       // card shows it, and it lands on disk.
       await page.locator(`#cards .card[data-id="${id}"] input.audio-rename`).fill("Morning idea");
@@ -1026,7 +1038,7 @@ async function main() {
       fs.renameSync(tmp2, boardPath);
       // Wait for the live-follow reload, then fit the camera
       // so every card is on screen before measuring.
-      await page.locator(`#cards .card[data-id="${ids.video}"]`).first().waitFor({ timeout: 15000 });
+      await page.locator(`#cards .card[data-id="${ids.video}"]`).first().waitFor({ timeout: READY_TIMEOUT_MS });
       await page.keyboard.press("f");
       await new Promise((r) => setTimeout(r, 500));
       // The content selector per kind: the element whose text
@@ -1095,7 +1107,7 @@ async function main() {
       const video = board.items.find((it) => "Video" in it.kind);
       assert.ok(video, "video card on the board");
       const id = video.id;
-      await page.locator(`#cards .card[data-id="${id}"]`).first().waitFor({ timeout: 15000 });
+      await page.locator(`#cards .card[data-id="${id}"]`).first().waitFor({ timeout: READY_TIMEOUT_MS });
       await page.keyboard.press("f");
       await new Promise((r) => setTimeout(r, 500));
       const state = () => page.evaluate((cid) => {
@@ -1183,7 +1195,7 @@ async function main() {
       const text = board.items.find((it) => "Text" in it.kind && it.kind.Text.text.includes("Checklist card"));
       assert.ok(text, "checklist card on the board");
       const sel = `.card-decorations-right[data-for="${text.id}"] .card-progress`;
-      await page.locator(sel).first().waitFor({ timeout: 15000 });
+      await page.locator(sel).first().waitFor({ timeout: READY_TIMEOUT_MS });
       const before = await page.evaluate((s) => {
         const el = document.querySelector(s);
         if (!el) return null;
@@ -1219,7 +1231,7 @@ async function main() {
       const cx = Math.round((200 - cam.x) * cam.zoom);
       const cy = Math.round((625 - cam.y) * cam.zoom + 48);
       await doubleClick(page, cx, cy);
-      await page.locator("textarea.note-edit").waitFor({ timeout: 10000 });
+      await page.locator("textarea.note-edit").waitFor({ timeout: READY_TIMEOUT_MS });
       const mic = await page.locator(".note-edit-mic").first().boundingBox();
       const row = await page.locator(".note-edit-row").first().boundingBox();
       assert.ok(mic, "mic on a new note");
@@ -1253,7 +1265,7 @@ async function main() {
       await page.keyboard.press("f");
       await new Promise((r) => setTimeout(r, 500));
       const canvas = page.locator(`#cards .card[data-id="${modelId}"] canvas.model3d`).first();
-      await canvas.waitFor({ timeout: 15000 });
+      await canvas.waitFor({ timeout: READY_TIMEOUT_MS });
       // The model is drawn by the one shared WebGL layer
       // (#model3d-layer), not the card's own canvas, so
       // sample the layer at the card's screen rect. Read
@@ -1432,7 +1444,7 @@ async function main() {
         await page.waitForSelector("textarea.note-edit", { timeout: 3000 });
       } catch {
         await doubleClick(page, 200, 200);
-        await page.waitForSelector("textarea.note-edit", { timeout: 10000 });
+        await page.waitForSelector("textarea.note-edit", { timeout: READY_TIMEOUT_MS });
       }
       await page.keyboard.type("Zebra crossing");
       await page.keyboard.press("Escape");
@@ -1449,7 +1461,7 @@ async function main() {
       await page.mouse.click(firstCard.x + firstCard.width / 2, firstCard.y + firstCard.height / 2);
       await new Promise((r) => setTimeout(r, 300));
       await page.keyboard.press("Control+f");
-      await page.locator("#search-input").waitFor({ timeout: 10000 });
+      await page.locator("#search-input").waitFor({ timeout: READY_TIMEOUT_MS });
       await page.keyboard.type("Zebra");
       // The count can carry a " · Indexing context…" suffix
       // while media indexes, so match on the prefix.
@@ -1508,7 +1520,7 @@ async function main() {
       });
       // The file is restored; reload proves the app loads it.
       await page.reload();
-      await page.waitForSelector("#board", { timeout: 15000 });
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
       await waitFor("board renders after restore", async () => {
         const n = await page.evaluate(() => document.querySelectorAll("#cards .card").length);
         return n >= 1 ? true : null;
