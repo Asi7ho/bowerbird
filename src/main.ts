@@ -151,6 +151,7 @@ C.undoStore = createUndoStore({
   requestRender: () => boardRender(),
   refreshSettings: () => { refreshSettingsUI(); },
   toast,
+  onSaveRefused: () => { void reloadFromDisk("refused"); },
 });
 
 // The settings window is a first-party plugin (core-settings).
@@ -182,6 +183,28 @@ function boardSize(): Pt {
 }
 function boardPoint(clientX: number, clientY: number): Pt {
   return elementPoint(C.boardEl, clientX, clientY);
+}
+// Reload the board from disk, like a same-board restore —
+// the undo stack survives (loadBoardFromJson keeps it for
+// the same folder), the redo chain clears — and tell plugins
+// the content changed. Two callers: a genuine external
+// change (an agent or a script rewrote board.json), and a
+// refused save (the guard found the disk changed). The
+// refused case says where the local edits went: they are
+// preserved in the recovery journal, restorable from the
+// Boards panel's Versions section.
+async function reloadFromDisk(reason: "external" | "refused"): Promise<void> {
+  try {
+    const reloaded = await api.loadBoard();
+    if (!reloaded.json) return;
+    await loadBoardFromJson(C, reloaded.json, reloaded.board_dir);
+    emitPluginEvent("board");
+    toast(reason === "refused"
+      ? "Board updated on disk — your changes are kept in Versions"
+      : "Board updated on disk");
+  } catch {
+    // A reload that fails leaves the current board alone.
+  }
 }
 function zoomAt(screen: Pt, factor: number): void {
   Object.assign(C.board.camera, zoomCamera(C.board.camera, screen, factor));
@@ -418,17 +441,7 @@ async function init(): Promise<void> {
   // Reload it like a same-board restore — the undo stack survives
   // (loadBoardFromJson keeps it for the same folder), the redo
   // chain clears — and tell plugins the content changed.
-  api.onExternalBoardChange(async () => {
-    try {
-      const reloaded = await api.loadBoard();
-      if (!reloaded.json) return;
-      await loadBoardFromJson(C, reloaded.json, reloaded.board_dir);
-      emitPluginEvent("board");
-      toast("Board updated on disk");
-    } catch {
-      // A reload that fails leaves the current board alone.
-    }
-  });
+  api.onExternalBoardChange(() => void reloadFromDisk("external"));
   // Panel tab order, loaded with the board: the plugin system
   // applies it once panels are registered, and saves it back
   // whenever the user drags a tab.

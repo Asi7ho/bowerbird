@@ -902,17 +902,20 @@ function registerIpc(): void {
     // agent, a script) changed it. Overwriting would silently
     // lose that edit — the race the 300 ms watcher debounce
     // used to leave open. Do not write; record the disk
-    // content and tell the renderer an external change
-    // arrived, so it reloads like a normal live-follow
-    // instead of clobbering. The in-memory edit is lost, the
-    // same as a live-follow reload, but nothing is lost
-    // silently and the user sees the external board.
+    // content and return false, so the renderer knows the
+    // save was refused and reloads the disk board itself,
+    // with its unsaved edits preserved in the recovery
+    // journal (see electron/recovery.ts). The old code sent
+    // board-changed-external here, but that event could
+    // land before the renderer's save promise resolved, so
+    // the reload discarded the edits before the refusal
+    // was even known — the toast then said "Board updated
+    // on disk" for work the user had just lost.
     try {
       const onDisk = fs.readFileSync(file, "utf8");
       if (lastSavedJson !== null && onDisk !== lastSavedJson) {
         lastSavedJson = onDisk;
         if (boardWatchTimer) { clearTimeout(boardWatchTimer); boardWatchTimer = null; }
-        boardView?.webContents.send("bowerbird:board-changed-external");
         return false;
       }
     } catch { /* no file yet: first save proceeds */ }
