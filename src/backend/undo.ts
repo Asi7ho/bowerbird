@@ -33,6 +33,11 @@ export interface UndoContext {
   requestRender(): void;
   refreshSettings(): void;
   toast(msg: string): void;
+  // Called when a save is refused by the live-follow guard
+  // (the board changed on disk): the renderer reloads the
+  // disk board, with the refused edits preserved in the
+  // recovery journal. Optional — unit tests omit it.
+  onSaveRefused?(): void;
 }
 
 export interface UndoStore {
@@ -124,8 +129,14 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
         // or the board is absurdly large — is a failure too:
         // without this the title bar says "Saved" for a board
         // that never reached disk.
-        if (ok === false) onSaveFailed("save was refused");
-        else {
+        if (ok === false) {
+          onSaveFailed("save was refused");
+          // The disk board wins: reload it, with the refused
+          // edits preserved in the recovery journal (the
+          // journal was written before this save, so the
+          // reload cannot lose them).
+          ctx.onSaveRefused?.();
+        } else {
           emitPluginEvent("saved");
           // The save landed: clear the journal, but only if
           // it still holds this board — a later save's journal
