@@ -1129,6 +1129,21 @@ window.addEventListener("wheel", (e: WheelEvent) => {
     return;
   }
   if ((e.target as HTMLElement).closest("#settings, #toolbar, #title-bar")) return;
+  // A wheel over a card's scrollable content — a note taller
+  // than its card, an audio transcript — scrolls that content,
+  // not the board. Only when it can actually scroll further
+  // in the wheel's direction: at the top or bottom edge the
+  // wheel falls through to the board, so the board never
+  // feels stuck behind a card that has nothing more to show.
+  // Ctrl/Cmd+wheel still zooms the board from over a card.
+  if (!e.ctrlKey && !e.metaKey) {
+    const scroller = (e.target as HTMLElement).closest(".card .note-body, .card .audio-transcript-text") as HTMLElement | null;
+    if (scroller) {
+      const canUp = scroller.scrollTop > 0;
+      const canDown = scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight;
+      if ((e.deltaY < 0 && canUp) || (e.deltaY > 0 && canDown)) return;
+    }
+  }
   e.preventDefault();
   if (e.ctrlKey || e.metaKey) {
     // Pinch / Ctrl+wheel zoom: accumulate, apply once per
