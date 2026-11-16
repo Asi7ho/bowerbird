@@ -1252,15 +1252,22 @@ window.addEventListener("wheel", (e: WheelEvent) => {
 window.addEventListener("resize", () => { applyCamera(); refreshContentIfVisibleChanged(); });
 // Quitting inside a camera-save debounce (400 ms wheel,
 // 120 ms zoom settle) used to lose the camera: the async
-// save never ran. Flush it synchronously on unload, so a
-// pan or zoom made just before quitting is kept. Only
-// when a save is actually pending — an idle window writes
-// nothing.
+// save never ran. And an async content save in flight when
+// the window closes may not complete either. Flush
+// synchronously on unload, so a pan, a zoom or an edit made
+// just before quitting is kept: commit any in-progress edit,
+// then write the board as-is. Only the unload flush uses
+// the synchronous save; ordinary saves stay async. The
+// write is unconditional — one tmp+rename at quit —
+// because the unload handler cannot cheaply tell whether
+// a save is pending, and a no-op rewrite is harmless.
 window.addEventListener("beforeunload", () => {
-  if (!S.wheelSaveTimer && !S.zoomSettleTimer) return;
   if (S.wheelSaveTimer) { clearTimeout(S.wheelSaveTimer); S.wheelSaveTimer = null; }
   if (S.zoomSettleTimer) { clearTimeout(S.zoomSettleTimer); S.zoomSettleTimer = null; }
-  try { S.api.board.saveSync(); } catch { /* the board is gone; nothing to flush */ }
+  try {
+    S.api.board.commitEditing();
+    S.api.board.saveSync();
+  } catch { /* the board is gone; nothing to flush */ }
 });
 // A media file that is missing shows as a blank card, which
 // looks like a rendering bug and tells the user nothing.

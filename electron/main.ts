@@ -1742,7 +1742,21 @@ function registerIpc(): void {
   // Quit must quit the app, not just close the window: on macOS
   // closing the only window does not by itself end the app, and
   // BaseWindow.close() alone did not end the process in testing.
-  ipcMain.handle("bowerbird:quit", () => { if (peekWin) peekWin.destroy(); if (win) win.destroy(); app.quit(); });
+  // Quit through close(), not destroy(): close runs the
+  // renderer's beforeunload flush, so a pending save lands;
+  // destroy skips it. window-all-closed then quits the app
+  // (verified live: the process exits after close). The 2s
+  // backstop force-quits if the window ever fails to close,
+  // rather than leaving the app running with no window.
+  ipcMain.handle("bowerbird:quit", () => {
+    if (peekWin) peekWin.destroy();
+    if (!win) { app.quit(); return; }
+    win.close();
+    setTimeout(() => {
+      if (win && !win.isDestroyed()) win.destroy();
+      app.quit();
+    }, 2000);
+  });
   ipcMain.handle("bowerbird:fullscreen", () => { if (win) win.setFullScreen(!win.isFullScreen()); return win ? win.isFullScreen() : false; });
   ipcMain.handle("bowerbird:maximise", () => {
     if (!win) return false;
