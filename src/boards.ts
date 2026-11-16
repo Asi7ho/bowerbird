@@ -309,11 +309,12 @@ export async function restoreBoardBackup(ctx: BootContext, name: string): Promis
   }
 }
 
-// Import a board export — a ZIP file, or the folder it
-// unzips to — and load it. The main process installs the
-// board under the boards directory and hands back the board
-// resolved to this machine; null means the user cancelled
-// the file dialog, which is not an error.
+// Import a data export — a ZIP file, or the folder it
+// unzips to — and load the board that was current at export
+// time. The main process installs every board, plugin and
+// state file, and hands back the board resolved to this
+// machine; null means the user cancelled the file dialog,
+// which is not an error.
 export async function importBoard(ctx: BootContext): Promise<boolean> {
   try {
     const loaded = await api.importBoard();

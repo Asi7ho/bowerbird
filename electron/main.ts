@@ -446,12 +446,13 @@ const { maybeBackup, listBackups, restoreBackup, makeBackup } = createBackups({
 });
 
 // Export and import live in electron/export.ts. The factory
-// reads the current board through these, so an export always
-// snapshots the board the app is on now.
-const { buildExportZip, importExport } = createExport({
-  boardPath: () => boardPath(),
-  boardDir: () => boardDir(),
-  boardsDir: () => boardsDir(),
+// reads the install through these, so an export always
+// snapshots the whole install as it is now: every board, the
+// user-installed plugins, and the app state.
+const { buildFullExportZip, importExport } = createExport({
+  baseDir: () => defaultBaseDir(),
+  userDataDir: () => app.getPath("userData"),
+  currentBoardName: () => currentBoard,
   displayName: (dir: string) => boardDisplayName(dir),
   sanitise: (name: string) => sanitise(name),
 });
@@ -1378,37 +1379,43 @@ function registerIpc(): void {
     return shell.openPath(dir);
   });
   ipcMain.handle("bowerbird:export-board", async () => {
-    // Export the current board as a ZIP: board.json with
-    // relative asset paths, the display name, and every
-    // referenced media file. The user picks where it goes;
-    // cancelling returns null, not an error.
-    const name = boardDisplayName(boardDir());
+    // Export the whole install as a ZIP: every board, the
+    // user-installed plugins with their full folders, and the
+    // app state. The user picks where it goes; cancelling
+    // returns null, not an error.
     const d = new Date();
     const p = (n: number): string => String(n).padStart(2, "0");
     const stamp = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
     const picked = await dialog.showSaveDialog({
-      defaultPath: `bowerbird-${sanitise(name)}-${stamp}.zip`,
-      filters: [{ name: "Bowerbird board export", extensions: ["zip"] }],
+      defaultPath: `bowerbird-data-${stamp}.zip`,
+      filters: [{ name: "Bowerbird data export", extensions: ["zip"] }],
     });
     if (picked.canceled || !picked.filePath) return null;
-    const zip = await buildExportZip();
+    const zip = await buildFullExportZip();
     fs.writeFileSync(picked.filePath, zip);
     return picked.filePath;
   });
   ipcMain.handle("bowerbird:import-board", async () => {
-    // Import a board export: a ZIP file, or the folder it
-    // unzips to. Cancelling returns null. The import
-    // installs the board under the boards directory and
-    // returns it resolved to this machine, ready to load;
-    // the board.json on disk keeps its relative paths, so
-    // the folder stays portable. lastSavedJson is the raw
-    // on-disk content, or the guard would mistake the
-    // resolution for an external edit.
+    // Import a data export: a ZIP file, or the folder it
+    // unzips to. Cancelling returns null. The current board
+    // is backed up first, so an import that replaces it is
+    // reversible, like a backup restore. The import installs
+    // every board, plugin and state file, and returns the
+    // board that was current at export time, resolved to
+    // this machine, ready to load; the board.json files on
+    // disk keep their relative paths, so the folders stay
+    // portable. lastSavedJson is the raw on-disk content, or
+    // the guard would mistake the resolution for an external
+    // edit.
     const picked = await dialog.showOpenDialog({
       properties: ["openFile", "openDirectory"],
-      filters: [{ name: "Bowerbird board export", extensions: ["zip"] }],
+      filters: [{ name: "Bowerbird data export", extensions: ["zip"] }],
     });
     if (picked.canceled || picked.filePaths.length === 0) return null;
+    try {
+      const cur = fs.readFileSync(boardPath(), "utf8");
+      makeBackup(boardDir(), cur);
+    } catch { /* a board that cannot be backed up still imports */ }
     const out = await importExport(picked.filePaths[0]);
     try {
       lastSavedJson = fs.readFileSync(out.board_path, "utf8");
