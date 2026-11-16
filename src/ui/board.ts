@@ -59,8 +59,8 @@ export function activate(a: PluginContext): void {
     <div id="grid"></div>
     <svg id="canvas-svg"><g id="world"></g></svg>
     <div id="group-frames"></div>
-    <div id="cards" role="listbox" aria-label="Board cards"></div>
     <div id="groups"></div>
+    <div id="cards" role="listbox" aria-label="Board cards"></div>
     <div id="plugin-view" style="display:none"></div>
     <div id="plugin-overlays"></div>
     <div id="view-switcher" style="display:none"></div>

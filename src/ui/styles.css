@@ -213,7 +213,15 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    moves it into view. Clipping to the viewport is #board's job
    (#board is untransformed and overflow:hidden), which clips in
    screen space after the transform. */
-#cards { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; }
+#cards { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; pointer-events: none; }
+/* The #cards layer itself takes no clicks: its children
+   re-enable pointer events only where they need them
+   (.card button, .note-body, …), so a click on empty
+   board space — or on a group label, which now sits below
+   this layer — reaches the board or the label instead of
+   being swallowed by the layer. Without this, moving
+   #groups below #cards made the label unclickable and the
+   group rename never opened. */
 /* #group-frames holds the group frames' dashed borders. Same
    no-overflow rule as #cards: frames live in world coordinates.
    It sits BEFORE #cards in the DOM, so it paints below them:
@@ -308,10 +316,11 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    left. It sits astride the top border, half above it, so
    it never overlaps the cards inside the group — they
    start 24px below the border. Double-click it to rename
-   the section. It is a direct child of #groups (not of
-   the frame), positioned at the frame's top-left, so the
-   frame can live below the cards while the label stays
-   above them. */
+   the section. It is a direct child of #groups, positioned
+   at the frame's top-left. #groups sits below the cards,
+   so a note placed over the label covers it, like the
+   frame border — the rename still works on the part of
+   the label no card covers. */
 .group-label {
   position: absolute;
   background: #fff; border: 1px solid var(--hairline);
