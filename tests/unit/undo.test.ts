@@ -182,4 +182,20 @@ describe("createUndoStore", () => {
     board.next_id = 2;
     expect(store.saveSync()).toBe(false);
   });
+
+  it("a board loaded from disk becomes the save baseline", () => {
+    store.save();
+    // An external change arrives by load (watcher reload,
+    // restore): the board is replaced without a save.
+    board.items.push(textItem(1, "hello"));
+    board.next_id = 2;
+    store.restoreUndoForBoard("/tmp/board", true);
+    // The loaded board is the baseline now: neither the
+    // async save nor the unload flush rewrites it, so a
+    // restore is never undone by a later save or reload.
+    store.save();
+    expect(saveBoard).toHaveBeenCalledTimes(1);
+    expect(store.saveSync()).toBe(false);
+    expect(saveBoardSync).not.toHaveBeenCalled();
+  });
 });

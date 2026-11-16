@@ -383,7 +383,22 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
     undoStack = [];
     redoStack = [];
     setLastSnapshot(contentSnapshot());
+    resetSeenKeys();
     updateUndoButtons();
+  }
+  // The loaded board is the new baseline for save()'s
+  // change detection. Without this, a board loaded from
+  // disk (a watcher reload, a restore) still counts as
+  // "changed" against the last saved state, and the next
+  // save — including the unload flush — writes the loaded
+  // board back over the disk board it came from. That is
+  // how a restore was undone by a reload: the disk board
+  // was the snapshot, memory held the board it replaced,
+  // and the flush wrote memory back.
+  function resetSeenKeys(): void {
+    const itemsJson = JSON.stringify(ctx.getBoard().items);
+    lastSeenContentKey = contentKeyFor(itemsJson);
+    lastSeenCameraJson = JSON.stringify(ctx.getBoard().camera);
   }
   // Undo is per board, not per app: each board keeps its own
   // stack in this map, keyed by its folder, so creating a new
@@ -400,6 +415,7 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
       // but the redo chain is for the old content, so it goes.
       redoStack = [];
       setLastSnapshot(contentSnapshot());
+      resetSeenKeys();
       updateUndoButtons();
       return;
     }
@@ -414,6 +430,7 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
       redoStack = [];
       setLastSnapshot(contentSnapshot());
     }
+    resetSeenKeys();
     updateUndoButtons();
   }
 
