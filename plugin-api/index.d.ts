@@ -273,6 +273,12 @@ export interface PluginBridge {
   openExternal(target: string): Promise<void>;
   listBackups(): Promise<Array<{ name: string; items: number; size: number }>>;
   openBackupsFolder(): Promise<string>;
+  // Export the current board as a ZIP (null when the user
+  // cancels), and import a board export — a ZIP file or
+  // the folder it unzips to (null on cancel). The import
+  // returns the board resolved to this machine.
+  exportBoard(): Promise<string | null>;
+  importBoard(): Promise<{ json: string; board_path: string; board_dir: string } | null>;
   listPlugins(): Promise<PluginManifest[]>;
   readPluginFile(pluginId: string, relativePath: string): Promise<string>;
   getPluginEnabled(): Promise<Record<string, boolean>>;
@@ -451,6 +457,7 @@ export interface PluginHost {
   ungroupSelection: () => boolean;
   deleteSelection: () => boolean;
   restoreBackup: (name: string) => Promise<boolean>;
+  importBoard: () => Promise<boolean>;
   getBuildId: () => string;
   // ---- media (for the cards that play or preview media) ----
   getAudioState: () => { id: number | null; playing: boolean; currentTime: number; duration: number };
@@ -690,6 +697,14 @@ export interface PluginContext {
     restore: (name: string) => Promise<boolean>;
     openFolder: () => Promise<string>;
   };
+  // Board export and import: export downloads the current
+  // board as a ZIP (null when the user cancels the save
+  // dialog); import installs a board export — a ZIP file
+  // or the folder it unzips to — and loads it, so it needs
+  // board:write and is not available to a trial plugin.
+  // Both return the board resolved to this machine.
+  exportBoard: () => Promise<string | null>;
+  importBoard: () => Promise<boolean>;
   window: {
     hide: () => Promise<void>;
     show: () => Promise<void>;

@@ -309,6 +309,24 @@ export async function restoreBoardBackup(ctx: BootContext, name: string): Promis
   }
 }
 
+// Import a board export — a ZIP file, or the folder it
+// unzips to — and load it. The main process installs the
+// board under the boards directory and hands back the board
+// resolved to this machine; null means the user cancelled
+// the file dialog, which is not an error.
+export async function importBoard(ctx: BootContext): Promise<boolean> {
+  try {
+    const loaded = await api.importBoard();
+    if (!loaded) return false;
+    await loadBoardFromJson(ctx, loaded.json, loaded.board_dir);
+    ctx.toast("Board imported");
+    return true;
+  } catch (e) {
+    ctx.toast(`Could not import board: ${String(e)}`);
+    return false;
+  }
+}
+
 // Reset the board to a fresh welcome board (the settings
 // "Delete all board data" flow). The settings plugin calls
 // this through the API; the core owns the reset itself.
