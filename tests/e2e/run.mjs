@@ -1808,6 +1808,16 @@ async function main() {
         const hello = b.items.filter((it) => "Text" in it.kind && it.kind.Text.text === "Hello SVG");
         return countKind("Shape") === before.shape + 4 && countKind("Stroke") === before.stroke + 3 && hello.length === 1 ? b : null;
       });
+      // Imported strokes obey the board contract: their
+      // points are absolute, so the min of the points is
+      // pos. Relative points used to render at the origin.
+      const strokes = readBoard().items.filter((it) => "Stroke" in it.kind).slice(-3);
+      for (const s of strokes) {
+        const xs = s.kind.Stroke.points.map((p) => p.x);
+        const ys = s.kind.Stroke.points.map((p) => p.y);
+        assert.ok(Math.abs(Math.min(...xs) - s.pos.x) < 0.01, "svg stroke points are absolute in x");
+        assert.ok(Math.abs(Math.min(...ys) - s.pos.y) < 0.01, "svg stroke points are absolute in y");
+      }
     });
 
     await check("dropping a PNG with transparency lands an image card", async () => {
@@ -1860,6 +1870,23 @@ async function main() {
       assert.ok(shapes.some((it) => it.kind.Shape.shape === "ellipse"), "the circle lands as an ellipse Shape");
       const stroke = readBoard().items.filter((it) => "Stroke" in it.kind).slice(-1)[0];
       assert.equal(stroke.kind.Stroke.color, "#008000", "stroked path keeps its colour");
+      // The stroke's points are absolute (min == pos), and
+      // the path in the DOM starts at the stroke's first
+      // point — relative points used to render it at the
+      // origin, off-screen.
+      const sxs = stroke.kind.Stroke.points.map((p) => p.x);
+      const sys = stroke.kind.Stroke.points.map((p) => p.y);
+      assert.ok(Math.abs(Math.min(...sxs) - stroke.pos.x) < 0.01, "ai stroke points are absolute in x");
+      assert.ok(Math.abs(Math.min(...sys) - stroke.pos.y) < 0.01, "ai stroke points are absolute in y");
+      const first = stroke.kind.Stroke.points[0];
+      await waitFor("ai stroke path in the DOM", async () => {
+        const starts = await page.evaluate(() => [...document.querySelectorAll("#world path")].map((p) => p.getAttribute("d") ?? ""));
+        const atRealPosition = starts.some((d) => {
+          const m = /^M(-?[\d.]+),(-?[\d.]+)/.exec(d);
+          return m !== null && Math.abs(parseFloat(m[1]) - first.x) < 0.01 && Math.abs(parseFloat(m[2]) - first.y) < 0.01;
+        });
+        return atRealPosition ? true : null;
+      });
       const images = readBoard().items.filter((it) => "Image" in it.kind).slice(-2);
       const sizes = images.map((it) => `${it.size.w}x${it.size.h}`).sort();
       assert.deepEqual(sizes, ["100x60", "300x200"], "embedded image lands at its placed size, gradient page as one raster of the page");
