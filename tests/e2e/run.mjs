@@ -1833,15 +1833,37 @@ async function main() {
       for (const layer of layers) assert.ok(fs.existsSync(layer.kind.Image.path), "psd layer asset exists on disk");
     });
 
-    await check("dropping a PDF-compatible .ai lands a PdfCard", async () => {
-      const before = countKind("PdfCard");
+    await check("dropping a PDF-compatible .ai lands its artwork as editable cards, not a PdfCard", async () => {
+      const before = { pdf: countKind("PdfCard"), text: countKind("Text") };
       await dropFixture("sample.ai", "application/pdf");
-      const card = await waitFor("ai pdf card in board.json", () => {
-        const found = readBoard().items.filter((it) => "PdfCard" in it.kind);
-        return found.length === before + 1 ? found[found.length - 1] : null;
+      await waitFor("ai text card in board.json", () => {
+        const hello = readBoard().items.filter((it) => "Text" in it.kind && it.kind.Text.text === "Hello PDF");
+        return countKind("PdfCard") === before.pdf && countKind("Text") === before.text + 1 && hello.length === 1 ? hello[0] : null;
       });
-      assert.ok(card.kind.PdfCard.path.endsWith("sample.ai"), "ai file kept its name");
-      assert.ok(fs.existsSync(card.kind.PdfCard.path), "embedded ai asset exists on disk");
+      const hello = readBoard().items.find((it) => "Text" in it.kind && it.kind.Text.text === "Hello PDF");
+      assert.equal(hello.kind.Text.size, 18, "ai text keeps its 18pt size");
+      assert.ok(!readBoard().items.some((it) => "PdfCard" in it.kind && it.kind.PdfCard.path.endsWith("sample.ai")), "no PdfCard for the .ai file");
+    });
+
+    await check("dropping a vector .ai lands shapes, strokes, text, an image and a raster fallback page", async () => {
+      const before = { shape: countKind("Shape"), stroke: countKind("Stroke"), text: countKind("Text"), image: countKind("Image") };
+      await dropFixture("sample-vector.ai", "application/pdf");
+      await waitFor("vector ai cards in board.json", () => {
+        const hello = readBoard().items.filter((it) => "Text" in it.kind && it.kind.Text.text === "Hello AI");
+        const b = readBoard();
+        return countKind("Shape") === before.shape + 3 && countKind("Stroke") === before.stroke + 1 &&
+          hello.length === 1 && countKind("Image") === before.image + 2 ? b : null;
+      });
+      const shapes = readBoard().items.filter((it) => "Shape" in it.kind).slice(-3);
+      const fills = shapes.map((it) => it.kind.Shape.fill).sort();
+      assert.deepEqual(fills, ["#0000ff", "#ff0000", "#ff8000"], "rect, circle and form rect land with their fills");
+      assert.ok(shapes.some((it) => it.kind.Shape.shape === "ellipse"), "the circle lands as an ellipse Shape");
+      const stroke = readBoard().items.filter((it) => "Stroke" in it.kind).slice(-1)[0];
+      assert.equal(stroke.kind.Stroke.color, "#008000", "stroked path keeps its colour");
+      const images = readBoard().items.filter((it) => "Image" in it.kind).slice(-2);
+      const sizes = images.map((it) => `${it.size.w}x${it.size.h}`).sort();
+      assert.deepEqual(sizes, ["100x60", "300x200"], "embedded image lands at its placed size, gradient page as one raster of the page");
+      for (const img of images) assert.ok(fs.existsSync(img.kind.Image.path), "vector ai image asset exists on disk");
     });
 
     await check("dropping a legacy .ai reports it as unsupported and lands nothing", async () => {
