@@ -1,7 +1,7 @@
 import { api } from "./backend/api";
 import {
   type BootContext,
-  healBoardItem, isFrameCard, loadBoardFromJson, resetBoardToWelcome, restoreBoardBackup, startBackgroundIndexing, startPosterBackfill, switchToBoard, syncGroupLabels,
+  healBoardItem, importBoard, isFrameCard, loadBoardFromJson, resetBoardToWelcome, restoreBoardBackup, startBackgroundIndexing, startPosterBackfill, switchToBoard, syncGroupLabels,
 } from "./boards";
 import { createMedia, type Media } from "./backend/media";
 import { createCardRenderer, SHAPES, shapePreviewPoints, type CardRenderer } from "./backend/cards";
@@ -673,6 +673,7 @@ async function init(): Promise<void> {
     ungroupSelection: () => boardUngroupSelected(),
     deleteSelection: () => boardDeleteSelected(),
     restoreBackup: (name) => restoreBoardBackup(C, name),
+    importBoard: () => importBoard(C),
     getBuildId: () => C.currentBuildId,
     // Media state, for the cards that play or preview media.
     // The raw audio element is never handed out; the plugin

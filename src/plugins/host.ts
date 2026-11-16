@@ -469,6 +469,12 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
       },
       openFolder: async () => bridge!.openBackupsFolder(),
     },
+    exportBoard: async () => bridge!.exportBoard(),
+    importBoard: async () => {
+      require("board:write");
+      requireNotTrial("import a board");
+      return host!.importBoard();
+    },
     window: {
       hide: async () => {
         require("window");

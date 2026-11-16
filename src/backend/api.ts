@@ -19,6 +19,13 @@ export interface BowerbirdAPI {
   listBackups(): Promise<Array<{ name: string; items: number; size: number }>>;
   restoreBackup(name: string): Promise<{ json: string; board_path: string; board_dir: string }>;
   openBackupsFolder(): Promise<string>;
+  // Export the current board as a ZIP (null when the user
+  // cancels the save dialog), and import a board export —
+  // a ZIP file or the folder it unzips to (null on cancel).
+  // The import returns the board resolved to this machine,
+  // ready to load.
+  exportBoard(): Promise<string | null>;
+  importBoard(): Promise<{ json: string; board_path: string; board_dir: string } | null>;
   resetBoard(opts?: { confirmed?: boolean }): Promise<{ pdf_size_bytes: number; video_size_bytes: number }>;
   factoryReset(opts?: { confirmed?: boolean }): Promise<{ ok: boolean }>;
   checkFile(filePath: string): Promise<{ path: string; exists: boolean; size: number; bundlePath: string; bundleExists: boolean; bundleSize: number }>;
