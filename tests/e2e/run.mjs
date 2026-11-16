@@ -1918,6 +1918,7 @@ async function main() {
       assert.ok(fs.existsSync(card.kind.PdfCard.path), "embedded pdf asset exists on disk");
     });
 
+
     // Shapes are hit on their visible geometry, not their
     // box (PR #10): a click on a shape's empty corner must
     // select nothing, and an outline shape's empty interior
@@ -2394,6 +2395,113 @@ async function main() {
       await waitFor("arrow saved", () => readBoard().items.filter((it) => "Connector" in it.kind).length > before ? true : null);
       const drawn = readBoard().items.find((it) => "Connector" in it.kind);
       assert.equal(drawn.kind.Connector.color, "#E63946", "a drawn arrow must use the pen colour");
+    });
+    // ---------------------------------------------------------------
+    // feat/reliability-trust: crash recovery, version history UI,
+    // and the save-on-quit flush. These run last: the kill check
+    // SIGKILLs the app and relaunches it, and the quit check
+    // closes the window for good.
+    const recoveryPath = path.join(path.dirname(boardPath), "recovery.json");
+    const launchApp = () =>
+      electron.launch({
+        executablePath: electronPath,
+        args: [".", "--no-sandbox", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
+        cwd: repoRoot,
+        env: {
+          ...process.env,
+          BOWERBIRD_BOARD_PATH: boardPath,
+          XDG_DATA_HOME: dataHome,
+          XDG_CONFIG_HOME: configHome,
+          BOWERBIRD_PLUGINS_DIR: pluginsDir,
+        },
+      });
+
+    await check("a version restores from the Boards panel history", async () => {
+      // Enable the Boards plugin (bundled, opt-in) and open its panel.
+      assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("boards", true)), true);
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
+      await page.locator('.plugin-tab[aria-label="Boards"]').click();
+      await page.locator(".bd-history").waitFor({ state: "visible", timeout: READY_TIMEOUT_MS });
+      // The oldest kept backup is the suite's first snapshot.
+      const oldest = await waitFor("a backup row in Versions", async () => {
+        const list = await page.evaluate(() => window.bowerbird.listAllBackups());
+        return list.length >= 1 ? list[list.length - 1] : null;
+      });
+      const backupCount = (await page.evaluate(() => window.bowerbird.listAllBackups())).length;
+      await waitFor("all backup rows render", async () => {
+        const n = await page.locator(".bd-version-row").count();
+        return n === backupCount ? true : null;
+      });
+      // Two-click arm, like the board list's delete: the first
+      // click arms it, the second restores.
+      const row = page.locator(".bd-version-row").last();
+      await row.locator(".bd-restore").click();
+      await row.locator(".bd-restore").click();
+      await waitFor("board.json restored to the oldest version", () => {
+        const restored = readBoard();
+        return (
+          restored.items.length === oldest.items &&
+          !textCards().some((it) => it.kind.Text.text === "Bar test note")
+        );
+      });
+      // The file is restored; reload proves the app loads it.
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
+      assert.equal(textCards().some((it) => it.kind.Text.text === "Bar test note"), false);
+    });
+
+    await check("a kill mid-edit is offered back at launch", async () => {
+      // Make an edit, then make its save refuse: rewrite
+      // board.json on disk while the note editor is open, so
+      // the guard sees disk != lastSavedJson when Escape
+      // commits the note. The refused save keeps the journal.
+      await page.keyboard.press("v");
+      await doubleClick(page, 600, 600);
+      await page.waitForSelector("textarea.note-edit", { timeout: READY_TIMEOUT_MS });
+      await page.keyboard.type("Do not lose me");
+      const disk = readBoard();
+      disk.camera.zoom = 9.9; // obviously external, so the guard refuses
+      const tmp3 = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp3, JSON.stringify(disk));
+      fs.renameSync(tmp3, boardPath);
+      await page.keyboard.press("Escape");
+      // The journal is the write-ahead copy of the refused
+      // save: it must hold the edit even though board.json does not.
+      await waitFor("journal holds the refused edit", () => {
+        if (!fs.existsSync(recoveryPath)) return null;
+        const rec = JSON.parse(fs.readFileSync(recoveryPath, "utf8"));
+        return rec.board?.items?.some((it) => "Text" in it.kind && it.kind.Text.text === "Do not lose me") ? true : null;
+      });
+      assert.equal(textCards().some((it) => it.kind.Text.text === "Do not lose me"), false);
+      // Kill the process dead (no beforeunload, no save) and relaunch.
+      const pid = app.process().pid;
+      process.kill(pid, "SIGKILL");
+      await waitFor("app process exits after SIGKILL", () => (app.process().exitCode !== null ? true : null), 10000);
+      app = await launchApp();
+      page = await app.firstWindow();
+      await page.waitForSelector("#recovery-dialog", { timeout: READY_TIMEOUT_MS });
+      await page.locator(".recovery-restore").click();
+      await waitFor("restored note in board.json", () =>
+        textCards().some((it) => it.kind.Text.text === "Do not lose me"),
+      );
+      assert.equal(fs.existsSync(recoveryPath), false);
+    });
+
+    await check("a pending save flushes on quit", async () => {
+      // A wheel pan saves only after a 400 ms debounce, so
+      // closing the window right after it proves the
+      // beforeunload flush, not the ordinary save.
+      const before = readBoard();
+      const zoom = before.camera.zoom;
+      await page.mouse.move(640, 100);
+      await page.mouse.wheel(0, 100);
+      await page.evaluate(() => window.bowerbird.closeWindow()).catch(() => undefined);
+      await waitFor("app process exits after close", () => (app.process().exitCode !== null ? true : null), 10000);
+      const after = readBoard();
+      const expectedY = before.camera.y + 100 / zoom;
+      assert.ok(Math.abs(after.camera.y - expectedY) < 1, `camera y should be ${expectedY}, got ${after.camera.y}`);
+      assert.equal(after.camera.x, before.camera.x);
     });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
