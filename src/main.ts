@@ -511,9 +511,12 @@ async function init(): Promise<void> {
     strokesNear: (point: Pt, radius: number) => strokesWithin(C.board, point, radius),
     // Live-drag mutations for the board view only. They
     // change the live board without saving or rendering;
-    // the drag saves once at drag end.
-    moveItems: (ids: number[], dx: number, dy: number) => { moveSelection(C.board, ids, dx, dy); },
-    resizeItem: (id: number, w: number, h: number) => { resizeItem(C.board, id, w, h); },
+    // the drag saves once at drag end. They fire
+    // "items-moved" so a listener that follows a card —
+    // the toolbar's note colour bar — can track it live,
+    // instead of waiting for the save-time "board" event.
+    moveItems: (ids: number[], dx: number, dy: number) => { moveSelection(C.board, ids, dx, dy); emitPluginEvent("items-moved"); },
+    resizeItem: (id: number, w: number, h: number) => { resizeItem(C.board, id, w, h); emitPluginEvent("items-moved"); },
     setItemRotation: (id: number, rot: number) => {
       const it = boardGet(C.board, id);
       if (it) it.rotation = rot;
