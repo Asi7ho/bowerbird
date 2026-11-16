@@ -15,6 +15,7 @@ import * as coreSettings from "./ui/settings";
 import * as coreTitlebar from "./ui/titlebar";
 import * as coreToolbar from "./ui/toolbar";
 import { measureNoteCardHeight } from "./ui/text-measure";
+import { showRecoveryOffer } from "./ui/recovery-dialog";
 import {
   Board, Camera, Item, Pt, ShapeKind, Size,
   boardGet, centre, clampZoom, elementPoint, elementSize,
@@ -343,8 +344,13 @@ window.addEventListener("paste", (e: ClipboardEvent) => {
 
 async function init(): Promise<void> {
   let panelOrderList: string[] = [];
+  // A journal that holds edits board.json does not: offer to
+  // restore it once the board is up. Captured here, shown at
+  // the end of init, over the live board.
+  let recoveryOffer: { hasRecovery: boolean; savedAt: number | null } | null = null;
   try {
     const loaded = await api.loadBoard();
+    recoveryOffer = loaded.recovery ?? null;
     C.boardDir = loaded.board_dir;
     if (Array.isArray(loaded.panelOrder)) panelOrderList = loaded.panelOrder.filter((x: unknown) => typeof x === "string");
     C.currentBuildId = loaded.buildId ?? "dev";
@@ -814,6 +820,30 @@ async function init(): Promise<void> {
   // Fill in previews for cards that never got one (welcome card, old
   // boards): title, description, image and icon, in the background.
   void C.drops.refreshLinkPreviews();
+  // Crash recovery, offered once at launch: the journal holds
+  // edits board.json does not. Restoring loads the journalled
+  // board (the current board is backed up first, so the choice
+  // is reversible); discarding drops the journal.
+  if (recoveryOffer?.hasRecovery && typeof recoveryOffer.savedAt === "number") {
+    showRecoveryOffer({
+      savedAt: recoveryOffer.savedAt,
+      onRestore: async () => {
+        try {
+          const restored = await api.recoveryRestore();
+          await loadBoardFromJson(C, restored.json, restored.board_dir);
+          toast("Unsaved changes restored");
+        } catch (e) {
+          toast(`Could not restore unsaved changes: ${String(e)}`);
+        }
+      },
+      onDiscard: async () => {
+        try {
+          await api.recoveryDiscard();
+          toast("Unsaved changes discarded");
+        } catch { /* the journal is gone already */ }
+      },
+    });
+  }
 }
 
 
