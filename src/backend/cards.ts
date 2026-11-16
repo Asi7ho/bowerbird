@@ -146,7 +146,7 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
     // placeholder so a board never shows a blank hole.
     // (The core-cards plugin provides all eight built-in
     // kinds, so this only fires when it is missing.)
-    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner" style="padding:12px"><div class="title" style="font-size:14px">Card</div><div class="sub" style="font-size:12px">No plugin provides this card kind.</div></div></div>` + decorations(x, y, ww, hh);
+    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner" style="padding:12px"><div class="media-title" style="font-size:14px">Card</div><div class="media-sub" style="font-size:12px">No plugin provides this card kind.</div></div></div>` + decorations(x, y, ww, hh);
   }
   return { cardHtml, shapeMeta, shapeLabel, isShapeTool, shapeClipPath, shapePreviewPoints };
 }

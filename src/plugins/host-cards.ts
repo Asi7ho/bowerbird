@@ -44,7 +44,7 @@ export function getCardRenderer(item: Item): PluginCardDef | null {
 // missing plugin, a render that threw, or a builtin render
 // that threw. One helper, not three near-identical divs.
 function fallbackCard(title: string, sub: string, sub2?: string): string {
-  return `<div style="padding:12px"><div class="title" style="font-size:14px">${title}</div><div class="sub" style="font-size:12px">${sub}</div>${sub2 ? `<div class="sub" style="font-size:12px">${sub2}</div>` : ""}</div>`;
+  return `<div style="padding:12px"><div class="media-title" style="font-size:14px">${title}</div><div class="media-sub" style="font-size:12px">${sub}</div>${sub2 ? `<div class="media-sub" style="font-size:12px">${sub2}</div>` : ""}</div>`;
 }
 
 export function getCardHtml(item: Item): string | null {

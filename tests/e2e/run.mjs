@@ -405,7 +405,7 @@ async function main() {
       assert.equal(await editor.inputValue(), "Hello CI");
       // The mic is only for new notes: editing an existing
       // note shows the text box alone.
-      assert.equal(await page.locator(".note-edit-mic").count(), 0);
+      assert.equal(await page.locator(".note-edit-row .icon-btn").count(), 0);
       await page.keyboard.type("!");
       await page.keyboard.press("Escape");
       await waitFor("edited text in board.json", () =>
@@ -510,7 +510,7 @@ async function main() {
       // Rename by double-clicking the label: the chip sits
       // astride the frame's top border — click its centre.
       await doubleClick(page, 123, 123);
-      await page.locator("input.group-rename").waitFor({ timeout: READY_TIMEOUT_MS });
+      await page.locator(".group-label input.inline-rename").waitFor({ timeout: READY_TIMEOUT_MS });
       await page.keyboard.type("Reading");
       await page.keyboard.press("Enter");
       await waitFor("renamed label in the DOM", async () => {
@@ -883,7 +883,7 @@ async function main() {
       const cy = noteBox.y + noteBox.height / 2;
       await doubleClick(page, cx, cy);
       await page.locator("textarea.note-edit").waitFor({ timeout: READY_TIMEOUT_MS });
-      const mic = page.locator(".note-edit-mic");
+      const mic = page.locator(".note-edit-row .icon-btn");
       assert.equal(await mic.count(), 1);
       await mic.click();
       await page.locator(".vn-recording", { hasText: "Recording" }).waitFor({ timeout: READY_TIMEOUT_MS });
@@ -918,7 +918,7 @@ async function main() {
       // once the audio card has landed there.
       await doubleClick(page, noteBox.x - 110, noteBox.y + noteBox.height / 2);
       await page.locator("textarea.note-edit").waitFor({ timeout: READY_TIMEOUT_MS });
-      assert.equal(await page.locator(".note-edit-mic").count(), 1);
+      assert.equal(await page.locator(".note-edit-row .icon-btn").count(), 1);
       await page.keyboard.press("Escape");
     });
 
@@ -982,21 +982,21 @@ async function main() {
       // Wait for the live-follow reload first: refitting the
       // camera (F) saves the board, and a save before the
       // reload would clobber this outside write.
-      await page.locator(`#cards .card[data-id="${id}"] .title`).first().waitFor({ timeout: READY_TIMEOUT_MS });
+      await page.locator(`#cards .card[data-id="${id}"] .media-title`).first().waitFor({ timeout: READY_TIMEOUT_MS });
       // Refit the camera: the board has grown since F, so the
       // new card can sit below the visible area.
       await page.keyboard.press("f");
       // Double-clicking the name swaps it for an input.
-      const titleBox = await page.locator(`#cards .card[data-id="${id}"] .title`).first().boundingBox();
+      const titleBox = await page.locator(`#cards .card[data-id="${id}"] .media-title`).first().boundingBox();
       assert.ok(titleBox, "audio title on screen");
       await doubleClick(page, titleBox.x + titleBox.width / 2, titleBox.y + titleBox.height / 2);
-      await page.locator(`#cards .card[data-id="${id}"] input.audio-rename`).waitFor({ timeout: READY_TIMEOUT_MS });
+      await page.locator(`#cards .card[data-id="${id}"] input.inline-rename`).waitFor({ timeout: READY_TIMEOUT_MS });
       // Typing a new name and pressing Enter commits it: the
       // card shows it, and it lands on disk.
-      await page.locator(`#cards .card[data-id="${id}"] input.audio-rename`).fill("Morning idea");
+      await page.locator(`#cards .card[data-id="${id}"] input.inline-rename`).fill("Morning idea");
       await page.keyboard.press("Enter");
       await waitFor("renamed title shows on the card", async () => {
-        const t = await page.locator(`#cards .card[data-id="${id}"] .title`).first().textContent().catch(() => "");
+        const t = await page.locator(`#cards .card[data-id="${id}"] .media-title`).first().textContent().catch(() => "");
         return (t ?? "").includes("Morning idea");
       });
       const card = readBoard().items.find((it) => it.id === id);
@@ -1049,11 +1049,11 @@ async function main() {
         image: "img",
         swatch: ".swatch-pill",
         url: ".link-title",
-        pdf: ".title",
-        audio: ".title",
-        video: ".title",
+        pdf: ".media-title",
+        audio: ".media-title",
+        video: ".media-title",
       };
-      const subSel = { url: ".link-desc", pdf: ".sub", audio: ".sub", video: ".sub" };
+      const subSel = { url: ".link-desc", pdf: ".media-sub", audio: ".media-sub", video: ".media-sub" };
       for (const [kind, cid] of Object.entries(ids)) {
         const m = await page.evaluate(([cid2, sel, sub]) => {
           const card = document.querySelector(`#cards .card[data-id="${cid2}"]`);
@@ -1117,7 +1117,7 @@ async function main() {
           video: !!card.querySelector("video"),
           thumb: !!card.querySelector(".video-thumb"),
           poster: !!card.querySelector(".video-thumb img"),
-          sub: card.querySelector(".sub")?.textContent ?? "",
+          sub: card.querySelector(".media-sub")?.textContent ?? "",
         };
       }, String(id));
       // No <video> element at rest, just the play tile.
@@ -1232,7 +1232,7 @@ async function main() {
       const cy = Math.round((625 - cam.y) * cam.zoom + 48);
       await doubleClick(page, cx, cy);
       await page.locator("textarea.note-edit").waitFor({ timeout: READY_TIMEOUT_MS });
-      const mic = await page.locator(".note-edit-mic").first().boundingBox();
+      const mic = await page.locator(".note-edit-row .icon-btn").first().boundingBox();
       const row = await page.locator(".note-edit-row").first().boundingBox();
       assert.ok(mic, "mic on a new note");
       assert.ok(row, "editor row found");

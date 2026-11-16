@@ -141,7 +141,12 @@ export function startTextEdit(id: number, isNew = false): void {
     const a = actions[0];
     const mic = document.createElement("button");
     mic.type = "button";
-    mic.className = "note-edit-mic";
+    mic.className = "icon-btn icon-btn-sm quiet";
+    // The mic sits in the edit row with the same spacing
+    // the old note-edit-mic had: 8px from the text, 6px
+    // from the card's edge. Positioning, not the button's
+    // look, so it stays inline here.
+    mic.style.margin = "0 6px 0 8px";
     mic.setAttribute("aria-label", a.label);
     mic.title = a.label;
     if (a.icon) {
@@ -263,7 +268,7 @@ export function startGroupRename(group: number): void {
   const chip = S.groupsEl.querySelector(`.group-label[data-group="${group}"]`) as HTMLElement | null;
   if (!chip) return;
   const input = document.createElement("input");
-  input.className = "group-rename";
+  input.className = "inline-rename";
   input.value = label;
   input.setAttribute("aria-label", "Section name");
   input.style.width = `${Math.max(8, label.length + 2)}ch`;
@@ -280,7 +285,7 @@ export function startGroupRename(group: number): void {
 // #cards target — the DOM target cannot say which part of
 // the card was clicked. The title's screen rect can.
 export function audioTitleHit(id: number, clientX: number, clientY: number): boolean {
-  const titleEl = S.cardsEl.querySelector(`.card[data-id="${id}"] .col .title`) as HTMLElement | null;
+  const titleEl = S.cardsEl.querySelector(`.card[data-id="${id}"] .media-col .media-title`) as HTMLElement | null;
   if (!titleEl) return false;
   const r = titleEl.getBoundingClientRect();
   return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
@@ -296,10 +301,10 @@ export function startAudioRename(id: number): void {
   if (!it || !("Audio" in it.kind)) return;
   const current = (it.kind.Audio.title?.trim() ?? "") || (it.kind.Audio.path.split("/").pop() ?? it.kind.Audio.path);
   const cardEl = S.cardsEl.querySelector(`.card[data-id="${id}"]`) as HTMLElement | null;
-  const titleEl = cardEl?.querySelector(".col .title") as HTMLElement | null;
+  const titleEl = cardEl?.querySelector(".media-col .media-title") as HTMLElement | null;
   if (!titleEl) return;
   const input = document.createElement("input");
-  input.className = "audio-rename";
+  input.className = "inline-rename";
   input.value = current;
   input.setAttribute("aria-label", "Voice note name");
   titleEl.textContent = "";

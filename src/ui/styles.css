@@ -52,7 +52,13 @@ button { font-family: inherit; }
      .card (board card), .segmented (pill container).
    - Text & inputs: .meta, .text-field, .kbd, .search-field.
    - Layout: .row, .divider, .toast.
-   - Navigation: .tab (Settings), .plugin-tab (dock). */
+   - Navigation: .tab (Settings), .plugin-tab (dock).
+   - Cards: .media-row/.media-tile/.media-col/.media-title/
+     .media-sub (the media tile), .card-col (a card's main
+     column), .inline-rename (a title being renamed). The
+     kind-specific card pieces (note body, link card, video
+     thumb, audio seek, 3D tile, swatch pill) are components
+     too, scoped under .card in the card section below. */
 .btn, .plugin-panel-body button {
   border: 1px solid var(--separator); background: #fff; border-radius: 9px;
   padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
@@ -97,6 +103,15 @@ button { font-family: inherit; }
 }
 .icon-btn.dim { opacity: 0.35; cursor: default; }
 .icon-btn.dim:hover { background: transparent; }
+/* Quiet: a grey icon that darkens on hover — a creation
+   action, not a tool. The note editor's mic. */
+.icon-btn.quiet { color: var(--grey); }
+.icon-btn.quiet:hover { color: var(--ink); }
+/* Disabled: the HTML attribute, not the .dim class. A PDF
+   nav button on the first page, for example. Same look as
+   .dim — unavailable, no hover. */
+.icon-btn:disabled { opacity: 0.35; cursor: default; }
+.icon-btn:disabled:hover { background: transparent; }
 .icon-btn svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .icon-btn-sm { width: 32px; height: 32px; }
 .icon-btn-xs { width: 22px; height: 22px; }
@@ -270,6 +285,51 @@ button { font-family: inherit; }
   display: none; z-index: 30; max-width: 70vw; box-shadow: var(--shadow-md);
 }
 .toast.show { display: block; }
+
+/* --- Card components ------------------------------------------------
+   The pieces a card is built from. The shared ones are
+   standalone classes, usable by any card renderer — the
+   core's, the core-cards plugin's, or a plugin's own. The
+   kind-specific ones (note body, link card, video thumb,
+   audio seek, 3D tile, swatch pill) stay scoped under
+   .card in the card section below; they are components too,
+   just for one kind. */
+
+/* The media tile: the row a media card shows when it is
+   short — a kind tile on the left, a title and a quiet
+   sub-line on the right. PDF, audio, video and the
+   placeholder cards all share it. The tile is a 56px
+   square with the kind's colour and label; the column
+   takes the rest of the width; title and sub elide to one
+   line. Font sizes are per instance, set inline (14px
+   title, 12px sub). */
+.media-row { display: flex; align-items: center; gap: 12px; padding: 12px; height: 100%; }
+.media-tile {
+  flex: none; width: 56px; height: 56px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 24px;
+}
+.media-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.media-title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.media-sub { color: var(--grey); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* A card's main column: the tall cards (PDF, audio, video,
+   3D) stack a preview, a title and a sub-line with 12px of
+   padding and an 8px gap. One class, not the same inline
+   flex repeated in every renderer. */
+.card-col { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+
+/* An inline rename: the input that replaces a title while
+   it is being renamed — a voice note's name, a section
+   label. Transparent, no border, inherits the font, so it
+   reads as the title it replaces. Width 100% so it fills
+   the title; a caller that sizes it (the section label,
+   sized in ch) sets an inline width, which wins. */
+.inline-rename {
+  font: inherit; color: inherit;
+  background: none; border: none; outline: none; padding: 0;
+  width: 100%; box-sizing: border-box;
+}
 
 #board { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: none; }
 
@@ -493,6 +553,22 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 
 /* Cards: white, 12px radius, soft macOS shadow. Selection is a blue
    focus ring, the way Finder and Notes show it. */
+/* --- Cards ------------------------------------------------------------
+   The board card and the pieces each kind is built from.
+   The shared pieces live in the Components section above
+   (.media-*, .card-col, .inline-rename, .icon-btn for the
+   PDF nav and the note editor's mic). What stays here is
+   one kind's own component: .note-body (the markdown
+   typography), .link-card (image, body, title, desc,
+   footer, domain), .video-thumb (poster + play mark),
+   .audio-tile (play button) and .audio-seek (the seek
+   slider), .model3d-tile/.model3d-error (the 3D card's
+   static tile and error box), .swatch-pill (the hex chip),
+   .card-decorations (the strip at a card's bottom edge),
+   .group-frame/.group-label (a section's dashed frame and
+   its chip), .card.plugin-frame (a slide frame), and
+   .missing-media (a file that is gone). A new card kind
+   reuses the shared pieces and adds its own here. */
 .card {
   position: absolute; background: #fff;
   border: 1px solid var(--hairline); border-radius: 12px;
@@ -552,18 +628,6 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   border-radius: 6px; padding: 2px 8px;
   font-size: 12px; font-weight: 600; color: var(--ink);
   pointer-events: auto; white-space: nowrap; cursor: text;
-}
-.group-frame .group-rename {
-  font: inherit; color: inherit;
-  background: none; border: none; outline: none; padding: 0;
-}
-/* A voice note's name, while it is being renamed: the
-   input fills the title's width, so a long name scrolls
-   inside it instead of pushing the card wider. */
-.card .audio-rename {
-  font: inherit; color: inherit;
-  background: none; border: none; outline: none; padding: 0;
-  width: 100%; box-sizing: border-box;
 }
 .card .inner { width: 100%; height: 100%; overflow: hidden; }
 /* A note taller than its card scrolls inside the card: the
@@ -625,29 +689,6 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    the icon is a quiet grey button that darkens on hover. */
 .card .note-edit-row { display: flex; align-items: stretch; width: 100%; height: 100%; }
 .card .note-edit-row .note-edit { width: auto; flex: 1 1 auto; min-width: 0; }
-.card .note-edit-mic {
-  flex: none; align-self: center; border: none; background: transparent;
-  color: var(--grey); cursor: pointer; padding: 6px; margin-left: 8px; margin-right: 6px;
-  border-radius: 6px; line-height: 0;
-}
-.card .note-edit-mic:hover { color: var(--ink); background: var(--fill); }
-.card .note-edit-mic svg { width: 18px; height: 18px; display: block; }
-.card .row { display: flex; align-items: center; gap: 12px; padding: 12px; height: 100%; }
-.card .tile {
-  flex: none; width: 56px; height: 56px; border-radius: 10px;
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 24px;
-}
-.card .col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.card .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card .sub { color: var(--grey); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card .pdf-nav {
-  flex: none; border: none; background: transparent; border-radius: 6px;
-  width: 24px; height: 24px; cursor: pointer; font-size: 16px; color: var(--ink);
-}
-.card .pdf-nav:hover { background: rgba(0, 0, 0, 0.05); }
-.card .pdf-nav:disabled { opacity: 0.35; cursor: default; }
-.card .pdf-nav:disabled:hover { background: transparent; }
 /* Link preview card: the site's own image on top when it has one,
    otherwise a clean text card. Title, description and domain all
    link out to the site; the whole card is never a fake embed. */
