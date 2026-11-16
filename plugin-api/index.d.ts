@@ -272,7 +272,13 @@ export interface PluginBridge {
   aiSetKey(key: string): Promise<boolean>;
   openExternal(target: string): Promise<void>;
   listBackups(): Promise<Array<{ name: string; items: number; size: number }>>;
+  listAllBackups(): Promise<Array<{ name: string; items: number; size: number; mtimeMs: number }>>;
   openBackupsFolder(): Promise<string>;
+  // Crash recovery (see electron/recovery.ts): whether the
+  // journal holds edits board.json does not, and dropping it.
+  // Restoring goes through the host, like restoreBackup.
+  recoveryStatus(): Promise<{ hasRecovery: boolean; savedAt: number | null }>;
+  recoveryDiscard(): Promise<void>;
   // Export the current board as a ZIP (null when the user
   // cancels), and import a board export — a ZIP file or
   // the folder it unzips to (null on cancel). The import
@@ -463,6 +469,7 @@ export interface PluginHost {
   ungroupSelection: () => boolean;
   deleteSelection: () => boolean;
   restoreBackup: (name: string) => Promise<boolean>;
+  restoreRecovery: () => Promise<boolean>;
   importBoard: () => Promise<boolean>;
   getBuildId: () => string;
   // ---- media (for the cards that play or preview media) ----
@@ -697,11 +704,20 @@ export interface PluginContext {
   // available to a trial plugin. openFolder opens the
   // backups folder in the file explorer, so an older
   // backup can be reached even though the UI lists only
-  // the newest one.
+  // the newest one. listAll lists every kept backup, for
+  // the Versions history in the Boards panel; recoveryStatus
+  // says whether the crash-recovery journal holds edits
+  // board.json does not, and restoreRecovery / discardRecovery
+  // restore or drop them (restoring backs the current board
+  // up first, like a backup restore).
   backups: {
     list: () => Promise<Array<{ name: string; items: number; size: number }>>;
+    listAll: () => Promise<Array<{ name: string; items: number; size: number; mtimeMs: number }>>;
     restore: (name: string) => Promise<boolean>;
     openFolder: () => Promise<string>;
+    recoveryStatus: () => Promise<{ hasRecovery: boolean; savedAt: number | null }>;
+    restoreRecovery: () => Promise<boolean>;
+    discardRecovery: () => Promise<void>;
   };
   // Board export and import: export downloads the whole
   // install as a ZIP (null when the user cancels the save

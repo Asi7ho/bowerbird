@@ -1,8 +1,11 @@
 // Boards — the panel: the intro line, the new-board form,
 // and the list container. The list itself (rows, delete,
-// rename) lives in list.ts; this file owns the panel DOM.
+// rename) lives in list.ts; the Versions section (the
+// recovery journal and every kept backup) lives in
+// history.ts; this file owns the panel DOM.
 import type { PluginContext } from "bowerbird-plugin-api";
 import { refresh } from "./list.js";
+import { clearHistory, refreshHistory, renderHistorySection } from "./history.js";
 
 let listEl: HTMLDivElement | null = null;
 let nameInput: HTMLInputElement | null = null;
@@ -13,6 +16,7 @@ let nameInput: HTMLInputElement | null = null;
 export function refreshPanel(api: PluginContext): void {
   if (!listEl) return;
   void refresh(api, listEl);
+  void refreshHistory(api);
 }
 
 export function renderPanel(api: PluginContext, container: HTMLElement): void {
@@ -51,10 +55,12 @@ export function renderPanel(api: PluginContext, container: HTMLElement): void {
   listEl = document.createElement("div");
   listEl.className = "bd-list";
   container.appendChild(listEl);
+  renderHistorySection(api, container);
   refreshPanel(api);
 }
 
 export function clearPanel(): void {
   listEl = null;
   nameInput = null;
+  clearHistory();
 }

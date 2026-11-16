@@ -55,3 +55,40 @@
 .plugin-panel[data-panel="boards"] .bd-armed {
   width: auto; padding: 0 8px; color: #e63946; font-size: 13px;
 }
+/* Versions: the recovery journal and every kept backup, under
+   a hairline below the board list. Rows mirror .bd-row; the
+   Restore button is the core button style (white, hairline
+   border, 9px radius, 6px 12px, 13px/600), like the Settings
+   backup restore. The journal row is the unsaved-changes
+   entry: it also gets a quiet Discard button. */
+.plugin-panel[data-panel="boards"] .bd-history {
+  margin-top: 16px; border-top: 1px solid var(--separator); padding-top: 12px;
+}
+.plugin-panel[data-panel="boards"] .bd-history-title {
+  font-size: 12px; font-weight: 600; color: var(--grey); margin: 0 0 4px;
+}
+.plugin-panel[data-panel="boards"] .bd-history-list {
+  display: flex; flex-direction: column;
+}
+.plugin-panel[data-panel="boards"] .bd-version-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border-radius: 9px; border-bottom: 1px solid var(--separator);
+}
+.plugin-panel[data-panel="boards"] .bd-version-row:hover { background: var(--fill); }
+.plugin-panel[data-panel="boards"] .bd-version-row .bd-meta {
+  flex: 1 1 auto; min-width: 0; margin: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.plugin-panel[data-panel="boards"] .bd-restore {
+  flex: none; border: 1px solid var(--separator); background: #fff; border-radius: 9px;
+  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
+  color: var(--ink); box-shadow: var(--shadow-sm);
+}
+.plugin-panel[data-panel="boards"] .bd-restore:hover { background: var(--fill); }
+.plugin-panel[data-panel="boards"] .bd-restore.bd-armed { color: #e63946; }
+.plugin-panel[data-panel="boards"] .bd-discard {
+  flex: none; border: none; background: transparent; border-radius: 9px;
+  padding: 6px 8px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--grey);
+}
+.plugin-panel[data-panel="boards"] .bd-discard:hover { background: var(--fill); color: var(--ink); }
+.plugin-panel[data-panel="boards"] .bd-discard.bd-armed { color: #e63946; }
