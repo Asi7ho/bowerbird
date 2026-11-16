@@ -1955,9 +1955,17 @@ async function main() {
 
     await check("a click on a filled shape's empty corner selects nothing", async () => {
       await shapeBoard();
-      await new Promise((r) => setTimeout(r, 1500));
+      // Wait for the watcher to load the new board BEFORE
+      // fitting: F pressed while the old board is still the
+      // model fits the old board, and the shapes land
+      // off-screen and culled from the DOM. The 1.5s sleep
+      // the bar checks use is not enough under load.
+      await waitFor("shape board loaded", async () => (await shapeRect(3)) ? true : null);
       await page.keyboard.press("f");
-      await waitFor("shape board in the DOM", async () => (await shapeRect(3)) ? true : null);
+      await waitFor("all 14 shapes in the DOM", async () => {
+        const ids = await page.evaluate(() => [...document.querySelectorAll("#cards .card")].map((el) => Number(el.dataset.id)));
+        return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14].every((id) => ids.includes(id)) ? true : null;
+      });
       // Filled ellipse/triangle/diamond/hexagon/star/arrow
       // corners are empty: clicking one must select nothing.
       // (Rect fills its box, so it has no empty corner.)
