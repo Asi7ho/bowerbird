@@ -1775,7 +1775,25 @@ function registerIpc(): void {
   ipcMain.handle("bowerbird:restore", () => { restoreBoard(); });
 
   ipcMain.handle("bowerbird:minimise", () => { if (win) win.minimize(); });
-  ipcMain.handle("bowerbird:close-window", () => { if (win) win.close(); });
+  // Flush pending saves before closing: BaseWindow.close()
+  // does not fire the BrowserView's beforeunload, so the
+  // renderer's unload flush never runs and a save made
+  // just before quitting (a wheel pan still inside its
+  // 400 ms debounce, an edit whose async save is in
+  // flight) never lands in board.json. Dispatch the
+  // beforeunload event explicitly and wait for it — the
+  // handler runs the same synchronous flush, so by the
+  // time this resolves the board is on disk. A renderer
+  // that is already gone just closes.
+  async function flushBeforeClose(): Promise<void> {
+    if (!win || !boardView || boardView.webContents.isDestroyed()) return;
+    try {
+      await boardView.webContents.executeJavaScript(
+        `window.dispatchEvent(new Event("beforeunload")); "flushed";`,
+      );
+    } catch { /* renderer gone; nothing to flush */ }
+  }
+  ipcMain.handle("bowerbird:close-window", async () => { await flushBeforeClose(); if (win) win.close(); });
   // Quit must quit the app, not just close the window: on macOS
   // closing the only window does not by itself end the app, and
   // BaseWindow.close() alone did not end the process in testing.
@@ -1785,9 +1803,10 @@ function registerIpc(): void {
   // (verified live: the process exits after close). The 2s
   // backstop force-quits if the window ever fails to close,
   // rather than leaving the app running with no window.
-  ipcMain.handle("bowerbird:quit", () => {
+  ipcMain.handle("bowerbird:quit", async () => {
     if (peekWin) peekWin.destroy();
     if (!win) { app.quit(); return; }
+    await flushBeforeClose();
     win.close();
     setTimeout(() => {
       if (win && !win.isDestroyed()) win.destroy();
