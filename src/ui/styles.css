@@ -351,7 +351,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 .card-decorations-right .card-progress {
   color: var(--grey); white-space: nowrap;
 }
-.card button, .card .clickable, .card textarea, .card a, .card video, .card input { pointer-events: auto; }
+.card button, .card .clickable, .card textarea, .card a, .card video, .card input, .card .note-body, .card .audio-transcript-text { pointer-events: auto; }
 .card .note-body { padding: 14px; line-height: 1.55; word-wrap: break-word; }
 .card .note-body p { margin: 0 0 6px; }
 .card .note-body h1, .card .note-body h2, .card .note-body h3 {
