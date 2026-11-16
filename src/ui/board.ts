@@ -39,7 +39,7 @@ export const manifest: PluginManifest = {
   version: "1.0.0",
   apiVersion: "2",
   main: "board.js",
-  permissions: ["board:read", "board:write"],
+  permissions: ["board:read", "board:write", "files:read"],
   required: true,
 };
 
