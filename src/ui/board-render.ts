@@ -296,7 +296,21 @@ export function render(): void {
   // Cards: rebuild, except the note being edited (its textarea stays).
   // Only visible cards are built (see visibleRect).
   const editingEl = S.editingId !== null ? S.cardsEl.querySelector(`[data-id="${S.editingId}"]`) : null;
-  const editingHtml = editingEl ? editingEl.outerHTML : null;
+  // Keep the editing card as a live element, not a serialised
+  // string: a textarea's outerHTML carries only its initial
+  // value, never what the user typed, so re-inserting the
+  // HTML emptied a note being edited whenever a render ran —
+  // zooming out while typing in a new note lost the text.
+  // Moving the element out of #cards (to #board, still in
+  // the document) keeps its value and its listeners. The
+  // move blurs the textarea, so the commit is suppressed
+  // while it happens (see suppressEditCommit) and focus —
+  // with the cursor where it was — is restored afterwards,
+  // so the user keeps typing through a zoom or a pan.
+  const editingTa = editingEl ? editingEl.querySelector("textarea.note-edit") as HTMLTextAreaElement | null : null;
+  const editingWasFocused = editingTa ? document.activeElement === editingTa : false;
+  const editingSel = editingTa && editingWasFocused ? [editingTa.selectionStart, editingTa.selectionEnd] as const : null;
+  if (editingEl) { S.suppressEditCommit = true; S.boardEl.appendChild(editingEl); }
   const v = visibleRect();
   let html = "";
   for (const item of board.items) {
@@ -347,7 +361,19 @@ export function render(): void {
     const v = S.cardsEl.querySelector(`[data-id="${activeVideo}"] video`) as HTMLVideoElement | null;
     if (v) v.play().catch(() => undefined);
   }
-  if (editingHtml) S.cardsEl.insertAdjacentHTML("beforeend", editingHtml);
+  if (editingEl) {
+    S.cardsEl.appendChild(editingEl);
+    S.suppressEditCommit = false;
+    // The move blurred the textarea; give the cursor back
+    // where it was, so a zoom or a pan mid-edit does not
+    // kick the user out of the text box.
+    if (editingTa && editingWasFocused) {
+      editingTa.focus();
+      if (editingSel) {
+        try { editingTa.setSelectionRange(editingSel[0], editingSel[1]); } catch { /* selection may be out of range after a re-measure */ }
+      }
+    }
+  }
   // Drag path cache: updateDraggedCards runs on every
   // pointermove, and the old version did three
   // attribute-selector queries per dragged card per move.
