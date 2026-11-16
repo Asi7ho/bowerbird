@@ -672,12 +672,15 @@ export function openExternal(target: string): void {
 // Fast-path drag previews: a single SVG node updated in place,
 // instead of rebuilding every card and stroke on every mousemove.
 // The node is cleared by the next full render (mouseup), so it never
-// needs its own removal.
-export function dragPreview(id: string, tag: string): SVGElement {
-  let el = S.worldEl.querySelector(`#${id}`) as SVGElement | null;
+// needs its own removal. A preview drawn over the cards (the shape
+// preview) lives in the preview layer above #cards instead of the
+// world layer below it, so the cards cannot cover it mid-drag.
+export function dragPreview(id: string, tag: string, toPreview = false): SVGElement {
+  const layer = toPreview ? S.previewWorldEl : S.worldEl;
+  let el = layer.querySelector(`#${id}`) as SVGElement | null;
   if (!el) {
     el = svgEl2(tag, { id }) as SVGElement;
-    S.worldEl.appendChild(el);
+    layer.appendChild(el);
   }
   return el;
 }
@@ -934,20 +937,20 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
     const fillAttr = outline ? "none" : penColor;
     const strokeAttr = outline ? penColor : "none";
     if (S.drag.shape === "rect") {
-      const el = dragPreview("shape-preview", "rect");
+      const el = dragPreview("shape-preview", "rect", true);
       el.setAttribute("x", String(x0)); el.setAttribute("y", String(y0));
       el.setAttribute("width", String(w)); el.setAttribute("height", String(h));
       el.setAttribute("rx", "12");
       el.setAttribute("fill", fillAttr); el.setAttribute("fill-opacity", outline ? "1" : "0.85");
       el.setAttribute("stroke", strokeAttr); el.setAttribute("stroke-width", outline ? "4" : "0");
     } else if (S.drag.shape === "ellipse") {
-      const el = dragPreview("shape-preview", "ellipse");
+      const el = dragPreview("shape-preview", "ellipse", true);
       el.setAttribute("cx", String(x0 + w / 2)); el.setAttribute("cy", String(y0 + h / 2));
       el.setAttribute("rx", String(w / 2)); el.setAttribute("ry", String(h / 2));
       el.setAttribute("fill", fillAttr); el.setAttribute("fill-opacity", outline ? "1" : "0.85");
       el.setAttribute("stroke", strokeAttr); el.setAttribute("stroke-width", outline ? "4" : "0");
     } else {
-      const el = dragPreview("shape-preview", "polygon");
+      const el = dragPreview("shape-preview", "polygon", true);
       el.setAttribute("points", S.api.shapes.previewPoints(S.drag.shape, x0, y0, w, h));
       el.setAttribute("fill", fillAttr); el.setAttribute("fill-opacity", outline ? "1" : "0.85");
       el.setAttribute("stroke", strokeAttr); el.setAttribute("stroke-width", outline ? "4" : "0");
