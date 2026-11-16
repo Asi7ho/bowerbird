@@ -223,17 +223,6 @@ export function activate(api: PluginContext): void {
   let lastTool = "";
 
   let lastKey = "";
-  // What the note-colours bar's vertical position was
-  // last computed from: the selected note, its board
-  // position and size. The bar's top only moves when
-  // that changes — a drag, a resize, or a new selection.
-  // A pan or a zoom changes the camera, not the note, so
-  // the bar's top stays fixed on screen while the user
-  // navigates: it does not slide up or down. Its left
-  // side still follows the note, so it stays on the
-  // note's side through a horizontal pan.
-  let lastBarKey = "";
-  let lastBarTop = 8;
   function update(): void {
     const tool = api.ui.getTool();
     if (tool !== lastTool) {
@@ -252,9 +241,9 @@ export function activate(api: PluginContext): void {
     // selection or the camera changes. The camera's pan
     // offset is in the key too: panning moves the note
     // on screen without changing its board position or
-    // the zoom, and the bar's left side and visibility
-    // must follow that — while its top stays fixed (see
-    // the bar section below).
+    // the zoom, and the bar must follow that as well — it
+    // is attached to the note, so it moves with it
+    // through a drag, a pan or a zoom.
     const noteItem = note ? api.board.getItem(note.id) : null;
     const notePos = noteItem ? api.geometry.itemBounds(noteItem)[0] : null;
     const key = `${tool}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}|${cam.x},${cam.y}|${colorBarOpen}|${outline}|${notePos ? `${notePos.x},${notePos.y}` : ""}`;
@@ -390,18 +379,17 @@ export function activate(api: PluginContext): void {
       // camera transform of the note's world position.
       // It sits on the left of the note, top-aligned
       // with it, and on the right when the left side
-      // would run off the viewport or cover the toolbar.
-      // Its top is fixed: it only moves when the note
-      // itself moves (a drag, a resize, a new selection),
-      // never while the camera pans or zooms — so it does
-      // not slide up or down as the user navigates. Its
-      // left still follows the note, so it stays on the
-      // note's side through a horizontal pan. And it
-      // belongs to the note: when the note is panned
-      // fully off-screen, the bar hides with it instead
-      // of floating on its own — but only then, so it
-      // does not vanish the moment the note starts to
-      // leave the viewport on a horizontal pan.
+      // would run off the viewport or cover the toolbar;
+      // its top is clamped so the whole column stays on
+      // screen. It is attached to the note: it is
+      // repositioned on every update, so it moves with
+      // the note through a drag, a pan or a zoom, and
+      // never floats on its own. And it belongs to the
+      // note: when the note is panned fully off-screen,
+      // the bar hides with it instead of floating on its
+      // own — but only then, so it does not vanish the
+      // moment the note starts to leave the viewport on
+      // a horizontal pan.
       const item = api.board.getItem(note.id);
       if (item) {
         const [pos, size] = api.geometry.itemBounds(item);
@@ -414,21 +402,10 @@ export function activate(api: PluginContext): void {
         const noteVisible = left + noteW > 0 && left < window.innerWidth && top + noteH > 0 && top < window.innerHeight;
         if (!noteVisible) {
           noteBar.style.display = "none";
-          // Force a full reposition when the note comes
-          // back on-screen, so the bar lands beside the
-          // note's new screen position instead of its
-          // old fixed top.
-          lastBarKey = "";
         } else {
           const barW = noteBar.offsetWidth;
           const barH = noteBar.offsetHeight;
-          // The top only moves when the note itself
-          // moves; a camera-only change keeps it fixed.
-          const barKey = `${note.id}|${pos.x},${pos.y}|${size.w},${size.h}`;
-          if (barKey !== lastBarKey) {
-            lastBarKey = barKey;
-            lastBarTop = Math.max(8, Math.min(top, window.innerHeight - barH - 8));
-          }
+          const barTop = Math.max(8, Math.min(top, window.innerHeight - barH - 8));
           const leftSide = left - barW - 8;
           const rightSide = left + noteW + 8;
           // The toolbar is a vertical strip on the left
@@ -438,9 +415,9 @@ export function activate(api: PluginContext): void {
           const toolbarRect = toolbar.getBoundingClientRect();
           const overlapsToolbar =
             leftSide < toolbarRect.right && leftSide + barW > toolbarRect.left &&
-            lastBarTop < toolbarRect.bottom && lastBarTop + barH > toolbarRect.top;
+            barTop < toolbarRect.bottom && barTop + barH > toolbarRect.top;
           noteBar.style.left = `${leftSide >= 8 && !overlapsToolbar ? leftSide : Math.min(rightSide, window.innerWidth - barW - 8)}px`;
-          noteBar.style.top = `${lastBarTop}px`;
+          noteBar.style.top = `${barTop}px`;
         }
       }
     }
