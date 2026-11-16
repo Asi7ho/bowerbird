@@ -2475,9 +2475,13 @@ async function main() {
       });
       assert.equal(textCards().some((it) => it.kind.Text.text === "Do not lose me"), false);
       // Kill the process dead (no beforeunload, no save) and relaunch.
-      const pid = app.process().pid;
-      process.kill(pid, "SIGKILL");
-      await waitFor("app process exits after SIGKILL", () => (app.process().exitCode !== null ? true : null), 10000);
+      // Playwright's app.process() throws once the process is
+      // dead, so capture the ChildProcess first and poll its
+      // exitCode — the object stays valid after death.
+      const proc = app.process();
+      assert.ok(proc, "electron process handle");
+      process.kill(proc.pid, "SIGKILL");
+      await waitFor("app process exits after SIGKILL", () => (proc.exitCode !== null ? true : null), 10000);
       app = await launchApp();
       page = await app.firstWindow();
       await page.waitForSelector("#recovery-dialog", { timeout: READY_TIMEOUT_MS });
@@ -2496,8 +2500,12 @@ async function main() {
       const zoom = before.camera.zoom;
       await page.mouse.move(640, 100);
       await page.mouse.wheel(0, 100);
+      // Capture the process before closing: app.process()
+      // throws once the process is dead.
+      const proc = app.process();
+      assert.ok(proc, "electron process handle");
       await page.evaluate(() => window.bowerbird.closeWindow()).catch(() => undefined);
-      await waitFor("app process exits after close", () => (app.process().exitCode !== null ? true : null), 10000);
+      await waitFor("app process exits after close", () => (proc.exitCode !== null ? true : null), 10000);
       const after = readBoard();
       const expectedY = before.camera.y + 100 / zoom;
       assert.ok(Math.abs(after.camera.y - expectedY) < 1, `camera y should be ${expectedY}, got ${after.camera.y}`);
