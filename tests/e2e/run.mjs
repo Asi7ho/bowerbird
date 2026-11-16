@@ -1999,6 +1999,62 @@ async function main() {
         assert.equal(sel, id, `outline shape ${id} edge (${fx},${fy}) should select it, got ${sel}`);
       }
     });
+
+    // fix/shape-preview-above-cards: the shape draw preview
+    // must paint above the existing cards, not hide behind
+    // them (it used to live in the canvas SVG below #cards).
+    await check("the shape preview draws above an existing card", async () => {
+      // The bar-test note is already on the board from the
+      // checks above; fit so it is centred on screen.
+      await barTestNote();
+      const ctr = await barTestCentre();
+      assert.ok(ctr, "bar test note has a centre on screen");
+      // Select the rectangle shape tool, then draw across
+      // the note in ONE gesture: a click first would select
+      // the note, and a second press at the same spot reads
+      // as a double-click and opens the editor instead of
+      // drawing.
+      await page.keyboard.press("r");
+      await new Promise((r) => setTimeout(r, 300));
+      // Drag diagonally across the note so the preview rect
+      // has real area over it (a horizontal drag makes a
+      // zero-height rect, which paints nothing).
+      const sx = ctr.x - ctr.w * 0.3, sy = ctr.y - ctr.h * 0.2;
+      const ex = ctr.x + ctr.w * 0.3, ey = ctr.y + ctr.h * 0.2;
+      const mx = (sx + ex) / 2, my = (sy + ey) / 2;
+      const before = await page.evaluate(() => document.querySelectorAll("#cards .card").length);
+      await page.mouse.move(sx, sy);
+      await page.mouse.down();
+      await page.mouse.move(ex, ey, { steps: 12 });
+      await new Promise((r) => setTimeout(r, 400));
+      // The preview must be the topmost element at the drag
+      // midpoint: it lives in the preview layer above #cards,
+      // so it paints over the note instead of hiding behind it.
+      const hit = await page.evaluate(([x, y]) => {
+        const prev = document.querySelector("#shape-preview");
+        const el = document.elementFromPoint(x, y);
+        return {
+          previewExists: !!prev,
+          previewParent: prev ? prev.parentElement?.id : null,
+          hitId: el ? el.id : null,
+          hitInCards: el ? !!el.closest("#cards") : false,
+        };
+      }, [mx, my]);
+      assert.ok(hit.previewExists, "shape preview exists mid-drag");
+      assert.equal(hit.previewParent, "preview-world", "shape preview lives in the preview layer");
+      assert.equal(hit.hitId, "shape-preview", "the preview is the topmost element over the note");
+      assert.equal(hit.hitInCards, false, "the note does not cover the preview");
+      await page.mouse.up();
+      await new Promise((r) => setTimeout(r, 500));
+      // The preview is cleared by the render on mouseup, and
+      // the shape lands as a new card.
+      const after = await page.evaluate(() => ({
+        previewGone: !document.querySelector("#shape-preview"),
+        cards: document.querySelectorAll("#cards .card").length,
+      }));
+      assert.ok(after.previewGone, "shape preview is gone after mouseup");
+      assert.equal(after.cards, before + 1, "the drawn shape lands as a new card");
+    });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
     console.log(`  FAIL  setup: ${String(error.message).split("\n")[0]}`);
