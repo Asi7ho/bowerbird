@@ -14,7 +14,16 @@ contextBridge.exposeInMainWorld("bowerbird", {
   renameBoard: (oldName: string, newName: string) => ipcRenderer.invoke("bowerbird:rename-board", oldName, newName),
   deleteBoard: (name: string, opts?: { confirmed?: boolean }) => ipcRenderer.invoke("bowerbird:delete-board", name, opts),
   listBackups: () => ipcRenderer.invoke("bowerbird:list-backups"),
+  listAllBackups: () => ipcRenderer.invoke("bowerbird:list-all-backups"),
   restoreBackup: (name: string) => ipcRenderer.invoke("bowerbird:restore-backup", name),
+  // Crash recovery (see electron/recovery.ts): the journal is
+  // written synchronously before every save and cleared once
+  // the save lands, so unsaved edits survive a kill.
+  recoveryWriteSync: (json: string) => ipcRenderer.sendSync("bowerbird:recovery-write-sync", json),
+  recoveryClear: (json: string) => ipcRenderer.invoke("bowerbird:recovery-clear", json),
+  recoveryStatus: () => ipcRenderer.invoke("bowerbird:recovery-status"),
+  recoveryRestore: () => ipcRenderer.invoke("bowerbird:recovery-restore"),
+  recoveryDiscard: () => ipcRenderer.invoke("bowerbird:recovery-discard"),
   openBackupsFolder: () => ipcRenderer.invoke("bowerbird:open-backups-folder"),
   exportBoard: () => ipcRenderer.invoke("bowerbird:export-board"),
   importBoard: () => ipcRenderer.invoke("bowerbird:import-board"),

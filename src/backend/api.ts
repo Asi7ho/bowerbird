@@ -5,7 +5,7 @@ import type { PluginManifest } from "../plugins/host";
 
 export interface BowerbirdAPI {
   platform: string;
-  loadBoard(): Promise<{ json: string | null; board_path: string; board_dir: string; pdf_size_bytes: number; video_size_bytes: number; panelOrder?: string[]; buildId?: string }>;
+  loadBoard(): Promise<{ json: string | null; board_path: string; board_dir: string; pdf_size_bytes: number; video_size_bytes: number; panelOrder?: string[]; buildId?: string; recovery?: { hasRecovery: boolean; savedAt: number | null } }>;
   saveBoard(json: string): Promise<boolean>;
   saveBoardSync(json: string): boolean;
   // Called when board.json changed on disk to content the app did
@@ -17,7 +17,18 @@ export interface BowerbirdAPI {
   renameBoard(oldName: string, newName: string): Promise<{ name: string }>;
   deleteBoard(name: string, opts?: { confirmed?: boolean }): Promise<{ wasCurrent: boolean }>;
   listBackups(): Promise<Array<{ name: string; items: number; size: number }>>;
+  listAllBackups(): Promise<Array<{ name: string; items: number; size: number; mtimeMs: number }>>;
   restoreBackup(name: string): Promise<{ json: string; board_path: string; board_dir: string }>;
+  // Crash recovery (see electron/recovery.ts): the journal is
+  // written synchronously before every save and cleared once
+  // the save lands. restore writes the journalled board through
+  // the save path (backing the current board up first) and
+  // returns it resolved, like restoreBackup.
+  recoveryWriteSync(json: string): boolean;
+  recoveryClear(json: string): Promise<boolean>;
+  recoveryStatus(): Promise<{ hasRecovery: boolean; savedAt: number | null }>;
+  recoveryRestore(): Promise<{ json: string; board_path: string; board_dir: string }>;
+  recoveryDiscard(): Promise<void>;
   openBackupsFolder(): Promise<string>;
   // Export the current board as a ZIP (null when the user
   // cancels the save dialog), and import a board export —

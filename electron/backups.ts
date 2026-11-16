@@ -21,9 +21,14 @@ export interface BackupEntry {
   size: number;
 }
 
+export interface BackupEntryFull extends BackupEntry {
+  mtimeMs: number;
+}
+
 export interface Backups {
   maybeBackup: (dir: string, json: string | null) => void;
   listBackups: (dir: string) => BackupEntry[];
+  listAllBackups: (dir: string) => BackupEntryFull[];
   restoreBackup: (dir: string, name: string) => { json: string; board_path: string; board_dir: string };
   makeBackup: (dir: string, json: string | null) => string | null;
 }
@@ -137,6 +142,25 @@ export function createBackups(deps: BackupsDeps): Backups {
     const folder = path.join(backups, name);
     return [{ name, items: deps.boardItemCount(path.join(folder, "board.json")), size: dirSize(folder) }];
   }
+  // Every kept backup, newest first, for the Versions
+  // history in the Boards panel. Only that panel calls it
+  // — Settings keeps listBackups above, so opening Settings
+  // never pays for all ten.
+  function listAllBackups(dir: string): BackupEntryFull[] {
+    const backups = backupsDirFor(dir);
+    let entries: string[] = [];
+    try { entries = fs.readdirSync(backups, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort().reverse(); } catch { return []; }
+    const out: BackupEntryFull[] = [];
+    for (const name of entries) {
+      const folder = path.join(backups, name);
+      let mtimeMs = 0;
+      try { mtimeMs = fs.statSync(folder).mtimeMs; } catch { /* a vanishing backup is skipped below */ }
+      try {
+        out.push({ name, items: deps.boardItemCount(path.join(folder, "board.json")), size: dirSize(folder), mtimeMs });
+      } catch { /* a backup without a board.json is not restorable */ }
+    }
+    return out;
+  }
   function restoreBackup(dir: string, name: string): { json: string; board_path: string; board_dir: string } {
     if (!/^[A-Za-z0-9._-]+$/.test(name) || name.includes("..")) throw new Error("bad backup name");
     const src = path.join(backupsDirFor(dir), name);
@@ -157,5 +181,5 @@ export function createBackups(deps: BackupsDeps): Backups {
     return { json, board_path: deps.boardPath(), board_dir: dir };
   }
 
-  return { maybeBackup, listBackups, restoreBackup, makeBackup };
+  return { maybeBackup, listBackups, listAllBackups, restoreBackup, makeBackup };
 }
