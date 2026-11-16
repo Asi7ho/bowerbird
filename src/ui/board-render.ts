@@ -57,6 +57,7 @@ export function applyGrid(): void {
 export function applyCamera(): void {
   const cam = S.api.view.getCamera();
   S.worldEl.setAttribute("transform", `translate(${-cam.x * cam.zoom},${-cam.y * cam.zoom}) scale(${cam.zoom})`);
+  S.groupFramesEl.style.transform = `translate(${-cam.x * cam.zoom}px,${-cam.y * cam.zoom}px) scale(${cam.zoom})`;
   S.cardsEl.style.transform = `translate(${-cam.x * cam.zoom}px,${-cam.y * cam.zoom}px) scale(${cam.zoom})`;
   S.groupsEl.style.transform = `translate(${-cam.x * cam.zoom}px,${-cam.y * cam.zoom}px) scale(${cam.zoom})`;
   applyGrid();
@@ -231,10 +232,19 @@ export function renderStrokesAndConnectors(board: Board): void {
 }
 
 export function renderGroupFrames(board: Board): void {
-  if (!S.groupsEl) return;
+  if (!S.groupsEl || !S.groupFramesEl) return;
   const selected = S.api.board.getSelected();
   const v = visibleRect();
-  let html = "";
+  // The border and its label live in separate layers: the
+  // border goes below the cards, so a card placed over a
+  // frame's edge covers the dashed line instead of the line
+  // painting over the card; the label stays above the cards
+  // in #groups, so it keeps taking clicks for rename. The
+  // label sits astride the frame's top border, half above
+  // it, so its position is the frame's top-left plus the
+  // same 12px in and 11px up it had as the frame's child.
+  let framesHtml = "";
+  let labelsHtml = "";
   // One pass over the items, grouped by group id: the old
   // version filtered the whole item list once per group
   // (and groupBounds scanned it again), so a board with
@@ -253,9 +263,11 @@ export function renderGroupFrames(board: Board): void {
     if (b.x > v.x1 || b.y > v.y1 || b.x + b.w < v.x0 || b.y + b.h < v.y0) continue;
     const isSel = members.some((it) => selected.includes(it.id));
     const label = board.groups?.[g]?.label ?? `Section ${g}`;
-    html += `<div class="group-frame${isSel ? " selected" : ""}" data-group="${g}" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px"><span class="group-label" data-group="${g}">${S.api.text.escapeHtml(label)}</span></div>`;
+    framesHtml += `<div class="group-frame${isSel ? " selected" : ""}" data-group="${g}" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px"></div>`;
+    labelsHtml += `<span class="group-label" data-group="${g}" style="left:${b.x + 12}px;top:${b.y - 11}px">${S.api.text.escapeHtml(label)}</span>`;
   }
-  S.groupsEl.innerHTML = html;
+  S.groupFramesEl.innerHTML = framesHtml;
+  S.groupsEl.innerHTML = labelsHtml;
 }
 
 export function render(): void {
