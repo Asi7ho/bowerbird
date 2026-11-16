@@ -432,7 +432,27 @@ export function updateResizeHandle(): void {
   const corner = S.api.geometry.rotatePoint({ x: p.x + s.w, y: p.y + s.h }, c, rot);
   const screen = toScreen(corner);
   const bs = boardSize();
-  if (screen.x < 0 || screen.y < 0 || screen.x > bs.x || screen.y > bs.y) {
+  // The toolbar is a vertical strip on the left edge, in
+  // viewport coordinates; the handles are positioned in
+  // board coordinates, so the toolbar's rect is converted
+  // into board coordinates before comparing. A handle
+  // whose box would land on the toolbar is hidden instead
+  // of painting over it — the resize handle sits on the
+  // card's bottom-right corner and the rotate grip above
+  // its top centre, so either one can reach the toolbar
+  // when the card is near the left edge.
+  const toolbarEl = document.getElementById("toolbar");
+  const boardRect = S.boardEl.getBoundingClientRect();
+  const tb = toolbarEl ? toolbarEl.getBoundingClientRect() : null;
+  const toolbarInBoard = tb ? {
+    left: tb.left - boardRect.left, right: tb.right - boardRect.left,
+    top: tb.top - boardRect.top, bottom: tb.bottom - boardRect.top,
+  } : null;
+  const coversToolbar = (x: number, y: number, w: number, h: number) =>
+    toolbarInBoard !== null &&
+    x < toolbarInBoard.right && x + w > toolbarInBoard.left &&
+    y < toolbarInBoard.bottom && y + h > toolbarInBoard.top;
+  if (screen.x < 0 || screen.y < 0 || screen.x > bs.x || screen.y > bs.y || coversToolbar(screen.x - 7, screen.y - 7, 14, 14)) {
     el.style.display = "none";
   } else {
     el.style.left = `${screen.x}px`;
@@ -442,7 +462,9 @@ export function updateResizeHandle(): void {
   if (rotEl) {
     if (!isRotatable(it, isFrameCard)) { rotEl.style.display = "none"; return; }
     const rs = toScreen(rotateHandleWorld(it, S.api.view.getCamera()));
-    if (rs.x < 0 || rs.y < 0 || rs.x > bs.x || rs.y > bs.y) {
+    // The grip is 18×18 centred on the point, with a 20px
+    // stem below it, so the full visual box is 18×38.
+    if (rs.x < 0 || rs.y < 0 || rs.x > bs.x || rs.y > bs.y || coversToolbar(rs.x - 9, rs.y - 9, 18, 38)) {
       rotEl.style.display = "none"; return;
     }
     rotEl.style.left = `${rs.x}px`;
