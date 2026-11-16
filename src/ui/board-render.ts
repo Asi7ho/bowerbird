@@ -353,6 +353,7 @@ export function render(): void {
   syncModel3DViews(S.boardEl, S.cardsEl, board.items, {
     fileUrl: (p) => S.api.files.fileUrl(p),
     onSelect: (id, additive) => S.api.board.setSelected(S.api.board.selectCard(S.api.board.getSelected(), id, additive)),
+    isSpaceDown: () => S.spaceDown,
   });
   for (const [id, st] of videoState) {
     const v = S.cardsEl.querySelector(`[data-id="${id}"] video`) as HTMLVideoElement | null;

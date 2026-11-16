@@ -41,6 +41,11 @@ export interface Model3DDeps {
   // the selection). setSelected only toggles classes — it
   // does not rebuild the DOM, so the viewer survives.
   onSelect: (id: number, additive: boolean) => void;
+  // True while the user holds Space: a Space+drag is a pan,
+  // so a pointerdown on a model must let the event reach the
+  // board instead of starting a rotate drag (the model
+  // canvas stops propagation, so the board never sees it).
+  isSpaceDown: () => boolean;
 }
 
 interface ViewState {
@@ -178,6 +183,10 @@ class Model3DView {
 
   private onPointerDown = (e: PointerEvent): void => {
     if (e.button !== 0 || !this.canvas) return;
+    // Space+drag is a pan: do not claim the drag — return
+    // without stopping propagation, so the event reaches the
+    // board and starts a pan instead of rotating the model.
+    if (this.deps.isSpaceDown()) return;
     // Select the card, then keep the board from starting a
     // move drag: the drag belongs to the model.
     this.deps.onSelect(this.cardId, e.shiftKey);
