@@ -46,25 +46,47 @@ type PdfPage = import("pdfjs-dist").PDFPageProxy;
 
 // pdf.js image kinds (ImageKind in pdf.js): 1 = grayscale
 // (1 byte/px), 2 = RGB (3 bytes/px), 3 = RGBA (4 bytes/px).
-// The resolved image object is a plain { width, height,
-// kind, data } — see the probe notes in ai-vector.ts.
+// The resolved image object has two shapes: with a worker
+// (the app's case) it arrives as an ImageBitmap, decoded by
+// the worker for rendering; without one (main-thread
+// evaluation) it is a plain { width, height, kind, data }
+// with raw pixel bytes. Both are handled.
 async function resolveImagePixels(page: PdfPage, objId: string): Promise<{ width: number; height: number; data: Uint8ClampedArray } | null> {
-  const raw = await new Promise<unknown>((resolve) => {
-    const timer = setTimeout(() => resolve(null), 5000);
-    try {
-      page.objs.get(
-        objId,
-        (data: unknown) => { clearTimeout(timer); resolve(data); },
-        () => { clearTimeout(timer); resolve(null); },
-      );
-    } catch {
-      clearTimeout(timer);
-      resolve(null);
-    }
-  });
+  // The object is usually resolved by the time the operator
+  // list returns; read it synchronously, and wait briefly
+  // (callback form) if it is not there yet.
+  let raw: unknown = null;
+  try {
+    raw = page.objs.get(objId);
+  } catch {
+    raw = await new Promise<unknown>((resolve) => {
+      const timer = setTimeout(() => resolve(null), 5000);
+      try {
+        page.objs.get(
+          objId,
+          (data: unknown) => { clearTimeout(timer); resolve(data); },
+          () => { clearTimeout(timer); resolve(null); },
+        );
+      } catch {
+        clearTimeout(timer);
+        resolve(null);
+      }
+    });
+  }
   if (!raw || typeof raw !== "object") return null;
-  const img = raw as { width?: unknown; height?: unknown; kind?: unknown; data?: unknown };
-  if (typeof img.width !== "number" || typeof img.height !== "number" || !(img.data instanceof Uint8Array)) return null;
+  const img = raw as { width?: unknown; height?: unknown; kind?: unknown; data?: unknown; bitmap?: unknown };
+  if (typeof img.width !== "number" || typeof img.height !== "number") return null;
+  if (img.bitmap instanceof ImageBitmap) {
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(img.bitmap, 0, 0);
+    const imageData = ctx.getImageData(0, 0, img.width, img.height);
+    return { width: img.width, height: img.height, data: imageData.data };
+  }
+  if (!(img.data instanceof Uint8Array)) return null;
   const n = img.width * img.height;
   const rgba = new Uint8ClampedArray(n * 4);
   if (img.kind === 3) {
