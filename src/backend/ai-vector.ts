@@ -105,6 +105,8 @@ export const AI_OPS = {
   endMarkedContent: 71,
   beginCompat: 72,
   endCompat: 73,
+  paintFormXObjectBegin: 74,
+  paintFormXObjectEnd: 75,
   beginGroup: 76,
   endGroup: 77,
   beginAnnotation: 80,
@@ -252,7 +254,7 @@ interface Subpath {
   fourCubics: boolean;
 }
 
-function parseDrawOps(ops: unknown[], ctm: Matrix): Subpath[] {
+function parseDrawOps(ops: ArrayLike<number>, ctm: Matrix): Subpath[] {
   const subs: Subpath[] = [];
   let cur: Pt[] = [];
   let start: Pt | null = null;
@@ -634,7 +636,20 @@ export function extractAiPage(ops: AiOpList, pageHeight: number): AiExtractResul
       case AI_OPS.setStrokeTransparent: s.stroke = null; break;
       case AI_OPS.constructPath: {
         const paintOp = asNumber(arg0);
-        const drawOps = Array.isArray(args[1]) ? (args[1] as unknown[]) : [];
+        // pdf.js carries the path as [paintOp, [drawOps],
+        // bbox], where drawOps is ONE Float32Array of
+        // interleaved DrawOPS codes and coordinates — not a
+        // plain array (see the module header). A plain flat
+        // array is accepted too, for hand-built lists.
+        const rawPath = args[1];
+        let drawOps: ArrayLike<number> = [];
+        if (Array.isArray(rawPath)) {
+          const first = rawPath[0];
+          if (Array.isArray(first) || ArrayBuffer.isView(first)) drawOps = first as unknown as ArrayLike<number>;
+          else drawOps = rawPath as number[];
+        } else if (ArrayBuffer.isView(rawPath)) {
+          drawOps = rawPath as unknown as ArrayLike<number>;
+        }
         if (paintOp === null) { flag("path with no paint operator"); break; }
         if (paintOp === PAINT.endPath) break;
         for (const sub of parseDrawOps(drawOps, s.ctm)) emitPath(sub, paintOp);
@@ -734,11 +749,15 @@ export function extractAiPage(ops: AiOpList, pageHeight: number): AiExtractResul
       }
       // No-ops: dependency declarations, marked content,
       // groups (contents extract normally; blend modes and
-      // knockout inside them are not reproduced), text
-      // begin/end markers, and caps/joins/miter, which the
-      // board's strokes do not carry.
+      // knockout inside them are not reproduced), Form
+      // XObject begin/end markers (the form's contents are
+      // inlined after a transform op, which the CTM tracking
+      // already applies), text begin/end markers, and
+      // caps/joins/miter, which the board's strokes do not
+      // carry.
       case AI_OPS.dependency: case AI_OPS.beginText: case AI_OPS.endText:
       case AI_OPS.beginGroup: case AI_OPS.endGroup:
+      case AI_OPS.paintFormXObjectBegin: case AI_OPS.paintFormXObjectEnd:
       case AI_OPS.setLineCap: case AI_OPS.setLineJoin: case AI_OPS.setMiterLimit:
       case AI_OPS.setRenderingIntent: case AI_OPS.setFlatness:
       case AI_OPS.markPoint: case AI_OPS.markPointProps:

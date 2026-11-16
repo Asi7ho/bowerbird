@@ -33,13 +33,13 @@ const FILL_STROKE = 24;
 
 // A rectangle as pdf.js compiles `re`: moveTo + 3 lineTo +
 // closePath. DrawOPS: moveTo 0, lineTo 1, curveTo 2, closePath 4.
-function rectDrawOps(x: number, y: number, w: number, h: number): unknown[] {
+function rectDrawOps(x: number, y: number, w: number, h: number): number[] {
   return [0, x, y, 1, x + w, y, 1, x + w, y + h, 1, x, y + h, 4];
 }
 
 // A circle as Illustrator writes one: moveTo + 4 cubics,
 // ending back at the start. kappa = 0.5522847498.
-function circleDrawOps(cx: number, cy: number, r: number): unknown[] {
+function circleDrawOps(cx: number, cy: number, r: number): number[] {
   const k = 0.5522847498 * r;
   return [
     0, cx + r, cy,
@@ -68,6 +68,18 @@ describe("extractAiPage paths", () => {
     // to board (20,20), 80x40.
     expect(it.pos).toEqual({ x: 20, y: 20 });
     expect(it.size).toEqual({ w: 80, h: 40 });
+  });
+
+  it("reads a path the way pdf.js actually emits it: one Float32Array", () => {
+    const r = extractAiPage(opsList([
+      [AI_OPS.setFillRGBColor, ["#ff0000"]],
+      [AI_OPS.constructPath, [FILL, [new Float32Array(rectDrawOps(20, 140, 80, 40))], new Float32Array([20, 140, 100, 180])]],
+    ]), 200);
+    expect(r.unmappable).toBe(false);
+    expect(r.items).toHaveLength(1);
+    expect(r.items[0].kind).toEqual({ Shape: { shape: "rect", fill: "#ff0000" } });
+    expect(r.items[0].pos).toEqual({ x: 20, y: 20 });
+    expect(r.items[0].size).toEqual({ w: 80, h: 40 });
   });
 
   it("a circle drawn as four Beziers becomes an ellipse Shape", () => {
