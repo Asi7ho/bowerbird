@@ -108,14 +108,33 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
       emitPluginEvent("save-failed");
       ctx.toast(`Save failed: ${String(e)}`);
     };
-    api.saveBoard(JSON.stringify(ctx.getBoard())).then(
+    const boardJson = JSON.stringify(ctx.getBoard());
+    // The recovery journal is written synchronously before
+    // the save itself, so a kill between the two still leaves
+    // the edit on disk: the journal is the write-ahead copy
+    // of exactly this save. A journal that cannot be written
+    // (or a bridge without one, in tests) must never break
+    // the save it precedes.
+    try {
+      api.recoveryWriteSync(boardJson);
+    } catch { /* the save below still proceeds */ }
+    api.saveBoard(boardJson).then(
       (ok) => {
         // A refused save — an external writer changed the file,
         // or the board is absurdly large — is a failure too:
         // without this the title bar says "Saved" for a board
         // that never reached disk.
         if (ok === false) onSaveFailed("save was refused");
-        else emitPluginEvent("saved");
+        else {
+          emitPluginEvent("saved");
+          // The save landed: clear the journal, but only if
+          // it still holds this board — a later save's journal
+          // write can land between this save and its clear,
+          // and a blind clear would delete the newer journal.
+          if (typeof api.recoveryClear === "function") {
+            void api.recoveryClear(boardJson).catch(() => undefined);
+          }
+        }
       },
       onSaveFailed,
     );
