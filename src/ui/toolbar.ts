@@ -377,10 +377,13 @@ export function activate(api: PluginContext): void {
       // camera transform of the note's world position.
       // It sits on the left of the note, top-aligned
       // with it, and on the right when the left side
-      // would run off the viewport; its top is clamped
-      // so the whole column stays on screen. It is
-      // repositioned on every update, so it moves with
-      // the note through a drag, a pan or a zoom.
+      // would run off the viewport or cover the toolbar;
+      // its top is clamped so the whole column stays on
+      // screen. It is repositioned on every update, so
+      // it moves with the note through a drag, a pan or
+      // a zoom. And it belongs to the note: when the note
+      // is panned off-screen, the bar hides with it
+      // instead of floating on its own.
       const item = api.board.getItem(note.id);
       if (item) {
         const [pos, size] = api.geometry.itemBounds(item);
@@ -388,12 +391,37 @@ export function activate(api: PluginContext): void {
         const rect = api.ui.boardEl.getBoundingClientRect();
         const left = rect.left + (pos.x - cam.x) * cam.zoom;
         const top = rect.top + (pos.y - cam.y) * cam.zoom;
-        const barW = noteBar.offsetWidth;
-        const barH = noteBar.offsetHeight;
-        const leftSide = left - barW - 8;
-        const rightSide = left + size.w * cam.zoom + 8;
-        noteBar.style.left = `${leftSide >= 8 ? leftSide : Math.min(rightSide, window.innerWidth - barW - 8)}px`;
-        noteBar.style.top = `${Math.max(8, Math.min(top, window.innerHeight - barH - 8))}px`;
+        const noteW = size.w * cam.zoom;
+        const noteH = size.h * cam.zoom;
+        // The bar belongs to the note: when the note is
+        // panned off-screen, the bar hides with it instead
+        // of floating on its own. "Off-screen" means the
+        // note's centre has left the viewport — a sliver
+        // of the note still showing does not count, or the
+        // bar would sit clamped far from the note it
+        // belongs to.
+        const centreX = left + noteW / 2;
+        const centreY = top + noteH / 2;
+        const noteVisible = centreX > 0 && centreX < window.innerWidth && centreY > 0 && centreY < window.innerHeight;
+        if (!noteVisible) {
+          noteBar.style.display = "none";
+        } else {
+          const barW = noteBar.offsetWidth;
+          const barH = noteBar.offsetHeight;
+          const barTop = Math.max(8, Math.min(top, window.innerHeight - barH - 8));
+          const leftSide = left - barW - 8;
+          const rightSide = left + noteW + 8;
+          // The toolbar is a vertical strip on the left
+          // edge; a bar on the note's left side would
+          // cover it when the note is near the left edge,
+          // so the bar flips to the note's right side.
+          const toolbarRect = toolbar.getBoundingClientRect();
+          const overlapsToolbar =
+            leftSide < toolbarRect.right && leftSide + barW > toolbarRect.left &&
+            barTop < toolbarRect.bottom && barTop + barH > toolbarRect.top;
+          noteBar.style.left = `${leftSide >= 8 && !overlapsToolbar ? leftSide : Math.min(rightSide, window.innerWidth - barW - 8)}px`;
+          noteBar.style.top = `${barTop}px`;
+        }
       }
     }
 
