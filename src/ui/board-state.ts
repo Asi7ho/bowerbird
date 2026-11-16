@@ -46,6 +46,12 @@ export interface BoardState {
   boardEl: HTMLDivElement;
   gridEl: HTMLDivElement;
   worldEl: SVGGElement;
+  // The draw-preview layer: it sits AFTER #cards in the DOM, so
+  // a shape being drawn paints above the existing cards instead
+  // of hiding behind them. Same camera transform as #world,
+  // cleared by render() like #world, so a preview never
+  // outlives its drag.
+  previewWorldEl: SVGGElement;
   cardsEl: HTMLDivElement;
   groupsEl: HTMLDivElement;
   // The group frames' dashed borders live in their own layer
@@ -112,6 +118,7 @@ export const S: BoardState = {
   boardEl: undefined as unknown as HTMLDivElement,
   gridEl: undefined as unknown as HTMLDivElement,
   worldEl: undefined as unknown as SVGGElement,
+  previewWorldEl: undefined as unknown as SVGGElement,
   cardsEl: undefined as unknown as HTMLDivElement,
   groupsEl: undefined as unknown as HTMLDivElement,
   groupFramesEl: undefined as unknown as HTMLDivElement,

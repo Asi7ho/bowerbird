@@ -61,6 +61,7 @@ export function activate(a: PluginContext): void {
     <div id="group-frames"></div>
     <div id="groups"></div>
     <div id="cards" role="listbox" aria-label="Board cards"></div>
+    <svg id="preview-svg"><g id="preview-world"></g></svg>
     <div id="plugin-view" style="display:none"></div>
     <div id="plugin-overlays"></div>
     <div id="view-switcher" style="display:none"></div>
@@ -77,6 +78,7 @@ export function activate(a: PluginContext): void {
 
   const grid = S.boardEl.querySelector<HTMLElement>("#grid");
   const canvasSvg = S.boardEl.querySelector<HTMLElement>("#canvas-svg");
+  const previewSvg = S.boardEl.querySelector<HTMLElement>("#preview-svg");
   const groupFrames = S.boardEl.querySelector<HTMLElement>("#group-frames");
   const cards = S.boardEl.querySelector<HTMLElement>("#cards");
   const groups = S.boardEl.querySelector<HTMLElement>("#groups");
@@ -86,11 +88,14 @@ export function activate(a: PluginContext): void {
   const overlays = S.boardEl.querySelector<HTMLElement>("#plugin-overlays");
   const viewSwitcher = S.boardEl.querySelector<HTMLElement>("#view-switcher");
   const toast = S.boardEl.querySelector<HTMLElement>("#toast");
-  if (grid && canvasSvg && groupFrames && cards && groups && resizeHandle && rotateHandle && pluginView && overlays && viewSwitcher && toast) {
+  if (grid && canvasSvg && previewSvg && groupFrames && cards && groups && resizeHandle && rotateHandle && pluginView && overlays && viewSwitcher && toast) {
     S.gridEl = grid as HTMLDivElement;
     // The SVG world group, inside the canvas SVG.
     const w = canvasSvg.querySelector("#world") as unknown as SVGGElement | null;
     if (w) S.worldEl = w;
+    // The draw-preview group, inside the preview SVG above #cards.
+    const pw = previewSvg?.querySelector("#preview-world") as unknown as SVGGElement | null;
+    if (pw) S.previewWorldEl = pw;
     S.groupFramesEl = groupFrames as HTMLDivElement;
     S.cardsEl = cards as HTMLDivElement;
     S.groupsEl = groups as HTMLDivElement;
@@ -99,7 +104,11 @@ export function activate(a: PluginContext): void {
     // querying them by id.
     S.api.ui.setBoardElements({
       board: S.boardEl,
-      canvas: [grid, canvasSvg, cards, resizeHandle, rotateHandle],
+      // The preview SVG goes last: main.ts reads the cards
+      // element positionally (index 2), so nothing may be
+      // inserted before it. It is a canvas layer so a plugin
+      // view hides it with the rest of the board.
+      canvas: [grid, canvasSvg, cards, resizeHandle, rotateHandle, previewSvg as HTMLElement],
       pluginView,
       overlays,
       viewSwitcher,
