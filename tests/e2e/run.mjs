@@ -1911,6 +1911,83 @@ async function main() {
       });
       assert.ok(fs.existsSync(card.kind.PdfCard.path), "embedded pdf asset exists on disk");
     });
+
+    // Shapes are hit on their visible geometry, not their
+    // box (PR #10): a click on a shape's empty corner must
+    // select nothing, and an outline shape's empty interior
+    // must select nothing — only its edge does. A plain
+    // click must not re-select by box either: pointerdown
+    // settles the selection by geometry, and a zero-area
+    // marquee on pointerup used to undo that. These checks
+    // replace the board with the 14 shapes (7 filled, 7
+    // outline) and click each one's empty and visible points.
+    const shapeBoard = () => {
+      const shapes = ["rect", "ellipse", "triangle", "diamond", "hexagon", "star", "arrow"];
+      const items = [];
+      let id = 1;
+      for (const [row, outline] of [[0, false], [1, true]]) {
+        for (const [col, shape] of shapes.entries()) {
+          items.push({ id: id++, pos: { x: col * 340, y: row * 320 }, size: { w: 200, h: 150 }, group: null, kind: { Shape: { shape, fill: "#FFCC00", ...(outline ? { outline: true } : {}) } } });
+        }
+      }
+      const board = { items, camera: { x: 0, y: 0, zoom: 1 }, next_id: id, next_group: 1, bg: "#F5F5F5", grid: false, groups: {} };
+      const tmp2 = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp2, JSON.stringify(board));
+      fs.renameSync(tmp2, boardPath);
+    };
+    const shapeRect = (id) => page.evaluate((sid) => {
+      const el = document.querySelector(`.card[data-id="${sid}"]`);
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return { x: r.x, y: r.y, w: r.width, h: r.height };
+    }, id);
+    const selectedId = () => page.evaluate(() => {
+      const el = document.querySelector(".card.selected");
+      return el ? Number(el.dataset.id) : null;
+    });
+    const clickShapePoint = async (id, fx, fy) => {
+      const r = await shapeRect(id);
+      assert.ok(r, `shape ${id} has a card in the DOM`);
+      await page.mouse.click(r.x + fx * r.w, r.y + fy * r.h);
+      await new Promise((r2) => setTimeout(r2, 300));
+      return selectedId();
+    };
+
+    await check("a click on a filled shape's empty corner selects nothing", async () => {
+      await shapeBoard();
+      await new Promise((r) => setTimeout(r, 1500));
+      await page.keyboard.press("f");
+      await waitFor("shape board in the DOM", async () => (await shapeRect(3)) ? true : null);
+      // Filled ellipse/triangle/diamond/hexagon/star/arrow
+      // corners are empty: clicking one must select nothing.
+      // (Rect fills its box, so it has no empty corner.)
+      const corners = [[2, 0.08, 0.08], [3, 0.1, 0.1], [4, 0.08, 0.08], [5, 0.05, 0.05], [6, 0.05, 0.05], [7, 0.08, 0.08]];
+      for (const [id, fx, fy] of corners) {
+        const sel = await clickShapePoint(id, fx, fy);
+        assert.equal(sel, null, `filled shape ${id} corner (${fx},${fy}) should select nothing, got ${sel}`);
+      }
+      // ... and the centres still select the shape.
+      for (const id of [2, 3, 4, 5, 6, 7]) {
+        const sel = await clickShapePoint(id, 0.5, 0.5);
+        assert.equal(sel, id, `filled shape ${id} centre should select it, got ${sel}`);
+      }
+    });
+
+    await check("a click on an outline shape's empty interior selects nothing, its edge selects it", async () => {
+      // The shape board is already loaded by the previous check.
+      for (const id of [8, 9, 10, 11, 12, 13, 14]) {
+        const sel = await clickShapePoint(id, 0.5, 0.5);
+        assert.equal(sel, null, `outline shape ${id} centre should select nothing, got ${sel}`);
+      }
+      // Edge points: top border/vertex/edge for each shape.
+      // The arrow's top is not its box top — its shaft top
+      // edge is at fy 0.4, so that is the edge point.
+      const edges = [[8, 0.5, 0.02], [9, 0.5, 0.02], [10, 0.5, 0.97], [11, 0.5, 0.02], [12, 0.5, 0.02], [13, 0.5, 0.02], [14, 0.3, 0.4]];
+      for (const [id, fx, fy] of edges) {
+        const sel = await clickShapePoint(id, fx, fy);
+        assert.equal(sel, id, `outline shape ${id} edge (${fx},${fy}) should select it, got ${sel}`);
+      }
+    });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
     console.log(`  FAIL  setup: ${String(error.message).split("\n")[0]}`);

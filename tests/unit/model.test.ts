@@ -67,10 +67,10 @@ function stroke(id: number, points: Array<{ x: number; y: number }>, pressures?:
   };
 }
 
-function shape(id: number, kind: ShapeKind, x: number, y: number, w = 200, h = 100, rotation?: number): Item {
+function shape(id: number, kind: ShapeKind, x: number, y: number, w = 200, h = 100, rotation?: number, outline?: boolean): Item {
   return {
     id, pos: { x, y }, size: { w, h }, group: null,
-    kind: { Shape: { shape: kind, fill: "#1A1A1A" } },
+    kind: { Shape: { shape: kind, fill: "#1A1A1A", ...(outline ? { outline: true } : {}) } },
     ...(rotation !== undefined ? { rotation } : {}),
   };
 }
@@ -254,6 +254,35 @@ describe("hitTest", () => {
     const b = board([shape(1, "triangle", 100, 100, 200, 100, 180)]);
     expect(hitTest(b, { x: 200, y: 170 })).toBe(1);
     expect(hitTest(b, { x: 110, y: 190 })).toBeNull();
+  });
+  it("an outline shape is hit only on its edge, never its empty interior", () => {
+    // An outline shape is a stroked edge: the interior is
+    // empty, so a point inside it must not select it, but
+    // a point on the edge must. All shapes at (100,100),
+    // 200x100; the edge points sit 2px inside the edge,
+    // well within the 8px hit tolerance.
+    const rect = board([shape(1, "rect", 100, 100, 200, 100, undefined, true)]);
+    expect(hitTest(rect, { x: 200, y: 150 })).toBeNull();
+    expect(hitTest(rect, { x: 200, y: 102 })).toBe(1);
+    const ell = board([shape(1, "ellipse", 100, 100, 200, 100, undefined, true)]);
+    expect(hitTest(ell, { x: 200, y: 150 })).toBeNull();
+    expect(hitTest(ell, { x: 200, y: 102 })).toBe(1);
+    const tri = board([shape(1, "triangle", 100, 100, 200, 100, undefined, true)]);
+    expect(hitTest(tri, { x: 200, y: 150 })).toBeNull();
+    expect(hitTest(tri, { x: 200, y: 198 })).toBe(1);
+    const dia = board([shape(1, "diamond", 100, 100, 200, 100, undefined, true)]);
+    expect(hitTest(dia, { x: 200, y: 150 })).toBeNull();
+    expect(hitTest(dia, { x: 200, y: 102 })).toBe(1);
+    const hex = board([shape(1, "hexagon", 100, 100, 200, 100, undefined, true)]);
+    expect(hitTest(hex, { x: 200, y: 150 })).toBeNull();
+    expect(hitTest(hex, { x: 200, y: 102 })).toBe(1);
+    const star = board([shape(1, "star", 100, 100, 200, 100, undefined, true)]);
+    expect(hitTest(star, { x: 200, y: 150 })).toBeNull();
+    expect(hitTest(star, { x: 150, y: 120 })).toBeNull();
+    expect(hitTest(star, { x: 200, y: 102 })).toBe(1);
+    const arr = board([shape(1, "arrow", 100, 100, 200, 100, undefined, true)]);
+    expect(hitTest(arr, { x: 200, y: 150 })).toBeNull();
+    expect(hitTest(arr, { x: 160, y: 140 })).toBe(1);
   });
 });
 
