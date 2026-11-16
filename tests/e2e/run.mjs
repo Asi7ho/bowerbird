@@ -2459,7 +2459,7 @@ async function main() {
       // CSS transform (it is being moved, not re-rendered);
       // after the camera settles it re-renders once, and the
       // model must show at its new position.
-      const size = page.viewportSize();
+      const size = await page.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight }));
       await page.keyboard.down("Space");
       await page.mouse.move(size.w / 2, size.h / 2);
       await page.mouse.down();
