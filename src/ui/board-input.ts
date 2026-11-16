@@ -318,6 +318,10 @@ export function commitEditingIfAny(): void {
 
 export function setTool(t: Tool): void {
   S.tool = t;
+  // The draw tools share one toolbar button and one
+  // shortcut (P): remember the draw tool last chosen, so
+  // P activates that one instead of always the pen.
+  if (t === "pen" || t === "pencil" || t === "highlighter" || t === "eraser") S.lastDrawTool = t;
   // Every tool switch leaves lasso mode: it belongs to
   // Select only. The L handler turns it back on after
   // switching to Select.
@@ -1384,10 +1388,16 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
     e.preventDefault();
     S.api.board.redo();
   } else if (e.key.toLowerCase() === "v" && !ctrl) setTool("select");
-  else if (e.key.toLowerCase() === "p" && !ctrl) setTool("pen");
+  // P activates the draw tool last chosen, not always the
+  // pen: a pencil stays a pencil. Before any draw tool is
+  // used it is the pen, the draw button's default.
+  else if (e.key.toLowerCase() === "p" && !ctrl) setTool(S.lastDrawTool ?? "pen");
   else if (e.key.toLowerCase() === "a" && !ctrl) setTool("connector");
-  else if (e.key.toLowerCase() === "r" && !ctrl) setTool("rect");
-  else if (e.key.toLowerCase() === "e" && !ctrl) setTool("ellipse");
+  // R and E activate their shape — unless a shape is
+  // already in use, which they keep: a triangle stays a
+  // triangle instead of resetting to a rectangle.
+  else if (e.key.toLowerCase() === "r" && !ctrl) setTool(isShapeTool(S.tool) ? S.tool : "rect");
+  else if (e.key.toLowerCase() === "e" && !ctrl) setTool(isShapeTool(S.tool) ? S.tool : "ellipse");
   else if (e.key.toLowerCase() === "l" && !ctrl) {
     // L toggles lasso mode on the select tool: from any
     // other tool it switches to Select with lasso on; on
