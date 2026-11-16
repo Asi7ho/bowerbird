@@ -68,7 +68,12 @@ export function activate(api: PluginContext): void {
     else b.innerHTML = icon;
     if (opts.className) b.className = opts.className;
     if (opts.type) b.type = opts.type;
-    b.addEventListener("click", onClick);
+    // A clicked button keeps DOM focus, and after any
+    // keypress it matches :focus-visible, so the accent
+    // outline lands on the last-used tool. Blur it, so
+    // focus returns to the board and the outline only
+    // ever shows for genuine keyboard focus (Tab, Ctrl+T).
+    b.addEventListener("click", () => { onClick(); b.blur(); });
     parent.appendChild(b);
     return b;
   }
@@ -81,7 +86,9 @@ export function activate(api: PluginContext): void {
     b.title = hex;
     b.setAttribute("aria-label", hex);
     b.setAttribute("aria-pressed", String(pressed));
-    b.addEventListener("click", onClick);
+    // As the tool buttons: a clicked swatch must not keep
+    // focus, or the next keypress outlines it.
+    b.addEventListener("click", () => { onClick(); b.blur(); });
     return b;
   }
 
@@ -282,7 +289,7 @@ export function activate(api: PluginContext): void {
         b.title = d.label;
         b.setAttribute("aria-label", d.label.replace(/ \(.*\)$/, ""));
         b.innerHTML = d.icon;
-        b.addEventListener("click", () => api.ui.setTool(d.id));
+        b.addEventListener("click", () => { api.ui.setTool(d.id); b.blur(); });
         drawPicker.appendChild(b);
       }
     }
@@ -324,7 +331,7 @@ export function activate(api: PluginContext): void {
         b.title = mode.label;
         b.setAttribute("aria-label", mode.label);
         b.textContent = mode.label;
-        b.addEventListener("click", () => { api.shapes.setOutline(mode.id === "outline"); update(); });
+        b.addEventListener("click", () => { api.shapes.setOutline(mode.id === "outline"); update(); b.blur(); });
         shapePicker.appendChild(b);
       }
       for (const meta of api.shapes.list()) {
@@ -334,7 +341,7 @@ export function activate(api: PluginContext): void {
         b.title = meta.key ? `${meta.label} (${meta.key})` : meta.label;
         b.setAttribute("aria-label", meta.label);
         b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${meta.svg}</svg>`;
-        b.addEventListener("click", () => api.ui.setTool(meta.kind));
+        b.addEventListener("click", () => { api.ui.setTool(meta.kind); b.blur(); });
         shapePicker.appendChild(b);
       }
     }

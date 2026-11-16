@@ -75,6 +75,10 @@ export interface BoardState {
   // toggled by L, with no toolbar button.
   lassoMode: boolean;
   tool: Tool;
+  // The draw tool last chosen (pencil, pen, highlighter or
+  // eraser). The P shortcut activates this one, not always
+  // the pen — so a pencil stays a pencil.
+  lastDrawTool: Tool | null;
   editingId: number | null;
   // Set while a render moves the editing card out of #cards
   // and back (see board-render): moving the card blurs its
@@ -127,6 +131,7 @@ export const S: BoardState = {
   lastContentKey: 0,
   lassoMode: false,
   tool: "select",
+  lastDrawTool: null,
   editingId: null,
   suppressEditCommit: false,
   spaceDown: false,
