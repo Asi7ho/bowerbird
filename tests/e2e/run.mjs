@@ -2500,8 +2500,21 @@ async function main() {
       // beforeunload flush, not the ordinary save.
       const before = readBoard();
       const zoom = before.camera.zoom;
+      // The wheel event is queued in the renderer, so a
+      // close evaluated at once can run before the wheel
+      // handler moves the camera — and the flush would
+      // faithfully save the un-panned board. Wait for the
+      // pan to land in the DOM (applyCamera sets the
+      // cards transform synchronously in the wheel
+      // handler) before closing, so the flush is what is
+      // tested. Closing still happens well inside the
+      // 400 ms debounce, so the ordinary save cannot
+      // explain it.
+      const cardsTransform = () => page.evaluate(() => document.querySelector("#cards")?.style.transform ?? "");
+      const transformBefore = await cardsTransform();
       await page.mouse.move(640, 100);
       await page.mouse.wheel(0, 100);
+      await waitFor("wheel pan applied", async () => (await cardsTransform()) !== transformBefore ? true : null);
       // Capture the process before closing: app.process()
       // throws once the process is dead.
       const proc = app.process();
