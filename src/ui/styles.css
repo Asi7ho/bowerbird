@@ -803,17 +803,21 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   outline: none;
 }
 #feedback-text:focus { border-color: var(--accent); }
-/* The Send button in the core button style — white, hairline
-   border, 9px radius, 6px 12px, 13px/600 — the same as Restore
-   and the plugin rows. It needs its own rule: Settings styles
-   its buttons one by one, so a bare button falls back to the
-   browser default. */
-#settings #btn-feedback {
+/* The Send, Export and Import buttons in the core button
+   style — white, hairline border, 9px radius, 6px 12px,
+   13px/600 — the same as Restore and the plugin rows. Each
+   needs its own rule: Settings styles its buttons one by
+   one, so a bare button falls back to the browser default. */
+#settings #btn-feedback,
+#settings #btn-export-data,
+#settings #btn-import-data {
   border: 1px solid var(--separator); background: #fff; border-radius: 9px;
   padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
   color: var(--ink); box-shadow: var(--shadow-sm);
 }
-#settings #btn-feedback:hover { background: var(--fill); }
+#settings #btn-feedback:hover,
+#settings #btn-export-data:hover,
+#settings #btn-import-data:hover { background: var(--fill); }
 #settings #btn-factory-reset {
   border: 1px solid var(--separator); background: #fff; border-radius: 9px;
   padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 600;
