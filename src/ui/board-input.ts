@@ -462,6 +462,7 @@ S.boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
   }
   const world = toWorld(winPt);
   // A plugin view owns its own viewport: core board clicks, pan and
+  // A plugin view owns its own viewport: core board clicks, pan and
   // tools must not run while it is active. The plugin's own
   // listeners on its container handle clicks there.
   if (S.api.view.getView() !== "board" && target.closest("#plugin-view")) return;
@@ -1056,7 +1057,15 @@ window.addEventListener("pointerup", (e: PointerEvent) => {
     }
     if (d.moved) S.api.board.save();
   } else if (d.kind === "marquee") {
-    S.api.board.setSelected(S.api.board.marqueeSelect(d.start, world));
+    // A click is not a marquee: pointerdown already settled
+    // the selection by geometry (hitTest), and a zero-area
+    // marquee would re-select by box — the empty corner of
+    // a triangle would select the triangle after hitTest
+    // correctly returned nothing. Only a real drag (moved
+    // at least a few pixels) marquee-selects.
+    if (Math.abs(world.x - d.start.x) >= 3 || Math.abs(world.y - d.start.y) >= 3) {
+      S.api.board.setSelected(S.api.board.marqueeSelect(d.start, world));
+    }
   } else if (d.kind === "pan") {
     // A Space+drag pan changes only the camera, so it must not
     // become an undo step — but it must reach disk, or closing
