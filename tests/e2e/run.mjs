@@ -1604,6 +1604,14 @@ async function main() {
       };
     });
     const selectBarTestNote = async () => {
+      // Settle first: the previous check ends with a mouse-up,
+      // and a click too soon after it at the same spot reads
+      // as a double-click, which opens the editor, hides the
+      // bar, and makes the wait below time out. Escape closes
+      // an editor left open by such a double-click.
+      await new Promise((r) => setTimeout(r, 700));
+      await page.keyboard.press("Escape");
+      await new Promise((r) => setTimeout(r, 200));
       const ctr = await barTestCentre();
       assert.ok(ctr, "bar test note has a centre on screen");
       await page.mouse.click(ctr.x, ctr.y);
