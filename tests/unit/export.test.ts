@@ -78,7 +78,7 @@ function makeInstall(root: string): { base: string; userData: string } {
   fs.mkdirSync(path.join(plugin, "data"), { recursive: true });
   fs.writeFileSync(path.join(plugin, "data", "notes.md"), "plugin notes");
   fs.writeFileSync(path.join(userData, "settings.json"), JSON.stringify({ dockVisible: true }));
-  fs.writeFileSync(path.join(userData, "plugins.json"), JSON.stringify({ "my-plugin": true }));
+  fs.writeFileSync(path.join(userData, "plugins.json"), JSON.stringify({ enabled: { "my-plugin": true } }));
   fs.writeFileSync(path.join(userData, "plugin-storage.json"), JSON.stringify({ "my-plugin": { count: 3 } }));
   fs.writeFileSync(path.join(userData, "secure-storage.json"), JSON.stringify({ "my-plugin": { key: "secret" } }));
   return { base, userData };
@@ -195,7 +195,7 @@ describe("full export and import round-trip", () => {
     expect(fs.readFileSync(path.join(freshBase, "plugins", "my-plugin", "extra.txt"), "utf8")).toBe("an extra plugin file");
     expect(fs.readFileSync(path.join(freshBase, "plugins", "my-plugin", "data", "notes.md"), "utf8")).toBe("plugin notes");
     // The state files are back.
-    expect(JSON.parse(fs.readFileSync(path.join(freshUserData, "plugins.json"), "utf8"))).toEqual({ "my-plugin": true });
+    expect(JSON.parse(fs.readFileSync(path.join(freshUserData, "plugins.json"), "utf8"))).toEqual({ enabled: { "my-plugin": true } });
     expect(JSON.parse(fs.readFileSync(path.join(freshUserData, "plugin-storage.json"), "utf8"))).toEqual({ "my-plugin": { count: 3 } });
     expect(JSON.parse(fs.readFileSync(path.join(freshUserData, "secure-storage.json"), "utf8"))).toEqual({ "my-plugin": { key: "secret" } });
     fs.rmSync(root, { recursive: true, force: true });
