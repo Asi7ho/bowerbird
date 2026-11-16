@@ -16,6 +16,7 @@ import type { Rectangle } from "electron";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { createBackups } from "./backups";
+import { clearRecovery, clearRecoveryIfMatches, readRecovery, recoveryDiffers, writeRecovery } from "./recovery";
 import { createExport, resolveBoardAssetPaths } from "./export";
 import { handleAppFileRequest, MIME } from "./appFile";
 import * as context from "./context";
@@ -440,7 +441,7 @@ function deleteBoard(name: unknown): { wasCurrent: boolean } {
 // Backups live in electron/backups.ts. The factory reads the
 // current board path through these, so a restore always writes
 // the board the app is on now.
-const { maybeBackup, listBackups, restoreBackup, makeBackup } = createBackups({
+const { maybeBackup, listBackups, listAllBackups, restoreBackup, makeBackup } = createBackups({
   boardPath: () => boardPath(),
   boardItemCount: (file: string) => boardItemCount(file),
 });
@@ -863,6 +864,16 @@ function registerIpc(): void {
     // different content on disk knows an external writer
     // changed it since.
     if (json) lastSavedJson = json;
+    // Crash recovery: the journal holds edits board.json
+    // does not — a kill, a crash, or a refused save since
+    // the last save landed. No board file at all plus a
+    // journal means the very first save never landed.
+    // The renderer offers to restore it at launch.
+    const rec = readRecovery(dir);
+    const recovery = {
+      hasRecovery: rec !== null && (json === null || recoveryDiffers(dir, json)),
+      savedAt: rec !== null && (json === null || recoveryDiffers(dir, json)) ? rec.savedAt : null,
+    };
     // The renderer gets the board with relative asset paths
     // resolved against its folder, so a board carried over
     // from another machine loads with absolute paths it can
@@ -870,7 +881,7 @@ function registerIpc(): void {
     // or the guard would mistake the resolution for an
     // external edit and refuse the next save.
     const resolvedJson = json ? resolveBoardAssetPaths(json, dir) : json;
-    return { json: resolvedJson, board_path: file, board_dir: dir, panelOrder: [...panelOrder], buildId: buildId(), ...showcase };
+    return { json: resolvedJson, board_path: file, board_dir: dir, panelOrder: [...panelOrder], buildId: buildId(), recovery, ...showcase };
   });
 
   // Write the board JSON to disk (tmp + rename), with the
@@ -1359,6 +1370,49 @@ function registerIpc(): void {
   });
   ipcMain.handle("bowerbird:list-backups", () => {
     return listBackups(boardDir());
+  });
+  ipcMain.handle("bowerbird:list-all-backups", () => {
+    return listAllBackups(boardDir());
+  });
+  // Crash recovery (see electron/recovery.ts). The renderer
+  // journals every save synchronously before the save itself,
+  // so a kill between the two still leaves the edit on disk.
+  // The write is sync: an async journal write could still be
+  // in flight when the app is killed, which is exactly the
+  // window the journal exists to close. It never throws —
+  // a journal that cannot be written must not break a save.
+  ipcMain.on("bowerbird:recovery-write-sync", (event, json: string) => {
+    event.returnValue = typeof json === "string" ? writeRecovery(boardDir(), json) : false;
+  });
+  // Clear the journal once its board has landed on disk.
+  // Compare-and-clear: a later save's journal write can land
+  // between this save and its clear, and a blind clear would
+  // delete the newer journal.
+  ipcMain.handle("bowerbird:recovery-clear", (_event, json: string) => {
+    return typeof json === "string" ? clearRecoveryIfMatches(boardDir(), json) : false;
+  });
+  ipcMain.handle("bowerbird:recovery-status", () => {
+    let boardJson: string | null = null;
+    try { boardJson = fs.readFileSync(boardPath(), "utf8"); } catch { boardJson = null; }
+    const rec = readRecovery(boardDir());
+    const hasRecovery = rec !== null && (boardJson === null || recoveryDiffers(boardDir(), boardJson));
+    return { hasRecovery, savedAt: hasRecovery ? rec.savedAt : null };
+  });
+  // Restore the journalled board: back up the current board
+  // first (so the restore is reversible, like a backup
+  // restore), write the journal through the save path (so
+  // the live-follow guard and the watcher baseline move
+  // with it), then clear the journal.
+  ipcMain.handle("bowerbird:recovery-restore", () => {
+    const rec = readRecovery(boardDir());
+    if (!rec) throw new Error("no unsaved changes to restore");
+    try { makeBackup(boardDir(), fs.readFileSync(boardPath(), "utf8")); } catch { /* restoring still proceeds */ }
+    if (!saveBoardJson(rec.json)) throw new Error("could not restore the unsaved changes");
+    clearRecovery(boardDir());
+    return { json: resolveBoardAssetPaths(rec.json, boardDir()), board_path: boardPath(), board_dir: boardDir() };
+  });
+  ipcMain.handle("bowerbird:recovery-discard", () => {
+    clearRecovery(boardDir());
   });
   ipcMain.handle("bowerbird:restore-backup", (_event, name: string) => {
     const out = restoreBackup(boardDir(), name);
