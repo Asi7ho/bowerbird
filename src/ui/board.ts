@@ -104,10 +104,9 @@ export function activate(a: PluginContext): void {
     // querying them by id.
     S.api.ui.setBoardElements({
       board: S.boardEl,
-      // The preview SVG goes last: main.ts reads the cards
-      // element positionally (index 2), so nothing may be
-      // inserted before it. It is a canvas layer so a plugin
-      // view hides it with the rest of the board.
+      // The preview SVG goes last: it is a canvas layer so a
+      // plugin view hides it with the rest of the board (the
+      // host shows and hides the canvas list as a group).
       canvas: [grid, canvasSvg, cards, resizeHandle, rotateHandle, previewSvg as HTMLElement],
       pluginView,
       overlays,

@@ -208,8 +208,10 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #canvas-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 /* The draw-preview layer, above #cards in the DOM (see board.ts):
    same geometry as #canvas-svg, so a shape preview lines up with
-   the world it is drawn in. */
-#preview-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+   the world it is drawn in. It is purely visual: pointer-events
+   none, so it never intercepts a click on a card, a group label
+   or a button below it — the layer covers the whole board. */
+#preview-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 #grid { position: absolute; inset: 0; pointer-events: none; }
 /* #cards must NOT have overflow:hidden: cards live in world
    coordinates, so a card at world x=1500 sits outside the layer's
