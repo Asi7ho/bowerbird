@@ -7,7 +7,7 @@
 // original cannot break the card. Preview fills are background
 // work, not user changes: they save without an undo step.
 import { api } from "./api";
-import { isPdfCompatible } from "./ai-import";
+import { isPdfCompatible, parseAiToItems } from "./ai-import";
 import type { ImportedItem } from "./import-types";
 import { boardGet, domainOf, estimateTextHeight, normaliseHex, type Board, type Item, type Kind, type Pt, type Size } from "./model";
 import { ensureVideoPoster } from "./poster";
@@ -239,15 +239,21 @@ export function createDrops(ctx: DropsContext): Drops {
             // rather than landing a broken card.
             ctx.toast(`${file.name} was saved without PDF compatibility, so it can't be imported`);
           } else {
-            // A PDF-compatible .ai file IS a PDF: embed it
-            // as-is and let the existing PDF card render
-            // the vector artwork.
-            const stored = await api.embedFileBytes(file.name, bytes);
-            const size = await api.fileSize(stored).catch(() => 0);
+            // A PDF-compatible .ai file's artwork is
+            // extracted into editable cards (shapes, strokes,
+            // text, images); a page with content that cannot
+            // be mapped lands as one raster image of the page.
+            // It never lands as a PDF preview card.
+            const items = await parseAiToItems(bytes, at);
             if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
-            const id = ctx.allocId();
-            board.items.push({ id, pos: at, size: { w: 260, h: 360 }, group: null, kind: { PdfCard: { path: stored, size_bytes: size } } });
-            added++;
+            if (items.length === 0) {
+              ctx.toast(`No artwork could be imported from ${file.name}`);
+            } else {
+              for (const item of items) {
+                if (!(await addImportedItem(item, file.name))) return;
+              }
+              added += items.length;
+            }
           }
         } else if (kind in STORED_KINDS) {
           const desc = STORED_KINDS[kind];
