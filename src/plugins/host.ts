@@ -468,12 +468,28 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
     },
     backups: {
       list: async () => bridge!.listBackups(),
+      // Every kept backup, newest first — the Versions
+      // history in the Boards panel. list() above stays
+      // newest-only for Settings, which never pays for all ten.
+      listAll: async () => bridge!.listAllBackups(),
       restore: async (name: string) => {
         require("board:write");
         requireNotTrial("restore a backup");
         return host!.restoreBackup(name);
       },
       openFolder: async () => bridge!.openBackupsFolder(),
+      // Crash recovery (see electron/recovery.ts): whether
+      // the journal holds edits board.json does not, and
+      // restoring or discarding them. Restoring loads the
+      // journalled board like a backup restore, so it needs
+      // board:write; discarding only deletes the journal.
+      recoveryStatus: async () => bridge!.recoveryStatus(),
+      restoreRecovery: async () => {
+        require("board:write");
+        requireNotTrial("restore unsaved changes");
+        return host!.restoreRecovery();
+      },
+      discardRecovery: async () => bridge!.recoveryDiscard(),
     },
     exportBoard: async () => bridge!.exportBoard(),
     importBoard: async () => {

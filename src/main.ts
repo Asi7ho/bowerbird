@@ -1,7 +1,7 @@
 import { api } from "./backend/api";
 import {
   type BootContext,
-  healBoardItem, importBoard, isFrameCard, loadBoardFromJson, resetBoardToWelcome, restoreBoardBackup, startBackgroundIndexing, startPosterBackfill, switchToBoard, syncGroupLabels,
+  healBoardItem, importBoard, isFrameCard, loadBoardFromJson, resetBoardToWelcome, restoreBoardBackup, restoreRecoveryJournal, startBackgroundIndexing, startPosterBackfill, switchToBoard, syncGroupLabels,
 } from "./boards";
 import { createMedia, type Media } from "./backend/media";
 import { createCardRenderer, SHAPES, shapePreviewPoints, type CardRenderer } from "./backend/cards";
@@ -694,6 +694,7 @@ async function init(): Promise<void> {
     ungroupSelection: () => boardUngroupSelected(),
     deleteSelection: () => boardDeleteSelected(),
     restoreBackup: (name) => restoreBoardBackup(C, name),
+    restoreRecovery: () => restoreRecoveryJournal(C),
     importBoard: () => importBoard(C),
     getBuildId: () => C.currentBuildId,
     // Media state, for the cards that play or preview media.
@@ -828,13 +829,7 @@ async function init(): Promise<void> {
     showRecoveryOffer({
       savedAt: recoveryOffer.savedAt,
       onRestore: async () => {
-        try {
-          const restored = await api.recoveryRestore();
-          await loadBoardFromJson(C, restored.json, restored.board_dir);
-          toast("Unsaved changes restored");
-        } catch (e) {
-          toast(`Could not restore unsaved changes: ${String(e)}`);
-        }
+        await restoreRecoveryJournal(C);
       },
       onDiscard: async () => {
         try {

@@ -324,6 +324,21 @@ export async function restoreBoardBackup(ctx: BootContext, name: string): Promis
   }
 }
 
+// Restore the crash-recovery journal: the edits board.json
+// does not hold. The main process backs the current board up
+// first, so the restore is reversible like a backup restore.
+export async function restoreRecoveryJournal(ctx: BootContext): Promise<boolean> {
+  try {
+    const restored = await api.recoveryRestore();
+    await loadBoardFromJson(ctx, restored.json, restored.board_dir);
+    ctx.toast("Unsaved changes restored");
+    return true;
+  } catch (e) {
+    ctx.toast(`Could not restore unsaved changes: ${String(e)}`);
+    return false;
+  }
+}
+
 // Import a data export — a ZIP file, or the folder it
 // unzips to — and load the board that was current at export
 // time. The main process installs every board, plugin and
