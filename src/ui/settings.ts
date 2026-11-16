@@ -13,6 +13,7 @@
 // declares the same permissions a user plugin would. It has no
 // back door into the core. See ARCHITECTURE.md.
 import type { PluginContext, PluginManifest } from "../plugins/host";
+import { createButton } from "./components";
 
 export const manifest: PluginManifest = {
   apiVersion: "2",
@@ -212,8 +213,7 @@ async function renderBackups(): Promise<void> {
   const meta = document.createElement("span");
   meta.className = "meta";
   meta.textContent = `${fmtName(b.name)} · ${b.items} items · ${fmtSize(b.size)}`;
-  const btn = document.createElement("button");
-  btn.textContent = "Restore";
+  const btn = createButton("Restore");
   let armed = false;
   btn.addEventListener("click", async () => {
     // Two-click confirm, like Delete all data: the first
@@ -233,8 +233,7 @@ async function renderBackups(): Promise<void> {
   row.appendChild(btn);
   // The list shows only the newest backup by design; the
   // folder is how an older one is reached.
-  const openBtn = document.createElement("button");
-  openBtn.textContent = "Open folder";
+  const openBtn = createButton("Open folder");
   openBtn.addEventListener("click", async () => {
     const err = await api!.backups.openFolder();
     if (err) api!.ui.toast("Could not open the backups folder.");
@@ -342,7 +341,7 @@ function renderPluginSettings(): void {
     const sections = el("plugin-settings-sections");
     const hasSettings = sections?.querySelector(`[data-plugin="${lp.id}"]`) !== null;
     row += `</div><span style="display:flex;gap:8px;flex:none">`;
-    if (lp.active && hasSettings) row += `<button data-plugin-settings="${lp.id}">Settings</button>`;
+    if (lp.active && hasSettings) row += `<button class="btn" data-plugin-settings="${lp.id}">Settings</button>`;
     // A required plugin has no toggle: it is the foundation
     // (board, Settings) and cannot be disabled, so there is
     // nothing to toggle. Every other plugin gets one. While
@@ -350,8 +349,8 @@ function renderPluginSettings(): void {
     // as the confirm ("Disable anyway") and is armed red,
     // like other confirm states.
     if (!lp.trial && !lp.required) {
-      if (confirming) row += `<button data-plugin-toggle="${lp.id}" class="armed">Disable anyway</button></span>`;
-      else row += `<button data-plugin-toggle="${lp.id}">${lp.active ? "Disable" : "Enable"}</button></span>`;
+      if (confirming) row += `<button class="btn armed" data-plugin-toggle="${lp.id}">Disable anyway</button></span>`;
+      else row += `<button class="btn" data-plugin-toggle="${lp.id}">${lp.active ? "Disable" : "Enable"}</button></span>`;
     } else row += `</span>`;
     row += `</div>`;
     return row;
@@ -364,7 +363,7 @@ function renderPluginSettings(): void {
   // Reset: back to the factory state — core plugins on,
   // extras off. One button under the list; it is reversible
   // by toggling plugins back on.
-  html += `<button id="plugins-reset">Reset plugins</button>`;
+  html += `<button id="plugins-reset" class="btn btn-danger">Reset plugins</button>`;
   list.innerHTML = html;
   el("plugins-reset")?.addEventListener("click", async () => {
     // Resetting turns every extra off at once, so a disable
@@ -478,19 +477,19 @@ export function activate(context: PluginContext): void {
             <h3>Data</h3>
             <p class="meta" id="board-dir-meta"></p>
             <p class="meta" id="build-meta"></p>
-            <button id="btn-export-data">Export data</button>
-            <button id="btn-import-data">Import data</button>
-            <button id="btn-factory-reset">Factory reset</button>
+            <button id="btn-export-data" class="btn">Export data</button>
+            <button id="btn-import-data" class="btn">Import data</button>
+            <button id="btn-factory-reset" class="btn btn-lg btn-danger">Factory reset</button>
             <div id="factory-reset-confirm" style="display:none">
               <p class="meta">Boards, settings, plugins and keys — everything. This cannot be undone.</p>
-              <button id="btn-factory-reset-confirm">Reset everything</button>
+              <button id="btn-factory-reset-confirm" class="btn btn-lg btn-danger-filled">Reset everything</button>
             </div>
             <h3>Backups</h3>
             <div id="backups-list"></div>
             <h3>Send feedback</h3>
             <p class="meta">Opens in your email app, addressed to <span class="email">wren7762@gmail.com</span>.</p>
             <textarea id="feedback-text" rows="4" placeholder="What happened, or what would you like?"></textarea>
-            <button id="btn-feedback">Send feedback</button>
+            <button id="btn-feedback" class="btn">Send feedback</button>
           </div>
           <div id="settings-section-plugins" class="settings-section" style="display:none">
             <div id="plugin-list"></div>

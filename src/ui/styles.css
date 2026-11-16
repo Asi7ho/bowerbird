@@ -36,6 +36,33 @@ html, body {
 body { display: flex; flex-direction: row; }
 #main-column { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; min-height: 0; }
 button { font-family: inherit; }
+
+/* Components: the reusable UI pieces. An action button is
+   .btn — never a bare <button>, which falls back to the
+   browser default, and never a per-id rule, which is how a
+   new button ships unstyled. The class is the component:
+   use it in HTML, or build the button with createButton in
+   src/ui/components.ts, which puts the class on for you.
+   Variants: .btn-danger (red text, for an action that undoes
+   work), .btn-danger-filled (red background, for the confirm
+   step of a destructive action), .btn-lg (8px 16px, for the
+   destructive buttons, which read bigger), .btn.armed (the
+   confirm state: red text and red border, a deliberate second
+   click). The margin and flex are on the base class so a
+   button in a row (Restore, Open folder, Enable) does not
+   shrink or gain a gap. */
+.btn {
+  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
+  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
+  color: var(--ink); box-shadow: var(--shadow-sm); margin: 0; flex: none;
+}
+.btn:hover { background: var(--fill); }
+.btn-lg { padding: 8px 16px; }
+.btn-danger { color: #e63946; }
+.btn-danger:hover { background: rgba(230, 57, 70, 0.06); }
+.btn-danger-filled { border: none; background: #e63946; color: #fff; }
+.btn.armed { color: #e63946; border-color: rgba(230, 57, 70, 0.4); }
+
 #board { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: none; }
 
 /* Custom title bar: opaque white, hairline underneath, the
@@ -830,31 +857,6 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   outline: none;
 }
 #feedback-text:focus { border-color: var(--accent); }
-/* The Send, Export and Import buttons in the core button
-   style — white, hairline border, 9px radius, 6px 12px,
-   13px/600 — the same as Restore and the plugin rows. Each
-   needs its own rule: Settings styles its buttons one by
-   one, so a bare button falls back to the browser default. */
-#settings #btn-feedback,
-#settings #btn-export-data,
-#settings #btn-import-data {
-  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
-  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
-  color: var(--ink); box-shadow: var(--shadow-sm);
-}
-#settings #btn-feedback:hover,
-#settings #btn-export-data:hover,
-#settings #btn-import-data:hover { background: var(--fill); }
-#settings #btn-factory-reset {
-  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
-  padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 600;
-  color: #e63946; box-shadow: var(--shadow-sm);
-}
-#settings #btn-factory-reset:hover { background: rgba(230, 57, 70, 0.06); }
-#settings #btn-factory-reset-confirm {
-  border: none; background: #e63946; color: #fff; border-radius: 9px;
-  padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 600; margin-right: 8px;
-}
 /* Backups: one row, last backup only — info on the left,
    Restore on the right, in the same button style as the
    plugin rows in Settings (white, hairline border, 9px
@@ -864,15 +866,6 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   display: flex; align-items: center; gap: 12px; margin: 6px 0;
 }
 #settings .backup-row .meta { flex: 1 1 auto; margin: 0; }
-#settings .backup-row button {
-  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
-  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
-  margin: 0; flex: none; color: var(--ink);
-}
-#settings .backup-row button:hover { background: var(--fill); }
-#settings .backup-row button.armed {
-  color: #e63946; border-color: rgba(230, 57, 70, 0.4);
-}
 
 
 /* Visually hidden but still announced: the live region
@@ -1158,18 +1151,6 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 /* Reset plugins: back to the factory state (core on, extras
    off). Red, like the board-data reset: it undoes work the
    user may have done (turning plugins back off), so it reads
-   as a destructive action, not a neutral one. */
-#settings #plugins-reset {
-  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
-  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
-  color: #e63946; box-shadow: var(--shadow-sm); margin-top: 16px;
-}
-#settings #plugins-reset:hover { background: rgba(230, 57, 70, 0.06); }
-#settings .plugin-row button {
-  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
-  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
-  margin: 0; flex: none;
-}
-/* The armed confirm state reads red, like other confirm states:
-   "Disable anyway" is a deliberate second click, not a toggle. */
-#settings .plugin-row button.armed { color: #e63946; }
+   as a destructive action, not a neutral one. The button
+   itself is .btn.btn-danger; only its spacing stays here. */
+#settings #plugins-reset { margin-top: 16px; }
