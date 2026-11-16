@@ -48,6 +48,12 @@ export interface BootContext {
   // DOM); the board operations call it through the context
   // so this module never imports the boot module.
   toast: (msg: string) => void;
+  // Measure a text note's card height from its text as
+  // rendered (the UI probe in text-measure.ts), so a load
+  // never re-inflates a note the editor sized exactly.
+  // Set by main.ts at boot; the estimate is the fallback
+  // where there is no DOM.
+  measureNoteCardHeight: (text: string, fontSize: number, width: number) => number;
   // The board DOM is built by the core-board plugin, so these
   // start unassigned and are read from the shell after the
   // plugin activates in init(). Before that they must not be
@@ -102,13 +108,22 @@ export function isFrameCard(it: Item | undefined): boolean {
 // and grow transcript voice notes so the toggle fits.
 // Shared by loadBoardFromJson and init (which adds its own
 // UrlCard branch on top).
-export function healBoardItem(it: Item): void {
+// The height is measured from the text as rendered
+// (measureCardHeight), not estimated: the character-count
+// estimate over-counts wrapped lines, so a healed card
+// would come back taller than its text and the empty space
+// at its bottom would grow on every load. Callers without
+// a DOM (unit tests) keep the estimate.
+export function healBoardItem(
+  it: Item,
+  measureCardHeight: (text: string, fontSize: number, width: number) => number = (t, s, w) => estimateTextHeight(t, s, w) + CARD_DECORATIONS_H,
+): void {
   // Tags are gone: drop any the board still carries,
   // so they never come back.
   delete (it as { tags?: unknown }).tags;
   if (isFrameCard(it)) delete (it as { rotation?: number }).rotation;
   if ("Text" in it.kind) {
-    const need = estimateTextHeight(it.kind.Text.text, it.kind.Text.size, it.size.w) + CARD_DECORATIONS_H;
+    const need = measureCardHeight(it.kind.Text.text, it.kind.Text.size, it.size.w);
     if (it.size.h < need) it.size.h = need;
   }
   // A voice note with a transcript keeps room for its
@@ -246,7 +261,7 @@ export async function loadBoardFromJson(ctx: BootContext, json: string, dir: str
   // on load, so the checklist progress never sits on its
   // text.
   for (const it of parsed.items) {
-    healBoardItem(it);
+    healBoardItem(it, ctx.measureNoteCardHeight);
   }
   // Groups are sections: give every group its label, and
   // drop labels for groups that no longer have members.

@@ -14,10 +14,11 @@ import * as coreSearch from "./ui/search";
 import * as coreSettings from "./ui/settings";
 import * as coreTitlebar from "./ui/titlebar";
 import * as coreToolbar from "./ui/toolbar";
+import { measureNoteCardHeight } from "./ui/text-measure";
 import {
   Board, Camera, Item, Pt, ShapeKind, Size,
-  boardGet, CARD_DECORATIONS_H, centre, clampZoom, elementPoint, elementSize,
-  estimateTextHeight, healDuplicateIds, hitTest, itemsCentre, lassoSelect, marquee, moveSelection,
+  boardGet, centre, clampZoom, elementPoint, elementSize,
+  healDuplicateIds, hitTest, itemsCentre, lassoSelect, marquee, moveSelection,
   resizeItem, screenToWorld, select, strokesWithin, zoomCamera,
 } from "./backend/model";
 import { welcomeBoard } from "./backend/welcome";
@@ -63,6 +64,7 @@ const C: BootContext = {
   selected: [],
   toastTimer: null,
   toast: undefined as unknown as (msg: string) => void,
+  measureNoteCardHeight,
   boardEl: undefined as unknown as HTMLDivElement,
   cardsEl: undefined as unknown as HTMLDivElement,
   toastEl: undefined as unknown as HTMLDivElement,
@@ -358,7 +360,7 @@ async function init(): Promise<void> {
           it.kind.UrlCard.image = it.kind.UrlCard.image ?? null;
           it.kind.UrlCard.icon = it.kind.UrlCard.icon ?? null;
         }
-        healBoardItem(it);
+        healBoardItem(it, measureNoteCardHeight);
       }
     } else {
       C.board = welcomeBoard(C.boardDir, loaded.pdf_size_bytes, loaded.video_size_bytes ?? 0);
@@ -536,8 +538,11 @@ async function init(): Promise<void> {
       it.kind.Text.text = text;
       // The card keeps room for its bottom row (checklist
       // progress) below the text, so the row never covers
-      // the last line.
-      it.size.h = Math.max(40, estimateTextHeight(text, it.kind.Text.size, it.size.w) + CARD_DECORATIONS_H);
+      // the last line. The height is measured from the
+      // text as rendered, not estimated, or the empty
+      // space at the note's bottom grows with every
+      // paragraph.
+      it.size.h = measureNoteCardHeight(text, it.kind.Text.size, it.size.w);
       return true;
     },
     // Rename a group's section label. One save, one undo
