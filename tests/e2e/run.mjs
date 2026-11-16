@@ -1784,6 +1784,84 @@ async function main() {
       assert.ok(Math.abs(back.gap - 8) <= 2, `bar gap should be 8 on return, got ${back.gap}`);
       assert.ok(Math.abs(back.topDiff) <= 2, `bar top should match note top on return, got ${back.topDiff}`);
     });
+
+    // ---- feat/file-formats: importing files onto the board ----
+    // Drop each format the same way a file dragged from Finder
+    // arrives (bytes in a DataTransfer, never a path) and prove
+    // the right cards land in board.json.
+    const dropFixture = async (file, type) => {
+      const b64 = fs.readFileSync(path.join(repoRoot, "tests/e2e/fixtures", file)).toString("base64");
+      await page.evaluate(([b64, file, type]) => {
+        const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+        const dt = new DataTransfer();
+        dt.items.add(new File([bytes], file, { type }));
+        document.body.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, clientX: 640, clientY: 400, dataTransfer: dt }));
+      }, [b64, file, type]);
+    };
+    const countKind = (name) => readBoard().items.filter((it) => name in it.kind).length;
+
+    await check("dropping an SVG file lands its shapes, strokes and text as cards", async () => {
+      const before = { shape: countKind("Shape"), stroke: countKind("Stroke"), text: countKind("Text") };
+      await dropFixture("sample.svg", "image/svg+xml");
+      await waitFor("svg cards in board.json", () => {
+        const b = readBoard();
+        const hello = b.items.filter((it) => "Text" in it.kind && it.kind.Text.text === "Hello SVG");
+        return countKind("Shape") === before.shape + 4 && countKind("Stroke") === before.stroke + 3 && hello.length === 1 ? b : null;
+      });
+    });
+
+    await check("dropping a PNG with transparency lands an image card", async () => {
+      const before = countKind("Image");
+      await dropFixture("transparent.png", "image/png");
+      const image = await waitFor("png image in board.json", () => {
+        const found = readBoard().items.filter((it) => "Image" in it.kind);
+        return found.length === before + 1 ? found[found.length - 1] : null;
+      });
+      assert.equal(image.size.w, 40);
+      assert.equal(image.size.h, 40);
+      assert.ok(fs.existsSync(image.kind.Image.path), "embedded png asset exists on disk");
+    });
+
+    await check("dropping a PSD lands its layers as cards", async () => {
+      const before = { image: countKind("Image"), text: countKind("Text") };
+      await dropFixture("sample.psd", "image/vnd.adobe.photoshop");
+      await waitFor("psd cards in board.json", () => {
+        const hello = readBoard().items.filter((it) => "Text" in it.kind && it.kind.Text.text === "Hello PSD");
+        return countKind("Image") === before.image + 2 && hello.length === 1 ? true : null;
+      });
+      const layers = readBoard().items.filter((it) => "Image" in it.kind).slice(-2);
+      for (const layer of layers) assert.ok(fs.existsSync(layer.kind.Image.path), "psd layer asset exists on disk");
+    });
+
+    await check("dropping a PDF-compatible .ai lands a PdfCard", async () => {
+      const before = countKind("PdfCard");
+      await dropFixture("sample.ai", "application/pdf");
+      const card = await waitFor("ai pdf card in board.json", () => {
+        const found = readBoard().items.filter((it) => "PdfCard" in it.kind);
+        return found.length === before + 1 ? found[found.length - 1] : null;
+      });
+      assert.ok(card.kind.PdfCard.path.endsWith("sample.ai"), "ai file kept its name");
+      assert.ok(fs.existsSync(card.kind.PdfCard.path), "embedded ai asset exists on disk");
+    });
+
+    await check("dropping a legacy .ai reports it as unsupported and lands nothing", async () => {
+      const before = readBoard().items.length;
+      await dropFixture("legacy.ai", "application/postscript");
+      await new Promise((r) => setTimeout(r, 1500));
+      assert.equal(readBoard().items.length, before, "no card should land for a non-PDF .ai");
+      const toast = await page.evaluate(() => document.querySelector("#toast")?.textContent ?? "");
+      assert.ok(toast.includes("PDF compatibility"), `toast should explain the limit, got ${JSON.stringify(toast)}`);
+    });
+
+    await check("dropping a PDF still lands a PdfCard", async () => {
+      const before = countKind("PdfCard");
+      await dropFixture("sample.pdf", "application/pdf");
+      const card = await waitFor("pdf card in board.json", () => {
+        const found = readBoard().items.filter((it) => "PdfCard" in it.kind);
+        return found.length === before + 1 ? found[found.length - 1] : null;
+      });
+      assert.ok(fs.existsSync(card.kind.PdfCard.path), "embedded pdf asset exists on disk");
+    });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
     console.log(`  FAIL  setup: ${String(error.message).split("\n")[0]}`);
