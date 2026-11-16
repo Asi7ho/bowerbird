@@ -68,6 +68,15 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
   // still counts as a change here and still writes to disk.
   let lastSeenContentKey: string | null = null;
   let lastSeenCameraJson: string | null = null;
+  // Async saves in flight: save() marks a change as seen
+  // when it dispatches the write, but the write lands
+  // later. While a write is in flight the flush (saveSync)
+  // must not trust the seen keys — a close during the
+  // flight would otherwise skip the write and leave
+  // board.json stale, with only the journal holding the
+  // change. A count, not a flag: two saves can dispatch
+  // before the first lands.
+  let savesInFlight = 0;
   // The content key for the current board, built from one
   // serialisation of the items: identical to contentKey()
   // of a snapshot (same fields, same order), without
@@ -130,6 +139,7 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
     try {
       api.recoveryWriteSync(boardJson);
     } catch { /* the save below still proceeds */ }
+    savesInFlight++;
     api.saveBoard(boardJson).then(
       (ok) => {
         // A refused save — an external writer changed the file,
@@ -155,7 +165,7 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
         }
       },
       onSaveFailed,
-    );
+    ).finally(() => { savesInFlight--; });
     return { itemsJson, contentKey };
   }
 
@@ -169,10 +179,13 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
   // after a backup restore the disk board is the
   // snapshot while memory still holds the board it
   // replaced, and an unconditional write would put the
-  // old board back on disk. A content save already
-  // dispatched is not dirty here either: its async write
-  // was sent, and the journal written before it preserves
-  // the edit if the window closes first. No undo step,
+  // old board back on disk. A save already dispatched
+  // IS dirty here: its async write may not have landed
+  // yet, and the seen keys were marked at dispatch, so
+  // trusting them would skip the write and leave
+  // board.json stale. The flush writes it synchronously
+  // instead — the same board the in-flight save is
+  // writing, so a duplicate landing is harmless. No undo step,
   // no search bump, no events: this is a flush, and the
   // seen keys are left alone so a later save still
   // captures the undo step for the change.
@@ -180,7 +193,7 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
     const itemsJson = JSON.stringify(ctx.getBoard().items);
     const contentKey = contentKeyFor(itemsJson);
     const cameraJson = JSON.stringify(ctx.getBoard().camera);
-    if (contentKey === lastSeenContentKey && cameraJson === lastSeenCameraJson) return false;
+    if (savesInFlight === 0 && contentKey === lastSeenContentKey && cameraJson === lastSeenCameraJson) return false;
     if (typeof api.saveBoardSync !== "function") return false;
     const boardJson = JSON.stringify(ctx.getBoard());
     // The journal is the write-ahead copy, as in save():

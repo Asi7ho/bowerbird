@@ -157,14 +157,42 @@ describe("createUndoStore", () => {
     expect(saveBoardSync).toHaveBeenCalledWith(JSON.stringify(board));
   });
 
-  it("saveSync does not write a board that did not change", () => {
+  it("saveSync does not write a board that did not change", async () => {
     // The restore case: after a backup restore the disk board
     // is the snapshot while memory still holds the board it
     // replaced — memory equals the last saved state, so the
     // unload flush must not write the stale board back.
+    // Let the async save from save() land first: while it is
+    // in flight the flush writes (see the test above), so the
+    // no-write assertion only holds once it has settled.
     store.save();
+    await new Promise((r) => setTimeout(r, 0));
     expect(store.saveSync()).toBe(false);
     expect(saveBoardSync).not.toHaveBeenCalled();
+  });
+
+  it("saveSync writes while an async save is still in flight", async () => {
+    // A close during an in-flight async save: save() marked
+    // the change as seen at dispatch, but the write has not
+    // landed, so the flush must write it synchronously
+    // instead of trusting the seen keys — otherwise the
+    // board on disk keeps the old camera and the change
+    // survives only in the journal.
+    let resolveSave!: (v: boolean) => void;
+    const pending = new Promise<boolean>((resolve) => { resolveSave = resolve; });
+    saveBoard.mockReturnValueOnce(pending);
+    board.items.push(textItem(1, "hello"));
+    board.next_id = 2;
+    store.save();
+    expect(store.saveSync()).toBe(true);
+    expect(saveBoardSync).toHaveBeenCalledTimes(1);
+    expect(saveBoardSync).toHaveBeenCalledWith(JSON.stringify(board));
+    // Once the async save lands, the flush has nothing to do.
+    resolveSave(true);
+    await pending;
+    await new Promise((r) => setTimeout(r, 0));
+    expect(store.saveSync()).toBe(false);
+    expect(saveBoardSync).toHaveBeenCalledTimes(1);
   });
 
   it("saveSync writes a camera-only change", () => {
@@ -183,7 +211,7 @@ describe("createUndoStore", () => {
     expect(store.saveSync()).toBe(false);
   });
 
-  it("a board loaded from disk becomes the save baseline", () => {
+  it("a board loaded from disk becomes the save baseline", async () => {
     store.save();
     // An external change arrives by load (watcher reload,
     // restore): the board is replaced without a save.
@@ -193,8 +221,10 @@ describe("createUndoStore", () => {
     // The loaded board is the baseline now: neither the
     // async save nor the unload flush rewrites it, so a
     // restore is never undone by a later save or reload.
+    // Let the first async save land first (see above).
     store.save();
     expect(saveBoard).toHaveBeenCalledTimes(1);
+    await new Promise((r) => setTimeout(r, 0));
     expect(store.saveSync()).toBe(false);
     expect(saveBoardSync).not.toHaveBeenCalled();
   });
