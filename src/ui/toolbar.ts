@@ -436,8 +436,13 @@ export function activate(api: PluginContext): void {
   api.events.on("pen", update);
   // Follow the camera (zoom level) and the board content,
   // so the note-colours bar follows a note that is moved.
+  // "items-moved" is the live drag: a move or resize
+  // changes the note's geometry without saving, so the
+  // save-time "board" event would leave the bar behind
+  // until the drag ends.
   api.events.on("camera", update);
   api.events.on("board", update);
+  api.events.on("items-moved", update);
   update();
 }
 

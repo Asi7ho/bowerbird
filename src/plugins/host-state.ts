@@ -70,10 +70,14 @@ export const listeners = new Map<string, Set<() => void>>();
 // The core's own events: state changes the core fires and
 // every plugin listens for — the board changed, a save
 // started or finished, the tool, view, camera, pen or
-// selection changed. A plugin may listen for these but never
-// fire them: firing one would make every other plugin and
-// the core act on a state change that never happened.
-export const CORE_EVENTS = new Set(["board", "camera", "pen", "save-failed", "saved", "saving", "selection", "tool", "view"]);
+// selection changed, or items moved without a save (a drag
+// moves cards live and saves once at drag end, so a
+// listener that follows a card — the toolbar's note colour
+// bar — needs this, not the save-time "board" event). A
+// plugin may listen for these but never fire them: firing
+// one would make every other plugin and the core act on a
+// state change that never happened.
+export const CORE_EVENTS = new Set(["board", "camera", "items-moved", "pen", "save-failed", "saved", "saving", "selection", "tool", "view"]);
 
 // The shell DOM the core owns (board element, panels
 // element, view switcher, toast, ...), filled in by
