@@ -504,8 +504,14 @@ function walkSvg(node: XmlNode, m: Matrix, out: RawItem[]): void {
     const moved = pts.map((p) => applyMatrix(mm, p));
     const xs = moved.map((p) => p.x), ys = moved.map((p) => p.y);
     const minX = Math.min(...xs), minY = Math.min(...ys);
+    // Stroke points are absolute in SVG user units, like a
+    // hand-drawn stroke's points are absolute in world
+    // coords: pos is just their bounding-box min. The
+    // renderer and hit-testing both read the points raw and
+    // never add pos, so relative points would draw at the
+    // origin.
     out.push({
-      kind: { Stroke: { points: moved.map((p) => ({ x: p.x - minX, y: p.y - minY })), color: paint.color, width: paint.width, marker: false } },
+      kind: { Stroke: { points: moved, color: paint.color, width: paint.width, marker: false } },
       pos: { x: minX, y: minY },
       size: { w: Math.max(1, Math.max(...xs) - minX), h: Math.max(1, Math.max(...ys) - minY) },
     });
@@ -575,7 +581,10 @@ export function parseSvgToItems(svgText: string, origin: Pt, maxWidth = 640): Im
   const out: ImportedItem[] = raw.map((it) => {
     const kind: Kind = it.kind;
     if ("Stroke" in kind) {
-      kind.Stroke.points = kind.Stroke.points.map((p) => ({ x: p.x * scale, y: p.y * scale }));
+      // Points are absolute in SVG units, so they translate
+      // like pos does — never scale them in place as
+      // relative offsets.
+      kind.Stroke.points = kind.Stroke.points.map((p) => ({ x: origin.x + (p.x - minX) * scale, y: origin.y + (p.y - minY) * scale }));
       kind.Stroke.width = Math.max(1, kind.Stroke.width * scale);
     }
     if ("Text" in kind && it.fontSize !== undefined) {

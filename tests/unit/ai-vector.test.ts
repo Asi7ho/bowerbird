@@ -106,8 +106,10 @@ describe("extractAiPage paths", () => {
     expect(kind).toMatchObject({ Stroke: { color: "#008000", width: 2, marker: false } });
     expect(r.items[0].pos).toEqual({ x: 20, y: 120 });
     expect(r.items[0].size).toEqual({ w: 80, h: 60 });
+    // Points are absolute in the flipped page frame, like a
+    // hand-drawn stroke's: their min is pos, never (0, 0).
     expect((kind as { Stroke: { points: Array<{ x: number; y: number }> } }).Stroke.points).toEqual([
-      { x: 0, y: 60 }, { x: 40, y: 0 }, { x: 80, y: 50 },
+      { x: 20, y: 180 }, { x: 60, y: 120 }, { x: 100, y: 170 },
     ]);
   });
 

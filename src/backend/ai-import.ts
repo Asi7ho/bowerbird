@@ -197,8 +197,14 @@ export async function parseAiToItems(data: Uint8Array, origin: Pt, maxWidth = 64
     }
     // Stack the pages vertically with a gap, in page
     // coordinates; the union scale below places them all.
+    // Stroke points are absolute in the page frame, so
+    // they move with pos — otherwise a stroke on a later
+    // page would draw at its first-page position.
     for (const it of pageItems) {
       it.pos = { x: it.pos.x, y: it.pos.y + offsetY };
+      if ("Stroke" in it.kind) {
+        it.kind.Stroke.points = it.kind.Stroke.points.map((p) => ({ x: p.x, y: p.y + offsetY }));
+      }
       raw.push(it);
     }
     offsetY += viewport.height + PAGE_GAP;
@@ -215,7 +221,10 @@ export async function parseAiToItems(data: Uint8Array, origin: Pt, maxWidth = 64
   const out: ImportedItem[] = raw.map((it) => {
     const kind: Kind = it.kind;
     if ("Stroke" in kind) {
-      kind.Stroke.points = kind.Stroke.points.map((pt) => ({ x: pt.x * scale, y: pt.y * scale }));
+      // Points are absolute in page units, so they
+      // translate like pos does — never scale them in place
+      // as relative offsets.
+      kind.Stroke.points = kind.Stroke.points.map((pt) => ({ x: origin.x + (pt.x - minX) * scale, y: origin.y + (pt.y - minY) * scale }));
       kind.Stroke.width = Math.max(1, kind.Stroke.width * scale);
     }
     if ("Text" in kind && it.fontSize !== undefined) {

@@ -435,8 +435,14 @@ export function extractAiPage(ops: AiOpList, pageHeight: number): AiExtractResul
     const box = bboxOf(sub.points);
     const r = flipBox(box);
     const pts = sub.points.map((p) => flip(p));
+    // Points are absolute in the flipped page frame, like a
+    // hand-drawn stroke's points are absolute in world
+    // coords: pos is just their bounding-box min. The
+    // renderer and hit-testing both read the points raw and
+    // never add pos, so relative points would draw at the
+    // origin.
     items.push({
-      kind: { Stroke: { points: pts.map((p) => ({ x: p.x - r.x, y: p.y - r.y })), color, width: Math.max(0.5, width), marker: false } },
+      kind: { Stroke: { points: pts, color, width: Math.max(0.5, width), marker: false } },
       pos: { x: r.x, y: r.y },
       size: { w: r.w, h: r.h },
     });
