@@ -45,6 +45,21 @@ const ICONS = {
   settings: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h9M17 8h3M4 16h3M11 16h9" /><circle cx="15" cy="8" r="2.2" /><circle cx="9" cy="16" r="2.2" /></svg>',
 };
 
+// Whether any pointer button is currently held down. A pan
+// is a drag: the user may pause mid-pan (no camera events
+// for a while) while still holding the pointer down, and the
+// note-colours bar must not come back during that pause —
+// only once the drag is over. The camera-settle timer reads
+// this; the listeners are added in activate and removed in
+// deactivate.
+let pointerIsDown = false;
+function onPointerDown(): void {
+  pointerIsDown = true;
+}
+function onPointerUp(): void {
+  pointerIsDown = false;
+}
+
 export function activate(api: PluginContext): void {
   // ---- build the toolbar DOM ----
   const wrap = document.createElement("div");
@@ -223,6 +238,14 @@ export function activate(api: PluginContext): void {
   let lastTool = "";
 
   let lastKey = "";
+  // Whether the camera is currently moving (a pan or a
+  // zoom). While it moves, the note-colours bar is hidden
+  // instead of sliding around with the board — the user is
+  // navigating, not editing — and it comes back once the
+  // camera has settled. The settle timer restarts on every
+  // camera event, so a long pan keeps it hidden throughout.
+  let cameraMoving = false;
+  let cameraSettleTimer: ReturnType<typeof setTimeout> | null = null;
   function update(): void {
     const tool = api.ui.getTool();
     if (tool !== lastTool) {
@@ -244,7 +267,7 @@ export function activate(api: PluginContext): void {
     // the zoom, and the bar must follow that as well.
     const noteItem = note ? api.board.getItem(note.id) : null;
     const notePos = noteItem ? api.geometry.itemBounds(noteItem)[0] : null;
-    const key = `${tool}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}|${cam.x},${cam.y}|${colorBarOpen}|${outline}|${notePos ? `${notePos.x},${notePos.y}` : ""}`;
+    const key = `${tool}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}|${cam.x},${cam.y}|${colorBarOpen}|${outline}|${notePos ? `${notePos.x},${notePos.y}` : ""}|${cameraMoving}`;
     if (key === lastKey) return;
     lastKey = key;
 
@@ -348,13 +371,32 @@ export function activate(api: PluginContext): void {
 
     // Note colours: shown when at least one selected card
     // is a text note and no draw tool is active. The bar
-    // sits just above the note (below it when the note is
-    // too close to the top of the screen), left-aligned
-    // with the note, and follows it as the board pans or
-    // zooms. Clicking a colour sets the background of
-    // every selected text note, in one undo step.
+    // sits beside the note (to its right, top-aligned, or
+    // to its left near the right edge) and follows it when
+    // the note itself is moved. It does NOT follow a pan
+    // or a zoom: while the camera moves it is hidden (see
+    // onCamera), so it never slides around while the user
+    // is navigating, and it stays hidden when the note has
+    // been panned out of view. Clicking a colour sets the
+    // background of every selected text note, in one undo
+    // step.
     const showNotes = note !== null && !isDraw;
-    noteBar.style.display = showNotes ? "flex" : "none";
+    // Whether the selected note is on screen, so the bar
+    // is not shown floating at the viewport edge when the
+    // note has been panned out of view.
+    let noteOnScreen = false;
+    if (note) {
+      const item = api.board.getItem(note.id);
+      if (item) {
+        const [pos, size] = api.geometry.itemBounds(item);
+        const c = api.view.getCamera();
+        const rect = api.ui.boardEl.getBoundingClientRect();
+        const left = rect.left + (pos.x - c.x) * c.zoom;
+        const top = rect.top + (pos.y - c.y) * c.zoom;
+        noteOnScreen = left + size.w * c.zoom > 0 && left < window.innerWidth && top + size.h * c.zoom > 0 && top < window.innerHeight;
+      }
+    }
+    noteBar.style.display = showNotes && !cameraMoving && noteOnScreen ? "flex" : "none";
     if (showNotes && noteBar.childElementCount === 0) {
       for (const hex of NOTE_COLOURS) {
         noteBar.appendChild(swatchButton(hex, () => {
@@ -430,17 +472,52 @@ export function activate(api: PluginContext): void {
     delBtn.classList.toggle("dim", selected.length === 0);
   }
 
+  // A pan or a zoom is navigation, not editing: the
+  // note-colours bar must not slide around with the board
+  // while the user is looking elsewhere. Hide it the
+  // moment the camera moves, and bring it back 200ms
+  // after the camera has settled (the timer restarts on
+  // every camera event, so a long pan keeps it hidden
+  // throughout). A pause mid-pan is not a settled camera:
+  // while a pointer button is held down the timer keeps
+  // rescheduling instead of bringing the bar back, so it
+  // only returns once the drag is over. Moving the note
+  // itself does not move the camera, so the bar still
+  // follows a drag.
+  function onCamera(): void {
+    cameraMoving = true;
+    noteBar.style.display = "none";
+    if (cameraSettleTimer !== null) clearTimeout(cameraSettleTimer);
+    const settle = (): void => {
+      if (pointerIsDown) {
+        cameraSettleTimer = setTimeout(settle, 200);
+        return;
+      }
+      cameraMoving = false;
+      cameraSettleTimer = null;
+      update();
+    };
+    cameraSettleTimer = setTimeout(settle, 200);
+    update();
+  }
+
   // Follow the tool, the selection and the pen colour.
   api.events.on("tool", update);
   api.events.on("selection", update);
   api.events.on("pen", update);
+  // Track whether a pointer button is held, so the
+  // camera-settle timer does not bring the note-colours
+  // bar back during a pause in the middle of a pan.
+  document.addEventListener("pointerdown", onPointerDown);
+  document.addEventListener("pointerup", onPointerUp);
+  document.addEventListener("pointercancel", onPointerUp);
   // Follow the camera (zoom level) and the board content,
   // so the note-colours bar follows a note that is moved.
   // "items-moved" is the live drag: a move or resize
   // changes the note's geometry without saving, so the
   // save-time "board" event would leave the bar behind
   // until the drag ends.
-  api.events.on("camera", update);
+  api.events.on("camera", onCamera);
   api.events.on("board", update);
   api.events.on("items-moved", update);
   update();
@@ -451,6 +528,9 @@ export function deactivate(): void {
   // restores the board without a toolbar (the core renders
   // nothing on its own). The note-colours bar lives on the
   // body, not in the toolbar, so it is removed too.
+  document.removeEventListener("pointerdown", onPointerDown);
+  document.removeEventListener("pointerup", onPointerUp);
+  document.removeEventListener("pointercancel", onPointerUp);
   document.getElementById("toolbar-wrap")?.remove();
   document.getElementById("note-colours")?.remove();
 }
