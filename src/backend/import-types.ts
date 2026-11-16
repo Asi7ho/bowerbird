@@ -20,5 +20,6 @@ export interface ImportedItem {
   // Raw layer pixels for an Image card (a PSD raster layer).
   // The drop flow renders these to PNG on a canvas and
   // embeds the result, then rewrites the kind's path.
-  pixels?: { width: number; height: number; data: Uint8ClampedArray | Uint8Array };
+  // PSD pixels can be 8-bit, 16-bit or 32-bit per channel.
+  pixels?: { width: number; height: number; data: Uint8ClampedArray | Uint8Array | Uint16Array | Float32Array };
 }
