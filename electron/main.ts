@@ -208,6 +208,18 @@ function boardDir(): string {
 let boardWatcher: fs.FSWatcher | null = null;
 let lastSavedJson: string | null = null;
 let boardWatchTimer: NodeJS.Timeout | null = null;
+// Board folders with a recovery offer outstanding: the journal
+// holds edits board.json does not, and the user has not chosen
+// Restore or Discard yet. While a folder is in this set, the
+// journal write/clear IPCs refuse to run — a background save
+// after launch (poster backfill, link previews) would otherwise
+// overwrite the journal with the current board and clear it,
+// destroying the recovery before the user can choose. The set
+// is per board folder, in-memory only: a relaunch recomputes
+// it from the journal at load. It clears on a successful
+// restore or a discard, when the journal is gone and normal
+// journaling can resume.
+const recoveryPending = new Set<string>();
 
 function startBoardWatcher(): void {
   stopBoardWatcher();
@@ -874,6 +886,12 @@ function registerIpc(): void {
       hasRecovery: rec !== null && (json === null || recoveryDiffers(dir, json)),
       savedAt: rec !== null && (json === null || recoveryDiffers(dir, json)) ? rec.savedAt : null,
     };
+    // Freeze the journal while the offer is outstanding (see
+    // recoveryPending above): a background save after this
+    // load must not overwrite or clear it before the user
+    // chooses. A load with no recovery unfreezes the folder.
+    if (recovery.hasRecovery) recoveryPending.add(dir);
+    else recoveryPending.delete(dir);
     // The renderer gets the board with relative asset paths
     // resolved against its folder, so a board carried over
     // from another machine loads with absolute paths it can
@@ -1385,6 +1403,13 @@ function registerIpc(): void {
   // window the journal exists to close. It never throws —
   // a journal that cannot be written must not break a save.
   ipcMain.on("bowerbird:recovery-write-sync", (event, json: string) => {
+    // While a recovery offer is outstanding for this board,
+    // refuse to overwrite the journal: the board being saved
+    // is the disk board (or a background save of it) and does
+    // not hold the journalled edits — overwriting would lose
+    // the recovery the dialog is offering. The save itself
+    // still proceeds; only the journal write is skipped.
+    if (recoveryPending.has(boardDir())) { event.returnValue = false; return; }
     event.returnValue = typeof json === "string" ? writeRecovery(boardDir(), json) : false;
   });
   // Clear the journal once its board has landed on disk.
@@ -1392,6 +1417,11 @@ function registerIpc(): void {
   // between this save and its clear, and a blind clear would
   // delete the newer journal.
   ipcMain.handle("bowerbird:recovery-clear", (_event, json: string) => {
+    // While a recovery offer is outstanding, refuse to clear:
+    // the journal is the recovery, and the save that wants it
+    // cleared is a background save of the disk board, not of
+    // the journalled edits.
+    if (recoveryPending.has(boardDir())) return false;
     return typeof json === "string" ? clearRecoveryIfMatches(boardDir(), json) : false;
   });
   ipcMain.handle("bowerbird:recovery-status", () => {
@@ -1412,10 +1442,14 @@ function registerIpc(): void {
     try { makeBackup(boardDir(), fs.readFileSync(boardPath(), "utf8")); } catch { /* restoring still proceeds */ }
     if (!saveBoardJson(rec.json)) throw new Error("could not restore the unsaved changes");
     clearRecovery(boardDir());
+    // The user chose: the journal is gone, so normal
+    // journaling can resume for later saves.
+    recoveryPending.delete(boardDir());
     return { json: resolveBoardAssetPaths(rec.json, boardDir()), board_path: boardPath(), board_dir: boardDir() };
   });
   ipcMain.handle("bowerbird:recovery-discard", () => {
     clearRecovery(boardDir());
+    recoveryPending.delete(boardDir());
   });
   ipcMain.handle("bowerbird:restore-backup", (_event, name: string) => {
     const out = restoreBackup(boardDir(), name);
