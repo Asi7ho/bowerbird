@@ -31,6 +31,7 @@
   "version": "0.2.1",
   "dependencies": {
     "@xenova/transformers": "2.17.2",
+    "ag-psd": "^34.2.1",
     "jszip": "^3.10.1",
     "minisearch": "7.2.0",
     "pdfjs-dist": "6.5.438",
