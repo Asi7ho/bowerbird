@@ -1319,13 +1319,25 @@ async function main() {
       await page.mouse.down();
       await page.mouse.move(cx + 120, cy, { steps: 10 });
       await page.mouse.up();
-      await new Promise((r) => setTimeout(r, 300));
-      const after = await sample();
+      // The drag rotates the view, but the re-render under
+      // SwiftShader can lag the drag — a fixed 300ms sleep
+      // flaked when the machine was busy, so poll until the
+      // pixels actually change instead of hoping the sleep
+      // was long enough.
+      let after = null;
+      let changed = false;
+      for (let i = 0; i < 20; i++) {
+        after = await sample();
+        if (after) {
+          changed = before.some((p, j) => {
+            const q = after[j];
+            return Math.abs(p[0] - q[0]) + Math.abs(p[1] - q[1]) + Math.abs(p[2] - q[2]) > 30;
+          });
+          if (changed) break;
+        }
+        await new Promise((r) => setTimeout(r, 500));
+      }
       assert.ok(after, "canvas still readable after the drag");
-      const changed = before.some((p, i) => {
-        const q = after[i];
-        return Math.abs(p[0] - q[0]) + Math.abs(p[1] - q[1]) + Math.abs(p[2] - q[2]) > 30;
-      });
       assert.ok(changed, "dragging the model rotated the view (pixels changed)");
     });
 
