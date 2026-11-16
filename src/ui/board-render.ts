@@ -58,6 +58,7 @@ export function applyGrid(): void {
 export function applyCamera(): void {
   const cam = S.api.view.getCamera();
   S.worldEl.setAttribute("transform", `translate(${-cam.x * cam.zoom},${-cam.y * cam.zoom}) scale(${cam.zoom})`);
+  S.previewWorldEl.setAttribute("transform", `translate(${-cam.x * cam.zoom},${-cam.y * cam.zoom}) scale(${cam.zoom})`);
   S.groupFramesEl.style.transform = `translate(${-cam.x * cam.zoom}px,${-cam.y * cam.zoom}px) scale(${cam.zoom})`;
   S.cardsEl.style.transform = `translate(${-cam.x * cam.zoom}px,${-cam.y * cam.zoom}px) scale(${cam.zoom})`;
   S.groupsEl.style.transform = `translate(${-cam.x * cam.zoom}px,${-cam.y * cam.zoom}px) scale(${cam.zoom})`;
@@ -122,6 +123,9 @@ export function refreshContentIfVisibleChanged(): void {
 // it follow in real time without re-parsing every card.
 export function renderSvgOnly(): void {
   S.worldEl.innerHTML = "";
+  // A preview is a drag-time node like the strokes, so a
+  // rebuild wipes it too — it never outlives its drag.
+  S.previewWorldEl.innerHTML = "";
   // Fresh board: a drag may have moved items since the last
   // render, and the SVG layer must follow the live board.
   renderStrokesAndConnectors(S.api.board.get());
@@ -292,6 +296,7 @@ export function render(): void {
     }
   }
   S.worldEl.innerHTML = "";
+  S.previewWorldEl.innerHTML = "";
   renderStrokesAndConnectors(board);
   renderGroupFrames(board);
   // Cards: rebuild, except the note being edited (its textarea stays).
