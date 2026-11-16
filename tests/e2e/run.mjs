@@ -2476,12 +2476,14 @@ async function main() {
       assert.equal(textCards().some((it) => it.kind.Text.text === "Do not lose me"), false);
       // Kill the process dead (no beforeunload, no save) and relaunch.
       // Playwright's app.process() throws once the process is
-      // dead, so capture the ChildProcess first and poll its
-      // exitCode — the object stays valid after death.
+      // dead, so capture the ChildProcess first and poll it —
+      // the object stays valid after death. Node leaves exitCode
+      // null for a signal-killed process and sets signalCode
+      // instead, so accept either.
       const proc = app.process();
       assert.ok(proc, "electron process handle");
       process.kill(proc.pid, "SIGKILL");
-      await waitFor("app process exits after SIGKILL", () => (proc.exitCode !== null ? true : null), 10000);
+      await waitFor("app process exits after SIGKILL", () => (proc.exitCode !== null || proc.signalCode !== null ? true : null), 10000);
       app = await launchApp();
       page = await app.firstWindow();
       await page.waitForSelector("#recovery-dialog", { timeout: READY_TIMEOUT_MS });
