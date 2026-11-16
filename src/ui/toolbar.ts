@@ -32,6 +32,12 @@ export const manifest: PluginManifest = {
 const PALETTE = ["#1A1A1A", "#E63946", "#2E86AB", "#FF6B35", "#6a4c93", "#2A9D8F"];
 const NOTE_COLOURS = ["#FFFFFF", "#FEF3C7", "#FCE7F3", "#DCFCE7", "#DBEAFE", "#FFEDD5", "#EDE9FE", "#F3F4F6"];
 
+// The timer that re-attaches the note-colours bar once the
+// camera settles after a pan or zoom. Module-level so
+// deactivate() can stop it (activate() owns the rest of
+// the bar state).
+let cameraSettleTimer: ReturnType<typeof setTimeout> | undefined;
+
 const ICONS = {
   select: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5 19 12l-7.5 1.4L8.6 20.5 6 3.5Z" /></svg>',
   pen: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 19.5 5.6 15 16.2 4.4a2.12 2.12 0 0 1 3 3L8.6 18l-4.1 1.5Z" fill="none"/><path d="M14.5 6.5l3 3" /></svg>',
@@ -226,11 +232,18 @@ export function activate(api: PluginContext): void {
   // What the note-colours bar's position was last computed
   // from: the selected note, its board position and size.
   // The bar only moves when that changes — a drag, a
-  // resize, or a new selection. A pan or a zoom changes
-  // the camera, not the note, so the bar stays exactly
-  // where it is on screen while the user navigates: it
-  // neither slides around with the board nor hides.
+  // resize, or a new selection — or when the camera
+  // settles after a pan or zoom (see update). A pan or a
+  // zoom changes the camera, not the note, so the bar
+  // stays exactly where it is on screen while the user
+  // navigates: it neither slides around with the board
+  // nor hides. Once the camera has settled it re-attaches
+  // beside the note's new screen position, so a pan never
+  // leaves it floating where the note used to be.
   let lastBarKey = "";
+  // The camera as of the last update (the settle timer
+  // itself lives at module level, see above).
+  let lastCamKey = "";
   function update(): void {
     const tool = api.ui.getTool();
     if (tool !== lastTool) {
@@ -255,6 +268,27 @@ export function activate(api: PluginContext): void {
     const key = `${tool}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}|${cam.x},${cam.y}|${colorBarOpen}|${outline}|${notePos ? `${notePos.x},${notePos.y}` : ""}`;
     if (key === lastKey) return;
     lastKey = key;
+
+    // The bar stays put while the camera moves, and
+    // re-attaches to the note once the camera has settled:
+    // a pan that leaves the bar floating where the note
+    // used to be is the bar detached. The timer restarts
+    // on every camera move, so it only fires 200ms after
+    // the last one.
+    const camKey = `${cam.x},${cam.y}|${zoom}`;
+    if (camKey !== lastCamKey) {
+      lastCamKey = camKey;
+      clearTimeout(cameraSettleTimer);
+      cameraSettleTimer = setTimeout(() => {
+        // Force update() past its key check, and the bar
+        // past its note key, so it repositions beside the
+        // note's new screen position. If the selection
+        // changed in the meantime, update() hides it.
+        lastBarKey = "";
+        lastKey = "";
+        update();
+      }, 200);
+    }
 
     zoomLabel.textContent = `${Math.round(zoom * 100)}%`;
 
@@ -359,11 +393,12 @@ export function activate(api: PluginContext): void {
     // sits beside the note (to its right, top-aligned, or
     // to its left near the right edge) and follows it when
     // the note itself is moved. It does NOT follow a pan
-    // or a zoom: while the camera moves the bar stays
-    // exactly where it is on screen — it neither slides
-    // around with the board nor hides — and only moves
-    // again when the note itself moves or the selection
-    // changes. Clicking a colour sets the background of
+    // or a zoom while the camera is moving: while the
+    // camera moves the bar stays exactly where it is on
+    // screen — it neither slides around with the board
+    // nor hides — and re-attaches beside the note once
+    // the camera settles (see the settle timer in
+    // update). Clicking a colour sets the background of
     // every selected text note, in one undo step.
     const showNotes = note !== null && !isDraw;
     noteBar.style.display = showNotes ? "flex" : "none";
@@ -393,12 +428,15 @@ export function activate(api: PluginContext): void {
       const item = api.board.getItem(note.id);
       if (item) {
         const [pos, size] = api.geometry.itemBounds(item);
-        // The bar only moves when the note itself moves.
-        // The camera is deliberately not in this key: a
-        // pan or a zoom changes the camera, not the note,
-        // so the bar stays put on screen while the user
-        // navigates, and only follows a drag, a resize or
-        // a new selection.
+        // The bar only moves when the note itself moves,
+        // or when the camera settles after a pan or zoom
+        // (the settle timer clears lastBarKey, so the
+        // next update repositions it). The camera is
+        // deliberately not in this key: a pan or a zoom
+        // changes the camera, not the note, so the bar
+        // stays put on screen while the user navigates,
+        // and only follows a drag, a resize, a new
+        // selection, or a settled camera.
         const barKey = `${note.id}|${pos.x},${pos.y}|${size.w},${size.h}`;
         if (barKey !== lastBarKey) {
           lastBarKey = barKey;
@@ -452,11 +490,6 @@ export function activate(api: PluginContext): void {
     delBtn.classList.toggle("dim", selected.length === 0);
   }
 
-  // A pan or a zoom is navigation, not editing: the
-  // note-colours bar must not slide around with the board
-  // while the user is looking elsewhere. Hide it the
-  // moment the camera moves, and bring it back 200ms
-  // after the camera has settled (the timer restarts on
   // Follow the tool, the selection and the pen colour.
   api.events.on("tool", update);
   api.events.on("selection", update);
@@ -480,7 +513,10 @@ export function deactivate(): void {
   // The toolbar DOM is built by this plugin; removing it
   // restores the board without a toolbar (the core renders
   // nothing on its own). The note-colours bar lives on the
-  // body, not in the toolbar, so it is removed too.
+  // body, not in the toolbar, so it is removed too. Stop
+  // the settle timer first, so it cannot re-attach a bar
+  // that is no longer there.
+  clearTimeout(cameraSettleTimer);
   document.getElementById("toolbar-wrap")?.remove();
   document.getElementById("note-colours")?.remove();
 }
