@@ -429,6 +429,18 @@ describe("text cards: markdown, checklists, height", () => {
     expect(short).toBeGreaterThanOrEqual(48);
     expect(long).toBeGreaterThan(short);
   });
+  it("estimateTextHeight counts blank lines and matches the note-body line-height", () => {
+    // A trailing newline is a blank line: it grows the note,
+    // or pressing Enter never grows it.
+    expect(estimateTextHeight("Hi\n", 16, 260)).toBeGreaterThan(estimateTextHeight("Hi", 16, 260));
+    // One line costs one line-height (16 * 1.55, the note
+    // body's line-height) plus the paragraph's 6px bottom
+    // margin — no more, or the empty space at a note's
+    // bottom grows with every line typed.
+    const two = estimateTextHeight("a\nb", 16, 260);
+    const three = estimateTextHeight("a\nb\nc", 16, 260);
+    expect(three - two).toBeCloseTo(16 * 1.55 + 6, 5);
+  });
   it("escapeHtml escapes the four characters", () => {
     expect(escapeHtml(`<a href="x">&`)).toBe("&lt;a href=&quot;x&quot;&gt;&amp;");
   });
