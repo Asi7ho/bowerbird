@@ -542,14 +542,14 @@ export function activate(context: PluginContext): void {
   for (const btn of Array.from(backdrop.querySelectorAll("[data-settings-tab]"))) {
     (btn as HTMLElement).addEventListener("click", () => setSettingsTab((btn as HTMLElement).dataset.settingsTab ?? "general"));
   }
-  // Export data: download the current board as a ZIP — its
-  // board.json with relative asset paths, plus every media
-  // file its cards reference — so the board comes back whole
-  // in a fresh install. Import data installs a board export
-  // (a ZIP, or the folder it unzips to) and loads it.
-  // Cancelling either dialog is not an error, so nothing is
-  // shown; a failed export or import is reported by the
-  // toast the board helper raises.
+  // Export data: download the whole install as a ZIP — every
+  // board, the user-installed plugins with their full folders,
+  // and the app state — so a fresh install comes back whole.
+  // Import data installs a data export (a ZIP, or the folder
+  // it unzips to) and loads the board that was current at
+  // export time. Cancelling either dialog is not an error, so
+  // nothing is shown; a failed export or import is reported by
+  // the toast the board helper raises.
   el("btn-export-data")?.addEventListener("click", async () => {
     try {
       const saved = await context.exportBoard();

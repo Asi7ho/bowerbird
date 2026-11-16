@@ -697,12 +697,13 @@ export interface PluginContext {
     restore: (name: string) => Promise<boolean>;
     openFolder: () => Promise<string>;
   };
-  // Board export and import: export downloads the current
-  // board as a ZIP (null when the user cancels the save
-  // dialog); import installs a board export — a ZIP file
-  // or the folder it unzips to — and loads it, so it needs
-  // board:write and is not available to a trial plugin.
-  // Both return the board resolved to this machine.
+  // Board export and import: export downloads the whole
+  // install as a ZIP (null when the user cancels the save
+  // dialog); import installs a data export — a ZIP file
+  // or the folder it unzips to — and loads the board that
+  // was current at export time, so it needs board:write and
+  // is not available to a trial plugin. Both return the board
+  // resolved to this machine.
   exportBoard: () => Promise<string | null>;
   importBoard: () => Promise<boolean>;
   window: {

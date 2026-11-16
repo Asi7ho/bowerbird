@@ -1,9 +1,10 @@
-// Unit tests for board export and import (electron/export.ts):
-// a portable snapshot of one board — board.json with relative
-// asset paths plus every referenced media file, packed into a
-// ZIP — and the path resolution that lets a board carried over
-// from another machine load. No DOM, no Electron, so these run
-// in plain vitest on every push and PR.
+// Unit tests for the full-data export and import
+// (electron/export.ts): a portable snapshot of the whole
+// install — every board, the user-installed plugins with
+// their full folders, and the app state — packed into a ZIP,
+// and the path resolution that lets a board carried over
+// from another machine load. No DOM, no Electron, so these
+// run in plain vitest on every push and PR.
 import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -41,17 +42,56 @@ function boardJson(dir: string): string {
   });
 }
 
-function makeBoard(root: string): string {
-  const dir = path.join(root, "My Board");
+function makeBoard(dir: string, displayName: string): void {
   fs.mkdirSync(path.join(dir, "assets"), { recursive: true });
   fs.writeFileSync(path.join(dir, "board.json"), boardJson(dir));
-  fs.writeFileSync(path.join(dir, "display-name.txt"), "My Board");
+  fs.writeFileSync(path.join(dir, "display-name.txt"), displayName);
   for (const f of ["photo.png", "song.mp3", "doc.pdf", "model.glb", "clip.mp4", "poster.png"]) {
     fs.writeFileSync(path.join(dir, "assets", f), `bytes-of-${f}`);
   }
   fs.writeFileSync(path.join(dir, "welcome.jpg"), "bytes-of-welcome");
   // id 9 points at a missing file: it is not created.
-  return dir;
+  // A backup, a library file and a context index, so the
+  // export has the rest of the board folder to carry.
+  fs.mkdirSync(path.join(dir, "backups", "2026-11-16-100000"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "backups", "2026-11-16-100000", "board.json"), boardJson(dir));
+  fs.mkdirSync(path.join(dir, "library"), { recursive: true });
+  fs.writeFileSync(path.join(dir, "library", "kept.png"), "bytes-of-kept");
+  fs.writeFileSync(path.join(dir, "context-index.json"), JSON.stringify({ version: 1 }));
+}
+
+// A whole fake install: Main at the data root, one named
+// board, one user plugin with an extra file, and the state
+// files. Returns the base dir and the userData dir.
+function makeInstall(root: string): { base: string; userData: string } {
+  const base = path.join(root, "base");
+  const userData = path.join(root, "userData");
+  fs.mkdirSync(base, { recursive: true });
+  fs.mkdirSync(userData, { recursive: true });
+  makeBoard(base, "Main");
+  makeBoard(path.join(base, "boards", "My_Board"), "My Board");
+  const plugin = path.join(base, "plugins", "my-plugin");
+  fs.mkdirSync(plugin, { recursive: true });
+  fs.writeFileSync(path.join(plugin, "manifest.json"), JSON.stringify({ apiVersion: "2", id: "my-plugin", name: "My Plugin", main: "main.ts" }));
+  fs.writeFileSync(path.join(plugin, "main.ts"), "export function activate() {}");
+  fs.writeFileSync(path.join(plugin, "extra.txt"), "an extra plugin file");
+  fs.mkdirSync(path.join(plugin, "data"), { recursive: true });
+  fs.writeFileSync(path.join(plugin, "data", "notes.md"), "plugin notes");
+  fs.writeFileSync(path.join(userData, "settings.json"), JSON.stringify({ dockVisible: true }));
+  fs.writeFileSync(path.join(userData, "plugins.json"), JSON.stringify({ "my-plugin": true }));
+  fs.writeFileSync(path.join(userData, "plugin-storage.json"), JSON.stringify({ "my-plugin": { count: 3 } }));
+  fs.writeFileSync(path.join(userData, "secure-storage.json"), JSON.stringify({ "my-plugin": { key: "secret" } }));
+  return { base, userData };
+}
+
+function makeExport(base: string, userData: string, currentBoard: string | null): ReturnType<typeof createExport> {
+  return createExport({
+    baseDir: () => base,
+    userDataDir: () => userData,
+    currentBoardName: () => currentBoard,
+    displayName: (dir: string) => fs.readFileSync(path.join(dir, "display-name.txt"), "utf8").trim(),
+    sanitise,
+  });
 }
 
 describe("resolveBoardAssetPaths", () => {
@@ -91,142 +131,161 @@ describe("resolveBoardAssetPaths", () => {
   });
 });
 
-describe("export and import round-trip", () => {
-  it("exports a board as a ZIP with relative paths and all its media, and imports it back whole", async () => {
+describe("full export and import round-trip", () => {
+  it("exports every board, the user plugins and the state, and imports them back whole", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "bowerbird-export-"));
-    const boardDir = makeBoard(root);
-    const boardsDir = path.join(root, "boards");
-    fs.mkdirSync(boardsDir, { recursive: true });
-    const { buildExportZip } = createExport({
-      boardPath: () => path.join(boardDir, "board.json"),
-      boardDir: () => boardDir,
-      boardsDir: () => boardsDir,
-      displayName: (dir: string) => fs.readFileSync(path.join(dir, "display-name.txt"), "utf8").trim(),
-      sanitise,
-    });
+    const { base, userData } = makeInstall(root);
+    const { buildFullExportZip } = makeExport(base, userData, "My Board");
 
-    const zipBuffer = await buildExportZip();
-    // The ZIP carries the board with relative paths, the
-    // display name, and every media file that existed.
+    const zipBuffer = await buildFullExportZip();
     const JSZip = (await import("jszip")).default;
     const zip = await JSZip.loadAsync(zipBuffer);
-    const exported = JSON.parse(await zip.file("board.json")!.async("string")) as { items: Array<{ kind: Record<string, { path?: string; source?: string; poster?: string }> }> };
-    expect(await zip.file("display-name.txt")!.async("string")).toBe("My Board");
-    const paths = exported.items.flatMap((it) => {
-      const k = it.kind;
-      return [k.Image?.path, k.Audio?.path, k.PdfCard?.path, k.Model3D?.path, k.Video?.source, k.Video?.poster].filter(Boolean) as string[];
-    });
-    // Every exported path that was rewritten is relative,
-    // inside assets/: the seven media files that existed.
-    // The remote video's URL and the missing file's absolute
-    // path are not rewritten, so they are not in this list.
-    const relative = paths.filter((p) => p.startsWith("assets/"));
-    expect(relative.length).toBe(7);
-    for (const p of relative) expect(p.startsWith("assets/")).toBe(true);
-    // The remote video's URL is untouched, and the missing
-    // file keeps its absolute path (it was never copied).
-    const video = exported.items[5].kind.Video!;
-    expect(video.source).toBe("https://example.com/v.mp4");
-    expect(exported.items[8].kind.Image!.path).toBe(`${boardDir}/assets/missing.png`);
-    // All seven media files are in the ZIP.
-    for (const p of relative) expect(zip.file(p)).not.toBeNull();
+    // The manifest names the current board.
+    const manifest = JSON.parse(await zip.file("bowerbird-export.json")!.async("string")) as { version: number; kind: string; currentBoard: string };
+    expect(manifest.version).toBe(1);
+    expect(manifest.kind).toBe("bowerbird-data");
+    expect(manifest.currentBoard).toBe("My Board");
+    // Both boards are in the ZIP, with relative asset paths.
+    for (const prefix of ["boards/Main/", "boards/My_Board/"]) {
+      expect(zip.file(`${prefix}board.json`)).not.toBeNull();
+      const board = JSON.parse(await zip.file(`${prefix}board.json`)!.async("string")) as { items: Array<{ kind: Record<string, { path?: string; source?: string }> }> };
+      const paths = board.items.flatMap((it) => {
+        const k = it.kind;
+        return [k.Image?.path, k.Audio?.path, k.PdfCard?.path, k.Model3D?.path, k.Video?.source].filter(Boolean) as string[];
+      });
+      const relative = paths.filter((p) => p.startsWith("assets/"));
+      expect(relative.length).toBe(6);
+      expect(zip.file(`${prefix}backups/2026-11-16-100000/board.json`)).not.toBeNull();
+      expect(zip.file(`${prefix}library/kept.png`)).not.toBeNull();
+      expect(zip.file(`${prefix}context-index.json`)).not.toBeNull();
+    }
+    // The user plugin is in the ZIP with its extra files.
+    expect(zip.file("plugins/my-plugin/manifest.json")).not.toBeNull();
+    expect(zip.file("plugins/my-plugin/main.ts")).not.toBeNull();
+    expect(zip.file("plugins/my-plugin/extra.txt")).not.toBeNull();
+    expect(zip.file("plugins/my-plugin/data/notes.md")).not.toBeNull();
+    // The state files are in the ZIP.
+    for (const name of ["settings.json", "plugins.json", "plugin-storage.json", "secure-storage.json"]) {
+      expect(zip.file(name)).not.toBeNull();
+    }
 
-    // Import the ZIP into a fresh boards directory: the
-    // board comes back with its paths resolved to the new
-    // folder, and the assets are on disk beside it.
+    // Import into a fresh install: everything comes back.
     const fresh = fs.mkdtempSync(path.join(os.tmpdir(), "bowerbird-fresh-"));
-    const freshBoards = path.join(fresh, "boards");
-    fs.mkdirSync(freshBoards, { recursive: true });
+    const freshBase = path.join(fresh, "base");
+    const freshUserData = path.join(fresh, "userData");
     const zipPath = path.join(root, "export.zip");
     fs.writeFileSync(zipPath, zipBuffer);
-    const { importExport: importIntoFresh } = createExport({
-      boardPath: () => "",
-      boardDir: () => "",
-      boardsDir: () => freshBoards,
-      displayName: (dir: string) => fs.readFileSync(path.join(dir, "display-name.txt"), "utf8").trim(),
-      sanitise,
-    });
-    const out = await importIntoFresh(zipPath);
-    const imported = JSON.parse(out.json) as { items: Array<{ kind: Record<string, { path?: string; source?: string; poster?: string }> }> };
-    const importedPaths = imported.items.flatMap((it) => {
-      const k = it.kind;
-      return [k.Image?.path, k.Audio?.path, k.PdfCard?.path, k.Model3D?.path, k.Video?.source, k.Video?.poster].filter(Boolean) as string[];
-    });
-    // Every imported local path is absolute, under the new
-    // board folder, and the file is actually there. The
-    // remote video's URL and the missing file's path are
-    // untouched: they were never copied, so they still point
-    // where they did.
-    const local = importedPaths.filter((p) => p.startsWith(out.board_dir));
-    expect(local.length).toBe(7);
-    for (const p of local) {
-      expect(fs.existsSync(p)).toBe(true);
-    }
-    const remoteVideo = imported.items[5].kind.Video!;
-    expect(remoteVideo.source).toBe("https://example.com/v.mp4");
-    expect(imported.items[8].kind.Image!.path).toBe(`${boardDir}/assets/missing.png`);
-    expect(fs.readFileSync(path.join(out.board_dir, "display-name.txt"), "utf8").trim()).toBe("My Board");
-    expect(fs.existsSync(path.join(out.board_dir, "board.json"))).toBe(true);
+    const { importExport } = makeExport(freshBase, freshUserData, null);
+    const out = await importExport(zipPath);
+    // The board that was current at export time is the one
+    // to load, resolved to the fresh install.
+    expect(out.board_dir).toBe(path.join(freshBase, "boards", "My_Board"));
+    const imported = JSON.parse(out.json) as { items: Array<{ kind: Record<string, { path: string }> }> };
+    expect(imported.items[0].kind.Image!.path).toBe(path.join(freshBase, "boards", "My_Board", "assets", "photo.png"));
+    expect(fs.existsSync(imported.items[0].kind.Image!.path)).toBe(true);
+    // Main is back at the data root, with its assets.
+    expect(fs.existsSync(path.join(freshBase, "board.json"))).toBe(true);
+    expect(fs.existsSync(path.join(freshBase, "assets", "photo.png"))).toBe(true);
+    expect(fs.existsSync(path.join(freshBase, "backups", "2026-11-16-100000", "board.json"))).toBe(true);
+    expect(fs.existsSync(path.join(freshBase, "library", "kept.png"))).toBe(true);
+    expect(fs.existsSync(path.join(freshBase, "context-index.json"))).toBe(true);
+    // The named board is back whole.
+    expect(fs.existsSync(path.join(freshBase, "boards", "My_Board", "assets", "clip.mp4"))).toBe(true);
+    // The user plugin is back with its extra files.
+    expect(fs.readFileSync(path.join(freshBase, "plugins", "my-plugin", "extra.txt"), "utf8")).toBe("an extra plugin file");
+    expect(fs.readFileSync(path.join(freshBase, "plugins", "my-plugin", "data", "notes.md"), "utf8")).toBe("plugin notes");
+    // The state files are back.
+    expect(JSON.parse(fs.readFileSync(path.join(freshUserData, "plugins.json"), "utf8"))).toEqual({ "my-plugin": true });
+    expect(JSON.parse(fs.readFileSync(path.join(freshUserData, "plugin-storage.json"), "utf8"))).toEqual({ "my-plugin": { count: 3 } });
+    expect(JSON.parse(fs.readFileSync(path.join(freshUserData, "secure-storage.json"), "utf8"))).toEqual({ "my-plugin": { key: "secret" } });
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(fresh, { recursive: true, force: true });
   });
 
-  it("imports an unzipped export folder, not just the ZIP", async () => {
+  it("imports an unzipped full export folder, not just the ZIP", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "bowerbird-export-"));
-    const boardDir = makeBoard(root);
-    const boardsDir = path.join(root, "boards");
-    fs.mkdirSync(boardsDir, { recursive: true });
-    const { buildExportZip } = createExport({
-      boardPath: () => path.join(boardDir, "board.json"),
-      boardDir: () => boardDir,
-      boardsDir: () => boardsDir,
-      displayName: (dir: string) => fs.readFileSync(path.join(dir, "display-name.txt"), "utf8").trim(),
-      sanitise,
-    });
+    const { base, userData } = makeInstall(root);
+    const { buildFullExportZip } = makeExport(base, userData, null);
     const JSZip = (await import("jszip")).default;
-    const zip = await JSZip.loadAsync(await buildExportZip());
-    // Unzip into a folder, the way a user would.
+    const zip = await JSZip.loadAsync(await buildFullExportZip());
     const folder = path.join(root, "unzipped");
-    fs.mkdirSync(path.join(folder, "assets"), { recursive: true });
     for (const [name, entry] of Object.entries(zip.files)) {
       if (entry.dir) continue;
-      fs.writeFileSync(path.join(folder, name), await entry.async("nodebuffer"));
+      const dest = path.join(folder, name);
+      fs.mkdirSync(path.dirname(dest), { recursive: true });
+      fs.writeFileSync(dest, await entry.async("nodebuffer"));
     }
     const fresh = fs.mkdtempSync(path.join(os.tmpdir(), "bowerbird-fresh-"));
-    const freshBoards = path.join(fresh, "boards");
-    fs.mkdirSync(freshBoards, { recursive: true });
-    const { importExport } = createExport({
-      boardPath: () => "",
-      boardDir: () => "",
-      boardsDir: () => freshBoards,
-      displayName: (dir: string) => fs.readFileSync(path.join(dir, "display-name.txt"), "utf8").trim(),
-      sanitise,
-    });
+    const { importExport } = makeExport(path.join(fresh, "base"), path.join(fresh, "userData"), null);
     const out = await importExport(folder);
-    expect(fs.existsSync(path.join(out.board_dir, "assets", "photo.png"))).toBe(true);
-    const imported = JSON.parse(out.json) as { items: Array<{ kind: { Image?: { path: string } } }> };
-    expect(imported.items[0].kind.Image!.path).toBe(path.join(out.board_dir, "assets", "photo.png"));
+    expect(fs.existsSync(path.join(fresh, "base", "plugins", "my-plugin", "main.ts"))).toBe(true);
+    expect(fs.existsSync(path.join(fresh, "base", "boards", "My_Board", "board.json"))).toBe(true);
+    expect(out.board_dir).toBe(path.join(fresh, "base"));
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(fresh, { recursive: true, force: true });
   });
 
-  it("refuses a ZIP with no board.json and a folder with no board.json", async () => {
+  it("dedupes a named board that already exists instead of overwriting it", async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "bowerbird-export-"));
-    const boardsDir = path.join(root, "boards");
-    fs.mkdirSync(boardsDir, { recursive: true });
-    const { importExport } = createExport({
-      boardPath: () => "",
-      boardDir: () => "",
-      boardsDir: () => boardsDir,
-      displayName: () => "",
-      sanitise,
-    });
+    const { base, userData } = makeInstall(root);
+    const { buildFullExportZip } = makeExport(base, userData, "My Board");
+    const zipPath = path.join(root, "export.zip");
+    fs.writeFileSync(zipPath, await buildFullExportZip());
+    // A fresh install that already has a board called My Board.
+    const fresh = fs.mkdtempSync(path.join(os.tmpdir(), "bowerbird-fresh-"));
+    const freshBase = path.join(fresh, "base");
+    makeBoard(path.join(freshBase, "boards", "My_Board"), "My Board");
+    const { importExport } = makeExport(freshBase, path.join(fresh, "userData"), null);
+    const out = await importExport(zipPath);
+    expect(fs.existsSync(path.join(freshBase, "boards", "My_Board", "board.json"))).toBe(true);
+    expect(fs.existsSync(path.join(freshBase, "boards", "My_Board-1", "board.json"))).toBe(true);
+    // The imported board is the one to load, under its
+    // deduped folder.
+    expect(out.board_dir).toBe(path.join(freshBase, "boards", "My_Board-1"));
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(fresh, { recursive: true, force: true });
+  });
+
+  it("still imports a single-board export, the older format", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "bowerbird-export-"));
+    const boardDir = path.join(root, "board");
+    makeBoard(boardDir, "Solo");
+    const JSZip = (await import("jszip")).default;
+    const zip = new JSZip();
+    const board = JSON.parse(fs.readFileSync(path.join(boardDir, "board.json"), "utf8")) as { items: Array<{ kind: Record<string, { path?: string; source?: string }> }> };
+    for (const it of board.items) {
+      const k = it.kind;
+      for (const field of ["path", "source"] as const) {
+        const v = (k.Image ?? k.Audio ?? k.PdfCard ?? k.Model3D ?? k.Video ?? {}) as Record<string, string | undefined>;
+        if (typeof v[field] === "string" && v[field]!.startsWith(boardDir) && fs.existsSync(v[field]!)) {
+          const name = path.basename(v[field]!);
+          zip.file(`assets/${name}`, fs.readFileSync(v[field]!));
+          v[field] = `assets/${name}`;
+        }
+      }
+    }
+    zip.file("board.json", JSON.stringify(board));
+    zip.file("display-name.txt", "Solo");
+    const zipPath = path.join(root, "solo.zip");
+    fs.writeFileSync(zipPath, await zip.generateAsync({ type: "nodebuffer" }));
+    const fresh = fs.mkdtempSync(path.join(os.tmpdir(), "bowerbird-fresh-"));
+    const { importExport } = makeExport(path.join(fresh, "base"), path.join(fresh, "userData"), null);
+    const out = await importExport(zipPath);
+    expect(out.board_dir).toBe(path.join(fresh, "base", "boards", "Solo"));
+    expect(fs.existsSync(path.join(fresh, "base", "boards", "Solo", "assets", "photo.png"))).toBe(true);
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(fresh, { recursive: true, force: true });
+  });
+
+  it("refuses a ZIP with no board to open and a folder with no board.json", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "bowerbird-export-"));
+    const { importExport } = makeExport(path.join(root, "base"), path.join(root, "userData"), null);
     const JSZip = (await import("jszip")).default;
     const bad = new JSZip();
     bad.file("hello.txt", "not a board");
     const badZip = path.join(root, "bad.zip");
     fs.writeFileSync(badZip, await bad.generateAsync({ type: "nodebuffer" }));
-    await expect(importExport(badZip)).rejects.toThrow("no board.json");
+    await expect(importExport(badZip)).rejects.toThrow("no board");
     const emptyFolder = path.join(root, "empty");
     fs.mkdirSync(emptyFolder);
     await expect(importExport(emptyFolder)).rejects.toThrow("no board.json");
