@@ -48,7 +48,13 @@ describe("createUndoStore", () => {
     board = emptyBoard();
     selected = [];
     saveBoard = vi.fn(async () => true);
-    vi.stubGlobal("window", { bowerbird: { saveBoard } });
+    vi.stubGlobal("window", {
+      bowerbird: {
+        saveBoard,
+        recoveryWriteSync: vi.fn(() => true),
+        recoveryClear: vi.fn(async () => true),
+      },
+    });
     ctx = {
       getBoard: () => board,
       getSelected: () => selected,
@@ -112,5 +118,30 @@ describe("createUndoStore", () => {
     store.saveWithoutUndo();
     expect(saveBoard).toHaveBeenCalledTimes(2);
     expect(store.canUndo()).toBe(false);
+  });
+
+  it("journals the board synchronously before the save, and clears it once the save lands", async () => {
+    const bridge = (window as unknown as { bowerbird: { recoveryWriteSync: ReturnType<typeof vi.fn>; recoveryClear: ReturnType<typeof vi.fn> } }).bowerbird;
+    board.items.push(textItem(1, "hello"));
+    board.next_id = 2;
+    store.save();
+    // Synchronous: the journal is on disk before save() returns.
+    expect(bridge.recoveryWriteSync).toHaveBeenCalledTimes(1);
+    expect(bridge.recoveryWriteSync).toHaveBeenCalledWith(JSON.stringify(board));
+    expect(saveBoard).toHaveBeenCalledTimes(1);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(bridge.recoveryClear).toHaveBeenCalledTimes(1);
+    expect(bridge.recoveryClear).toHaveBeenCalledWith(JSON.stringify(board));
+  });
+
+  it("keeps the journal when the save is refused", async () => {
+    const bridge = (window as unknown as { bowerbird: { recoveryWriteSync: ReturnType<typeof vi.fn>; recoveryClear: ReturnType<typeof vi.fn> } }).bowerbird;
+    saveBoard.mockResolvedValueOnce(false);
+    board.items.push(textItem(1, "hello"));
+    board.next_id = 2;
+    store.save();
+    expect(bridge.recoveryWriteSync).toHaveBeenCalledTimes(1);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(bridge.recoveryClear).not.toHaveBeenCalled();
   });
 });
