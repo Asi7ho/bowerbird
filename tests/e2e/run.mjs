@@ -2030,15 +2030,25 @@ async function main() {
       // The preview must be the topmost element at the drag
       // midpoint: it lives in the preview layer above #cards,
       // so it paints over the note instead of hiding behind it.
+      // The layer is pointer-events: none in the app (it must
+      // never intercept a click on a card below), so
+      // elementFromPoint skips it by default — restore hit
+      // testing just for this probe. That changes nothing
+      // about paint order; it only reveals it.
       const hit = await page.evaluate(([x, y]) => {
-        const prev = document.querySelector("#shape-preview");
+        const svg = document.querySelector("#preview-svg");
+        const prev = svg.style.pointerEvents;
+        svg.style.pointerEvents = "auto";
+        const prevEl = document.querySelector("#shape-preview");
         const el = document.elementFromPoint(x, y);
-        return {
-          previewExists: !!prev,
-          previewParent: prev ? prev.parentElement?.id : null,
+        const out = {
+          previewExists: !!prevEl,
+          previewParent: prevEl ? prevEl.parentElement?.id : null,
           hitId: el ? el.id : null,
           hitInCards: el ? !!el.closest("#cards") : false,
         };
+        svg.style.pointerEvents = prev;
+        return out;
       }, [mx, my]);
       assert.ok(hit.previewExists, "shape preview exists mid-drag");
       assert.equal(hit.previewParent, "preview-world", "shape preview lives in the preview layer");
@@ -2054,6 +2064,21 @@ async function main() {
       }));
       assert.ok(after.previewGone, "shape preview is gone after mouseup");
       assert.equal(after.cards, before + 1, "the drawn shape lands as a new card");
+      // The completed shape lands ABOVE the card it overlaps,
+      // not behind it: it is the last card in the DOM and its
+      // z-index is higher than the note's.
+      const stack = await page.evaluate(() => {
+        const cards = Array.from(document.querySelectorAll("#cards .card"));
+        const note = cards.find((c) => c.querySelector(".note-body"));
+        const shape = cards.find((c) => !c.querySelector(".note-body"));
+        if (!note || !shape) return { shapeAfterNote: false, shapeAboveNote: false };
+        return {
+          shapeAfterNote: !!(note.compareDocumentPosition(shape) & Node.DOCUMENT_POSITION_FOLLOWING),
+          shapeAboveNote: Number(getComputedStyle(shape).zIndex) > Number(getComputedStyle(note).zIndex),
+        };
+      });
+      assert.ok(stack.shapeAfterNote, "completed shape is after the note in the DOM");
+      assert.ok(stack.shapeAboveNote, "completed shape has a higher z-index than the note");
     });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
