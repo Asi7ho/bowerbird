@@ -371,10 +371,6 @@ export function activate(api: PluginContext): void {
     colorSwatch.style.setProperty("--swatch-color", penColor);
     colorSwatch.classList.toggle("active", colorBarOpen);
 
-    // The arrow draws in the pen colour, so its icon shows
-    // that colour — the colour the arrow will draw in.
-    connectorBtn.style.color = penColor;
-
     const isShape = isShapeTool(tool);
     setActive(shapeBtn, isShape);
     // The button shows the shape last chosen. Before any
