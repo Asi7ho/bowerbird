@@ -1308,10 +1308,16 @@ async function main() {
         await new Promise((r) => setTimeout(r, 500));
       }
       assert.ok(before, "the model rendered (centre pixel is the cube's blue)");
-      // Drag on the canvas to rotate, then confirm the view
-      // changed. The drag is quick, inside the 3s idle
-      // window, so auto-rotate cannot explain a change.
-      const box = await canvas.boundingBox();
+      // The canvas can flicker invisible while the card
+      // re-renders after the model load completes, so poll
+      // for its box instead of reading it once: the pixels
+      // above already proved the model rendered.
+      let box = null;
+      for (let i = 0; i < 20; i++) {
+        box = await canvas.boundingBox();
+        if (box) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
       assert.ok(box, "model canvas on screen");
       const cx = box.x + box.width / 2;
       const cy = box.y + box.height / 2;
