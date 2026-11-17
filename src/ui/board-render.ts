@@ -219,7 +219,7 @@ export function renderStrokesAndConnectors(board: Board): void {
       if (!ends) continue;
       const [a, b] = ends;
       const sel = selected.includes(item.id);
-      S.worldEl.appendChild(svgEl2("line", { x1: String(a.x), y1: String(a.y), x2: String(b.x), y2: String(b.y), stroke: sel ? ACCENT : "#333333", "stroke-width": sel ? "3" : "2" }));
+      S.worldEl.appendChild(svgEl2("line", { x1: String(a.x), y1: String(a.y), x2: String(b.x), y2: String(b.y), stroke: sel ? ACCENT : item.kind.Connector.color, "stroke-width": sel ? "3" : "2" }));
       const dx = b.x - a.x, dy = b.y - a.y;
       const len = Math.max(1, Math.hypot(dx, dy));
       const ux = dx / len, uy = dy / len;
@@ -227,7 +227,7 @@ export function renderStrokesAndConnectors(board: Board): void {
       const c1 = Math.cos(spread), s1 = Math.sin(spread), c2 = Math.cos(-spread), s2 = Math.sin(-spread);
       const p1 = { x: b.x - head * (ux * c1 - uy * s1), y: b.y - head * (ux * s1 + uy * c1) };
       const p2 = { x: b.x - head * (ux * c2 - uy * s2), y: b.y - head * (ux * s2 + uy * c2) };
-      S.worldEl.appendChild(svgEl2("polyline", { points: `${p1.x},${p1.y} ${b.x},${b.y} ${p2.x},${p2.y}`, fill: "none", stroke: sel ? ACCENT : "#333333", "stroke-width": sel ? "3" : "2" }));
+      S.worldEl.appendChild(svgEl2("polyline", { points: `${p1.x},${p1.y} ${b.x},${b.y} ${p2.x},${p2.y}`, fill: "none", stroke: sel ? ACCENT : item.kind.Connector.color, "stroke-width": sel ? "3" : "2" }));
     }
   }
   // Live stroke, connector preview and marquee are fast-path SVG
