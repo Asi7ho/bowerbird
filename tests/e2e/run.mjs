@@ -2309,15 +2309,42 @@ async function main() {
       await page.keyboard.press("l");
       assert.equal(await page.evaluate(modeOf), "select", "L must not turn the lasso on");
       // The colour bar hides the shape picker: only one
-      // flyout shows at a time. Closing the colour bar
-      // brings the picker back.
+      // flyout shows at a time. Closing the colour bar does
+      // not bring it back — it only appears on a tool button
+      // click or a tool shortcut, so the shape button does.
       await page.click("#tool-shape");
       await page.waitForSelector("#shape-picker", { state: "visible" });
       await page.click("#tool-colour");
       await page.waitForSelector("#shape-picker", { state: "hidden" });
       assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById("palette")).display), "flex", "the colour bar must show while the shape picker hides");
       await page.click("#tool-colour");
+      await page.waitForSelector("#shape-picker", { state: "hidden" });
+      await page.click("#tool-shape");
       await page.waitForSelector("#shape-picker", { state: "visible" });
+      // A flyout disappears once a tool is picked from it,
+      // and a tool shortcut opens it again.
+      await page.click('#shape-picker button[data-shape="triangle"]');
+      await page.waitForSelector("#shape-picker", { state: "hidden" });
+      await page.keyboard.press("r");
+      await page.waitForSelector("#shape-picker", { state: "visible" });
+      // Clicking empty board dismisses it too.
+      const empty2 = await page.evaluate(() => {
+        const rects = [...document.querySelectorAll("#cards .card")].map((c) => c.getBoundingClientRect());
+        rects.push(document.getElementById("toolbar-wrap").getBoundingClientRect());
+        rects.push(document.getElementById("note-colours").getBoundingClientRect());
+        // The flyouts hang off the toolbar's right side, so
+        // the toolbar's own rect does not cover them.
+        for (const p of document.querySelectorAll("#toolbar .palette")) rects.push(p.getBoundingClientRect());
+        for (let y = 100; y < 800; y += 20) {
+          for (let x = 100; x < 1200; x += 20) {
+            if (!rects.some((r) => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height)) return { x, y };
+          }
+        }
+        return null;
+      });
+      assert.ok(empty2, "there is empty board to click to dismiss the flyout");
+      await page.mouse.click(empty2.x, empty2.y);
+      await page.waitForSelector("#shape-picker", { state: "hidden" });
       // No toolbar button shows an outline after a shortcut:
       // a clicked button is blurred, so it cannot keep focus
       // and match :focus-visible on the next keypress.
