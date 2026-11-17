@@ -52,6 +52,19 @@ function importedBBox(items: ImportedItem[]): { x: number; y: number; w: number;
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
 
+// Size a FileCard from its artwork's aspect: the card is
+// 360 wide like a video card, the preview fills the width
+// (12px of padding each side), and the title and sub-line
+// take the remaining ~70px. The preview is capped at 360
+// tall so a very tall artwork does not make a giant card,
+// and floored at 80 so it stays visible. A missing or
+// empty artwork falls back to the video card's size.
+export function fileCardSize(artW: number, artH: number): { w: number; h: number } {
+  if (!(artW > 0) || !(artH > 0)) return { w: 360, h: 264 };
+  const previewH = Math.min(360, Math.max(80, (artH / artW) * 336));
+  return { w: 360, h: Math.round(previewH + 70) };
+}
+
 export function translateImportedToAnchor(items: ImportedItem[], anchor: Pt): ImportedItem[] {
   const b = importedBBox(items);
   if (!b) return items;
