@@ -2308,6 +2308,16 @@ async function main() {
       assert.equal(await page.evaluate(modeOf), "select", "V must remember plain select once it is chosen");
       await page.keyboard.press("l");
       assert.equal(await page.evaluate(modeOf), "select", "L must not turn the lasso on");
+      // The colour bar hides the shape picker: only one
+      // flyout shows at a time. Closing the colour bar
+      // brings the picker back.
+      await page.click("#tool-shape");
+      await page.waitForSelector("#shape-picker", { state: "visible" });
+      await page.click("#tool-colour");
+      await page.waitForSelector("#shape-picker", { state: "hidden" });
+      assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById("palette")).display), "flex", "the colour bar must show while the shape picker hides");
+      await page.click("#tool-colour");
+      await page.waitForSelector("#shape-picker", { state: "visible" });
       // No toolbar button shows an outline after a shortcut:
       // a clicked button is blurred, so it cannot keep focus
       // and match :focus-visible on the next keypress.
