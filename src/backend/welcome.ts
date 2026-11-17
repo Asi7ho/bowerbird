@@ -74,7 +74,9 @@ export function welcomeBoard(boardDir: string, pdfSize: number, videoSize: numbe
   const psdText = "PSD — layers as cards";
   add({ id: next(), pos: { x: 1300, y: 348 }, size: { w: 320, h: estimateTextHeight(psdText, 16, 320) }, group: null, kind: note(psdText, 320) });
   // PSD: dropped from the sample file — the cards the importer produces.
-  add({ id: next(), pos: { x: 1410, y: 440 }, size: { w: 40, h: 30 }, group: null, kind: { Image: { path: `${boardDir}/welcome-psd-green.png` } } });
+  // One nudge: the green layer sits 7px under the text card in
+  // the PSD's own layout, so it is moved down 17px to clear it.
+  add({ id: next(), pos: { x: 1410, y: 457 }, size: { w: 40, h: 30 }, group: null, kind: { Image: { path: `${boardDir}/welcome-psd-green.png` } } });
   add({ id: next(), pos: { x: 1390, y: 390 }, size: { w: 120, h: 57 }, group: null, kind: { Text: { text: "Hello PSD", bold: false, size: 24, color: "#000000" } } });
   add({ id: next(), pos: { x: 1300, y: 380 }, size: { w: 80, h: 60 }, group: null, kind: { Image: { path: `${boardDir}/welcome-psd-red.png` } } });
   const glbText = "3D — drag to rotate";
