@@ -79,6 +79,10 @@ export interface BoardState {
   // eraser). The P shortcut activates this one, not always
   // the pen — so a pencil stays a pencil.
   lastDrawTool: Tool | null;
+  // The geometry shape last chosen (rectangle, ellipse,
+  // triangle, …). The R shortcut activates this one, not
+  // always the rectangle — so a triangle stays a triangle.
+  lastShapeTool: Tool | null;
   editingId: number | null;
   // Set while a render moves the editing card out of #cards
   // and back (see board-render): moving the card blurs its
@@ -132,6 +136,7 @@ export const S: BoardState = {
   lassoMode: false,
   tool: "select",
   lastDrawTool: null,
+  lastShapeTool: null,
   editingId: null,
   suppressEditCommit: false,
   spaceDown: false,
