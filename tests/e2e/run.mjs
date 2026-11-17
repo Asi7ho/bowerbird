@@ -1834,6 +1834,44 @@ async function main() {
       }
     });
 
+    await check("editing a linked SVG source re-imports its group in place", async () => {
+      // The SVG drop above kept its source file in the board's
+      // assets and linked its group to it: the file is the
+      // original, not a conversion output.
+      const board = readBoard();
+      const linked = Object.entries(board.groups ?? {}).find(([, entry]) => entry.source?.kind === "svg");
+      assert.ok(linked, "svg drop linked its group to a source");
+      const group = Number(linked[0]);
+      const entry = linked[1];
+      const sourcePath = entry.source.path;
+      assert.ok(fs.existsSync(sourcePath), "kept source file exists in the board assets");
+      const membersBefore = board.items.filter((it) => it.group === group);
+      assert.equal(membersBefore.length, 8, "svg group has its 8 imported cards");
+      const anchorOf = (items) => ({ x: Math.min(...items.map((it) => it.pos.x)), y: Math.min(...items.map((it) => it.pos.y)) });
+      const anchor = anchorOf(membersBefore);
+      // Edit the source outside the app: the red rect turns
+      // blue and a purple circle appears, so the re-import
+      // is visible in board.json.
+      const edited = fs.readFileSync(path.join(repoRoot, "tests/e2e/fixtures", "sample.svg"), "utf8")
+        .replace('fill="#ff0000"', 'fill="#0000ff"')
+        .replace("</svg>", '  <circle cx="150" cy="50" r="15" fill="#800080"/>\n</svg>');
+      fs.writeFileSync(sourcePath, edited);
+      await waitFor("re-imported svg in board.json", () => {
+        const b = readBoard();
+        const members = b.items.filter((it) => it.group === group);
+        const blue = members.filter((it) => "Shape" in it.kind && it.kind.Shape.fill === "#0000ff");
+        const purple = members.filter((it) => "Shape" in it.kind && it.kind.Shape.fill === "#800080");
+        return blue.length === 2 && purple.length === 1 && members.length === 9 ? b : null;
+      });
+      // The group kept its place on the board, and the
+      // stored stat moved to the edited file.
+      const after = readBoard();
+      const anchorAfter = anchorOf(after.items.filter((it) => it.group === group));
+      assert.ok(Math.abs(anchorAfter.x - anchor.x) < 1 && Math.abs(anchorAfter.y - anchor.y) < 1, "re-import kept the group's place");
+      assert.notEqual(after.groups[group].source.size, entry.source.size, "source stat updated");
+      assert.ok(after.groups[group].source.mtimeMs > entry.source.mtimeMs, "source mtime updated");
+    });
+
     await check("dropping a PNG with transparency lands an image card", async () => {
       const before = countKind("Image");
       await dropFixture("transparent.png", "image/png");
