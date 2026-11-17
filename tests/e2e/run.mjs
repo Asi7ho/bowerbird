@@ -2568,6 +2568,103 @@ async function main() {
       }
       assert.ok(changed, "dragging the model rotated the view (pixels changed)");
     });
+
+    await check("many small models do not churn the 3D layer at rest", async () => {
+      // Two hundred models spread wide, so after fitting and
+      // zooming out each one is a few dozen pixels on
+      // screen — below the 48px auto-rotate gate. Without
+      // the gate the layer re-renders all of them every
+      // 100ms forever, and at-rest frames take ~200ms under
+      // SwiftShader; with it the layer goes quiet and the
+      // app idles at 60fps. The frame times are the
+      // user-visible outcome: nothing renders at rest, so
+      // rAF must fire on schedule. Two hundred, not twenty:
+      // twenty models cost too little per pass to move the
+      // median, so the check would pass with or without the
+      // gate; two hundred reproduces the measured 200ms
+      // at-rest frames.
+      const assetsDir = path.join(tmp, "assets");
+      fs.mkdirSync(assetsDir, { recursive: true });
+      fs.copyFileSync(path.join(repoRoot, "tests/e2e/fixtures/cube.glb"), path.join(assetsDir, "cube.glb"));
+      const board = readBoard();
+      let id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
+      const firstModelId = id;
+      for (let i = 0; i < 200; i++) {
+        board.items.push({ id, pos: { x: 1000 + (i % 20) * 1000, y: 1000 + Math.floor(i / 20) * 600 }, size: { w: 360, h: 300 }, group: null, kind: { Model3D: { path: path.join(assetsDir, "cube.glb"), size_bytes: 1472 } } });
+        id++;
+      }
+      board.next_id = id;
+      const tmp2 = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp2, JSON.stringify(board));
+      fs.renameSync(tmp2, boardPath);
+      await new Promise((r) => setTimeout(r, 1200));
+      await page.keyboard.press("f");
+      await new Promise((r) => setTimeout(r, 500));
+      // Zoom out until a model is small on screen (below
+      // the 48px gate with margin): read one card's width
+      // and press "-" until it is under 40px.
+      for (let i = 0; i < 12; i++) {
+        const w = await page.evaluate((mid) => {
+          const cv = document.querySelector(`#cards .card[data-id="${mid}"] canvas.model3d`);
+          return cv ? cv.getBoundingClientRect().width : 0;
+        }, String(firstModelId));
+        if (w > 0 && w < 40) break;
+        await page.keyboard.press("-");
+        await new Promise((r) => setTimeout(r, 300));
+      }
+      const smallW = await page.evaluate((mid) => {
+        const cv = document.querySelector(`#cards .card[data-id="${mid}"] canvas.model3d`);
+        return cv ? cv.getBoundingClientRect().width : 0;
+      }, String(firstModelId));
+      assert.ok(smallW > 0 && smallW < 48, `a model is small on screen (${smallW.toFixed(1)}px)`);
+      // Wait for a model to render (proves the views mounted
+      // and loaded), then past the 3s idle threshold, so the
+      // turn would be churning without the gate.
+      const sampleBlue = () => page.evaluate((mid) => {
+        const layer = document.querySelector("#model3d-layer");
+        const cv = document.querySelector(`#cards .card[data-id="${mid}"] canvas.model3d`);
+        if (!layer || !cv) return false;
+        const r = cv.getBoundingClientRect();
+        const lr = layer.getBoundingClientRect();
+        if (r.width < 5) return false;
+        const dpr = layer.width / lr.width;
+        const c = document.createElement("canvas");
+        c.width = layer.width; c.height = layer.height;
+        const x = c.getContext("2d");
+        if (!x) return false;
+        x.drawImage(layer, 0, 0);
+        const d = x.getImageData(Math.floor((r.x - lr.x + r.width * 0.5) * dpr), Math.floor((r.y - lr.y + r.height * 0.5) * dpr), 1, 1).data;
+        return d[2] > d[0] + 30 && d[2] > 80;
+      }, String(firstModelId));
+      let rendered = false;
+      for (let i = 0; i < 60; i++) {
+        if (await sampleBlue()) { rendered = true; break; }
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      assert.ok(rendered, "a small model rendered before the idle sample");
+      await new Promise((r) => setTimeout(r, 3500));
+      // Sample rAF deltas for 2s with no input. Without the
+      // gate the layer re-renders 200 models every 100ms and
+      // frames take ~200ms; with it nothing renders at rest.
+      const deltas = await page.evaluate(() => new Promise((resolve) => {
+        const frames = [];
+        const start = performance.now();
+        const tick = (t) => {
+          frames.push(t);
+          if (performance.now() - start < 2000) requestAnimationFrame(tick);
+          else {
+            const d = [];
+            for (let i = 1; i < frames.length; i++) d.push(frames[i] - frames[i - 1]);
+            resolve(d);
+          }
+        };
+        requestAnimationFrame(tick);
+      }));
+      const sorted = [...deltas].sort((a, b) => a - b);
+      const median = sorted[Math.floor(sorted.length / 2)];
+      assert.ok(deltas.length >= 30, `enough frames sampled at rest (${deltas.length})`);
+      assert.ok(median < 100, `at-rest frames stay fast with small models (median ${median.toFixed(1)}ms over ${deltas.length} frames)`);
+    });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
     console.log(`  FAIL  setup: ${String(error.message).split("\n")[0]}`);
