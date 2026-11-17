@@ -2351,6 +2351,47 @@ async function main() {
       await page.click("#tool-draw");
       await page.keyboard.press("p");
       assert.deepEqual(await page.evaluate(outlined), [], "no toolbar button may show an outline after a shortcut");
+      // The arrow shows the pen colour, and a drawn arrow
+      // uses it too. The colour button shows no outline
+      // when the colour bar is open.
+      await page.click("#tool-colour");
+      await page.waitForSelector("#palette", { state: "visible" });
+      await page.click('#palette button[title="#E63946"]');
+      assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById("tool-connector")).color), "rgb(230, 57, 70)", "the arrow must show the pen colour");
+      await page.click("#tool-colour");
+      await page.waitForSelector("#palette", { state: "visible" });
+      const swatchRing = await page.evaluate(() => getComputedStyle(document.getElementById("tool-colour"), "::before").boxShadow);
+      assert.ok(!swatchRing.includes("0, 122, 255"), "the colour button must show no accent outline when the colour bar is open");
+      await page.click("#tool-colour");
+      // Draw an arrow from the Preview test note to empty
+      // board: it must land in the pen colour.
+      const before = readBoard().items.filter((it) => "Connector" in it.kind).length;
+      const from = await page.evaluate(() => {
+        const card = [...document.querySelectorAll("#cards .card")].find((c) => (c.querySelector(".note-body")?.textContent ?? "").includes("Preview test note"));
+        if (!card) return null;
+        const r = card.getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      });
+      assert.ok(from, "the Preview test note is on screen to draw an arrow from");
+      const to = await page.evaluate(() => {
+        const rects = [...document.querySelectorAll("#cards .card")].map((c) => c.getBoundingClientRect());
+        rects.push(document.getElementById("toolbar-wrap").getBoundingClientRect());
+        for (let y = 100; y < 800; y += 20) {
+          for (let x = 100; x < 1200; x += 20) {
+            if (!rects.some((r) => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height)) return { x, y };
+          }
+        }
+        return null;
+      });
+      assert.ok(to, "there is empty board to draw the arrow to");
+      await page.keyboard.press("a");
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.mouse.move(to.x, to.y, { steps: 10 });
+      await page.mouse.up();
+      await waitFor("arrow saved", () => readBoard().items.filter((it) => "Connector" in it.kind).length > before ? true : null);
+      const drawn = readBoard().items.find((it) => "Connector" in it.kind);
+      assert.equal(drawn.kind.Connector.color, "#E63946", "a drawn arrow must use the pen colour");
     });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
