@@ -101,7 +101,7 @@ export function activate(api: PluginContext): void {
     { id: "select", label: "Select (V)", icon: ICONS.select },
     { id: "lasso", label: "Lasso (V)", icon: ICONS.lasso },
   ] as const;
-  const selectBtn = toolButton("tool-select", "Select (V)", "Select", ICONS.select, () => api.ui.setTool("select"));
+  const selectBtn = toolButton("tool-select", "Select (V)", "Select", ICONS.select, () => { pickerOpen = "select"; api.ui.setTool("select"); });
   // One draw button for pencil, pen and eraser, like the
   // shape button: it shows the draw tool last chosen, and
   // the flyout beside the toolbar chooses between them.
@@ -115,6 +115,7 @@ export function activate(api: PluginContext): void {
   const drawBtn = toolButton("tool-draw", "Pen (P)", "Pen", ICONS.pen, () => {
     // Opening the draw picker dismisses the colour bar, or
     // the picker would stay hidden behind it.
+    pickerOpen = "draw";
     colorBarOpen = false;
     const cur = api.ui.getTool();
     const isDraw = DRAW_TOOLS.some((d) => d.id === cur);
@@ -125,6 +126,7 @@ export function activate(api: PluginContext): void {
   // flyout beside the toolbar chooses between all shapes.
   // Its icon and title follow the current shape.
   const shapeBtn = toolButton("tool-shape", "Shape (R, more in the flyout)", "Shape", ICONS.select, () => {
+    pickerOpen = "shape";
     const cur = api.ui.getTool();
     // Clicking the shape button (re)activates the last shape.
     const shapes = api.shapes.list();
@@ -244,6 +246,12 @@ export function activate(api: PluginContext): void {
   // clicked again or a colour is picked. While it is open
   // the pickers hide, so only one flyout shows.
   let colorBarOpen = false;
+  // Which tool's flyout is open, or null when none is. A
+  // flyout only appears on a tool button click or a tool
+  // shortcut, and disappears once a tool is picked from it
+  // or the user clicks anywhere else — it never stays open
+  // while the user works with the tool.
+  let pickerOpen: "select" | "draw" | "shape" | null = null;
   // The tool at the last update. A tool change dismisses
   // the colour bar, or the draw picker would stay hidden
   // behind it when the user switches tools by keyboard.
@@ -277,7 +285,7 @@ export function activate(api: PluginContext): void {
     // between select and lasso leaves the tool as "select",
     // so without it the button and picker would not refresh.
     const mode = api.ui.getSelectMode();
-    const key = `${tool}|${mode}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}|${cam.x},${cam.y}|${colorBarOpen}|${outline}|${notePos ? `${notePos.x},${notePos.y}` : ""}`;
+    const key = `${tool}|${mode}|${pickerOpen ?? ""}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}|${cam.x},${cam.y}|${colorBarOpen}|${outline}|${notePos ? `${notePos.x},${notePos.y}` : ""}`;
     if (key === lastKey) return;
     lastKey = key;
 
@@ -298,9 +306,10 @@ export function activate(api: PluginContext): void {
       selectBtn.setAttribute("aria-label", modeTarget.label.replace(/ \(.*\)$/, ""));
     }
 
-    // Select picker: shown when the select tool is active
-    // and the colour bar is not open.
-    const showSelect = isSelect && !colorBarOpen;
+    // Select picker: shown when the select tool is active,
+    // the colour bar is not open, and its flyout was opened
+    // by the select button or the V shortcut.
+    const showSelect = isSelect && !colorBarOpen && pickerOpen === "select";
     selectPicker.style.display = showSelect ? "flex" : "none";
     if (showSelect && selectPicker.childElementCount === 0) {
       for (const m of SELECT_MODES) {
@@ -310,7 +319,7 @@ export function activate(api: PluginContext): void {
         b.title = m.label;
         b.setAttribute("aria-label", m.label.replace(/ \(.*\)$/, ""));
         b.innerHTML = m.icon;
-        b.addEventListener("click", () => { api.ui.setSelectMode(m.id); b.blur(); });
+        b.addEventListener("click", () => { pickerOpen = null; api.ui.setSelectMode(m.id); b.blur(); });
         selectPicker.appendChild(b);
       }
     }
@@ -335,9 +344,10 @@ export function activate(api: PluginContext): void {
       drawBtn.setAttribute("aria-label", drawTarget.label.replace(/ \(.*\)$/, ""));
     }
 
-    // Draw picker: shown when a draw tool is active and
-    // the colour bar is not open.
-    const showDraw = isDraw && !colorBarOpen;
+    // Draw picker: shown when a draw tool is active, the
+    // colour bar is not open, and its flyout was opened by
+    // the draw button or the P shortcut.
+    const showDraw = isDraw && !colorBarOpen && pickerOpen === "draw";
     drawPicker.style.display = showDraw ? "flex" : "none";
     if (showDraw && drawPicker.childElementCount === 0) {
       for (const d of DRAW_TOOLS) {
@@ -347,7 +357,7 @@ export function activate(api: PluginContext): void {
         b.title = d.label;
         b.setAttribute("aria-label", d.label.replace(/ \(.*\)$/, ""));
         b.innerHTML = d.icon;
-        b.addEventListener("click", () => { api.ui.setTool(d.id); b.blur(); });
+        b.addEventListener("click", () => { pickerOpen = null; api.ui.setTool(d.id); b.blur(); });
         drawPicker.appendChild(b);
       }
     }
@@ -378,11 +388,12 @@ export function activate(api: PluginContext): void {
       shapeBtn.setAttribute("aria-label", target.label);
     }
 
-    // Shape picker: shown when a shape tool is active and
-    // the colour bar is not open — like the draw and select
-    // pickers, so only one flyout shows at a time.
+    // Shape picker: shown when a shape tool is active, the
+    // colour bar is not open, and its flyout was opened by
+    // the shape button or the R shortcut — like the draw and
+    // select pickers, so only one flyout shows at a time.
     // The top row switches filled and outline shapes.
-    const showShape = isShape && !colorBarOpen;
+    const showShape = isShape && !colorBarOpen && pickerOpen === "shape";
     shapePicker.style.display = showShape ? "flex" : "none";
     if (showShape && shapePicker.childElementCount === 0) {
       for (const mode of [{ id: "filled", label: "Filled" }, { id: "outline", label: "Outline" }]) {
@@ -392,7 +403,7 @@ export function activate(api: PluginContext): void {
         b.title = mode.label;
         b.setAttribute("aria-label", mode.label);
         b.textContent = mode.label;
-        b.addEventListener("click", () => { api.shapes.setOutline(mode.id === "outline"); update(); b.blur(); });
+        b.addEventListener("click", () => { pickerOpen = null; api.shapes.setOutline(mode.id === "outline"); update(); b.blur(); });
         shapePicker.appendChild(b);
       }
       for (const meta of api.shapes.list()) {
@@ -402,7 +413,7 @@ export function activate(api: PluginContext): void {
         b.title = meta.key ? `${meta.label} (${meta.key})` : meta.label;
         b.setAttribute("aria-label", meta.label);
         b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${meta.svg}</svg>`;
-        b.addEventListener("click", () => { api.ui.setTool(meta.kind); b.blur(); });
+        b.addEventListener("click", () => { pickerOpen = null; api.ui.setTool(meta.kind); b.blur(); });
         shapePicker.appendChild(b);
       }
     }
@@ -520,6 +531,39 @@ export function activate(api: PluginContext): void {
 
     delBtn.classList.toggle("dim", selected.length === 0);
   }
+
+  // A tool shortcut opens its flyout too: the sidebar
+  // appears on a tool button click or a tool shortcut, and
+  // nowhere else. The core's own key handling switches the
+  // tool; this only opens the flyout, so it runs either
+  // before or after the core's handler and the result is
+  // the same. The guards mirror the core's: no shortcuts
+  // while typing in an input, while a video or audio card
+  // has focus, or while Settings is open.
+  window.addEventListener("keydown", (e) => {
+    if (e.ctrlKey || e.metaKey) return;
+    const active = document.activeElement;
+    if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.tagName === "VIDEO" || active.tagName === "AUDIO")) return;
+    if (api.ui.isSettingsOpen()) return;
+    const k = e.key.toLowerCase();
+    const target = k === "v" ? "select" : k === "p" ? "draw" : k === "r" ? "shape" : null;
+    if (!target) return;
+    pickerOpen = target;
+    update();
+  });
+
+  // Clicking anywhere outside the tool buttons and their
+  // flyouts dismisses the open flyout: the board, another
+  // toolbar button, a panel, the note-colours bar. Clicks
+  // inside the flyout are its own option picks, which
+  // dismiss it in their handlers.
+  document.addEventListener("pointerdown", (e) => {
+    if (pickerOpen === null) return;
+    const t = e.target as Node;
+    if (selectBtn.contains(t) || drawBtn.contains(t) || shapeBtn.contains(t) || selectPicker.contains(t) || drawPicker.contains(t) || shapePicker.contains(t)) return;
+    pickerOpen = null;
+    update();
+  });
 
   // Follow the tool, the selection and the pen colour.
   api.events.on("tool", update);
