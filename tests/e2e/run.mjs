@@ -1842,6 +1842,13 @@ async function main() {
       const linked = Object.entries(board.groups ?? {}).find(([, entry]) => entry.source?.kind === "svg");
       assert.ok(linked, "svg drop linked its group to a source");
       const group = Number(linked[0]);
+      // The linked group has no dashed frame — its cards sit
+      // on the board like any other cards. Only its label
+      // marks it, carrying the button that opens the source.
+      const frame = await page.$(`.group-frame[data-group="${group}"]`);
+      assert.equal(frame, null, "linked group has no dashed frame");
+      const label = await page.$(`.group-label[data-group="${group}"] .group-open-source`);
+      assert.ok(label, "linked group label carries the open-source button");
       const entry = linked[1];
       const sourcePath = entry.source.path;
       assert.ok(fs.existsSync(sourcePath), "kept source file exists in the board assets");
