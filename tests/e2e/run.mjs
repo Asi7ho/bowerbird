@@ -1562,15 +1562,23 @@ async function main() {
         board.items.push(note);
         board.next_id = id + 1;
         const tmp2 = `${boardPath}.tmp`;
+        // Clear any stale toast text first, so the wait below
+        // proves THIS write was followed, not an earlier reload.
+        await page.evaluate(() => { const t = document.querySelector("#toast"); if (t) t.textContent = ""; });
         fs.writeFileSync(tmp2, JSON.stringify(board));
         fs.renameSync(tmp2, boardPath);
-        // Give the watcher time to follow the write (the
-        // external-edit check waits the same 1.5s) before
-        // fitting: F pressed before the model updates fits
-        // the old board, and the note — placed clear of the
-        // restored board's cards — stays off-screen and
-        // culled from the DOM.
-        await new Promise((r) => setTimeout(r, 1500));
+        // Wait for the watcher to deliver the write and the
+        // renderer to reload it (reloadFromDisk toasts after
+        // applying the new board) before fitting. A fixed
+        // sleep races the watcher under load: F pressed before
+        // the model updates fits the old board, and the note
+        // — placed clear of the restored board's cards —
+        // stays off-screen and culled from the DOM, so no
+        // later wait can ever see it.
+        await waitFor("board reload toast after bar note write", async () => {
+          const toast = await page.evaluate(() => document.querySelector("#toast")?.textContent ?? "");
+          return toast.includes("Board updated on disk") ? true : null;
+        });
         await page.keyboard.press("f");
         await waitFor("bar test note in the DOM", async () => {
           const n = await page.evaluate(() => [...document.querySelectorAll("#cards .card .note-body")].some((b) => (b.innerText || "").includes("Bar test note")));
