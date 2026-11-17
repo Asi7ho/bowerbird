@@ -267,11 +267,11 @@ export function activate(api: PluginContext): void {
         // preview on the left, name and page count on the right,
         // the same row shape as audio and video cards.
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px" data-pdf-wrap="${c.id}">
-          <div style="width:56px;height:${c.hh - 24}px;flex:none;background:var(--bg-system);border-radius:6px;overflow:hidden"><canvas data-pdf-canvas="${c.id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
+          <div style="width:56px;height:${c.hh - 24}px;flex:none;background:var(--bg-system);border-radius:10px;overflow:hidden"><canvas data-pdf-canvas="${c.id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
           ${titleSubCol(name, c.ww - 92, `${kb} KB · <span data-pdf-count="${c.id}">…</span>`)}</div></div>`;
       }
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px" data-pdf-wrap="${c.id}">
-        <div style="flex:1 1 auto;min-height:0;background:var(--bg-system);border-radius:8px;overflow:hidden"><canvas data-pdf-canvas="${c.id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
+        <div style="flex:1 1 auto;min-height:0;background:var(--bg-system);border-radius:10px;overflow:hidden"><canvas data-pdf-canvas="${c.id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
         <div style="display:flex;align-items:center;gap:8px"><div class="title" style="font-size:14px;flex:1 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${api.text.escapeHtml(name)}</div>
         <button class="pdf-nav" data-action="pdf-prev" data-id="${c.id}" title="Previous page" aria-label="Previous page" ${pageNum <= 1 ? "disabled" : ""}>‹</button><span class="sub" data-pdf-count="${c.id}">…</span><button class="pdf-nav" data-action="pdf-next" data-id="${c.id}" title="Next page" aria-label="Next page">›</button></div>
         <div class="sub" style="font-size:12px">${kb} KB</div></div></div>`;
