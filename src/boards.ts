@@ -54,6 +54,11 @@ export interface BootContext {
   // Set by main.ts at boot; the estimate is the fallback
   // where there is no DOM.
   measureNoteCardHeight: (text: string, fontSize: number, width: number) => number;
+  // Live imports: re-import the group linked to a source
+  // file that changed on disk. Set by main.ts after the
+  // drops are created; boards.ts reaches the re-import
+  // through here so it never imports the drops module.
+  refreshLinkedSource?: (path: string, stat: { exists: boolean; size: number; mtimeMs: number }) => Promise<void>;
   // The board DOM is built by the core-board plugin, so these
   // start unassigned and are read from the shell after the
   // plugin activates in init(). Before that they must not be
@@ -166,6 +171,30 @@ export function syncWatchedSources(ctx: BootContext): void {
     if (entry.source) paths.push(entry.source.path);
   }
   void api.setWatchedSources(paths).catch(() => { /* watching is a convenience */ });
+}
+
+// After a load, a linked source may be newer than its cards
+// (the file was edited while the app was closed, or while
+// another board was showing): re-import the stale groups.
+// A source missing at load is left alone — the file may come
+// back, and the watcher will catch it then; a deletion while
+// the app runs is unlinked by the change event instead.
+export async function refreshStaleSources(ctx: BootContext): Promise<void> {
+  if (!ctx.refreshLinkedSource) return;
+  for (const entry of Object.values(ctx.board.groups ?? {})) {
+    if (!entry.source) continue;
+    let stat: { exists: boolean; size: number; mtimeMs: number };
+    try {
+      const checked = await api.checkFile(entry.source.path);
+      stat = { exists: checked.exists, size: checked.size, mtimeMs: checked.mtimeMs };
+    } catch { continue; }
+    if (!stat.exists) continue;
+    // The stored stat is the file as last imported: a
+    // difference means the file changed since the cards
+    // were built.
+    if (entry.source.size === stat.size && entry.source.mtimeMs === stat.mtimeMs) continue;
+    await ctx.refreshLinkedSource(entry.source.path, stat);
+  }
 }
 
 export function startBackgroundIndexing(ctx: BootContext): void {
@@ -312,6 +341,10 @@ export async function loadBoardFromJson(ctx: BootContext, json: string, dir: str
   // everything is already indexed.
   startBackgroundIndexing(ctx);
   syncWatchedSources(ctx);
+  // A source may be newer than its cards already (edited
+  // while the app was closed, or while another board was
+  // showing): re-import the stale groups.
+  void refreshStaleSources(ctx);
   // Fill in poster frames for videos that predate them
   // (old boards, the welcome board), in the background.
   startPosterBackfill(ctx);

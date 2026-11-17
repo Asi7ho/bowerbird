@@ -9,6 +9,7 @@
 import { api } from "./api";
 import { isPdfCompatible, parseAiToItems } from "./ai-import";
 import type { ImportedItem } from "./import-types";
+import { base64ToBytes, findSourceGroup, groupBBox, translateImportedToAnchor } from "./live-import";
 import { boardGet, domainOf, estimateTextHeight, normaliseHex, type Board, type Item, type Kind, type Pt, type Size } from "./model";
 import { ensureVideoPoster } from "./poster";
 import { imageDataToPngBytes, parsePsd, psdLayersToItems } from "./psd-import";
@@ -24,12 +25,18 @@ export interface DropsContext {
   toWorld(s: Pt): Pt;
   toast(msg: string): void;
   syncWatchedSources(): void;
+  clearSelection(ids: number[]): void;
 }
 
 export interface Drops {
   dropPaths(files: File[], atScreen: Pt): Promise<void>;
   addUrlAt(at: Pt, url: string): Promise<void>;
   refreshLinkPreviews(): Promise<void>;
+  // Re-import the group linked to a source file that changed
+  // on disk. The group's cards are rebuilt from the file and
+  // land where the group currently is; a deleted source
+  // unlinks the group and keeps its cards.
+  refreshSource(path: string, stat: { exists: boolean; size: number; mtimeMs: number }): Promise<void>;
 }
 
 export function createDrops(ctx: DropsContext): Drops {
@@ -146,6 +153,47 @@ export function createDrops(ctx: DropsContext): Drops {
     ctx.requestRender();
   }
 
+  // Store an imported item's raster bytes and push it onto
+  // the given board. An Image card arrives with a placeholder
+  // path; the bytes behind it are embedded here and the
+  // path rewritten to the stored copy. Returns false if
+  // the board switched mid-import, so the caller stops.
+  // Shared by the drop flow and the live re-import, so it
+  // takes the board it lands on instead of closing over
+  // the drop's.
+  async function addImportedItem(board: Board, item: ImportedItem, fileName: string, group: number | null): Promise<boolean> {
+    const kind = item.kind;
+    if (item.embed && "Image" in kind) {
+      kind.Image.path = await api.embedFileBytes(item.embed.name, item.embed.data);
+    } else if (item.pixels && "Image" in kind) {
+      const png = await imageDataToPngBytes(item.pixels);
+      const stem = fileName.replace(/\.[^.]*$/, "") || "psd";
+      kind.Image.path = await api.embedFileBytes(`${stem}-layer.png`, png);
+    }
+    if (ctx.getBoard() !== board) { ctx.toast("Board switched — import stopped"); return false; }
+    const id = ctx.allocId();
+    const newItem: Item = { id, pos: item.pos, size: item.size, group, kind };
+    if (item.rotation !== undefined) newItem.rotation = item.rotation;
+    board.items.push(newItem);
+    return true;
+  }
+
+  // Land an image card for a file already embedded at
+  // `stored` (the SVG fallback, where the embedded file is
+  // the linked source itself, so it must not be embedded
+  // a second time). The size comes from loading it. Shared
+  // by the drop flow and the live re-import.
+  async function addStoredImageCard(board: Board, stored: string, atWorld: Pt, group: number | null): Promise<boolean> {
+    const img = new Image();
+    await new Promise<void>((resolve) => { img.onload = () => resolve(); img.onerror = () => resolve(); img.src = api.fileUrl(stored); });
+    if (ctx.getBoard() !== board) { ctx.toast("Board switched — import stopped"); return false; }
+    const nw = img.naturalWidth || 320, nh = img.naturalHeight || 240;
+    const scale = nw > 320 ? 320 / nw : 1;
+    const id = ctx.allocId();
+    board.items.push({ id, pos: atWorld, size: { w: Math.max(40, nw * scale), h: Math.max(40, nh * scale) }, group, kind: { Image: { path: stored } } });
+    return true;
+  }
+
   async function dropPaths(files: File[], atScreen: Pt): Promise<void> {
     // The board the drop started on. Every branch awaits
     // file work, and the user may switch boards while it
@@ -179,42 +227,9 @@ export function createDrops(ctx: DropsContext): Drops {
       return true;
     }
 
-    // Land an image card for a file already embedded at
-    // `stored` (the SVG fallback, where the embedded file is
-    // the linked source itself, so it must not be embedded
-    // a second time). The size comes from loading it.
-    async function addStoredImageCard(stored: string, atWorld: Pt, group: number | null): Promise<boolean> {
-      const img = new Image();
-      await new Promise<void>((resolve) => { img.onload = () => resolve(); img.onerror = () => resolve(); img.src = api.fileUrl(stored); });
-      if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return false; }
-      const nw = img.naturalWidth || 320, nh = img.naturalHeight || 240;
-      const scale = nw > 320 ? 320 / nw : 1;
-      const id = ctx.allocId();
-      board.items.push({ id, pos: atWorld, size: { w: Math.max(40, nw * scale), h: Math.max(40, nh * scale) }, group, kind: { Image: { path: stored } } });
-      return true;
-    }
-
     // Store an imported item's raster bytes and push it onto
-    // the board. An Image card arrives with a placeholder
-    // path; the bytes behind it are embedded here and the
-    // path rewritten to the stored copy. Returns false if
-    // the board switched mid-import, so the caller stops.
-    async function addImportedItem(item: ImportedItem, fileName: string, group: number | null): Promise<boolean> {
-      const kind = item.kind;
-      if (item.embed && "Image" in kind) {
-        kind.Image.path = await api.embedFileBytes(item.embed.name, item.embed.data);
-      } else if (item.pixels && "Image" in kind) {
-        const png = await imageDataToPngBytes(item.pixels);
-        const stem = fileName.replace(/\.[^.]*$/, "") || "psd";
-        kind.Image.path = await api.embedFileBytes(`${stem}-layer.png`, png);
-      }
-      if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return false; }
-      const id = ctx.allocId();
-      const newItem: Item = { id, pos: item.pos, size: item.size, group, kind };
-      if (item.rotation !== undefined) newItem.rotation = item.rotation;
-      board.items.push(newItem);
-      return true;
-    }
+    // the board — see addImportedItem above (shared with the
+    // live re-import).
 
     // Keep an import's source file in the board's assets and
     // link its cards to it: the file is never lost, and the
@@ -232,8 +247,18 @@ export function createDrops(ctx: DropsContext): Drops {
         return null;
       }
       const group = ctx.allocGroup();
+      // The stat as embedded: the re-import compares the file
+      // on disk against it, so the app's own write is ignored
+      // and an outside edit is caught. Best-effort — a failed
+      // stat just means the first load re-imports once and
+      // records the real stat.
+      let size = 0, mtimeMs = 0;
+      try {
+        const checked = await api.checkFile(stored);
+        size = checked.size; mtimeMs = checked.mtimeMs;
+      } catch { /* keep the link; the stat heals on first refresh */ }
       board.groups = board.groups ?? {};
-      board.groups[group] = { label: file.name, source: { path: stored, kind } };
+      board.groups[group] = { label: file.name, source: { path: stored, kind, size, mtimeMs } };
       return { group, stored };
     }
 
@@ -255,12 +280,12 @@ export function createDrops(ctx: DropsContext): Drops {
             // a second time.
             const linked = await linkImport(file, bytes, "svg");
             if (!linked) { if (await addImageCard(file, at)) added++; }
-            else if (await addStoredImageCard(linked.stored, at, linked.group)) added++;
+            else if (await addStoredImageCard(board, linked.stored, at, linked.group)) added++;
           } else {
             const linked = await linkImport(file, bytes, "svg");
             const group = linked?.group ?? null;
             for (const item of items) {
-              if (!(await addImportedItem(item, file.name, group))) return;
+              if (!(await addImportedItem(board, item, file.name, group))) return;
             }
             added += items.length;
           }
@@ -275,7 +300,7 @@ export function createDrops(ctx: DropsContext): Drops {
             const linked = await linkImport(file, bytes, "psd");
             const group = linked?.group ?? null;
             for (const item of items) {
-              if (!(await addImportedItem(item, file.name, group))) return;
+              if (!(await addImportedItem(board, item, file.name, group))) return;
             }
             added += items.length;
           }
@@ -300,7 +325,7 @@ export function createDrops(ctx: DropsContext): Drops {
               const linked = await linkImport(file, bytes, "ai");
               const group = linked?.group ?? null;
               for (const item of items) {
-                if (!(await addImportedItem(item, file.name, group))) return;
+                if (!(await addImportedItem(board, item, file.name, group))) return;
               }
               added += items.length;
             }
@@ -372,5 +397,84 @@ export function createDrops(ctx: DropsContext): Drops {
     await Promise.all(jobs);
   }
 
-  return { dropPaths, addUrlAt, refreshLinkPreviews };
+  async function refreshSource(path: string, stat: { exists: boolean; size: number; mtimeMs: number }): Promise<void> {
+    // The board the refresh started on: the user may switch
+    // boards while the file is read and parsed, and the new
+    // cards must land on the board they were refreshed for.
+    const board = ctx.getBoard();
+    const sameBoard = (): boolean => ctx.getBoard() === board;
+    const group = findSourceGroup(board, path);
+    if (group === null) return;
+    const entry = board.groups?.[group];
+    const source = entry?.source;
+    if (!source) return;
+    // The app's own write (the embed at drop time) matches
+    // the stored stat: nothing changed.
+    if (stat.exists && source.size === stat.size && source.mtimeMs === stat.mtimeMs) return;
+    if (!stat.exists) {
+      // The source file was deleted outside the app: keep the
+      // cards, drop the link, and say so. The group keeps its
+      // label; it is a plain group now.
+      delete entry.source;
+      ctx.toast(`Source file deleted — ${entry.label} is no longer linked`);
+      ctx.save(); ctx.requestRender(); ctx.syncWatchedSources();
+      return;
+    }
+    const members = board.items.filter((it) => it.group === group);
+    if (members.length === 0) return;
+    const anchor = groupBBox(members);
+    if (!anchor) return;
+    let bytes: Uint8Array<ArrayBuffer>;
+    try {
+      const read = await api.readFileBase64(path);
+      bytes = base64ToBytes(read.base64);
+    } catch {
+      ctx.toast(`Could not read ${entry.label}`);
+      return;
+    }
+    if (!sameBoard() || findSourceGroup(ctx.getBoard(), path) !== group) { ctx.toast("Board switched — import stopped"); return; }
+    let items: ImportedItem[];
+    try {
+      if (source.kind === "svg") {
+        items = parseSvgToItems(new TextDecoder().decode(bytes), { x: anchor.x, y: anchor.y });
+      } else if (source.kind === "psd") {
+        items = psdLayersToItems(parsePsd(bytes.buffer), { x: anchor.x, y: anchor.y });
+      } else {
+        if (!isPdfCompatible(bytes)) { ctx.toast(`${entry.label} was saved without PDF compatibility, so it can't be imported`); return; }
+        items = await parseAiToItems(bytes, { x: anchor.x, y: anchor.y });
+      }
+    } catch {
+      ctx.toast(`Could not re-import ${entry.label}`);
+      return;
+    }
+    if (!sameBoard() || findSourceGroup(ctx.getBoard(), path) !== group) { ctx.toast("Board switched — import stopped"); return; }
+    const ids = members.map((it) => it.id);
+    if (items.length === 0 && source.kind === "svg") {
+      // Nothing mappable any more: fall back to one image
+      // card of the whole file, as the drop does.
+      board.items = board.items.filter((it) => !ids.includes(it.id));
+      if (!(await addStoredImageCard(board, path, { x: anchor.x, y: anchor.y }, group))) return;
+    } else if (items.length === 0) {
+      ctx.toast(`No artwork could be imported from ${entry.label}`);
+      return;
+    } else {
+      // The parsers position from the anchor, but the file's
+      // content may start offset from it: translate so the
+      // rebuilt group's top-left lands where the group is.
+      const translated = translateImportedToAnchor(items, { x: anchor.x, y: anchor.y });
+      board.items = board.items.filter((it) => !ids.includes(it.id));
+      for (const item of translated) {
+        if (!(await addImportedItem(board, item, entry.label, group))) return;
+      }
+    }
+    ctx.clearSelection(ids);
+    // The cards are rebuilt from the new bytes: record the
+    // stat they came from, so the next change is detected
+    // against this one and the app's own writes are ignored.
+    const entryNow = ctx.getBoard().groups?.[group];
+    if (entryNow?.source) entryNow.source = { ...entryNow.source, size: stat.size, mtimeMs: stat.mtimeMs };
+    ctx.save(); ctx.requestRender();
+  }
+
+  return { dropPaths, addUrlAt, refreshLinkPreviews, refreshSource };
 }

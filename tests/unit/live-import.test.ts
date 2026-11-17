@@ -3,7 +3,7 @@
 // source file, and translating a fresh import onto the group's
 // current position. Pure functions, no DOM.
 import { describe, expect, it } from "vitest";
-import { findSourceGroup, groupBBox, translateImportedToAnchor } from "../../src/backend/live-import";
+import { base64ToBytes, findSourceGroup, groupBBox, translateImportedToAnchor } from "../../src/backend/live-import";
 import type { Board } from "../../src/backend/model";
 
 function boardWithGroups(groups: Board["groups"]): Board {
@@ -17,6 +17,13 @@ function boardWithGroups(groups: Board["groups"]): Board {
     grid: "Dots",
   };
 }
+
+describe("base64ToBytes", () => {
+  it("decodes base64 to the original bytes", () => {
+    expect(base64ToBytes("aGVsbG8=")).toEqual(new Uint8Array([104, 101, 108, 108, 111]));
+    expect(base64ToBytes("")).toEqual(new Uint8Array([]));
+  });
+});
 
 describe("findSourceGroup", () => {
   it("finds the group linked to a source path", () => {

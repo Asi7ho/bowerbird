@@ -82,10 +82,15 @@ export interface GroupEntry {
 }
 
 // The file a live-import group came from: its kind, and the
-// board-local path it was embedded at.
+// board-local path it was embedded at. size and mtimeMs are
+// the file as last imported: the app re-imports when the
+// file on disk differs from them, and ignores its own write
+// (which matches them).
 export interface ImportSource {
   path: string;
   kind: "svg" | "psd" | "ai";
+  size?: number;
+  mtimeMs?: number;
 }
 
 // Arranging cards: the layout math for api.board.arrange.

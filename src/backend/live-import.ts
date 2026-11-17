@@ -20,6 +20,14 @@ export function findSourceGroup(board: Board, path: string): number | null {
   return null;
 }
 
+// Decode a base64 string to bytes (atob output is Latin-1,
+// so each char is one byte — the same pattern as media.ts).
+// The return is a plain ArrayBuffer-backed array, so its
+// .buffer is an ArrayBuffer for the PSD parser.
+export function base64ToBytes(base64: string): Uint8Array<ArrayBuffer> {
+  return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+}
+
 export function groupBBox(items: Item[]): { x: number; y: number; w: number; h: number } | null {
   if (items.length === 0) return null;
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
