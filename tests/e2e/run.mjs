@@ -2357,11 +2357,9 @@ async function main() {
       await page.click("#tool-colour");
       await page.waitForSelector("#palette", { state: "visible" });
       await page.click('#palette button[title="#E63946"]');
-      // The toolbar button's colour transitions (0.15s in
-      // the stylesheet), so the computed colour only lands
-      // on the pen colour once the transition finishes —
-      // poll for it instead of reading it mid-transition.
-      await waitFor("arrow turns the pen colour", () => page.evaluate(() => getComputedStyle(document.getElementById("tool-connector")).color === "rgb(230, 57, 70)" ? true : null));
+      // The toolbar arrow stays black: only the drawn
+      // arrow takes the pen colour.
+      assert.equal(await page.evaluate(() => getComputedStyle(document.getElementById("tool-connector")).color), "rgb(29, 29, 31)", "the toolbar arrow must stay black");
       await page.click("#tool-colour");
       await page.waitForSelector("#palette", { state: "visible" });
       const swatchRing = await page.evaluate(() => getComputedStyle(document.getElementById("tool-colour"), "::before").boxShadow);
