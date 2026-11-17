@@ -8,7 +8,7 @@
 // position after the transform, or the models drift away
 // from their cards mid-pan.
 import { describe, expect, it } from "vitest";
-import { layerTransform } from "../../src/backend/model3d";
+import { isWorthTurning, layerTransform } from "../../src/backend/model3d";
 
 type Cam = { x: number; y: number; zoom: number };
 
@@ -92,5 +92,40 @@ describe("layerTransform", () => {
     // moves models by only a few screen pixels, so the
     // transform must be exact, not approximately right.
     expectTracks({ x: 0, y: 0, zoom: 0.073 }, { x: 500, y: 200, zoom: 0.073 }, POINTS);
+  });
+});
+
+describe("isWorthTurning", () => {
+  // The gate for the idle turn (src/backend/model3d.ts):
+  // a model only counts toward the auto-rotate trigger
+  // when its larger on-screen dimension is at least 48px.
+  // Below that the turn is invisible, so rendering the
+  // whole layer every 100ms for it is pure waste.
+  it("a model at fit zoom is too small to turn", () => {
+    // The 2,000-card board fits at zoom ~0.046; a 360px
+    // model card is ~16px on screen there.
+    expect(isWorthTurning(360, 300, 0.0456)).toBe(false);
+  });
+
+  it("the same model at working zoom turns", () => {
+    expect(isWorthTurning(360, 300, 0.84)).toBe(true);
+  });
+
+  it("the threshold is 48px on the larger dimension", () => {
+    // 360px wide at zoom 48/360 is exactly 48px.
+    expect(isWorthTurning(360, 300, 48 / 360)).toBe(true);
+    expect(isWorthTurning(360, 300, 47 / 360)).toBe(false);
+  });
+
+  it("a wide flat model counts on its width", () => {
+    // 500px wide but only 10px tall: the turn reads on
+    // the width, so at zoom 0.1 (50px) it turns.
+    expect(isWorthTurning(500, 10, 0.1)).toBe(true);
+    expect(isWorthTurning(500, 10, 0.09)).toBe(false);
+  });
+
+  it("zero size or zero zoom never turns", () => {
+    expect(isWorthTurning(0, 0, 1)).toBe(false);
+    expect(isWorthTurning(360, 300, 0)).toBe(false);
   });
 });
