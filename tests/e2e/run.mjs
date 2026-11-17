@@ -2234,14 +2234,32 @@ async function main() {
       await page.click('#draw-picker button[data-draw="pencil"]');
       await page.keyboard.press("p");
       assert.equal(await page.evaluate(toolOf), "pencil", "P must not switch the pencil back to the pen");
-      // Triangle stays triangle through R and E.
+      // R is the one geometry shortcut: it activates the
+      // shape last chosen, not always the rectangle. A
+      // triangle stays a triangle through R, and R remembers
+      // it after switching away and back.
       await page.click("#tool-shape");
       await page.waitForSelector('#shape-picker button[data-shape="triangle"]', { state: "visible" });
       await page.click('#shape-picker button[data-shape="triangle"]');
       await page.keyboard.press("r");
       assert.equal(await page.evaluate(toolOf), "triangle", "R must not reset the triangle to a rectangle");
+      await page.keyboard.press("v");
+      await page.keyboard.press("r");
+      assert.equal(await page.evaluate(toolOf), "triangle", "R must remember the triangle after switching away");
+      // Picking another shape updates what R remembers.
+      await page.click("#tool-shape");
+      await page.waitForSelector('#shape-picker button[data-shape="ellipse"]', { state: "visible" });
+      await page.click('#shape-picker button[data-shape="ellipse"]');
+      await page.keyboard.press("v");
+      await page.keyboard.press("r");
+      assert.equal(await page.evaluate(toolOf), "ellipse", "R must remember the ellipse once it is chosen");
+      // E is gone: it must not switch to the ellipse, from
+      // a shape or from select.
       await page.keyboard.press("e");
-      assert.equal(await page.evaluate(toolOf), "triangle", "E must not reset the triangle to an ellipse");
+      assert.equal(await page.evaluate(toolOf), "ellipse", "E must not change the tool");
+      await page.keyboard.press("v");
+      await page.keyboard.press("e");
+      assert.equal(await page.evaluate(toolOf), "select", "E must not switch to the ellipse from select");
       // No toolbar button shows an outline after a shortcut:
       // a clicked button is blurred, so it cannot keep focus
       // and match :focus-visible on the next keypress.
