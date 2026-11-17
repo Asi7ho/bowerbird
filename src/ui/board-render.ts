@@ -268,14 +268,20 @@ export function renderGroupFrames(board: Board): void {
   for (const [g, members] of byGroup) {
     const source = board.groups?.[g]?.source;
     // A live import is a section even with one card: its
-    // frame and label carry the open-source button.
+    // label carries the open-source button.
     if (members.length < 2 && !source) continue;
     const b = groupBounds(members, S.api.geometry.itemBounds);
     if (!b) continue;
     if (b.x > v.x1 || b.y > v.y1 || b.x + b.w < v.x0 || b.y + b.h < v.y0) continue;
     const isSel = members.some((it) => selected.includes(it.id));
     const label = board.groups?.[g]?.label ?? `Section ${g}`;
-    framesHtml += `<div class="group-frame${isSel ? " selected" : ""}" data-group="${g}" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px"></div>`;
+    // A live import has no dashed frame: its cards should
+    // sit on the board like any other cards, not look like
+    // a special widget. Only the label marks the group, and
+    // it carries the button that opens the source file.
+    if (!source) {
+      framesHtml += `<div class="group-frame${isSel ? " selected" : ""}" data-group="${g}" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px"></div>`;
+    }
     labelsHtml += `<span class="group-label" data-group="${g}" style="left:${b.x + 12}px;top:${b.y - 11}px">${S.api.text.escapeHtml(label)}${source ? `<button class="group-open-source" data-group="${g}" title="Open source file" aria-label="Open source file">${OPEN_SOURCE_ICON}</button>` : ""}</span>`;
   }
   S.groupFramesEl.innerHTML = framesHtml;
