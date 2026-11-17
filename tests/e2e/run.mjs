@@ -2266,6 +2266,48 @@ async function main() {
       await page.keyboard.press("v");
       await page.keyboard.press("e");
       assert.equal(await page.evaluate(toolOf), "select", "E must not switch to the ellipse from select");
+      // V is the one select shortcut: it activates the
+      // selection mode last chosen (plain select or lasso).
+      // A lasso stays a lasso through V, and V remembers it
+      // after switching away and back — and a real lasso loop
+      // selects the card it encloses.
+      const modeOf = () => document.getElementById("tool-select")?.dataset.mode ?? "select";
+      await page.click("#tool-select");
+      await page.waitForSelector('#select-picker button[data-mode="lasso"]', { state: "visible" });
+      await page.click('#select-picker button[data-mode="lasso"]');
+      assert.equal(await page.evaluate(modeOf), "lasso", "picking lasso must show it on the select button");
+      await page.keyboard.press("p");
+      await page.keyboard.press("v");
+      assert.equal(await page.evaluate(modeOf), "lasso", "V must remember the lasso after switching away");
+      // A lasso loop around the Preview test note selects it.
+      // The loop starts on empty board around the note, so
+      // the drag is a lasso, not a card drag.
+      const note = await page.evaluate(() => {
+        const card = [...document.querySelectorAll("#cards .card")].find((c) => (c.querySelector(".note-body")?.textContent ?? "").includes("Preview test note"));
+        if (!card) return null;
+        const r = card.getBoundingClientRect();
+        return { x: r.x, y: r.y, w: r.width, h: r.height };
+      });
+      assert.ok(note, "the Preview test note is on screen to lasso");
+      await page.mouse.move(note.x - 20, note.y - 20);
+      await page.mouse.down();
+      await page.mouse.move(note.x + note.w + 20, note.y - 20, { steps: 5 });
+      await page.mouse.move(note.x + note.w + 20, note.y + note.h + 20, { steps: 5 });
+      await page.mouse.move(note.x - 20, note.y + note.h + 20, { steps: 5 });
+      await page.mouse.move(note.x - 20, note.y - 20, { steps: 5 });
+      await page.mouse.up();
+      const lassoed = await page.evaluate(() => [...document.querySelectorAll("#cards .card")].some((c) => c.classList.contains("selected") && (c.querySelector(".note-body")?.textContent ?? "").includes("Preview test note")));
+      assert.ok(lassoed, "the lasso loop must select the note it encloses");
+      // Picking plain select updates what V remembers, and
+      // L is gone: it must not turn the lasso back on.
+      await page.click("#tool-select");
+      await page.waitForSelector('#select-picker button[data-mode="select"]', { state: "visible" });
+      await page.click('#select-picker button[data-mode="select"]');
+      await page.keyboard.press("p");
+      await page.keyboard.press("v");
+      assert.equal(await page.evaluate(modeOf), "select", "V must remember plain select once it is chosen");
+      await page.keyboard.press("l");
+      assert.equal(await page.evaluate(modeOf), "select", "L must not turn the lasso on");
       // No toolbar button shows an outline after a shortcut:
       // a clicked button is blurred, so it cannot keep focus
       // and match :focus-visible on the next keypress.
