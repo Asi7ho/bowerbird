@@ -260,12 +260,17 @@ function hitTestWithFrames(b: Board, world: Pt): number | null {
 }
 
 function bringToFront(ids: number[]): void {
-  // Later items paint on top, so a clicked card (and its group) comes
-  // to the front. Frames never come to the front: their board order
-  // is a frame-based order (a presentation's slide order), and
-  // clicking a frame to move it must not reorder its slides.
-  // Frames also render as transparent borders, so staying behind
-  // later cards is correct visually, not just for order.
+  // A permanent reorder of the board: later items paint on
+  // top. This is NOT what selecting does — selection fronts
+  // a card visually only (applyStacking), and deselecting
+  // returns it to its place, without touching the board
+  // order. This method is for an explicit front command or
+  // a plugin that means to reorder. Frames never come to
+  // the front: their board order is a frame-based order (a
+  // presentation's slide order), and moving a frame must not
+  // reorder its slides. Frames also render as transparent
+  // borders, so staying behind later cards is correct
+  // visually, not just for order.
   const nonFrames = ids.filter((id) => !isFrameCard(boardGet(C.board, id)));
   const front = C.board.items.filter((it) => nonFrames.includes(it.id));
   const rest = C.board.items.filter((it) => !nonFrames.includes(it.id));

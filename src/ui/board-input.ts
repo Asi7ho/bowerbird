@@ -566,7 +566,6 @@ S.boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
   }
   if (clicked !== null && cornerHit(clicked, world)) {
     S.api.board.setSelected(S.api.board.selectCard(S.api.board.getSelected(), clicked, false));
-    S.api.board.bringToFront(S.api.board.getSelected());
     applyStacking();
     updateSelection();
     const it = S.api.board.getItem(clicked);
@@ -575,7 +574,6 @@ S.boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
   }
   if (clicked !== null) {
     S.api.board.setSelected(S.api.board.selectCard(S.api.board.getSelected(), clicked, e.shiftKey));
-    S.api.board.bringToFront(S.api.board.getSelected());
     applyStacking();
     updateSelection();
     S.drag = { kind: "move", lastWorld: world, moved: false };
