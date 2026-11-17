@@ -517,7 +517,11 @@ export function updateSelectionInner(): void {
     el.classList.toggle("selected", board.items.some((it) => it.group === g && selected.includes(it.id)));
   }
   // Selection changes without a full render (a plain click) still
-  // need the resize handle to appear / disappear immediately.
+  // need the resize handle to appear / disappear immediately,
+  // and the selected cards to come to the front — and back to
+  // their place when deselected. Both are z-index only, never
+  // a DOM rebuild, so a pending click is never cancelled.
+  applyStacking();
   updateResizeHandle();
 }
 
@@ -580,9 +584,22 @@ export function applyStacking(): void {
   // built a Map over every board item on every render,
   // including thousands of off-screen items that have no
   // DOM node and need no z-index at all.
+  // A selected card paints above every unselected card, in
+  // its DOM order among the selected ones; deselecting
+  // returns it to its index-based z-index, i.e. its place.
+  // This is visual only — the board order never changes, so
+  // selecting never reorders anything on disk and nothing
+  // needs saving to undo it. The values only compete
+  // inside #cards (its camera transform makes it a stacking
+  // context), so a selected card can never cover the
+  // toolbar, top bar or panels, which live above the board.
+  const selected = S.api.board.getSelected();
+  const n = S.cardsEl.children.length;
   let i = 0;
   for (const child of Array.from(S.cardsEl.children)) {
-    (child as HTMLElement).style.zIndex = String(i++);
+    const el = child as HTMLElement;
+    el.style.zIndex = String(selected.includes(Number(el.dataset.id)) ? n + i : i);
+    i++;
   }
 }
 
