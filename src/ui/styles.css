@@ -330,6 +330,17 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   pointer-events: none;
 }
 .group-frame.selected { border-color: rgba(0, 122, 255, 0.6); }
+/* A live-import group's frame is invisible on the board:
+   no dash, no border, so its cards sit like any other
+   cards. When a member is selected it becomes a solid
+   blue outline around the whole import — the same ring a
+   selected card gets — so the import reads as one
+   selected thing. */
+.group-frame.live-import { border: 2px solid transparent; }
+.group-frame.live-import.selected {
+  border-color: rgba(0, 122, 255, 0.5);
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.35);
+}
 /* The section label: the app's own frame-label treatment,
    as on slides — a small white chip at the frame's top
    left. It sits astride the top border, half above it, so
@@ -347,17 +358,6 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   font-size: 12px; font-weight: 600; color: var(--ink);
   pointer-events: auto; white-space: nowrap; cursor: text;
 }
-/* The open-source button on a live-import group's label:
-   quiet like the label, no background or border, and only
-   fully opaque on hover. */
-.group-open-source {
-  appearance: none; background: none; border: none;
-  padding: 0; margin-left: 6px; width: 14px; height: 14px;
-  color: var(--ink); opacity: 0.55; cursor: pointer;
-  vertical-align: -2px;
-}
-.group-open-source:hover { opacity: 1; }
-.group-open-source svg { width: 14px; height: 14px; display: block; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .group-frame .group-rename {
   font: inherit; color: inherit;
   background: none; border: none; outline: none; padding: 0;

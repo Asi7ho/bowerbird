@@ -236,10 +236,6 @@ export function renderStrokesAndConnectors(board: Board): void {
   // rebuild every card.
 }
 
-// The open-source mark on a live-import group's label: an
-// arrow leaving a box, drawn in the app's stroke style.
-const OPEN_SOURCE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5H5v14h14v-4" fill="none"/><path d="M14 4h6v6" fill="none"/><path d="M20 4 11 13" fill="none"/></svg>';
-
 export function renderGroupFrames(board: Board): void {
   if (!S.groupsEl || !S.groupFramesEl) return;
   const selected = S.api.board.getSelected();
@@ -267,22 +263,28 @@ export function renderGroupFrames(board: Board): void {
   }
   for (const [g, members] of byGroup) {
     const source = board.groups?.[g]?.source;
-    // A live import is a section even with one card: its
-    // label carries the open-source button.
+    // A live import is a section even with one card.
     if (members.length < 2 && !source) continue;
     const b = groupBounds(members, S.api.geometry.itemBounds);
     if (!b) continue;
     if (b.x > v.x1 || b.y > v.y1 || b.x + b.w < v.x0 || b.y + b.h < v.y0) continue;
     const isSel = members.some((it) => selected.includes(it.id));
     const label = board.groups?.[g]?.label ?? `Section ${g}`;
-    // A live import has no dashed frame: its cards should
-    // sit on the board like any other cards, not look like
-    // a special widget. Only the label marks the group, and
-    // it carries the button that opens the source file.
-    if (!source) {
-      framesHtml += `<div class="group-frame${isSel ? " selected" : ""}" data-group="${g}" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px"></div>`;
+    if (source) {
+      // A live import has no label and no frame on the
+      // board — its cards sit like any other cards. But the
+      // frame element still renders, invisible, so the
+      // selection outline can appear on click: when a
+      // member is selected the frame turns into a solid
+      // blue outline around the whole import (not dashed,
+      // like a selected card's ring). updateSelectionInner
+      // toggles its selected class on a plain click, so it
+      // shows without a full render.
+      framesHtml += `<div class="group-frame live-import${isSel ? " selected" : ""}" data-group="${g}" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px"></div>`;
+      continue;
     }
-    labelsHtml += `<span class="group-label" data-group="${g}" style="left:${b.x + 12}px;top:${b.y - 11}px">${S.api.text.escapeHtml(label)}${source ? `<button class="group-open-source" data-group="${g}" title="Open source file" aria-label="Open source file">${OPEN_SOURCE_ICON}</button>` : ""}</span>`;
+    framesHtml += `<div class="group-frame${isSel ? " selected" : ""}" data-group="${g}" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px"></div>`;
+    labelsHtml += `<span class="group-label" data-group="${g}" style="left:${b.x + 12}px;top:${b.y - 11}px">${S.api.text.escapeHtml(label)}</span>`;
   }
   S.groupFramesEl.innerHTML = framesHtml;
   S.groupsEl.innerHTML = labelsHtml;
@@ -522,12 +524,23 @@ export function updateSelectionInner(): void {
     }
   }
   // Group frames follow the selection too: a frame reads as
-  // selected when any of its members is.
+  // selected when any of its members is. The labels live in
+  // #groups and the frames in #group-frames; both toggle
+  // here, so a plain click shows the outline without a
+  // full render. (A live-import group's frame is invisible
+  // until selected — its .selected class is the outline.)
   const board = S.cachedBoard ?? S.api.board.get();
   for (const child of Array.from(S.groupsEl.children)) {
     const el = child as HTMLElement;
     const g = Number(el.dataset.group);
     el.classList.toggle("selected", board.items.some((it) => it.group === g && selected.includes(it.id)));
+  }
+  if (S.groupFramesEl) {
+    for (const child of Array.from(S.groupFramesEl.children)) {
+      const el = child as HTMLElement;
+      const g = Number(el.dataset.group);
+      el.classList.toggle("selected", board.items.some((it) => it.group === g && selected.includes(it.id)));
+    }
   }
   // Selection changes without a full render (a plain click) still
   // need the resize handle to appear / disappear immediately,

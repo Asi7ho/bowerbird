@@ -1842,13 +1842,29 @@ async function main() {
       const linked = Object.entries(board.groups ?? {}).find(([, entry]) => entry.source?.kind === "svg");
       assert.ok(linked, "svg drop linked its group to a source");
       const group = Number(linked[0]);
-      // The linked group has no dashed frame — its cards sit
-      // on the board like any other cards. Only its label
-      // marks it, carrying the button that opens the source.
-      const frame = await page.$(`.group-frame[data-group="${group}"]`);
-      assert.equal(frame, null, "linked group has no dashed frame");
-      const label = await page.$(`.group-label[data-group="${group}"] .group-open-source`);
-      assert.ok(label, "linked group label carries the open-source button");
+      // The linked group has no label and no visible frame —
+      // its cards sit on the board like any other cards. Its
+      // frame element is there but invisible, and it becomes
+      // a solid blue outline around the whole import when a
+      // member is selected.
+      const label = await page.$(`.group-label[data-group="${group}"]`);
+      assert.equal(label, null, "linked group has no label");
+      const frame = await page.$(`.group-frame.live-import[data-group="${group}"]`);
+      assert.ok(frame, "linked group has an invisible live-import frame");
+      const frameClass = await frame.evaluate((el) => el.className);
+      assert.ok(!frameClass.includes("selected"), "linked group has no outline before selection");
+      // Click a member: the whole group is selected, and the
+      // outline appears around it without a full render.
+      const red = board.items.find((it) => it.group === group && "Shape" in it.kind && it.kind.Shape.fill === "#ff0000");
+      const redBox = await page.locator(`#cards .card[data-id="${red.id}"]`).boundingBox();
+      assert.ok(redBox, "red rect card is on screen");
+      await page.mouse.click(redBox.x + redBox.width / 2, redBox.y + redBox.height / 2);
+      await waitFor("live-import outline on selection", async () => {
+        const el = await page.$(`.group-frame.live-import[data-group="${group}"]`);
+        if (!el) return null;
+        const cls = await el.evaluate((n) => n.className);
+        return cls.includes("selected") ? true : null;
+      });
       const entry = linked[1];
       const sourcePath = entry.source.path;
       assert.ok(fs.existsSync(sourcePath), "kept source file exists in the board assets");
