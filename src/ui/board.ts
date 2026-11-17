@@ -28,7 +28,7 @@ import type { PluginContext, PluginManifest } from "../plugins/host";
 import { S } from "./board-state";
 import { render, updateSelection } from "./board-render";
 import {
-  attachBoardListeners, attachWindowListeners, commitEditingIfAny, deleteSelected, groupSelected, setTool, ungroupSelected,
+  attachBoardListeners, attachWindowListeners, commitEditingIfAny, deleteSelected, getSelectMode, groupSelected, setSelectMode, setTool, ungroupSelected,
 } from "./board-input";
 import { disposeAllModel3DViewers } from "../backend/model3d";
 
@@ -128,6 +128,8 @@ export function activate(a: PluginContext): void {
     getEditingId: () => S.editingId,
     setTool,
     getTool: () => S.tool,
+    setSelectMode,
+    getSelectMode,
     groupSelected,
     ungroupSelected,
     deleteSelected,

@@ -406,6 +406,12 @@ export interface PluginHost {
   switchBoard: (name: string, preserveUndo?: boolean) => Promise<boolean>;
   setTool: (tool: string) => void;
   getTool: () => string;
+  // Choose the selection mode (plain select or lasso) and
+  // activate Select with it. The mode is remembered, so
+  // the V shortcut and the select button restore the mode
+  // last chosen instead of always plain select.
+  setSelectMode: (mode: "select" | "lasso") => void;
+  getSelectMode: () => "select" | "lasso";
   getPenColor: () => string;
   setPenColor: (hex: string) => boolean;
   getCamera: () => Camera;
@@ -843,6 +849,12 @@ export interface PluginContext {
     // plugin highlights the active tool from this. Changing
     // the tool fires a "tool" plugin event.
     getTool: () => string;
+    // Choose the selection mode (plain select or lasso) and
+    // activate Select with it. The mode is remembered, so
+    // the V shortcut and the select button restore the mode
+    // last chosen instead of always plain select.
+    setSelectMode: (mode: "select" | "lasso") => void;
+    getSelectMode: () => "select" | "lasso";
     // Hand the plugin system the toolbar's tool container
     // (the #tools segment), so plugin tool buttons can be
     // added to it. The toolbar plugin provides this; other
@@ -1219,6 +1231,8 @@ export interface BoardController {
   getEditingId: () => number | null;
   setTool: (tool: string) => void;
   getTool: () => string;
+  setSelectMode: (mode: "select" | "lasso") => void;
+  getSelectMode: () => "select" | "lasso";
   groupSelected: () => boolean;
   ungroupSelected: () => boolean;
   deleteSelected: () => boolean;
