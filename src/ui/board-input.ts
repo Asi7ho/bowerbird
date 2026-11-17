@@ -322,6 +322,10 @@ export function setTool(t: Tool): void {
   // shortcut (P): remember the draw tool last chosen, so
   // P activates that one instead of always the pen.
   if (t === "pen" || t === "pencil" || t === "highlighter" || t === "eraser") S.lastDrawTool = t;
+  // The geometry shapes share one toolbar button and one
+  // shortcut (R): remember the shape last chosen, so R
+  // activates that one instead of always the rectangle.
+  if (isShapeTool(t)) S.lastShapeTool = t;
   // Every tool switch leaves lasso mode: it belongs to
   // Select only. The L handler turns it back on after
   // switching to Select.
@@ -1393,11 +1397,13 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   // used it is the pen, the draw button's default.
   else if (e.key.toLowerCase() === "p" && !ctrl) setTool(S.lastDrawTool ?? "pen");
   else if (e.key.toLowerCase() === "a" && !ctrl) setTool("connector");
-  // R and E activate their shape — unless a shape is
-  // already in use, which they keep: a triangle stays a
-  // triangle instead of resetting to a rectangle.
-  else if (e.key.toLowerCase() === "r" && !ctrl) setTool(isShapeTool(S.tool) ? S.tool : "rect");
-  else if (e.key.toLowerCase() === "e" && !ctrl) setTool(isShapeTool(S.tool) ? S.tool : "ellipse");
+  // R is the one geometry shortcut: it activates the shape
+  // last chosen, not always the rectangle. Before any shape
+  // is used it is the rectangle, the shape button's default.
+  // There is no E shortcut any more: it used to switch to
+  // the ellipse, which the single R shortcut now covers by
+  // remembering it.
+  else if (e.key.toLowerCase() === "r" && !ctrl) setTool(S.lastShapeTool ?? "rect");
   else if (e.key.toLowerCase() === "l" && !ctrl) {
     // L toggles lasso mode on the select tool: from any
     // other tool it switches to Select with lasso on; on
