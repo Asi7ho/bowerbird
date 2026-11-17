@@ -83,6 +83,10 @@ export interface BoardState {
   // triangle, …). The R shortcut activates this one, not
   // always the rectangle — so a triangle stays a triangle.
   lastShapeTool: Tool | null;
+  // The selection mode last chosen (plain select or lasso).
+  // The V shortcut activates this one, not always plain
+  // select — so a lasso stays a lasso.
+  lastSelectMode: "select" | "lasso" | null;
   editingId: number | null;
   // Set while a render moves the editing card out of #cards
   // and back (see board-render): moving the card blurs its
@@ -137,6 +141,7 @@ export const S: BoardState = {
   tool: "select",
   lastDrawTool: null,
   lastShapeTool: null,
+  lastSelectMode: null,
   editingId: null,
   suppressEditCommit: false,
   spaceDown: false,

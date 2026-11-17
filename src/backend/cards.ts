@@ -38,7 +38,7 @@ export interface CardRenderer {
 // picked, and no new key is stolen from plugins or text.
 export const SHAPES: { kind: ShapeKind; label: string; key: string; svg: string }[] = [
   { kind: "rect", label: "Rectangle", key: "R", svg: '<rect x="4" y="5" width="16" height="14" rx="2" />' },
-  { kind: "ellipse", label: "Ellipse", key: "E", svg: '<ellipse cx="12" cy="12" rx="8" ry="6.5" />' },
+  { kind: "ellipse", label: "Ellipse", key: "", svg: '<ellipse cx="12" cy="12" rx="8" ry="6.5" />' },
   { kind: "triangle", label: "Triangle", key: "", svg: '<path d="M12 4 L20 20 L4 20 Z" />' },
   { kind: "diamond", label: "Diamond", key: "", svg: '<path d="M12 3 L21 12 L12 21 L3 12 Z" />' },
   { kind: "hexagon", label: "Hexagon", key: "", svg: '<path d="M8 3 L16 3 L21 12 L16 21 L8 21 L3 12 Z" />' },

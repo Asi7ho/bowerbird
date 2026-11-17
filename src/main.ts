@@ -24,8 +24,8 @@ import {
 import { welcomeBoard } from "./backend/welcome";
 import {
   boardClearEditing, boardCommitEditing, boardDeleteSelected,
-  boardGetEditingId, boardGetTool, boardGroupSelected, boardRender,
-  boardSetTool, boardUngroupSelected, boardUpdateSelection,
+  boardGetEditingId, boardGetSelectMode, boardGetTool, boardGroupSelected, boardRender,
+  boardSetSelectMode, boardSetTool, boardUngroupSelected, boardUpdateSelection,
   closeSettingsUI, emitPluginEvent, getBoardElements,
   initPlugins, isSettingsUIOpen,
   openSettingsUI,
@@ -598,6 +598,8 @@ async function init(): Promise<void> {
     switchBoard: (name: string, preserveUndo = false) => switchToBoard(C, name, preserveUndo),
     setTool: (toolName: string) => boardSetTool(toolName),
     getTool: () => boardGetTool(),
+    setSelectMode: (mode: "select" | "lasso") => boardSetSelectMode(mode),
+    getSelectMode: () => boardGetSelectMode(),
     // Zoom around the board centre, by a factor. The
     // toolbar's zoom buttons. The camera math stays here;
     // the plugin just says "zoom in" or "zoom out".

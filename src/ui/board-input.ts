@@ -326,10 +326,11 @@ export function setTool(t: Tool): void {
   // shortcut (R): remember the shape last chosen, so R
   // activates that one instead of always the rectangle.
   if (isShapeTool(t)) S.lastShapeTool = t;
-  // Every tool switch leaves lasso mode: it belongs to
-  // Select only. The L handler turns it back on after
-  // switching to Select.
-  S.lassoMode = false;
+  // Lasso mode belongs to Select only: leaving Select
+  // turns it off, and returning to Select restores the
+  // selection mode last chosen (select or lasso) — so V
+  // activates the lasso if that was last used.
+  S.lassoMode = t === "select" && S.lastSelectMode === "lasso";
   S.drag = null;
   updateEraserRing(0, 0, false);
   // The toolbar plugin follows the tool through the "tool"
@@ -337,6 +338,19 @@ export function setTool(t: Tool): void {
   // show the right flyout without polling. The plugin
   // system syncs its own tool buttons on the same event.
   S.api.events.emit("tool");
+}
+
+// Choose the selection mode (plain select or lasso) and
+// activate Select with it. The mode is remembered, so V
+// and the select button restore it — the toolbar's select
+// picker and the shortcut share this one memory.
+export function setSelectMode(mode: "select" | "lasso"): void {
+  S.lastSelectMode = mode;
+  setTool("select");
+}
+
+export function getSelectMode(): "select" | "lasso" {
+  return S.lassoMode ? "lasso" : "select";
 }
 
 // Selection actions, shared by the keyboard shortcuts and by the
@@ -1391,7 +1405,13 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   } else if (e.key.toLowerCase() === "y" && ctrl && !(active && active.tagName === "INPUT")) {
     e.preventDefault();
     S.api.board.redo();
-  } else if (e.key.toLowerCase() === "v" && !ctrl) setTool("select");
+  }
+  // V is the one select shortcut: it activates Select with
+  // the selection mode last chosen (plain select or lasso),
+  // not always plain select. There is no L shortcut any
+  // more: it used to toggle the lasso, which V now covers
+  // by remembering it.
+  else if (e.key.toLowerCase() === "v" && !ctrl) setTool("select");
   // P activates the draw tool last chosen, not always the
   // pen: a pencil stays a pencil. Before any draw tool is
   // used it is the pen, the draw button's default.
@@ -1404,15 +1424,6 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   // the ellipse, which the single R shortcut now covers by
   // remembering it.
   else if (e.key.toLowerCase() === "r" && !ctrl) setTool(S.lastShapeTool ?? "rect");
-  else if (e.key.toLowerCase() === "l" && !ctrl) {
-    // L toggles lasso mode on the select tool: from any
-    // other tool it switches to Select with lasso on; on
-    // Select it flips the mode. V, or any other tool
-    // switch, turns it off again (setTool clears it).
-    const next = S.tool !== "select" || !S.lassoMode;
-    setTool("select");
-    S.lassoMode = next;
-  }
   else if (e.key.toLowerCase() === "x" && !ctrl) setTool("eraser");
   else if (e.key === "[" && !ctrl) rotateSelected(-15);
   else if (e.key === "]" && !ctrl) rotateSelected(15);

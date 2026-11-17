@@ -126,6 +126,12 @@ export function boardSetTool(tool: string): void {
 export function boardGetTool(): string {
   return boardController?.getTool() ?? "select";
 }
+export function boardSetSelectMode(mode: "select" | "lasso"): void {
+  boardController?.setSelectMode(mode);
+}
+export function boardGetSelectMode(): "select" | "lasso" {
+  return boardController?.getSelectMode() ?? "select";
+}
 export function boardGroupSelected(): boolean {
   return boardController?.groupSelected() ?? false;
 }
@@ -595,6 +601,8 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
       },
       setTool: (id: string) => host!.setTool(id),
       getTool: () => host!.getTool(),
+      setSelectMode: (mode: "select" | "lasso") => host!.setSelectMode(mode),
+      getSelectMode: () => host!.getSelectMode(),
       setToolbarToolsEl: (el: HTMLElement) => {
         requireTrusted("provide the toolbar tools element");
         shell.toolbarToolsEl = el;

@@ -35,6 +35,7 @@ const NOTE_COLOURS = ["#FFFFFF", "#FEF3C7", "#FCE7F3", "#DCFCE7", "#DBEAFE", "#F
 
 const ICONS = {
   select: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5 19 12l-7.5 1.4L8.6 20.5 6 3.5Z" /></svg>',
+  lasso: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 3.5a5.5 5.5 0 1 1-5.5 5.5c0-1.9 1.3-3.2 3.1-3.2 1.9 0 3.2 1.3 3.2 3.2s-1.3 3.2-3.2 3.2-3.1-1.3-3.1-3.1" fill="none"/><path d="M9 14.5 5.5 20.5" /></svg>',
   pen: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 19.5 5.6 15 16.2 4.4a2.12 2.12 0 0 1 3 3L8.6 18l-4.1 1.5Z" fill="none"/><path d="M14.5 6.5l3 3" /></svg>',
   pencil: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>',
   highlighter: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 11-6 6v3h9l3-3" /><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4Z" /></svg>',
@@ -92,6 +93,14 @@ export function activate(api: PluginContext): void {
     return b;
   }
 
+  // One select button for plain select and lasso, like the
+  // draw button: it shows the selection mode last chosen,
+  // and the flyout beside the toolbar chooses between them.
+  // Its icon and title follow the current mode.
+  const SELECT_MODES = [
+    { id: "select", label: "Select (V)", icon: ICONS.select },
+    { id: "lasso", label: "Lasso (V)", icon: ICONS.lasso },
+  ] as const;
   const selectBtn = toolButton("tool-select", "Select (V)", "Select", ICONS.select, () => api.ui.setTool("select"));
   // One draw button for pencil, pen and eraser, like the
   // shape button: it shows the draw tool last chosen, and
@@ -115,7 +124,7 @@ export function activate(api: PluginContext): void {
   // The shape button shows the shape last chosen, and the
   // flyout beside the toolbar chooses between all shapes.
   // Its icon and title follow the current shape.
-  const shapeBtn = toolButton("tool-shape", "Shape (R for rectangle, E for ellipse, more in the flyout)", "Shape", ICONS.select, () => {
+  const shapeBtn = toolButton("tool-shape", "Shape (R, more in the flyout)", "Shape", ICONS.select, () => {
     const cur = api.ui.getTool();
     // Clicking the shape button (re)activates the last shape.
     const shapes = api.shapes.list();
@@ -156,6 +165,16 @@ export function activate(api: PluginContext): void {
   drawPicker.id = "draw-picker";
   drawPicker.style.display = "none";
   toolbar.appendChild(drawPicker);
+
+  // The select picker: plain select and lasso, beside the
+  // select button (the first tool, so the default top of
+  // 12px already puts it there). It shows when the select
+  // tool is active.
+  const selectPicker = document.createElement("div");
+  selectPicker.className = "palette";
+  selectPicker.id = "select-picker";
+  selectPicker.style.display = "none";
+  toolbar.appendChild(selectPicker);
 
   // The note-colours bar: a floating bar that sits next
   // to the selected text note, not in the toolbar. It is
@@ -254,14 +273,53 @@ export function activate(api: PluginContext): void {
     // through a drag, a pan or a zoom.
     const noteItem = note ? api.board.getItem(note.id) : null;
     const notePos = noteItem ? api.geometry.itemBounds(noteItem)[0] : null;
-    const key = `${tool}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}|${cam.x},${cam.y}|${colorBarOpen}|${outline}|${notePos ? `${notePos.x},${notePos.y}` : ""}`;
+    // The selection mode is in the key too: switching
+    // between select and lasso leaves the tool as "select",
+    // so without it the button and picker would not refresh.
+    const mode = api.ui.getSelectMode();
+    const key = `${tool}|${mode}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}|${cam.x},${cam.y}|${colorBarOpen}|${outline}|${notePos ? `${notePos.x},${notePos.y}` : ""}`;
     if (key === lastKey) return;
     lastKey = key;
 
     zoomLabel.textContent = `${Math.round(zoom * 100)}%`;
 
     const setActive = (el: HTMLElement, on: boolean) => el.classList.toggle("active", on);
-    setActive(selectBtn, tool === "select");
+
+    // The select button shows the selection mode in use.
+    const isSelect = tool === "select";
+    setActive(selectBtn, isSelect);
+    const modeTarget = isSelect
+      ? SELECT_MODES.find((m) => m.id === mode)
+      : (!selectBtn.dataset.mode ? SELECT_MODES.find((m) => m.id === "select") : undefined);
+    if (modeTarget && selectBtn.dataset.mode !== modeTarget.id) {
+      selectBtn.dataset.mode = modeTarget.id;
+      selectBtn.innerHTML = modeTarget.icon;
+      selectBtn.title = modeTarget.label;
+      selectBtn.setAttribute("aria-label", modeTarget.label.replace(/ \(.*\)$/, ""));
+    }
+
+    // Select picker: shown when the select tool is active
+    // and the colour bar is not open.
+    const showSelect = isSelect && !colorBarOpen;
+    selectPicker.style.display = showSelect ? "flex" : "none";
+    if (showSelect && selectPicker.childElementCount === 0) {
+      for (const m of SELECT_MODES) {
+        const b = document.createElement("button");
+        b.className = "shape-option";
+        b.dataset.mode = m.id;
+        b.title = m.label;
+        b.setAttribute("aria-label", m.label.replace(/ \(.*\)$/, ""));
+        b.innerHTML = m.icon;
+        b.addEventListener("click", () => { api.ui.setSelectMode(m.id); b.blur(); });
+        selectPicker.appendChild(b);
+      }
+    }
+    if (showSelect) {
+      for (const child of Array.from(selectPicker.children)) {
+        (child as HTMLButtonElement).classList.toggle("active", (child as HTMLButtonElement).dataset.mode === mode);
+      }
+    }
+
     setActive(connectorBtn, tool === "connector");
 
     // The draw button shows the draw tool last chosen.
