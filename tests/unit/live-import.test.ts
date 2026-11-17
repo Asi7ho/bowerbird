@@ -3,7 +3,7 @@
 // source file, and translating a fresh import onto the group's
 // current position. Pure functions, no DOM.
 import { describe, expect, it } from "vitest";
-import { base64ToBytes, findSourceGroup, groupBBox, translateImportedToAnchor } from "../../src/backend/live-import";
+import { base64ToBytes, fileCardSize, findSourceGroup, groupBBox, translateImportedToAnchor } from "../../src/backend/live-import";
 import type { Board } from "../../src/backend/model";
 
 function boardWithGroups(groups: Board["groups"]): Board {
@@ -52,6 +52,25 @@ describe("groupBBox", () => {
       { id: 2, pos: { x: 50, y: 5 }, size: { w: 10, h: 10 }, group: null, kind: { Text: { text: "b", bold: false, size: 16, color: "#000000" } } },
     ];
     expect(groupBBox(items as never)).toEqual({ x: 10, y: 5, w: 50, h: 55 });
+  });
+});
+
+describe("fileCardSize", () => {
+  it("is 360 wide with the preview height from the artwork's aspect, plus room for the title and sub", () => {
+    // A 200x120 artwork: preview (120/200)*336 = 201.6, +70.
+    expect(fileCardSize(200, 120)).toEqual({ w: 360, h: 272 });
+    // A square artwork: preview 336, +70.
+    expect(fileCardSize(100, 100)).toEqual({ w: 360, h: 406 });
+  });
+  it("caps a very tall artwork's preview at 360", () => {
+    expect(fileCardSize(100, 1000)).toEqual({ w: 360, h: 430 });
+  });
+  it("floors a very wide artwork's preview at 80", () => {
+    expect(fileCardSize(1000, 10)).toEqual({ w: 360, h: 150 });
+  });
+  it("falls back to the video card's size for a missing artwork", () => {
+    expect(fileCardSize(0, 0)).toEqual({ w: 360, h: 264 });
+    expect(fileCardSize(-5, 100)).toEqual({ w: 360, h: 264 });
   });
 });
 
