@@ -1924,11 +1924,14 @@ async function main() {
     });
 
     await check("dropping a PDF-compatible .ai lands one FileCard, not a PdfCard", async () => {
-      const before = { pdf: countKind("PdfCard"), file: countKind("FileCard") };
+      const before = {
+        pdf: countKind("PdfCard"),
+        ai: readBoard().items.filter((it) => "FileCard" in it.kind && it.kind.FileCard.format === "ai").length,
+      };
       await dropFixture("sample.ai", "application/pdf");
       const card = await waitFor("ai file card in board.json", () => {
         const found = readBoard().items.filter((it) => "FileCard" in it.kind && it.kind.FileCard.format === "ai");
-        return found.length === before.file + 1 ? found[found.length - 1] : null;
+        return found.length === before.ai + 1 ? found[found.length - 1] : null;
       });
       assert.equal(countKind("PdfCard"), before.pdf, "no PdfCard for the .ai file");
       assert.ok(card.kind.FileCard.path.endsWith("sample.ai"), "file card points at the kept source");
@@ -1939,7 +1942,7 @@ async function main() {
     });
 
     await check("dropping a vector .ai lands one FileCard with a preview of the artwork", async () => {
-      const before = countKind("FileCard");
+      const before = readBoard().items.filter((it) => "FileCard" in it.kind && it.kind.FileCard.format === "ai").length;
       await dropFixture("sample-vector.ai", "application/pdf");
       const card = await waitFor("vector ai file card in board.json", () => {
         const found = readBoard().items.filter((it) => "FileCard" in it.kind && it.kind.FileCard.format === "ai");
