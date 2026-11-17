@@ -41,6 +41,7 @@ type ShapeData = { shape: string; fill: string; outline?: boolean };
 type ImageData = { path: string };
 type UrlCardData = { url: string; title: string | null; description: string | null; image?: string | null; icon?: string | null; embed?: boolean };
 type PdfCardData = { path: string; size_bytes: number };
+type FileCardData = { path: string; size_bytes: number; format: "psd" | "ai"; preview?: string };
 type SwatchData = { hex: string };
 type AudioData = { path: string; title?: string; transcript?: string };
 type VideoData = { source: string; remote: boolean; size_bytes: number; poster?: string; duration?: number };
@@ -275,6 +276,32 @@ export function activate(api: PluginContext): void {
         <div style="display:flex;align-items:center;gap:8px"><div class="title" style="font-size:14px;flex:1 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${api.text.escapeHtml(name)}</div>
         <button class="pdf-nav" data-action="pdf-prev" data-id="${c.id}" title="Previous page" aria-label="Previous page" ${pageNum <= 1 ? "disabled" : ""}>‹</button><span class="sub" data-pdf-count="${c.id}">…</span><button class="pdf-nav" data-action="pdf-next" data-id="${c.id}" title="Next page" aria-label="Next page">›</button></div>
         <div class="sub" style="font-size:12px">${kb} KB</div></div></div>`;
+    },
+  });
+
+  // A native design file (.psd, .ai) is one card, like a
+  // PDF: a preview of the artwork on top, the file name
+  // and size below it. The preview is the rendered artwork
+  // (the PSD's composite, the AI's first page), embedded
+  // alongside the source; without one — a file whose
+  // artwork could not be rendered — the card is a tile in
+  // the format's colour, like the PDF's red tile.
+  api.cards.registerBuiltin({
+    kind: "FileCard",
+    title: "Design file",
+    render: (item, data, plain = false) => {
+      const c = chrome(item, plain);
+      const { path, size_bytes, format, preview } = data as FileCardData;
+      const name = path.split("/").pop() ?? path;
+      const kb = formatKB(size_bytes);
+      const label = format === "psd" ? "PSD" : "AI";
+      const tint = format === "psd" ? "#2E86AB" : "#FF6B35";
+      const previewHtml = preview
+        ? `<img src="${api.files.fileUrl(preview)}" draggable="false" alt="" style="width:100%;height:100%;object-fit:contain;display:block" />`
+        : `<div class="filecard-tile" style="background:${api.text.tint(tint, 0.88)};color:${tint}">${label}</div>`;
+      return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
+        <div style="flex:1 1 auto;min-height:0;background:var(--bg-system);border-radius:10px;overflow:hidden">${previewHtml}</div>
+        ${titleHtml(name, c.ww - 24)}<div class="sub" style="font-size:12px">${kb} KB · ${label}</div></div></div>`;
     },
   });
 

@@ -26,6 +26,13 @@ export type Kind =
   | { Image: { path: string } }
   | { UrlCard: { url: string; title: string | null; description: string | null; image?: string | null; icon?: string | null; embed?: boolean } }
   | { PdfCard: { path: string; size_bytes: number } }
+  // A native design file (.psd, .ai) lands as one card,
+  // like a PDF: a preview of the artwork, the file name
+  // and size below it. `path` is the source file itself
+  // (kept in the board's assets, live-synced); `preview`
+  // is the rendered artwork, embedded alongside it.
+  // Double-clicking opens the source in its app.
+  | { FileCard: { path: string; size_bytes: number; format: "psd" | "ai"; preview?: string } }
   | { Swatch: { hex: string } }
   | { Audio: { path: string; title?: string; transcript?: string } }
   | { Video: { source: string; remote: boolean; size_bytes: number; poster?: string; duration?: number } }
