@@ -2152,12 +2152,16 @@ async function main() {
       assert.equal(after.cards, before + 1, "the drawn shape lands as a new card");
       // The completed shape lands ABOVE the card it overlaps,
       // not behind it: it is the last card in the DOM and its
-      // z-index is higher than the note's.
+      // z-index is higher than the note's. The shape is the
+      // last card, not the first non-note one: the hit-test
+      // checks above replace the board with 14 shapes, so the
+      // first non-note card predates the note this check drew
+      // over.
       const stack = await page.evaluate(() => {
         const cards = Array.from(document.querySelectorAll("#cards .card"));
-        const note = cards.find((c) => c.querySelector(".note-body"));
-        const shape = cards.find((c) => !c.querySelector(".note-body"));
-        if (!note || !shape) return { shapeAfterNote: false, shapeAboveNote: false };
+        const note = cards.find((c) => (c.querySelector(".note-body")?.textContent ?? "").includes("Preview test note"));
+        const shape = cards[cards.length - 1];
+        if (!note || !shape || shape === note) return { shapeAfterNote: false, shapeAboveNote: false };
         return {
           shapeAfterNote: !!(note.compareDocumentPosition(shape) & Node.DOCUMENT_POSITION_FOLLOWING),
           shapeAboveNote: Number(getComputedStyle(shape).zIndex) > Number(getComputedStyle(note).zIndex),
