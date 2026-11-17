@@ -1090,10 +1090,16 @@ function registerIpc(): void {
       if (isBoardLocal(p)) next.add(path.resolve(p));
     }
     watchedSources = next;
-    // A fresh board has no assets folder yet, so the watcher
-    // could not start at load; the first drop creates the
-    // folder and registers a source, so start it then.
-    if (!sourceWatcher) startSourceWatcher();
+    // Restart the watcher on every registration, not just when
+    // it is missing: a backup restore deletes the assets
+    // folder and recreates it, and fs.watch follows the old
+    // inode, so a watcher started before the restore never
+    // fires again. Restarting re-resolves the live folder.
+    // Any event pending in the 300 ms debounce is dropped
+    // here, but syncWatchedSources runs refreshStaleSources
+    // right after this resolves, so a missed edit is still
+    // caught by the stat comparison.
+    startSourceWatcher();
     return true;
   });
 
