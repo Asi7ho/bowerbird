@@ -5,7 +5,7 @@ import type { PluginManifest } from "../plugins/host";
 
 export interface BowerbirdAPI {
   platform: string;
-  loadBoard(): Promise<{ json: string | null; board_path: string; board_dir: string; pdf_size_bytes: number; video_size_bytes: number; panelOrder?: string[]; buildId?: string; recovery?: { hasRecovery: boolean; savedAt: number | null } }>;
+  loadBoard(): Promise<{ json: string | null; board_path: string; board_dir: string; pdf_size_bytes: number; video_size_bytes: number; model_size_bytes: number; panelOrder?: string[]; buildId?: string; recovery?: { hasRecovery: boolean; savedAt: number | null } }>;
   saveBoard(json: string): Promise<boolean>;
   saveBoardSync(json: string): boolean;
   // Called when board.json changed on disk to content the app did
@@ -41,7 +41,7 @@ export interface BowerbirdAPI {
   // ready to load.
   exportBoard(): Promise<string | null>;
   importBoard(): Promise<{ json: string; board_path: string; board_dir: string } | null>;
-  resetBoard(opts?: { confirmed?: boolean }): Promise<{ pdf_size_bytes: number; video_size_bytes: number }>;
+  resetBoard(opts?: { confirmed?: boolean }): Promise<{ pdf_size_bytes: number; video_size_bytes: number; model_size_bytes: number }>;
   factoryReset(opts?: { confirmed?: boolean }): Promise<{ ok: boolean }>;
   checkFile(filePath: string): Promise<{ path: string; exists: boolean; size: number; mtimeMs: number; bundlePath: string; bundleExists: boolean; bundleSize: number }>;
   readFileBase64(filePath: string): Promise<{ mime: string; base64: string }>;

@@ -434,7 +434,7 @@ export async function resetBoardToWelcome(ctx: BootContext, opts?: { confirmed?:
   boardClearEditing();
   try {
     const showcase = await api.resetBoard(opts);
-    ctx.board = welcomeBoard(ctx.boardDir, showcase.pdf_size_bytes, showcase.video_size_bytes);
+    ctx.board = welcomeBoard(ctx.boardDir, showcase.pdf_size_bytes, showcase.video_size_bytes, showcase.model_size_bytes);
     ctx.board.camera = { x: 0, y: 0, zoom: 1 };
     closeSettingsUI();
     ctx.undoStore.save();
