@@ -8,8 +8,8 @@
 // (plugin-api/) so plugins import them by name without reaching
 // into the core. This module re-exports them, so existing core
 // imports from "./model" keep working.
-import type { Anchor, ArrangeOptions, Block, Board, Camera, Item, Kind, Pt, Segment, ShapeKind, Size } from "bowerbird-plugin-api";
-export type { Anchor, ArrangeOptions, Block, Board, Camera, Item, Kind, Pt, Segment, ShapeKind, Size };
+import type { Anchor, ArrangeOptions, Block, Board, Camera, GroupEntry, ImportSource, Item, Kind, Pt, Segment, ShapeKind, Size } from "bowerbird-plugin-api";
+export type { Anchor, ArrangeOptions, Block, Board, Camera, GroupEntry, ImportSource, Item, Kind, Pt, Segment, ShapeKind, Size };
 
 // Shape outline fractions, in % of the shape's box. The single
 // source of truth for a shape's geometry: cards.ts renders the

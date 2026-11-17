@@ -11,14 +11,14 @@
 // neither content nor camera changed. A failed write clears
 // the seen keys so the next save retries instead of skipping.
 import { api } from "./api";
-import { boardGet, type Board, type Item } from "./model";
+import { boardGet, type Board, type GroupEntry, type Item } from "./model";
 import { emitPluginEvent } from "../plugins/host";
 
 export interface UndoState {
   items: Item[];
   next_id: number;
   next_group: number;
-  groups: Record<number, { label: string }>;
+  groups: Record<number, GroupEntry>;
   bg: string;
   grid: Board["grid"];
   selected: number[];
@@ -263,7 +263,7 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
       items: JSON.parse(JSON.stringify(ctx.getBoard().items)) as Item[],
       next_id: ctx.getBoard().next_id,
       next_group: ctx.getBoard().next_group,
-      groups: JSON.parse(JSON.stringify(ctx.getBoard().groups ?? {})) as Record<number, { label: string }>,
+      groups: JSON.parse(JSON.stringify(ctx.getBoard().groups ?? {})) as Record<number, GroupEntry>,
       bg: ctx.getBoard().bg,
       grid: ctx.getBoard().grid,
       selected: [...ctx.getSelected()],
@@ -278,7 +278,7 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
       items: JSON.parse(itemsJson) as Item[],
       next_id: ctx.getBoard().next_id,
       next_group: ctx.getBoard().next_group,
-      groups: JSON.parse(JSON.stringify(ctx.getBoard().groups ?? {})) as Record<number, { label: string }>,
+      groups: JSON.parse(JSON.stringify(ctx.getBoard().groups ?? {})) as Record<number, GroupEntry>,
       bg: ctx.getBoard().bg,
       grid: ctx.getBoard().grid,
       selected: [...ctx.getSelected()],
@@ -355,7 +355,7 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
     ctx.getBoard().next_id = s.next_id;
     ctx.getBoard().next_group = s.next_group;
     if (Object.keys(s.groups ?? {}).length > 0) {
-      ctx.getBoard().groups = JSON.parse(JSON.stringify(s.groups)) as Record<number, { label: string }>;
+      ctx.getBoard().groups = JSON.parse(JSON.stringify(s.groups)) as Record<number, GroupEntry>;
     } else {
       delete ctx.getBoard().groups;
     }
