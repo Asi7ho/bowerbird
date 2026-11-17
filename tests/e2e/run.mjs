@@ -2151,24 +2151,63 @@ async function main() {
       assert.ok(after.previewGone, "shape preview is gone after mouseup");
       assert.equal(after.cards, before + 1, "the drawn shape lands as a new card");
       // The completed shape lands ABOVE the card it overlaps,
-      // not behind it: it is the last card in the DOM and its
-      // z-index is higher than the note's. The shape is the
-      // last card, not the first non-note one: the hit-test
-      // checks above replace the board with 14 shapes, so the
-      // first non-note card predates the note this check drew
-      // over.
+      // not behind it: it is the last card in the DOM. The shape
+      // is the last card, not the first non-note one: the
+      // hit-test checks above replace the board with 14 shapes,
+      // so the first non-note card predates the note this check
+      // drew over.
       const stack = await page.evaluate(() => {
         const cards = Array.from(document.querySelectorAll("#cards .card"));
         const note = cards.find((c) => (c.querySelector(".note-body")?.textContent ?? "").includes("Preview test note"));
         const shape = cards[cards.length - 1];
-        if (!note || !shape || shape === note) return { shapeAfterNote: false, shapeAboveNote: false };
+        if (!note || !shape || shape === note) return { shapeAfterNote: false, noteZ: 0, shapeZ: 0 };
         return {
           shapeAfterNote: !!(note.compareDocumentPosition(shape) & Node.DOCUMENT_POSITION_FOLLOWING),
-          shapeAboveNote: Number(getComputedStyle(shape).zIndex) > Number(getComputedStyle(note).zIndex),
+          noteZ: Number(getComputedStyle(note).zIndex),
+          shapeZ: Number(getComputedStyle(shape).zIndex),
         };
       });
       assert.ok(stack.shapeAfterNote, "completed shape is after the note in the DOM");
-      assert.ok(stack.shapeAboveNote, "completed shape has a higher z-index than the note");
+      // Selecting the note brings it to the front: while it
+      // is selected it paints above the shape it was drawn
+      // under, and its handle and colour bar sit above it
+      // coherently instead of floating over the shape while
+      // the note stays behind.
+      assert.ok(stack.noteZ > stack.shapeZ, "the selected note paints above the shape");
+      // Deselecting returns the note to its place, below the
+      // shape: switch back to the select tool, then click
+      // empty board, which clears the selection. (With the
+      // shape tool still active, the click would start
+      // another shape drag instead of deselecting.)
+      await page.keyboard.press("v");
+      await new Promise((r) => setTimeout(r, 300));
+      const empty = await page.evaluate(() => {
+        const rects = [...document.querySelectorAll("#cards .card")].map((c) => c.getBoundingClientRect());
+        const tb = document.querySelector("#toolbar")?.getBoundingClientRect();
+        const bar = document.querySelector("#note-colours")?.getBoundingClientRect();
+        const blocked = [...rects, tb, bar].filter(Boolean);
+        for (let y = 90; y < 800; y += 80) {
+          for (let x = 100; x < 1200; x += 80) {
+            if (!blocked.some((r) => x > r.left - 4 && x < r.right + 4 && y > r.top - 4 && y < r.bottom + 4)) return { x, y };
+          }
+        }
+        return null;
+      });
+      assert.ok(empty, "there is empty board to click to deselect");
+      await page.mouse.click(empty.x, empty.y);
+      await new Promise((r) => setTimeout(r, 400));
+      const back = await page.evaluate(() => {
+        const cards = [...document.querySelectorAll("#cards .card")];
+        const note = cards.find((c) => (c.querySelector(".note-body")?.textContent ?? "").includes("Preview test note"));
+        const shape = cards[cards.length - 1];
+        return {
+          selected: document.querySelectorAll("#cards .card.selected").length,
+          noteZ: Number(getComputedStyle(note).zIndex),
+          shapeZ: Number(getComputedStyle(shape).zIndex),
+        };
+      });
+      assert.equal(back.selected, 0, "nothing is selected after clicking empty board");
+      assert.ok(back.noteZ < back.shapeZ, "deselecting returns the note below the shape");
     });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });
