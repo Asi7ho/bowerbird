@@ -1,7 +1,7 @@
 import { api } from "./backend/api";
 import {
   type BootContext,
-  healBoardItem, importBoard, isFrameCard, loadBoardFromJson, resetBoardToWelcome, restoreBoardBackup, restoreRecoveryJournal, startBackgroundIndexing, startPosterBackfill, switchToBoard, syncGroupLabels, syncWatchedSources,
+  healBoardItem, importBoard, isFrameCard, loadBoardFromJson, refreshStaleSources, resetBoardToWelcome, restoreBoardBackup, restoreRecoveryJournal, startBackgroundIndexing, startPosterBackfill, switchToBoard, syncGroupLabels, syncWatchedSources,
 } from "./boards";
 import { createMedia, type Media } from "./backend/media";
 import { createCardRenderer, SHAPES, shapePreviewPoints, type CardRenderer } from "./backend/cards";
@@ -165,12 +165,17 @@ C.drops = createDrops({
   allocId: () => allocId(),
   allocGroup: () => { C.board.next_group += 1; return C.board.next_group; },
   syncWatchedSources: () => syncWatchedSources(C),
+  clearSelection: (ids) => { C.selected = C.selected.filter((s) => !ids.includes(s)); },
   save: () => { C.undoStore.save(); },
   saveWithoutUndo: () => C.undoStore.saveWithoutUndo(),
   requestRender: () => boardRender(),
   toWorld: (s) => toWorld(s),
   toast,
 });
+
+// Live imports: the stale check in boards.ts reaches the
+// re-import through here (boards.ts never imports drops).
+C.refreshLinkedSource = (path, stat) => C.drops.refreshSource(path, stat);
 
 function toWorld(s: Pt): Pt {
   return screenToWorld(s, C.board.camera);
@@ -444,10 +449,16 @@ async function init(): Promise<void> {
   // (loadBoardFromJson keeps it for the same folder), the redo
   // chain clears — and tell plugins the content changed.
   api.onExternalBoardChange(() => void reloadFromDisk("external"));
+  // Live imports: a source file changed on disk — re-import
+  // the group linked to it.
+  api.onSourceChanged((ev) => void C.drops.refreshSource(ev.path, { exists: ev.exists, size: ev.size, mtimeMs: ev.mtimeMs }));
   // Live imports: the board is up, so tell the main process
   // which source files to watch (loadBoardFromJson does the
   // same after every later load; init parses inline).
   syncWatchedSources(C);
+  // A source may be newer than its cards already (edited
+  // while the app was closed): re-import the stale groups.
+  void refreshStaleSources(C);
   // Panel tab order, loaded with the board: the plugin system
   // applies it once panels are registered, and saves it back
   // whenever the user drags a tab.
