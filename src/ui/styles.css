@@ -210,8 +210,15 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    same geometry as #canvas-svg, so a shape preview lines up with
    the world it is drawn in. It is purely visual: pointer-events
    none, so it never intercepts a click on a card, a group label
-   or a button below it — the layer covers the whole board. */
-#preview-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+   or a button below it — the layer covers the whole board.
+   z-index 110: above the resize/rotate handles (100) and the
+   note colour bar (40), so a shape drawn across a selected note
+   paints over both instead of hiding behind them — below the
+   toolbar wrap (120) and the plugin overlays (150), so board
+   chrome and modal overlays still cover it. #board creates no
+   stacking context, so this z-index competes in the root one
+   and beats the bar's fixed z-index 40. */
+#preview-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 110; }
 #grid { position: absolute; inset: 0; pointer-events: none; }
 /* #cards must NOT have overflow:hidden: cards live in world
    coordinates, so a card at world x=1500 sits outside the layer's
@@ -577,7 +584,12 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    the toolbar's right instead, so the tools never move. */
 #toolbar-wrap {
   position: absolute; top: 50%; left: 12px; transform: translateY(-50%);
-  display: flex; pointer-events: none; z-index: 10;
+  display: flex; pointer-events: none;
+  /* z-index 120: above the draw-preview layer (110), so a shape
+     dragged across the board's left edge never paints over the
+     toolbar — below the plugin overlays (150), so a modal overlay
+     like the command palette still covers it. */
+  z-index: 120;
 }
 #toolbar {
   position: relative;
