@@ -17,6 +17,7 @@ import { parseSvgToItems } from "./svg-import";
 export interface DropsContext {
   getBoard(): Board;
   allocId(): number;
+  allocGroup(): number;
   save(): void;
   saveWithoutUndo(): void;
   requestRender(): void;
@@ -165,7 +166,7 @@ export function createDrops(ctx: DropsContext): Drops {
     // Land a raster image file as one Image card at its
     // natural size (capped at 320 wide). Shared by the image
     // branch and the SVG fallback below.
-    async function addImageCard(file: File, atWorld: Pt): Promise<boolean> {
+    async function addImageCard(file: File, atWorld: Pt, group: number | null = null): Promise<boolean> {
       const stored = await api.embedFileBytes(file.name, await file.arrayBuffer());
       const img = new Image();
       await new Promise<void>((resolve) => { img.onload = () => resolve(); img.onerror = () => resolve(); img.src = api.fileUrl(stored); });
@@ -173,7 +174,22 @@ export function createDrops(ctx: DropsContext): Drops {
       const nw = img.naturalWidth || 320, nh = img.naturalHeight || 240;
       const scale = nw > 320 ? 320 / nw : 1;
       const id = ctx.allocId();
-      board.items.push({ id, pos: atWorld, size: { w: Math.max(40, nw * scale), h: Math.max(40, nh * scale) }, group: null, kind: { Image: { path: stored } } });
+      board.items.push({ id, pos: atWorld, size: { w: Math.max(40, nw * scale), h: Math.max(40, nh * scale) }, group, kind: { Image: { path: stored } } });
+      return true;
+    }
+
+    // Land an image card for a file already embedded at
+    // `stored` (the SVG fallback, where the embedded file is
+    // the linked source itself, so it must not be embedded
+    // a second time). The size comes from loading it.
+    async function addStoredImageCard(stored: string, atWorld: Pt, group: number | null): Promise<boolean> {
+      const img = new Image();
+      await new Promise<void>((resolve) => { img.onload = () => resolve(); img.onerror = () => resolve(); img.src = api.fileUrl(stored); });
+      if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return false; }
+      const nw = img.naturalWidth || 320, nh = img.naturalHeight || 240;
+      const scale = nw > 320 ? 320 / nw : 1;
+      const id = ctx.allocId();
+      board.items.push({ id, pos: atWorld, size: { w: Math.max(40, nw * scale), h: Math.max(40, nh * scale) }, group, kind: { Image: { path: stored } } });
       return true;
     }
 
@@ -182,7 +198,7 @@ export function createDrops(ctx: DropsContext): Drops {
     // path; the bytes behind it are embedded here and the
     // path rewritten to the stored copy. Returns false if
     // the board switched mid-import, so the caller stops.
-    async function addImportedItem(item: ImportedItem, fileName: string): Promise<boolean> {
+    async function addImportedItem(item: ImportedItem, fileName: string, group: number | null): Promise<boolean> {
       const kind = item.kind;
       if (item.embed && "Image" in kind) {
         kind.Image.path = await api.embedFileBytes(item.embed.name, item.embed.data);
@@ -193,10 +209,31 @@ export function createDrops(ctx: DropsContext): Drops {
       }
       if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return false; }
       const id = ctx.allocId();
-      const newItem: Item = { id, pos: item.pos, size: item.size, group: null, kind };
+      const newItem: Item = { id, pos: item.pos, size: item.size, group, kind };
       if (item.rotation !== undefined) newItem.rotation = item.rotation;
       board.items.push(newItem);
       return true;
+    }
+
+    // Keep an import's source file in the board's assets and
+    // link its cards to it: the file is never lost, and the
+    // app can re-import it when it changes on disk. The
+    // cards go in one group named after the file, and the
+    // group records the source. Returns the group and the
+    // stored path, or null when the source could not be
+    // kept — the cards still land, just unlinked.
+    async function linkImport(file: File, data: Uint8Array, kind: "svg" | "psd" | "ai"): Promise<{ group: number; stored: string } | null> {
+      let stored: string;
+      try {
+        stored = await api.embedFileBytes(file.name, data);
+      } catch {
+        ctx.toast(`Could not keep ${file.name}`);
+        return null;
+      }
+      const group = ctx.allocGroup();
+      board.groups = board.groups ?? {};
+      board.groups[group] = { label: file.name, source: { path: stored, kind } };
+      return { group, stored };
     }
 
     for (const file of files) {
@@ -206,28 +243,38 @@ export function createDrops(ctx: DropsContext): Drops {
         if (kind === "image") {
           if (await addImageCard(file, at)) added++;
         } else if (kind === "svg") {
-          const items = parseSvgToItems(await file.text(), at);
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const items = parseSvgToItems(new TextDecoder().decode(bytes), at);
           if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
           if (items.length === 0) {
             // Nothing mappable (a <use>-only file, say): keep
             // the old behaviour and land the whole SVG as
-            // one image card.
-            if (await addImageCard(file, at)) added++;
+            // one image card — the embedded file is the
+            // linked source itself, so it is not embedded
+            // a second time.
+            const linked = await linkImport(file, bytes, "svg");
+            if (!linked) { if (await addImageCard(file, at)) added++; }
+            else if (await addStoredImageCard(linked.stored, at, linked.group)) added++;
           } else {
+            const linked = await linkImport(file, bytes, "svg");
+            const group = linked?.group ?? null;
             for (const item of items) {
-              if (!(await addImportedItem(item, file.name))) return;
+              if (!(await addImportedItem(item, file.name, group))) return;
             }
             added += items.length;
           }
         } else if (kind === "psd") {
-          const parsed = parsePsd(await file.arrayBuffer());
+          const bytes = new Uint8Array(await file.arrayBuffer());
+          const parsed = parsePsd(bytes.buffer);
           if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
           const items = psdLayersToItems(parsed, at);
           if (items.length === 0) {
             ctx.toast(`No layers could be imported from ${file.name}`);
           } else {
+            const linked = await linkImport(file, bytes, "psd");
+            const group = linked?.group ?? null;
             for (const item of items) {
-              if (!(await addImportedItem(item, file.name))) return;
+              if (!(await addImportedItem(item, file.name, group))) return;
             }
             added += items.length;
           }
@@ -249,8 +296,10 @@ export function createDrops(ctx: DropsContext): Drops {
             if (items.length === 0) {
               ctx.toast(`No artwork could be imported from ${file.name}`);
             } else {
+              const linked = await linkImport(file, bytes, "ai");
+              const group = linked?.group ?? null;
               for (const item of items) {
-                if (!(await addImportedItem(item, file.name))) return;
+                if (!(await addImportedItem(item, file.name, group))) return;
               }
               added += items.length;
             }

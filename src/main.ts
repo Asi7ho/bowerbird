@@ -163,6 +163,7 @@ C.undoStore = createUndoStore({
 C.drops = createDrops({
   getBoard: () => C.board,
   allocId: () => allocId(),
+  allocGroup: () => { C.board.next_group += 1; return C.board.next_group; },
   save: () => { C.undoStore.save(); },
   saveWithoutUndo: () => C.undoStore.saveWithoutUndo(),
   requestRender: () => boardRender(),
