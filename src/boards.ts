@@ -170,7 +170,15 @@ export function syncWatchedSources(ctx: BootContext): void {
   for (const entry of Object.values(ctx.board.groups ?? {})) {
     if (entry.source) paths.push(entry.source.path);
   }
-  void api.setWatchedSources(paths).catch(() => { /* watching is a convenience */ });
+  void api.setWatchedSources(paths).then(() => {
+    // The watcher only sees changes after it starts: a
+    // source edited between the drop and the watcher
+    // starting would be missed entirely, so stat the
+    // registered sources now and refresh any that already
+    // moved. (This is also what catches a change made
+    // while the app was closed, on the next load.)
+    void refreshStaleSources(ctx);
+  }).catch(() => { /* watching is a convenience */ });
 }
 
 // After a load, a linked source may be newer than its cards
