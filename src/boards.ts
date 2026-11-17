@@ -155,6 +155,19 @@ export function healBoardItem(
 // so indexing still starts on a busy board. A search
 // starts indexing at once (see updateSearch), so this
 // delay only ever costs a few seconds of background time.
+// Tell the main process which source files to watch for live
+// imports: the paths linked from this board's groups. Called
+// after every board load, and after a drop links a new source
+// (via the drops context). The main process only notifies for
+// these paths, and only when they are board-local.
+export function syncWatchedSources(ctx: BootContext): void {
+  const paths: string[] = [];
+  for (const entry of Object.values(ctx.board.groups ?? {})) {
+    if (entry.source) paths.push(entry.source.path);
+  }
+  void api.setWatchedSources(paths).catch(() => { /* watching is a convenience */ });
+}
+
 export function startBackgroundIndexing(ctx: BootContext): void {
   const start = () => { void ctx.search.startContextIndexing(); };
   if (typeof requestIdleCallback === "function") {
@@ -298,6 +311,7 @@ export async function loadBoardFromJson(ctx: BootContext, json: string, dir: str
   // cost. It is async and guarded: nothing happens when
   // everything is already indexed.
   startBackgroundIndexing(ctx);
+  syncWatchedSources(ctx);
   // Fill in poster frames for videos that predate them
   // (old boards, the welcome board), in the background.
   startPosterBackfill(ctx);

@@ -23,6 +23,7 @@ export interface DropsContext {
   requestRender(): void;
   toWorld(s: Pt): Pt;
   toast(msg: string): void;
+  syncWatchedSources(): void;
 }
 
 export interface Drops {
@@ -343,7 +344,7 @@ export function createDrops(ctx: DropsContext): Drops {
       }
       at = { x: at.x + 24, y: at.y + 24 };
     }
-    if (added > 0) { ctx.save(); ctx.requestRender(); }
+    if (added > 0) { ctx.save(); ctx.requestRender(); ctx.syncWatchedSources(); }
   }
   async function refreshLinkPreviews(): Promise<void> {
     const jobs: Promise<void>[] = [];

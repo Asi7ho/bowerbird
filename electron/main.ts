@@ -242,11 +242,65 @@ function startBoardWatcher(): void {
     // Watching is a convenience: the board still loads on boot.
     boardWatcher = null;
   }
+  // The source watcher follows the board watcher: same board,
+  // same lifecycle. The registered set is empty until the
+  // renderer registers this board's linked sources.
+  startSourceWatcher();
 }
 
 function stopBoardWatcher(): void {
   if (boardWatchTimer) { clearTimeout(boardWatchTimer); boardWatchTimer = null; }
   if (boardWatcher) { boardWatcher.close(); boardWatcher = null; }
+  stopSourceWatcher();
+}
+
+// Live imports: the main process watches the board's assets
+// folder for changes to the source files linked from the
+// board's groups (see GroupEntry.source). Only paths the
+// renderer registered are reported, and only when they are
+// board-local — the watcher never follows a path outside the
+// board, for the same reason the path-taking handlers do
+// not (see the security boundaries comment above).
+let sourceWatcher: fs.FSWatcher | null = null;
+let sourceWatchTimer: NodeJS.Timeout | null = null;
+let watchedSources = new Set<string>();
+let pendingSources = new Set<string>();
+
+function startSourceWatcher(): void {
+  stopSourceWatcher(false);
+  try {
+    const assets = path.join(boardDir(), "assets");
+    sourceWatcher = fs.watch(assets, (_eventType, filename) => {
+      if (typeof filename !== "string") return;
+      const full = path.resolve(path.join(assets, filename));
+      if (!watchedSources.has(full)) return;
+      pendingSources.add(full);
+      if (sourceWatchTimer) clearTimeout(sourceWatchTimer);
+      sourceWatchTimer = setTimeout(() => {
+        sourceWatchTimer = null;
+        const paths = [...pendingSources];
+        pendingSources = new Set();
+        for (const p of paths) {
+          let exists = false, size = -1, mtimeMs = 0;
+          try {
+            const st = fs.statSync(p);
+            exists = true; size = st.size; mtimeMs = st.mtimeMs;
+          } catch { /* deleted: exists stays false */ }
+          boardView?.webContents.send("bowerbird:source-changed", { path: p, exists, size, mtimeMs });
+        }
+      }, 300);
+    });
+  } catch {
+    // Watching is a convenience: the board still loads.
+    sourceWatcher = null;
+  }
+}
+
+function stopSourceWatcher(clearSet = true): void {
+  if (sourceWatchTimer) { clearTimeout(sourceWatchTimer); sourceWatchTimer = null; }
+  if (sourceWatcher) { sourceWatcher.close(); sourceWatcher = null; }
+  pendingSources = new Set();
+  if (clearSet) watchedSources = new Set();
 }
 
 // Build identifier, so a user can tell which packaged build
@@ -1012,16 +1066,35 @@ function registerIpc(): void {
   // fails on their machine, instead of "File missing".
   ipcMain.handle("bowerbird:check-file", (_event, filePath: string) => {
     if (!isBoardLocal(filePath)) throw new Error("not a board-local file");
-    const sizeOf = (file: string): number => { try { return fs.statSync(file).size; } catch { return -1; } };
+    const statOf = (file: string): { size: number; mtimeMs: number } => { try { const s = fs.statSync(file); return { size: s.size, mtimeMs: s.mtimeMs }; } catch { return { size: -1, mtimeMs: 0 }; } };
     const bundle = path.join(assetsDir(), path.basename(String(filePath)));
     return {
       path: String(filePath),
       exists: fs.existsSync(filePath),
-      size: sizeOf(filePath),
+      size: statOf(filePath).size,
+      mtimeMs: statOf(filePath).mtimeMs,
       bundlePath: bundle,
       bundleExists: fs.existsSync(bundle),
-      bundleSize: sizeOf(bundle),
+      bundleSize: statOf(bundle).size,
     };
+  });
+
+  ipcMain.handle("bowerbird:set-watched-sources", (_event, paths: unknown) => {
+    if (!Array.isArray(paths)) return false;
+    const next = new Set<string>();
+    for (const p of paths) {
+      if (typeof p !== "string") continue;
+      // Board-local only: the renderer must never be able to
+      // make the main process watch — and stat — a file
+      // outside the board.
+      if (isBoardLocal(p)) next.add(path.resolve(p));
+    }
+    watchedSources = next;
+    // A fresh board has no assets folder yet, so the watcher
+    // could not start at load; the first drop creates the
+    // folder and registers a source, so start it then.
+    if (!sourceWatcher) startSourceWatcher();
+    return true;
   });
 
   // Force-restore the welcome media, even if files already

@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld("bowerbird", {
   saveBoard: (json: string) => ipcRenderer.invoke("bowerbird:save-board", json),
   saveBoardSync: (json: string) => ipcRenderer.sendSync("bowerbird:save-board-sync", json),
   onExternalBoardChange: (cb: () => void) => { ipcRenderer.on("bowerbird:board-changed-external", () => cb()); },
+  setWatchedSources: (paths: string[]) => ipcRenderer.invoke("bowerbird:set-watched-sources", paths),
+  onSourceChanged: (cb: (ev: { path: string; exists: boolean; size: number; mtimeMs: number }) => void) => { ipcRenderer.on("bowerbird:source-changed", (_event, ev) => cb(ev)); },
   listBoards: () => ipcRenderer.invoke("bowerbird:list-boards"),
   createBoard: (name: string) => ipcRenderer.invoke("bowerbird:create-board", name),
   switchBoard: (name: string) => ipcRenderer.invoke("bowerbird:switch-board", name),

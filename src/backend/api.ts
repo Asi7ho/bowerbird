@@ -11,6 +11,10 @@ export interface BowerbirdAPI {
   // Called when board.json changed on disk to content the app did
   // not write (an agent or a script): the renderer reloads it.
   onExternalBoardChange(cb: () => void): void;
+  // Live imports: tell the main process which board-local
+  // source files to watch, and hear when one changes on disk.
+  setWatchedSources(paths: string[]): Promise<boolean>;
+  onSourceChanged(cb: (ev: { path: string; exists: boolean; size: number; mtimeMs: number }) => void): void;
   listBoards(): Promise<Array<{ name: string; current: boolean; items: number }>>;
   createBoard(name: string): Promise<{ name: string }>;
   switchBoard(name: string): Promise<{ json: string; board_path: string; board_dir: string }>;
@@ -39,7 +43,7 @@ export interface BowerbirdAPI {
   importBoard(): Promise<{ json: string; board_path: string; board_dir: string } | null>;
   resetBoard(opts?: { confirmed?: boolean }): Promise<{ pdf_size_bytes: number; video_size_bytes: number }>;
   factoryReset(opts?: { confirmed?: boolean }): Promise<{ ok: boolean }>;
-  checkFile(filePath: string): Promise<{ path: string; exists: boolean; size: number; bundlePath: string; bundleExists: boolean; bundleSize: number }>;
+  checkFile(filePath: string): Promise<{ path: string; exists: boolean; size: number; mtimeMs: number; bundlePath: string; bundleExists: boolean; bundleSize: number }>;
   readFileBase64(filePath: string): Promise<{ mime: string; base64: string }>;
   contextEmbedImage(filePath: string): Promise<number[]>;
   contextEmbedFrame(dataUrl: string): Promise<number[]>;

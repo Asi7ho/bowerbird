@@ -1,7 +1,7 @@
 import { api } from "./backend/api";
 import {
   type BootContext,
-  healBoardItem, importBoard, isFrameCard, loadBoardFromJson, resetBoardToWelcome, restoreBoardBackup, restoreRecoveryJournal, startBackgroundIndexing, startPosterBackfill, switchToBoard, syncGroupLabels,
+  healBoardItem, importBoard, isFrameCard, loadBoardFromJson, resetBoardToWelcome, restoreBoardBackup, restoreRecoveryJournal, startBackgroundIndexing, startPosterBackfill, switchToBoard, syncGroupLabels, syncWatchedSources,
 } from "./boards";
 import { createMedia, type Media } from "./backend/media";
 import { createCardRenderer, SHAPES, shapePreviewPoints, type CardRenderer } from "./backend/cards";
@@ -164,6 +164,7 @@ C.drops = createDrops({
   getBoard: () => C.board,
   allocId: () => allocId(),
   allocGroup: () => { C.board.next_group += 1; return C.board.next_group; },
+  syncWatchedSources: () => syncWatchedSources(C),
   save: () => { C.undoStore.save(); },
   saveWithoutUndo: () => C.undoStore.saveWithoutUndo(),
   requestRender: () => boardRender(),
@@ -443,6 +444,10 @@ async function init(): Promise<void> {
   // (loadBoardFromJson keeps it for the same folder), the redo
   // chain clears — and tell plugins the content changed.
   api.onExternalBoardChange(() => void reloadFromDisk("external"));
+  // Live imports: the board is up, so tell the main process
+  // which source files to watch (loadBoardFromJson does the
+  // same after every later load; init parses inline).
+  syncWatchedSources(C);
   // Panel tab order, loaded with the board: the plugin system
   // applies it once panels are registered, and saves it back
   // whenever the user drags a tab.
