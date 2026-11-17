@@ -91,6 +91,12 @@ class Model3DView {
   private lastStepAt = 0;
   private disposed = false;
   private loaded = false;
+  // The card's world size, so the scheduler can tell how
+  // big this model is on screen without reading the DOM
+  // (see isWorthTurning). Set when the view mounts (sync),
+  // refreshed on every render, so a resize is picked up.
+  private worldW = 0;
+  private worldH = 0;
   // The placeholder canvas this view is currently listening
   // on. render() rebuilds the card DOM, so the element
   // changes and the listeners move with it (see sync).
@@ -283,6 +289,17 @@ class Model3DView {
     return this.loaded && !this.dragging && now - this.lastInteract > IDLE_MS;
   }
 
+  setWorldSize(w: number, h: number): void {
+    this.worldW = w;
+    this.worldH = h;
+  }
+
+  // True when this view is big enough on screen at this
+  // zoom for its idle turn to be worth rendering.
+  worthTurning(zoom: number): boolean {
+    return isWorthTurning(this.worldW, this.worldH, zoom);
+  }
+
   setAspect(w: number, h: number): void {
     if (w <= 0 || h <= 0) return;
     this.camera.aspect = w / h;
@@ -365,6 +382,17 @@ const SETTLE_MS = 120;
 // ten times less WebGL work than every frame.
 const AUTO_ROTATE_MS = 100;
 
+// A model smaller than this on screen does not get its
+// idle turn rendered: below ~48px the turn moves a couple
+// of pixels and is invisible, so re-rendering the whole
+// layer every 100ms for it is pure waste. The camera still
+// re-renders it when it moves (cameraChanged / dirty), so
+// it always lands in the right place — only the idle churn
+// is gated. 48 is a judgment call: at fit zoom on the
+// 2,000-card board the models are ~16px, at working zoom
+// they are 300px, so anything in between separates the two.
+const AUTO_ROTATE_MIN_SCREEN_PX = 48;
+
 // A render is pending: the card set changed, a model
 // loaded, or a view was rotated or zoomed.
 let dirty = false;
@@ -395,6 +423,15 @@ export function layerTransform(
     ty: (from.y - to.y) * to.zoom,
     s: to.zoom / from.zoom,
   };
+}
+
+// True when a model of this world size is big enough on
+// screen at this zoom for its idle turn to be visible.
+// Pure geometry: the screen size is the world size times
+// the zoom, and the larger dimension is what the turn
+// reads on.
+export function isWorthTurning(worldW: number, worldH: number, zoom: number): boolean {
+  return Math.max(worldW, worldH) * zoom >= AUTO_ROTATE_MIN_SCREEN_PX;
 }
 
 // Called by the board's applyCamera() on every camera
@@ -466,8 +503,16 @@ function loop(): void {
       currentCamera.y !== lastRenderedCamera.y ||
       currentCamera.zoom !== lastRenderedCamera.zoom);
   let anyAutoRotating = false;
+  // Only a view big enough on screen to see turning
+  // counts: at fit zoom the models are a few pixels and
+  // their turn is invisible, so counting them would
+  // re-render the whole layer every 100ms for nothing.
+  // The zoom comes from the latest camera; before the
+  // first camera change it defaults to 1 (turn rather
+  // than not, when unknown).
+  const zoom = currentCamera?.zoom ?? 1;
   for (const view of views.values()) {
-    if (view.wantsAutoRotate(now)) {
+    if (view.wantsAutoRotate(now) && view.worthTurning(zoom)) {
       anyAutoRotating = true;
       break;
     }
@@ -572,6 +617,9 @@ export function syncModel3DViews(
       view = new Model3DView(id, url, deps, envTexture);
       views.set(id, view);
     }
+    // The card's world size, for the auto-rotate gate:
+    // refreshed on every sync so a resize is picked up.
+    view.setWorldSize(item.size.w, item.size.h);
     // render() rebuilds the card DOM, so the placeholder
     // element changes; the listeners move with it.
     view.attach(canvas);
