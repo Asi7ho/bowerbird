@@ -944,7 +944,7 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
       el.setAttribute("y1", String(a.y));
       el.setAttribute("x2", String(world.x));
       el.setAttribute("y2", String(world.y));
-      el.setAttribute("stroke", "#333333");
+      el.setAttribute("stroke", S.api.pen.getColor());
       el.setAttribute("stroke-width", "2");
     }
   } else if (S.drag.kind === "shape") {
@@ -1058,7 +1058,7 @@ window.addEventListener("pointerup", (e: PointerEvent) => {
       // its centre comes from toItem — no second lookup.
       const bPt = "Point" in toAnchor ? toAnchor.Point : (toItem ? S.api.geometry.centre(toItem) : { x: 0, y: 0 });
       const { pos, size } = rectFromPoints(aPt, bPt);
-      S.api.board.addItem({ Connector: { from: d.from, to: toAnchor, color: "#333333" } }, pos, size);
+      S.api.board.addItem({ Connector: { from: d.from, to: toAnchor, color: S.api.pen.getColor() } }, pos, size);
     }
   } else if (d.kind === "shape") {
     const w = Math.abs(world.x - d.start.x), h = Math.abs(world.y - d.start.y);
