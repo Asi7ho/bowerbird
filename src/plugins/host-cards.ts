@@ -78,7 +78,7 @@ export function getCardHtml(item: Item): string | null {
 // ---------------------------------------------------------------- built-in card kinds
 
 // The built-in card kinds (Text, Image, Swatch, UrlCard,
-// PdfCard, Audio, Video, Shape). Strokes and connectors are
+// PdfCard, FileCard, Audio, Video, Shape). Strokes and connectors are
 // not cards — they are drawn on the canvas, not rendered
 // as card HTML — so they have no builtin renderer.
 export function builtinKindName(item: Item): string | null {
@@ -88,6 +88,7 @@ export function builtinKindName(item: Item): string | null {
   if ("Swatch" in item.kind) return "Swatch";
   if ("UrlCard" in item.kind) return "UrlCard";
   if ("PdfCard" in item.kind) return "PdfCard";
+  if ("FileCard" in item.kind) return "FileCard";
   if ("Audio" in item.kind) return "Audio";
   if ("Video" in item.kind) return "Video";
   if ("Model3D" in item.kind) return "Model3D";
