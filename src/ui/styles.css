@@ -347,6 +347,17 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   font-size: 12px; font-weight: 600; color: var(--ink);
   pointer-events: auto; white-space: nowrap; cursor: text;
 }
+/* The open-source button on a live-import group's label:
+   quiet like the label, no background or border, and only
+   fully opaque on hover. */
+.group-open-source {
+  appearance: none; background: none; border: none;
+  padding: 0; margin-left: 6px; width: 14px; height: 14px;
+  color: var(--ink); opacity: 0.55; cursor: pointer;
+  vertical-align: -2px;
+}
+.group-open-source:hover { opacity: 1; }
+.group-open-source svg { width: 14px; height: 14px; display: block; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .group-frame .group-rename {
   font: inherit; color: inherit;
   background: none; border: none; outline: none; padding: 0;
