@@ -242,7 +242,7 @@ export function activate(api: PluginContext): void {
   // Whether the colour bar is open. It opens only when
   // the colour swatch is clicked, and closes when it is
   // clicked again or a colour is picked. While it is open
-  // the draw picker hides, so only one flyout shows.
+  // the pickers hide, so only one flyout shows.
   let colorBarOpen = false;
   // The tool at the last update. A tool change dismisses
   // the colour bar, or the draw picker would stay hidden
@@ -378,10 +378,13 @@ export function activate(api: PluginContext): void {
       shapeBtn.setAttribute("aria-label", target.label);
     }
 
-    // Shape picker: shown when a shape tool is active.
+    // Shape picker: shown when a shape tool is active and
+    // the colour bar is not open — like the draw and select
+    // pickers, so only one flyout shows at a time.
     // The top row switches filled and outline shapes.
-    shapePicker.style.display = isShape ? "flex" : "none";
-    if (isShape && shapePicker.childElementCount === 0) {
+    const showShape = isShape && !colorBarOpen;
+    shapePicker.style.display = showShape ? "flex" : "none";
+    if (showShape && shapePicker.childElementCount === 0) {
       for (const mode of [{ id: "filled", label: "Filled" }, { id: "outline", label: "Outline" }]) {
         const b = document.createElement("button");
         b.className = "shape-mode";
@@ -403,7 +406,7 @@ export function activate(api: PluginContext): void {
         shapePicker.appendChild(b);
       }
     }
-    if (isShape) {
+    if (showShape) {
       for (const child of Array.from(shapePicker.children)) {
         const btn = child as HTMLButtonElement;
         if (btn.dataset.mode) {
