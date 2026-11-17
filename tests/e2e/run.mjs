@@ -1907,65 +1907,48 @@ async function main() {
       assert.ok(fs.existsSync(image.kind.Image.path), "embedded png asset exists on disk");
     });
 
-    await check("dropping a PSD lands its layers as cards", async () => {
-      const before = { image: countKind("Image"), text: countKind("Text") };
+    await check("dropping a PSD lands one FileCard with a preview", async () => {
+      const before = countKind("FileCard");
       await dropFixture("sample.psd", "image/vnd.adobe.photoshop");
-      await waitFor("psd cards in board.json", () => {
-        const hello = readBoard().items.filter((it) => "Text" in it.kind && it.kind.Text.text === "Hello PSD");
-        return countKind("Image") === before.image + 2 && hello.length === 1 ? true : null;
+      const card = await waitFor("psd file card in board.json", () => {
+        const found = readBoard().items.filter((it) => "FileCard" in it.kind && it.kind.FileCard.format === "psd");
+        return found.length === before + 1 ? found[found.length - 1] : null;
       });
-      const layers = readBoard().items.filter((it) => "Image" in it.kind).slice(-2);
-      for (const layer of layers) assert.ok(fs.existsSync(layer.kind.Image.path), "psd layer asset exists on disk");
+      assert.equal(card.size.w, 360, "file card is 360 wide");
+      assert.ok(card.kind.FileCard.path.endsWith("sample.psd"), "file card points at the kept source");
+      assert.ok(fs.existsSync(card.kind.FileCard.path), "kept psd source exists on disk");
+      assert.ok(card.kind.FileCard.preview, "file card has a preview");
+      assert.ok(fs.existsSync(card.kind.FileCard.preview), "preview png exists on disk");
+      assert.ok(card.kind.FileCard.size_bytes > 0, "file card records the source size");
+      assert.ok(card.group !== null, "file card is in its linked group");
     });
 
-    await check("dropping a PDF-compatible .ai lands its artwork as editable cards, not a PdfCard", async () => {
-      const before = { pdf: countKind("PdfCard"), text: countKind("Text") };
+    await check("dropping a PDF-compatible .ai lands one FileCard, not a PdfCard", async () => {
+      const before = { pdf: countKind("PdfCard"), file: countKind("FileCard") };
       await dropFixture("sample.ai", "application/pdf");
-      await waitFor("ai text card in board.json", () => {
-        const hello = readBoard().items.filter((it) => "Text" in it.kind && it.kind.Text.text === "Hello PDF");
-        return countKind("PdfCard") === before.pdf && countKind("Text") === before.text + 1 && hello.length === 1 ? hello[0] : null;
+      const card = await waitFor("ai file card in board.json", () => {
+        const found = readBoard().items.filter((it) => "FileCard" in it.kind && it.kind.FileCard.format === "ai");
+        return found.length === before.file + 1 ? found[found.length - 1] : null;
       });
-      const hello = readBoard().items.find((it) => "Text" in it.kind && it.kind.Text.text === "Hello PDF");
-      assert.equal(hello.kind.Text.size, 18, "ai text keeps its 18pt size");
-      assert.ok(!readBoard().items.some((it) => "PdfCard" in it.kind && it.kind.PdfCard.path.endsWith("sample.ai")), "no PdfCard for the .ai file");
+      assert.equal(countKind("PdfCard"), before.pdf, "no PdfCard for the .ai file");
+      assert.ok(card.kind.FileCard.path.endsWith("sample.ai"), "file card points at the kept source");
+      assert.ok(fs.existsSync(card.kind.FileCard.path), "kept ai source exists on disk");
+      assert.ok(card.kind.FileCard.preview, "file card has a preview");
+      assert.ok(fs.existsSync(card.kind.FileCard.preview), "preview png exists on disk");
+      assert.ok(card.group !== null, "file card is in its linked group");
     });
 
-    await check("dropping a vector .ai lands shapes, strokes, text, an image and a raster fallback page", async () => {
-      const before = { shape: countKind("Shape"), stroke: countKind("Stroke"), text: countKind("Text"), image: countKind("Image") };
+    await check("dropping a vector .ai lands one FileCard with a preview of the artwork", async () => {
+      const before = countKind("FileCard");
       await dropFixture("sample-vector.ai", "application/pdf");
-      await waitFor("vector ai cards in board.json", () => {
-        const hello = readBoard().items.filter((it) => "Text" in it.kind && it.kind.Text.text === "Hello AI");
-        const b = readBoard();
-        return countKind("Shape") === before.shape + 3 && countKind("Stroke") === before.stroke + 1 &&
-          hello.length === 1 && countKind("Image") === before.image + 2 ? b : null;
+      const card = await waitFor("vector ai file card in board.json", () => {
+        const found = readBoard().items.filter((it) => "FileCard" in it.kind && it.kind.FileCard.format === "ai");
+        return found.length === before + 1 ? found[found.length - 1] : null;
       });
-      const shapes = readBoard().items.filter((it) => "Shape" in it.kind).slice(-3);
-      const fills = shapes.map((it) => it.kind.Shape.fill).sort();
-      assert.deepEqual(fills, ["#0000ff", "#ff0000", "#ff8000"], "rect, circle and form rect land with their fills");
-      assert.ok(shapes.some((it) => it.kind.Shape.shape === "ellipse"), "the circle lands as an ellipse Shape");
-      const stroke = readBoard().items.filter((it) => "Stroke" in it.kind).slice(-1)[0];
-      assert.equal(stroke.kind.Stroke.color, "#008000", "stroked path keeps its colour");
-      // The stroke's points are absolute (min == pos), and
-      // the path in the DOM starts at the stroke's first
-      // point — relative points used to render it at the
-      // origin, off-screen.
-      const sxs = stroke.kind.Stroke.points.map((p) => p.x);
-      const sys = stroke.kind.Stroke.points.map((p) => p.y);
-      assert.ok(Math.abs(Math.min(...sxs) - stroke.pos.x) < 0.01, "ai stroke points are absolute in x");
-      assert.ok(Math.abs(Math.min(...sys) - stroke.pos.y) < 0.01, "ai stroke points are absolute in y");
-      const first = stroke.kind.Stroke.points[0];
-      await waitFor("ai stroke path in the DOM", async () => {
-        const starts = await page.evaluate(() => [...document.querySelectorAll("#world path")].map((p) => p.getAttribute("d") ?? ""));
-        const atRealPosition = starts.some((d) => {
-          const m = /^M(-?[\d.]+),(-?[\d.]+)/.exec(d);
-          return m !== null && Math.abs(parseFloat(m[1]) - first.x) < 0.01 && Math.abs(parseFloat(m[2]) - first.y) < 0.01;
-        });
-        return atRealPosition ? true : null;
-      });
-      const images = readBoard().items.filter((it) => "Image" in it.kind).slice(-2);
-      const sizes = images.map((it) => `${it.size.w}x${it.size.h}`).sort();
-      assert.deepEqual(sizes, ["100x60", "300x200"], "embedded image lands at its placed size, gradient page as one raster of the page");
-      for (const img of images) assert.ok(fs.existsSync(img.kind.Image.path), "vector ai image asset exists on disk");
+      assert.equal(card.size.w, 360, "file card is 360 wide");
+      assert.ok(card.kind.FileCard.path.endsWith("sample-vector.ai"), "file card points at the kept source");
+      assert.ok(fs.existsSync(card.kind.FileCard.preview), "preview png exists on disk");
+      assert.ok(card.group !== null, "file card is in its linked group");
     });
 
     await check("dropping a legacy .ai reports it as unsupported and lands nothing", async () => {
