@@ -469,9 +469,20 @@ export function navigateElements(dir: 1 | -1): void {
 // ---------------------------------------------------------------- input
 
 export function attachBoardListeners(): void {
+// A live-import group's label carries an open-source button:
+// it opens the source file in its default app, so the user
+// can edit the board's copy and the board re-imports it.
+// The labels are re-rendered on every render, so the click
+// is delegated here instead of wired per label.
+S.groupsEl.addEventListener("click", (e: MouseEvent) => {
+  const btn = (e.target as HTMLElement).closest(".group-open-source") as HTMLElement | null;
+  if (!btn) return;
+  const source = S.api.board.get().groups?.[Number(btn.dataset.group)]?.source;
+  if (source) openExternal(source.path);
+});
 S.boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
   const target = e.target as HTMLElement;
-  if (target.closest("#toolbar, #settings-backdrop, #toast, #plugin-overlays, #search-box, #title-bar, video, input, canvas.model3d")) return;
+  if (target.closest("#toolbar, #settings-backdrop, #toast, #plugin-overlays, #search-box, #title-bar, video, input, canvas.model3d, .group-open-source")) return;
   // A board click or drag must never start a native text selection
   // across the cards (bug: clicking anywhere highlighted all text).
   if (!target.closest("textarea.note-edit")) window.getSelection()?.removeAllRanges();

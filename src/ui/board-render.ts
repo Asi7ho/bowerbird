@@ -236,6 +236,10 @@ export function renderStrokesAndConnectors(board: Board): void {
   // rebuild every card.
 }
 
+// The open-source mark on a live-import group's label: an
+// arrow leaving a box, drawn in the app's stroke style.
+const OPEN_SOURCE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5H5v14h14v-4" fill="none"/><path d="M14 4h6v6" fill="none"/><path d="M20 4 11 13" fill="none"/></svg>';
+
 export function renderGroupFrames(board: Board): void {
   if (!S.groupsEl || !S.groupFramesEl) return;
   const selected = S.api.board.getSelected();
@@ -262,14 +266,17 @@ export function renderGroupFrames(board: Board): void {
     else byGroup.set(it.group, [it]);
   }
   for (const [g, members] of byGroup) {
-    if (members.length < 2) continue;
+    const source = board.groups?.[g]?.source;
+    // A live import is a section even with one card: its
+    // frame and label carry the open-source button.
+    if (members.length < 2 && !source) continue;
     const b = groupBounds(members, S.api.geometry.itemBounds);
     if (!b) continue;
     if (b.x > v.x1 || b.y > v.y1 || b.x + b.w < v.x0 || b.y + b.h < v.y0) continue;
     const isSel = members.some((it) => selected.includes(it.id));
     const label = board.groups?.[g]?.label ?? `Section ${g}`;
     framesHtml += `<div class="group-frame${isSel ? " selected" : ""}" data-group="${g}" style="left:${b.x}px;top:${b.y}px;width:${b.w}px;height:${b.h}px"></div>`;
-    labelsHtml += `<span class="group-label" data-group="${g}" style="left:${b.x + 12}px;top:${b.y - 11}px">${S.api.text.escapeHtml(label)}</span>`;
+    labelsHtml += `<span class="group-label" data-group="${g}" style="left:${b.x + 12}px;top:${b.y - 11}px">${S.api.text.escapeHtml(label)}${source ? `<button class="group-open-source" data-group="${g}" title="Open source file" aria-label="Open source file">${OPEN_SOURCE_ICON}</button>` : ""}</span>`;
   }
   S.groupFramesEl.innerHTML = framesHtml;
   S.groupsEl.innerHTML = labelsHtml;
