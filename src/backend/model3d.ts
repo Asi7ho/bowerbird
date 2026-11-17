@@ -41,6 +41,11 @@ export interface Model3DDeps {
   // the selection). setSelected only toggles classes — it
   // does not rebuild the DOM, so the viewer survives.
   onSelect: (id: number, additive: boolean) => void;
+  // True while the user holds Space: a Space+drag is a pan,
+  // so a pointerdown on a model must let the event reach the
+  // board instead of starting a rotate drag (the model
+  // canvas stops propagation, so the board never sees it).
+  isSpaceDown: () => boolean;
 }
 
 interface ViewState {
@@ -79,6 +84,11 @@ class Model3DView {
   private lastX = 0;
   private lastY = 0;
   private lastInteract = 0;
+  // When step() last ran, so the idle turn is time-based:
+  // the render cadence varies now (on demand, throttled
+  // while idle-rotating), and a fixed per-render step would
+  // spin faster at 60fps than at 10fps.
+  private lastStepAt = 0;
   private disposed = false;
   private loaded = false;
   // The placeholder canvas this view is currently listening
@@ -108,6 +118,7 @@ class Model3DView {
     // shared by every view.
     if (env) this.scene.environment = env;
     this.lastInteract = performance.now();
+    this.lastStepAt = this.lastInteract;
     this.load();
   }
 
@@ -144,6 +155,9 @@ class Model3DView {
     }
     this.distance = THREE.MathUtils.clamp(this.distance, this.modelRadius * 1.1, this.modelRadius * 6);
     this.loaded = true;
+    // The model was invisible until now; the on-demand
+    // loop only renders when something marks it dirty.
+    markDirty();
   }
 
   private showError(message: string): void {
@@ -169,6 +183,10 @@ class Model3DView {
 
   private onPointerDown = (e: PointerEvent): void => {
     if (e.button !== 0 || !this.canvas) return;
+    // Space+drag is a pan: do not claim the drag — return
+    // without stopping propagation, so the event reaches the
+    // board and starts a pan instead of rotating the model.
+    if (this.deps.isSpaceDown()) return;
     // Select the card, then keep the board from starting a
     // move drag: the drag belongs to the model.
     this.deps.onSelect(this.cardId, e.shiftKey);
@@ -196,6 +214,8 @@ class Model3DView {
     // the top.
     this.elevation = THREE.MathUtils.clamp(this.elevation + dy * 0.008, -0.2, 1.5);
     this.lastInteract = performance.now();
+    // A drag rotates the view: re-render on the next frame.
+    markDirty();
   };
 
   private onPointerUp = (): void => {
@@ -217,6 +237,8 @@ class Model3DView {
       this.modelRadius * 6,
     );
     this.lastInteract = performance.now();
+    // A wheel zoom changes the framing: re-render.
+    markDirty();
   };
 
   // The placeholder's screen rect, in CSS pixels relative
@@ -231,10 +253,17 @@ class Model3DView {
 
   // Advance the idle auto-rotate and place the camera for
   // this frame. Returns false when the view has nothing to
-  // draw yet (model still loading).
+  // draw yet (model still loading). The turn is time-based
+  // and the step clamped: renders are on demand now, so the
+  // gap between two renders varies, and a long pause (a pan,
+  // a hidden tab) must not jump the model — the turn
+  // effectively pauses while nothing renders, and resumes
+  // smoothly on the next render.
   step(now: number): boolean {
+    const dt = Math.min(Math.max(now - this.lastStepAt, 0), 100);
+    this.lastStepAt = now;
     if (!this.dragging && now - this.lastInteract > IDLE_MS) {
-      this.azimuth += AUTO_ROTATE;
+      this.azimuth += AUTO_ROTATE * (dt / 16.7);
     }
     if (!this.loaded) return false;
     const { azimuth, elevation, distance } = this;
@@ -245,6 +274,13 @@ class Model3DView {
     );
     this.camera.lookAt(0, 0, 0);
     return true;
+  }
+
+  // True when this view is idle-turning and needs a
+  // periodic re-render: loaded, not being dragged, and
+  // untouched for IDLE_MS.
+  wantsAutoRotate(now: number): boolean {
+    return this.loaded && !this.dragging && now - this.lastInteract > IDLE_MS;
   }
 
   setAspect(w: number, h: number): void {
@@ -308,12 +344,87 @@ let pmrem: THREE.PMREMGenerator | null = null;
 let raf = 0;
 let boardEl: HTMLElement | null = null;
 
+// ---------------------------------------------------------------- on-demand rendering
+//
+// The old loop re-rendered every visible model on every
+// animation frame, even at rest and even while panning —
+// under SwiftShader that re-rasterizes the whole
+// full-viewport layer in software on every frame, which is
+// what made a 2,000-card board pan at ~5fps. Now the layer
+// renders only when something actually changed, and while
+// the camera moves it is carried by a CSS transform
+// instead: the compositor moves the already-rendered
+// pixels, and the WebGL work happens once, when the camera
+// settles.
+
+// How long the camera must be still before a re-render.
+const SETTLE_MS = 120;
+// Slowest re-render cadence while models idle-turn: the
+// turn is 0.005 rad per 16.7ms, so 100ms steps are ~1.7
+// degrees — smooth enough for a slow ambient turn, and
+// ten times less WebGL work than every frame.
+const AUTO_ROTATE_MS = 100;
+
+// A render is pending: the card set changed, a model
+// loaded, or a view was rotated or zoomed.
+let dirty = false;
+// Latest camera, from model3DCameraChanged (called by the
+// board's applyCamera on every camera change).
+let currentCamera: { x: number; y: number; zoom: number } | null = null;
+// Camera at the last render, and when the camera last moved.
+let lastRenderedCamera: { x: number; y: number; zoom: number } | null = null;
+let lastCameraChangeAt = 0;
+// When the idle turn last rendered, for its cadence.
+let lastAutoRotateRenderAt = 0;
+
+// The CSS transform that carries the layer from the camera
+// it was rendered at (from) to the camera it must show now
+// (to). Both are world-space cameras; the layer's content
+// is in screen space. A world point rendered at
+// (w - from.x) * from.zoom sits now at
+// (w - to.x) * to.zoom, which is scale(to.zoom / from.zoom)
+// then translate((from.x - to.x) * to.zoom, same for y) —
+// with transform-origin 0 0, so the scale is about the
+// viewport's top-left, not its centre.
+export function layerTransform(
+  from: { x: number; y: number; zoom: number },
+  to: { x: number; y: number; zoom: number },
+): { tx: number; ty: number; s: number } {
+  return {
+    tx: (from.x - to.x) * to.zoom,
+    ty: (from.y - to.y) * to.zoom,
+    s: to.zoom / from.zoom,
+  };
+}
+
+// Called by the board's applyCamera() on every camera
+// change. Moves the already-rendered layer with the camera
+// (no WebGL work) and wakes the scheduler so it re-renders
+// once the camera settles.
+export function model3DCameraChanged(cam: { x: number; y: number; zoom: number }): void {
+  currentCamera = cam;
+  lastCameraChangeAt = performance.now();
+  if (sharedCanvas && lastRenderedCamera) {
+    const { tx, ty, s } = layerTransform(lastRenderedCamera, cam);
+    sharedCanvas.style.transform = `translate(${tx}px, ${ty}px) scale(${s})`;
+  }
+  kickLoop();
+}
+
+function markDirty(): void {
+  dirty = true;
+  kickLoop();
+}
+
 function ensureSharedCanvas(board: HTMLElement): void {
   boardEl = board;
   if (sharedCanvas && sharedCanvas.isConnected) return;
   sharedCanvas = document.createElement("canvas");
   sharedCanvas.id = "model3d-layer";
-  sharedCanvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:block;";
+  // transform-origin 0 0: the pan transform (see
+  // layerTransform) scales about the viewport's top-left,
+  // which is what the screen-space math assumes.
+  sharedCanvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:block;transform-origin:0 0;";
   // Above #cards, below the group frames and overlays: the
   // card's own background is opaque, so a layer below it
   // would be hidden. The layer is transparent except where
@@ -333,18 +444,59 @@ function ensureSharedCanvas(board: HTMLElement): void {
   envTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 }
 
+// The scheduler: a cheap rAF tick that decides whether a
+// WebGL render is actually due. It renders only when the
+// camera has settled and something changed — the card set,
+// a view's angle, or the camera itself — or when the idle
+// turn is due its next step. While the camera is still
+// moving it does nothing: the CSS transform set by
+// model3DCameraChanged carries the layer, so a pan costs
+// the compositor a texture move, not a re-rasterization.
+// The tick itself is a few comparisons when nothing is due.
 function loop(): void {
   raf = 0;
   if (!renderer || !sharedCanvas || !boardEl) return;
   if (views.size === 0) return;
   const now = performance.now();
+  const cameraMoving = now - lastCameraChangeAt < SETTLE_MS;
+  const cameraChanged =
+    currentCamera !== null &&
+    (lastRenderedCamera === null ||
+      currentCamera.x !== lastRenderedCamera.x ||
+      currentCamera.y !== lastRenderedCamera.y ||
+      currentCamera.zoom !== lastRenderedCamera.zoom);
+  let anyAutoRotating = false;
+  for (const view of views.values()) {
+    if (view.wantsAutoRotate(now)) {
+      anyAutoRotating = true;
+      break;
+    }
+  }
+  const autoRotateDue = anyAutoRotating && now - lastAutoRotateRenderAt >= AUTO_ROTATE_MS;
+  if (!cameraMoving && (dirty || cameraChanged || autoRotateDue)) {
+    renderAll(now);
+    dirty = false;
+    if (anyAutoRotating) lastAutoRotateRenderAt = now;
+    lastRenderedCamera = currentCamera ? { ...currentCamera } : null;
+  }
+  // Keep the scheduler alive while there are views: the
+  // tick is cheap when nothing is due, and it is what
+  // notices the camera settling and the idle turn starting.
+  raf = requestAnimationFrame(loop);
+}
+
+// One WebGL pass over the visible views, at their current
+// screen rects. The pan transform is reset first: the rects
+// are measured in screen space, and a leftover transform
+// would move them twice. The reset and the render happen in
+// the same frame, so there is no intermediate paint.
+function renderAll(now: number): void {
+  if (!renderer || !sharedCanvas || !boardEl) return;
   const dpr = Math.min(window.devicePixelRatio, 2);
   const bw = boardEl.clientWidth;
   const bh = boardEl.clientHeight;
-  if (bw <= 0 || bh <= 0) {
-    raf = requestAnimationFrame(loop);
-    return;
-  }
+  if (bw <= 0 || bh <= 0) return;
+  sharedCanvas.style.transform = "";
   // Size the drawing buffer to the board, in device pixels.
   const wantW = Math.round(bw * dpr);
   const wantH = Math.round(bh * dpr);
@@ -377,7 +529,6 @@ function loop(): void {
     renderer.render(view.drawScene, view.drawCamera);
   }
   renderer.setScissorTest(false);
-  raf = requestAnimationFrame(loop);
 }
 
 function kickLoop(): void {
@@ -431,7 +582,10 @@ export function syncModel3DViews(
       views.delete(id);
     }
   }
-  kickLoop();
+  // The card set changed (mounted or dropped views), so the
+  // layer needs a re-render — once the camera settles, if
+  // it is moving; the transform carries it until then.
+  markDirty();
 }
 
 // Dispose every view (board switch / teardown) and remove
@@ -457,4 +611,9 @@ export function disposeAllModel3DViewers(): void {
     sharedCanvas = null;
   }
   boardEl = null;
+  dirty = false;
+  currentCamera = null;
+  lastRenderedCamera = null;
+  lastCameraChangeAt = 0;
+  lastAutoRotateRenderAt = 0;
 }

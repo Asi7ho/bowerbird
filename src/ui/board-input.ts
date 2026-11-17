@@ -471,7 +471,11 @@ export function navigateElements(dir: 1 | -1): void {
 export function attachBoardListeners(): void {
 S.boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
   const target = e.target as HTMLElement;
-  if (target.closest("#toolbar, #settings-backdrop, #toast, #plugin-overlays, #search-box, #title-bar, video, input, canvas.model3d")) return;
+  if (target.closest("#toolbar, #settings-backdrop, #toast, #plugin-overlays, #search-box, #title-bar, video, input")) return;
+  // A pointerdown on a model canvas belongs to the model
+  // (rotate) — unless Space is held, in which case it is a
+  // pan and the board must handle it.
+  if (target.closest("canvas.model3d") && !S.spaceDown) return;
   // A board click or drag must never start a native text selection
   // across the cards (bug: clicking anywhere highlighted all text).
   if (!target.closest("textarea.note-edit")) window.getSelection()?.removeAllRanges();

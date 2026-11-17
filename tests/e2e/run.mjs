@@ -1918,6 +1918,7 @@ async function main() {
       assert.ok(fs.existsSync(card.kind.PdfCard.path), "embedded pdf asset exists on disk");
     });
 
+
     // Shapes are hit on their visible geometry, not their
     // box (PR #10): a click on a shape's empty corner must
     // select nothing, and an outline shape's empty interior
@@ -2394,6 +2395,178 @@ async function main() {
       await waitFor("arrow saved", () => readBoard().items.filter((it) => "Connector" in it.kind).length > before ? true : null);
       const drawn = readBoard().items.find((it) => "Connector" in it.kind);
       assert.equal(drawn.kind.Connector.color, "#E63946", "a drawn arrow must use the pen colour");
+    });
+    // --- perf/professional-scale: the shared 3D layer renders
+    // on demand and is carried by a CSS transform while the
+    // camera moves, instead of re-rendering every frame.
+    // These checks prove the layer still renders correctly
+    // after a pan and a zoom, and that dragging a model still
+    // rotates it.
+    await check("the 3D layer renders after a pan and a zoom", async () => {
+      // A fresh model card, placed where it fits on screen
+      // after F, so the pan and zoom below move it by a
+      // known amount.
+      const assetsDir = path.join(tmp, "assets");
+      fs.mkdirSync(assetsDir, { recursive: true });
+      fs.copyFileSync(path.join(repoRoot, "tests/e2e/fixtures/cube.glb"), path.join(assetsDir, "cube.glb"));
+      const board = readBoard();
+      const id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
+      const perfModelId = id;
+      board.items.push({ id, pos: { x: 600, y: 300 }, size: { w: 360, h: 300 }, group: null, kind: { Model3D: { path: path.join(assetsDir, "cube.glb"), size_bytes: 1472 } } });
+      board.next_id = id + 1;
+      const tmp2 = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp2, JSON.stringify(board));
+      fs.renameSync(tmp2, boardPath);
+      await new Promise((r) => setTimeout(r, 1200));
+      await page.keyboard.press("f");
+      await new Promise((r) => setTimeout(r, 500));
+      const canvas = page.locator(`#cards .card[data-id="${perfModelId}"] canvas.model3d`).first();
+      await canvas.waitFor({ timeout: READY_TIMEOUT_MS });
+      // Sample the shared layer at the card's rect (the
+      // cube is blue; the card background is light grey).
+      const sample = () => page.evaluate((mid) => {
+        const layer = document.querySelector("#model3d-layer");
+        const cv = document.querySelector(`#cards .card[data-id="${mid}"] canvas.model3d`);
+        if (!layer || !cv) return null;
+        const r = cv.getBoundingClientRect();
+        const lr = layer.getBoundingClientRect();
+        if (r.width < 50) return null;
+        const dpr = layer.width / lr.width;
+        const c = document.createElement("canvas");
+        c.width = layer.width; c.height = layer.height;
+        const x = c.getContext("2d");
+        if (!x) return null;
+        x.drawImage(layer, 0, 0);
+        const pts = [];
+        for (const [fx, fy] of [[0.5, 0.5], [0.25, 0.5], [0.75, 0.5]]) {
+          const bx = Math.floor((r.x - lr.x + r.width * fx) * dpr);
+          const by = Math.floor((r.y - lr.y + r.height * fy) * dpr);
+          const d = x.getImageData(bx, by, 1, 1).data;
+          pts.push([d[0], d[1], d[2]]);
+        }
+        return pts;
+      }, String(perfModelId));
+      const isBlue = (pts) => pts && pts[0][2] > pts[0][0] + 30 && pts[0][2] > 80;
+      // Wait for the first render (slow under SwiftShader).
+      let rendered = null;
+      for (let i = 0; i < 60; i++) {
+        const s = await sample();
+        if (isBlue(s)) { rendered = s; break; }
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      assert.ok(rendered, "the model rendered before the pan (centre pixel is the cube's blue)");
+      // Pan with Space+drag. While the camera moves the layer
+      // must be carried by a CSS transform (it is moved, not
+      // re-rendered); after the camera settles it re-renders
+      // once, and the model must show at its new position.
+      // The transform is observed, not sampled once: under
+      // load the settle re-render can reset it to "" before
+      // a single read lands, so a MutationObserver records
+      // every value it takes during the pan instead.
+      await page.evaluate(() => {
+        window.__layerTransforms = [];
+        const layer = document.querySelector("#model3d-layer");
+        if (!layer) return;
+        const mo = new MutationObserver(() => {
+          window.__layerTransforms.push(layer.style.transform || "");
+        });
+        mo.observe(layer, { attributes: true, attributeFilter: ["style"] });
+        window.__layerTransformObserver = mo;
+      });
+      const size = await page.evaluate(() => ({ w: window.innerWidth, h: window.innerHeight }));
+      await page.keyboard.down("Space");
+      await page.mouse.move(size.w / 2, size.h / 2);
+      await page.mouse.down();
+      await page.mouse.move(size.w / 2 + 100, size.h / 2, { steps: 5 });
+      await page.mouse.move(size.w / 2 + 200, size.h / 2, { steps: 5 });
+      await page.mouse.up();
+      await page.keyboard.up("Space");
+      // Let the observer callbacks flush before reading.
+      await new Promise((r) => setTimeout(r, 300));
+      const transforms = await page.evaluate(() => {
+        window.__layerTransformObserver?.disconnect();
+        return window.__layerTransforms ?? [];
+      });
+      const carried = transforms.some((t) => t !== "" && t !== "translate(0px, 0px) scale(1)");
+      assert.ok(carried, `layer carried a CSS transform mid-pan, saw [${transforms.join(" | ")}]`);
+      let afterPan = null;
+      for (let i = 0; i < 20; i++) {
+        const s = await sample();
+        if (isBlue(s)) { afterPan = s; break; }
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      assert.ok(afterPan, "the model rendered at its new position after the pan settled");
+      // Zoom in one step and confirm it still renders.
+      await page.keyboard.press("=");
+      let afterZoom = null;
+      for (let i = 0; i < 20; i++) {
+        const s = await sample();
+        if (isBlue(s)) { afterZoom = s; break; }
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      assert.ok(afterZoom, "the model rendered after zooming in");
+    });
+
+    await check("dragging a model still rotates it after a pan", async () => {
+      // The perf model from the previous check is still on
+      // the board; drag it and confirm the view changed.
+      // This proves a drag marks the layer dirty and the
+      // on-demand loop re-renders, rather than the drag
+      // being swallowed by the new scheduler.
+      const board = readBoard();
+      const perfModelId = Math.max(...board.items.filter((it) => "Model3D" in it.kind).map((it) => it.id));
+      const canvas = page.locator(`#cards .card[data-id="${perfModelId}"] canvas.model3d`).first();
+      await canvas.waitFor({ timeout: READY_TIMEOUT_MS });
+      const sample = () => page.evaluate((mid) => {
+        const layer = document.querySelector("#model3d-layer");
+        const cv = document.querySelector(`#cards .card[data-id="${mid}"] canvas.model3d`);
+        if (!layer || !cv) return null;
+        const r = cv.getBoundingClientRect();
+        const lr = layer.getBoundingClientRect();
+        if (r.width < 50) return null;
+        const dpr = layer.width / lr.width;
+        const c = document.createElement("canvas");
+        c.width = layer.width; c.height = layer.height;
+        const x = c.getContext("2d");
+        if (!x) return null;
+        x.drawImage(layer, 0, 0);
+        const pts = [];
+        for (const [fx, fy] of [[0.5, 0.5], [0.25, 0.5], [0.75, 0.5], [0.5, 0.25], [0.5, 0.75]]) {
+          const bx = Math.floor((r.x - lr.x + r.width * fx) * dpr);
+          const by = Math.floor((r.y - lr.y + r.height * fy) * dpr);
+          const d = x.getImageData(bx, by, 1, 1).data;
+          pts.push([d[0], d[1], d[2]]);
+        }
+        return pts;
+      }, String(perfModelId));
+      let before = null;
+      for (let i = 0; i < 20; i++) {
+        const s = await sample();
+        if (s && s[0][2] > s[0][0] + 30 && s[0][2] > 80) { before = s; break; }
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      assert.ok(before, "the model rendered before the drag");
+      const box = await canvas.boundingBox();
+      assert.ok(box, "model canvas on screen");
+      const cx = box.x + box.width / 2;
+      const cy = box.y + box.height / 2;
+      await page.mouse.move(cx, cy);
+      await page.mouse.down();
+      await page.mouse.move(cx + 120, cy, { steps: 10 });
+      await page.mouse.up();
+      let changed = false;
+      for (let i = 0; i < 20; i++) {
+        const after = await sample();
+        if (after) {
+          changed = before.some((p, j) => {
+            const q = after[j];
+            return Math.abs(p[0] - q[0]) + Math.abs(p[1] - q[1]) + Math.abs(p[2] - q[2]) > 30;
+          });
+          if (changed) break;
+        }
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      assert.ok(changed, "dragging the model rotated the view (pixels changed)");
     });
   } catch (error) {
     results.push({ name: "setup", ok: false, error });

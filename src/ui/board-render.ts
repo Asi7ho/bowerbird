@@ -15,7 +15,7 @@ import {
   Board, GRID, Item,
   pressureWidth, smoothStrokePressures, smoothStrokeSamples, strokeMaxWidth, strokePressuresVary,
 } from "../backend/model";
-import { syncModel3DViews } from "../backend/model3d";
+import { model3DCameraChanged, syncModel3DViews } from "../backend/model3d";
 
 // ---------------------------------------------------------------- rendering
 
@@ -64,6 +64,12 @@ export function applyCamera(): void {
   S.groupsEl.style.transform = `translate(${-cam.x * cam.zoom}px,${-cam.y * cam.zoom}px) scale(${cam.zoom})`;
   applyGrid();
   updateResizeHandle();
+  // The shared 3D layer moves with the camera by CSS
+  // transform instead of re-rendering every frame: while a
+  // pan or zoom is in progress the compositor carries the
+  // already-rendered models, and the layer re-renders once
+  // the camera settles (see model3d.ts).
+  model3DCameraChanged(cam);
 }
 
 // Visible world rect, with a margin so cards at the edge do not pop
@@ -347,6 +353,7 @@ export function render(): void {
   syncModel3DViews(S.boardEl, S.cardsEl, board.items, {
     fileUrl: (p) => S.api.files.fileUrl(p),
     onSelect: (id, additive) => S.api.board.setSelected(S.api.board.selectCard(S.api.board.getSelected(), id, additive)),
+    isSpaceDown: () => S.spaceDown,
   });
   for (const [id, st] of videoState) {
     const v = S.cardsEl.querySelector(`[data-id="${id}"] video`) as HTMLVideoElement | null;
