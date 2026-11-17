@@ -112,6 +112,28 @@ async function resolveImagePixels(page: PdfPage, objId: string): Promise<{ width
   return { width: img.width, height: img.height, data: rgba };
 }
 
+// Render a PDF-compatible .ai file's first page as the
+// preview for a FileCard, at 2x for sharpness (the card
+// sizes from the page, so the pixels stay sharp). A file
+// with more artboards shows its first; the rest live in
+// Illustrator, which is where the file opens. Returns null
+// when the file cannot be read as a PDF at all.
+export async function renderAiPreview(data: Uint8Array): Promise<{ png: Uint8Array; width: number; height: number } | null> {
+  let doc: import("pdfjs-dist").PDFDocumentProxy;
+  try {
+    const pdfjs = await loadPdfjs();
+    doc = await pdfjs.getDocument({ data }).promise;
+  } catch {
+    return null;
+  }
+  if (doc.numPages < 1) return null;
+  const page = await doc.getPage(1);
+  const viewport = page.getViewport({ scale: 1 });
+  if (viewport.width <= 0 || viewport.height <= 0) return null;
+  const png = await renderPageToPng(page);
+  return { png, width: viewport.width, height: viewport.height };
+}
+
 // Render one page to PNG bytes, at 2x for the raster
 // fallback (the card is sized from the page, so the pixels
 // stay sharp when the import is scaled down).

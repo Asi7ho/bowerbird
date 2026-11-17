@@ -121,6 +121,17 @@ export function psdLayersToItems(psd: Psd, origin: Pt, maxWidth = 1280): Importe
   return items;
 }
 
+// Render a PSD's merged composite as the preview for a
+// FileCard: the composite is what Photoshop shows — all
+// visible layers, including text, flattened. Returns null
+// when the file has no composite (nothing visible to show),
+// so the card falls back to its format tile.
+export async function renderPsdPreview(psd: Psd): Promise<{ png: Uint8Array; width: number; height: number } | null> {
+  if (!psd.imageData || psd.width <= 0 || psd.height <= 0) return null;
+  const png = await imageDataToPngBytes(psd.imageData);
+  return { png, width: psd.width, height: psd.height };
+}
+
 // Render a layer's raw pixels to PNG bytes. Renderer-only:
 // it paints the pixels onto a canvas and exports it, so it
 // needs `document`. The drop flow calls this for each raster

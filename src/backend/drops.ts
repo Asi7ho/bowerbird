@@ -7,12 +7,12 @@
 // original cannot break the card. Preview fills are background
 // work, not user changes: they save without an undo step.
 import { api } from "./api";
-import { isPdfCompatible, parseAiToItems } from "./ai-import";
+import { isPdfCompatible, renderAiPreview } from "./ai-import";
 import type { ImportedItem } from "./import-types";
-import { base64ToBytes, findSourceGroup, groupBBox, translateImportedToAnchor } from "./live-import";
+import { base64ToBytes, fileCardSize, findSourceGroup, groupBBox, translateImportedToAnchor } from "./live-import";
 import { boardGet, domainOf, estimateTextHeight, normaliseHex, type Board, type Item, type Kind, type Pt, type Size } from "./model";
 import { ensureVideoPoster } from "./poster";
-import { imageDataToPngBytes, parsePsd, psdLayersToItems } from "./psd-import";
+import { parsePsd, renderPsdPreview } from "./psd-import";
 import { parseSvgToItems } from "./svg-import";
 
 export interface DropsContext {
@@ -161,14 +161,16 @@ export function createDrops(ctx: DropsContext): Drops {
   // Shared by the drop flow and the live re-import, so it
   // takes the board it lands on instead of closing over
   // the drop's.
-  async function addImportedItem(board: Board, item: ImportedItem, fileName: string, group: number | null): Promise<boolean> {
+  async function addImportedItem(board: Board, item: ImportedItem, group: number | null): Promise<boolean> {
     const kind = item.kind;
+    // An Image card arrives with a placeholder path and the
+    // bytes to store; the bytes are embedded here and the
+    // path rewritten to the stored copy. (PSD and AI no
+    // longer explode into layer items, so no importer
+    // produces raw pixels any more — only the SVG's
+    // embedded images land here.)
     if (item.embed && "Image" in kind) {
       kind.Image.path = await api.embedFileBytes(item.embed.name, item.embed.data);
-    } else if (item.pixels && "Image" in kind) {
-      const png = await imageDataToPngBytes(item.pixels);
-      const stem = fileName.replace(/\.[^.]*$/, "") || "psd";
-      kind.Image.path = await api.embedFileBytes(`${stem}-layer.png`, png);
     }
     if (ctx.getBoard() !== board) { ctx.toast("Board switched — import stopped"); return false; }
     const id = ctx.allocId();
@@ -238,7 +240,7 @@ export function createDrops(ctx: DropsContext): Drops {
     // group records the source. Returns the group and the
     // stored path, or null when the source could not be
     // kept — the cards still land, just unlinked.
-    async function linkImport(file: File, data: Uint8Array, kind: "svg" | "psd" | "ai"): Promise<{ group: number; stored: string } | null> {
+    async function linkImport(file: File, data: Uint8Array, kind: "svg" | "psd" | "ai"): Promise<{ group: number; stored: string; size: number; mtimeMs: number } | null> {
       let stored: string;
       try {
         stored = await api.embedFileBytes(file.name, data);
@@ -259,7 +261,44 @@ export function createDrops(ctx: DropsContext): Drops {
       } catch { /* keep the link; the stat heals on first refresh */ }
       board.groups = board.groups ?? {};
       board.groups[group] = { label: file.name, source: { path: stored, kind, size, mtimeMs } };
-      return { group, stored };
+      return { group, stored, size, mtimeMs };
+    }
+
+    // Land one FileCard for a .psd or .ai: the source file is
+    // kept and linked (so it live-syncs), the artwork is
+    // rendered once to a preview, and the card shows the
+    // preview with the file name and size. The preview is a
+    // derived file in the board's assets, like a video
+    // poster; a file whose artwork could not be rendered
+    // still lands, with the format tile instead.
+    async function addFileCard(file: File, data: Uint8Array<ArrayBuffer>, format: "psd" | "ai", atWorld: Pt): Promise<boolean> {
+      const linked = await linkImport(file, data, format);
+      if (!linked) return false;
+      const stem = file.name.replace(/\.[^.]*$/, "") || format;
+      let preview: string | undefined;
+      let artW = 0, artH = 0;
+      try {
+        const rendered = format === "psd"
+          ? await renderPsdPreview(parsePsd(data.buffer))
+          : await renderAiPreview(data);
+        if (rendered) {
+          preview = await api.embedFileBytes(`${stem}-preview.png`, rendered.png);
+          artW = rendered.width; artH = rendered.height;
+        }
+      } catch {
+        // No preview: the card lands with its format tile.
+        preview = undefined;
+      }
+      if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return false; }
+      const id = ctx.allocId();
+      board.items.push({
+        id,
+        pos: atWorld,
+        size: fileCardSize(artW, artH),
+        group: linked.group,
+        kind: { FileCard: { path: linked.stored, size_bytes: linked.size, format, ...(preview ? { preview } : {}) } },
+      });
+      return true;
     }
 
     for (const file of files) {
@@ -285,25 +324,19 @@ export function createDrops(ctx: DropsContext): Drops {
             const linked = await linkImport(file, bytes, "svg");
             const group = linked?.group ?? null;
             for (const item of items) {
-              if (!(await addImportedItem(board, item, file.name, group))) return;
+              if (!(await addImportedItem(board, item, group))) return;
             }
             added += items.length;
           }
         } else if (kind === "psd") {
           const bytes = new Uint8Array(await file.arrayBuffer());
-          const parsed = parsePsd(bytes.buffer);
           if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
-          const items = psdLayersToItems(parsed, at);
-          if (items.length === 0) {
-            ctx.toast(`No layers could be imported from ${file.name}`);
-          } else {
-            const linked = await linkImport(file, bytes, "psd");
-            const group = linked?.group ?? null;
-            for (const item of items) {
-              if (!(await addImportedItem(board, item, file.name, group))) return;
-            }
-            added += items.length;
-          }
+          // A .psd lands as one FileCard — the artwork's
+          // preview, the file name and size — not as its
+          // layers exploded into cards. Double-clicking it
+          // opens the file in Photoshop; editing it there
+          // re-renders the preview on the board.
+          if (await addFileCard(file, bytes, "psd", at)) added++;
         } else if (kind === "ai") {
           const bytes = new Uint8Array(await file.arrayBuffer());
           if (!isPdfCompatible(bytes)) {
@@ -312,23 +345,11 @@ export function createDrops(ctx: DropsContext): Drops {
             // rather than landing a broken card.
             ctx.toast(`${file.name} was saved without PDF compatibility, so it can't be imported`);
           } else {
-            // A PDF-compatible .ai file's artwork is
-            // extracted into editable cards (shapes, strokes,
-            // text, images); a page with content that cannot
-            // be mapped lands as one raster image of the page.
-            // It never lands as a PDF preview card.
-            const items = await parseAiToItems(bytes, at);
-            if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
-            if (items.length === 0) {
-              ctx.toast(`No artwork could be imported from ${file.name}`);
-            } else {
-              const linked = await linkImport(file, bytes, "ai");
-              const group = linked?.group ?? null;
-              for (const item of items) {
-                if (!(await addImportedItem(board, item, file.name, group))) return;
-              }
-              added += items.length;
-            }
+            // A .ai lands as one FileCard, like a .psd: its
+            // first page rendered as the preview, the file
+            // name and size below it. Double-clicking it
+            // opens the file in Illustrator.
+            if (await addFileCard(file, bytes, "ai", at)) added++;
           }
         } else if (kind in STORED_KINDS) {
           const desc = STORED_KINDS[kind];
@@ -433,38 +454,61 @@ export function createDrops(ctx: DropsContext): Drops {
       return;
     }
     if (!sameBoard() || findSourceGroup(ctx.getBoard(), path) !== group) { ctx.toast("Board switched — import stopped"); return; }
+    // A design file is one card: re-render its preview and
+    // update that card in place, keeping its top-left. The
+    // card resizes to the new artwork's aspect, like the
+    // drop does. A file whose artwork can no longer be
+    // rendered keeps its card with the format tile.
+    if (source.kind === "psd" || source.kind === "ai") {
+      const card = members.find((it) => "FileCard" in it.kind);
+      if (!card || !("FileCard" in card.kind)) return;
+      if (source.kind === "ai" && !isPdfCompatible(bytes)) { ctx.toast(`${entry.label} was saved without PDF compatibility, so it can't be imported`); return; }
+      let preview: string | undefined;
+      let artW = 0, artH = 0;
+      try {
+        const rendered = source.kind === "psd"
+          ? await renderPsdPreview(parsePsd(bytes.buffer))
+          : await renderAiPreview(bytes);
+        if (rendered) {
+          const stem = entry.label.replace(/\.[^.]*$/, "") || source.kind;
+          preview = await api.embedFileBytes(`${stem}-preview.png`, rendered.png);
+          artW = rendered.width; artH = rendered.height;
+        }
+      } catch {
+        // No preview: the card keeps its format tile.
+        preview = undefined;
+      }
+      if (!sameBoard() || findSourceGroup(ctx.getBoard(), path) !== group) { ctx.toast("Board switched — import stopped"); return; }
+      card.pos = { x: anchor.x, y: anchor.y };
+      card.size = fileCardSize(artW, artH);
+      card.kind = { FileCard: { path, size_bytes: stat.size, format: source.kind, ...(preview ? { preview } : {}) } };
+      const entryNow = ctx.getBoard().groups?.[group];
+      if (entryNow?.source) entryNow.source = { ...entryNow.source, size: stat.size, mtimeMs: stat.mtimeMs };
+      ctx.save(); ctx.requestRender();
+      return;
+    }
     let items: ImportedItem[];
     try {
-      if (source.kind === "svg") {
-        items = parseSvgToItems(new TextDecoder().decode(bytes), { x: anchor.x, y: anchor.y });
-      } else if (source.kind === "psd") {
-        items = psdLayersToItems(parsePsd(bytes.buffer), { x: anchor.x, y: anchor.y });
-      } else {
-        if (!isPdfCompatible(bytes)) { ctx.toast(`${entry.label} was saved without PDF compatibility, so it can't be imported`); return; }
-        items = await parseAiToItems(bytes, { x: anchor.x, y: anchor.y });
-      }
+      items = parseSvgToItems(new TextDecoder().decode(bytes), { x: anchor.x, y: anchor.y });
     } catch {
       ctx.toast(`Could not re-import ${entry.label}`);
       return;
     }
     if (!sameBoard() || findSourceGroup(ctx.getBoard(), path) !== group) { ctx.toast("Board switched — import stopped"); return; }
     const ids = members.map((it) => it.id);
-    if (items.length === 0 && source.kind === "svg") {
+    if (items.length === 0) {
       // Nothing mappable any more: fall back to one image
       // card of the whole file, as the drop does.
       board.items = board.items.filter((it) => !ids.includes(it.id));
       if (!(await addStoredImageCard(board, path, { x: anchor.x, y: anchor.y }, group))) return;
-    } else if (items.length === 0) {
-      ctx.toast(`No artwork could be imported from ${entry.label}`);
-      return;
     } else {
-      // The parsers position from the anchor, but the file's
+      // The parser positions from the anchor, but the file's
       // content may start offset from it: translate so the
       // rebuilt group's top-left lands where the group is.
       const translated = translateImportedToAnchor(items, { x: anchor.x, y: anchor.y });
       board.items = board.items.filter((it) => !ids.includes(it.id));
       for (const item of translated) {
-        if (!(await addImportedItem(board, item, entry.label, group))) return;
+        if (!(await addImportedItem(board, item, group))) return;
       }
     }
     ctx.clearSelection(ids);
