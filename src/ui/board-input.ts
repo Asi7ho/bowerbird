@@ -568,6 +568,10 @@ S.boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
       if (it && "UrlCard" in it.kind) { openExternal(it.kind.UrlCard.url); return; }
       if (it && "PdfCard" in it.kind) { openExternal(it.kind.PdfCard.path); return; }
       if (it && "Image" in it.kind) { openExternal(it.kind.Image.path); return; }
+      // A design file opens in its own app: Photoshop for a
+      // .psd, Illustrator for a .ai. The OS picks the app
+      // from the file type; the board just opens the file.
+      if (it && "FileCard" in it.kind) { openExternal(it.kind.FileCard.path); return; }
     } else {
       createTextNoteAt(world);
       return;
