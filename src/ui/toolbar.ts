@@ -16,6 +16,7 @@
 // changes, so a render on every mousemove does not rebuild
 // the toolbar for nothing.
 import type { PluginContext, PluginManifest } from "../plugins/host";
+import { createIconButton, createPickerOption, createSegButton, createSwatch } from "./components";
 import { placeNoteBar } from "./overlay-placement";
 
 export const manifest: PluginManifest = {
@@ -52,37 +53,24 @@ export function activate(api: PluginContext): void {
   wrap.id = "toolbar-wrap";
   const toolbar = document.createElement("div");
   toolbar.id = "toolbar";
+  toolbar.className = "frosted";
   wrap.appendChild(toolbar);
 
   const toolsSeg = document.createElement("div");
-  toolsSeg.className = "seg";
+  toolsSeg.className = "seg segmented";
   toolsSeg.id = "tools";
   toolbar.appendChild(toolsSeg);
 
   function toolButton(id: string, title: string, label: string, icon: string, onClick: () => void, parent: HTMLElement = toolsSeg, opts: { className?: string; type?: "button" | "reset" | "submit"; text?: string } = {}): HTMLButtonElement {
-    const b = document.createElement("button");
-    b.id = id;
-    b.title = title;
-    b.setAttribute("aria-label", label);
-    if (opts.text !== undefined) b.textContent = opts.text;
-    else b.innerHTML = icon;
-    if (opts.className) b.className = opts.className;
+    const b = createIconButton(icon, { id, title, label, text: opts.text, onClick });
+    if (opts.className) b.classList.add(opts.className);
     if (opts.type) b.type = opts.type;
-    b.addEventListener("click", onClick);
     parent.appendChild(b);
     return b;
   }
 
   function swatchButton(hex: string, onClick: () => void, pressed = false): HTMLButtonElement {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "swatch";
-    b.style.background = hex;
-    b.title = hex;
-    b.setAttribute("aria-label", hex);
-    b.setAttribute("aria-pressed", String(pressed));
-    b.addEventListener("click", onClick);
-    return b;
+    return createSwatch(hex, { active: pressed, onClick });
   }
 
   const selectBtn = toolButton("tool-select", "Select (V)", "Select", ICONS.select, () => api.ui.setTool("select"));
@@ -122,7 +110,7 @@ export function activate(api: PluginContext): void {
   api.ui.setToolbarToolsEl(toolsSeg);
 
   const palette = document.createElement("div");
-  palette.className = "palette";
+  palette.className = "palette frosted";
   palette.id = "palette";
   palette.style.display = "none";
   toolbar.appendChild(palette);
@@ -137,7 +125,7 @@ export function activate(api: PluginContext): void {
   }, toolsSeg, { className: "colour-swatch", type: "button" });
 
   const shapePicker = document.createElement("div");
-  shapePicker.className = "palette";
+  shapePicker.className = "palette frosted";
   shapePicker.id = "shape-picker";
   shapePicker.style.display = "none";
   toolbar.appendChild(shapePicker);
@@ -145,7 +133,7 @@ export function activate(api: PluginContext): void {
   // The draw picker: pencil, pen and eraser, beside the
   // draw button. It shows when a draw tool is active.
   const drawPicker = document.createElement("div");
-  drawPicker.className = "palette";
+  drawPicker.className = "palette frosted";
   drawPicker.id = "draw-picker";
   drawPicker.style.display = "none";
   toolbar.appendChild(drawPicker);
@@ -159,7 +147,7 @@ export function activate(api: PluginContext): void {
   // step. It lives on the body, outside the board, so
   // clicking it never starts a drag or deselects.
   const noteBar = document.createElement("div");
-  noteBar.className = "note-colour-bar";
+  noteBar.className = "palette frosted note-colour-bar";
   noteBar.id = "note-colours";
   noteBar.style.display = "none";
   noteBar.addEventListener("pointerdown", (e) => e.stopPropagation());
@@ -276,13 +264,12 @@ export function activate(api: PluginContext): void {
     drawPicker.style.display = showDraw ? "flex" : "none";
     if (showDraw && drawPicker.childElementCount === 0) {
       for (const d of DRAW_TOOLS) {
-        const b = document.createElement("button");
-        b.className = "shape-option";
-        b.dataset.draw = d.id;
-        b.title = d.label;
-        b.setAttribute("aria-label", d.label.replace(/ \(.*\)$/, ""));
-        b.innerHTML = d.icon;
-        b.addEventListener("click", () => api.ui.setTool(d.id));
+        const b = createPickerOption(d.icon, {
+          title: d.label,
+          label: d.label.replace(/ \(.*\)$/, ""),
+          dataset: { draw: d.id },
+          onClick: () => api.ui.setTool(d.id),
+        });
         drawPicker.appendChild(b);
       }
     }
@@ -318,23 +305,20 @@ export function activate(api: PluginContext): void {
     shapePicker.style.display = isShape ? "flex" : "none";
     if (isShape && shapePicker.childElementCount === 0) {
       for (const mode of [{ id: "filled", label: "Filled" }, { id: "outline", label: "Outline" }]) {
-        const b = document.createElement("button");
-        b.className = "shape-mode";
+        const b = createSegButton(mode.label, {
+          small: true,
+          onClick: () => { api.shapes.setOutline(mode.id === "outline"); update(); },
+        });
         b.dataset.mode = mode.id;
-        b.title = mode.label;
-        b.setAttribute("aria-label", mode.label);
-        b.textContent = mode.label;
-        b.addEventListener("click", () => { api.shapes.setOutline(mode.id === "outline"); update(); });
         shapePicker.appendChild(b);
       }
       for (const meta of api.shapes.list()) {
-        const b = document.createElement("button");
-        b.className = "shape-option";
-        b.dataset.shape = meta.kind;
-        b.title = meta.key ? `${meta.label} (${meta.key})` : meta.label;
-        b.setAttribute("aria-label", meta.label);
-        b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${meta.svg}</svg>`;
-        b.addEventListener("click", () => api.ui.setTool(meta.kind));
+        const b = createPickerOption(`<svg viewBox="0 0 24 24" aria-hidden="true">${meta.svg}</svg>`, {
+          title: meta.key ? `${meta.label} (${meta.key})` : meta.label,
+          label: meta.label,
+          dataset: { shape: meta.kind },
+          onClick: () => api.ui.setTool(meta.kind),
+        });
         shapePicker.appendChild(b);
       }
     }

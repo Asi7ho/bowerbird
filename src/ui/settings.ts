@@ -13,6 +13,7 @@
 // declares the same permissions a user plugin would. It has no
 // back door into the core. See ARCHITECTURE.md.
 import type { PluginContext, PluginManifest } from "../plugins/host";
+import { createButton } from "./components";
 
 export const manifest: PluginManifest = {
   apiVersion: "2",
@@ -121,7 +122,7 @@ function renderShortcutsTable(): void {
   if (!table) return;
   const allShortcuts: Array<[string, string]> = [...SHORTCUTS];
   for (const s of api.ui.listShortcuts()) allShortcuts.push([s.key.toUpperCase(), `${s.title} (${s.pluginName})`]);
-  table.innerHTML = allShortcuts.map(([k, v]) => `<tr><td><kbd>${api!.text.escapeHtml(k)}</kbd></td><td>${api!.text.escapeHtml(v)}</td></tr>`).join("");
+  table.innerHTML = allShortcuts.map(([k, v]) => `<tr><td><kbd class="kbd">${api!.text.escapeHtml(k)}</kbd></td><td>${api!.text.escapeHtml(v)}</td></tr>`).join("");
 }
 
 // One option row: a set of preview buttons in a
@@ -144,6 +145,7 @@ function renderOpts(
   const cur = current();
   for (const [label, value] of opts) {
     const b = document.createElement("button");
+    b.className = "picker-option";
     b.title = label;
     b.setAttribute("aria-label", label);
     b.appendChild(tile(value));
@@ -208,12 +210,11 @@ async function renderBackups(): Promise<void> {
   const b = list[0];
   container.innerHTML = "";
   const row = document.createElement("div");
-  row.className = "backup-row";
+  row.className = "row backup-row";
   const meta = document.createElement("span");
   meta.className = "meta";
   meta.textContent = `${fmtName(b.name)} · ${b.items} items · ${fmtSize(b.size)}`;
-  const btn = document.createElement("button");
-  btn.textContent = "Restore";
+  const btn = createButton("Restore");
   let armed = false;
   btn.addEventListener("click", async () => {
     // Two-click confirm, like Delete all data: the first
@@ -233,8 +234,7 @@ async function renderBackups(): Promise<void> {
   row.appendChild(btn);
   // The list shows only the newest backup by design; the
   // folder is how an older one is reached.
-  const openBtn = document.createElement("button");
-  openBtn.textContent = "Open folder";
+  const openBtn = createButton("Open folder");
   openBtn.addEventListener("click", async () => {
     const err = await api!.backups.openFolder();
     if (err) api!.ui.toast("Could not open the backups folder.");
@@ -317,7 +317,7 @@ function renderPluginSettings(): void {
     // trial plugin is not installed yet, so it gets no
     // toggle; a failed plugin shows its error underneath.
     const off = !lp.active;
-    let row = `<div class="plugin-row${off ? " plugin-row-off" : ""}"><span class="plugin-dot" aria-hidden="true"></span><div class="plugin-row-text"><div><strong>${api!.text.escapeHtml(lp.name)}</strong></div>`;
+    let row = `<div class="row plugin-row${off ? " plugin-row-off" : ""}"><span class="plugin-dot" aria-hidden="true"></span><div class="plugin-row-text"><div><strong>${api!.text.escapeHtml(lp.name)}</strong></div>`;
     if (lp.description) row += `<p class="plugin-desc">${api!.text.escapeHtml(lp.description)}</p>`;
     if (lp.failed && lp.error) row += `<p class="meta"><strong>${api!.text.escapeHtml(lp.error)}</strong></p>`;
     // The disable warning: when this plugin is awaiting a
@@ -342,7 +342,7 @@ function renderPluginSettings(): void {
     const sections = el("plugin-settings-sections");
     const hasSettings = sections?.querySelector(`[data-plugin="${lp.id}"]`) !== null;
     row += `</div><span style="display:flex;gap:8px;flex:none">`;
-    if (lp.active && hasSettings) row += `<button data-plugin-settings="${lp.id}">Settings</button>`;
+    if (lp.active && hasSettings) row += `<button class="btn" data-plugin-settings="${lp.id}">Settings</button>`;
     // A required plugin has no toggle: it is the foundation
     // (board, Settings) and cannot be disabled, so there is
     // nothing to toggle. Every other plugin gets one. While
@@ -350,8 +350,8 @@ function renderPluginSettings(): void {
     // as the confirm ("Disable anyway") and is armed red,
     // like other confirm states.
     if (!lp.trial && !lp.required) {
-      if (confirming) row += `<button data-plugin-toggle="${lp.id}" class="armed">Disable anyway</button></span>`;
-      else row += `<button data-plugin-toggle="${lp.id}">${lp.active ? "Disable" : "Enable"}</button></span>`;
+      if (confirming) row += `<button class="btn armed" data-plugin-toggle="${lp.id}">Disable anyway</button></span>`;
+      else row += `<button class="btn" data-plugin-toggle="${lp.id}">${lp.active ? "Disable" : "Enable"}</button></span>`;
     } else row += `</span>`;
     row += `</div>`;
     return row;
@@ -364,7 +364,7 @@ function renderPluginSettings(): void {
   // Reset: back to the factory state — core plugins on,
   // extras off. One button under the list; it is reversible
   // by toggling plugins back on.
-  html += `<button id="plugins-reset">Reset plugins</button>`;
+  html += `<button id="plugins-reset" class="btn btn-danger">Reset plugins</button>`;
   list.innerHTML = html;
   el("plugins-reset")?.addEventListener("click", async () => {
     // Resetting turns every extra off at once, so a disable
@@ -456,17 +456,18 @@ export function activate(context: PluginContext): void {
 
   backdrop = document.createElement("div");
   backdrop.id = "settings-backdrop";
+  backdrop.className = "dialog-backdrop";
   backdrop.innerHTML = `
-    <div id="settings" role="dialog" aria-modal="true" aria-label="Settings">
+    <div id="settings" class="dialog" role="dialog" aria-modal="true" aria-label="Settings">
       <div id="settings-header">
         <h2>Settings</h2>
         <button class="close" id="settings-close" title="Close (Esc)">×</button>
       </div>
       <div id="settings-layout">
         <div id="settings-tabs">
-          <button data-settings-tab="general" class="active">General</button>
-          <button data-settings-tab="plugins">Plugins</button>
-          <button data-settings-tab="plugin-settings">Plugin settings</button>
+          <button data-settings-tab="general" class="tab active">General</button>
+          <button data-settings-tab="plugins" class="tab">Plugins</button>
+          <button data-settings-tab="plugin-settings" class="tab">Plugin settings</button>
         </div>
         <div id="settings-content">
           <div id="settings-section-general" class="settings-section">
@@ -478,19 +479,19 @@ export function activate(context: PluginContext): void {
             <h3>Data</h3>
             <p class="meta" id="board-dir-meta"></p>
             <p class="meta" id="build-meta"></p>
-            <button id="btn-export-data">Export data</button>
-            <button id="btn-import-data">Import data</button>
-            <button id="btn-factory-reset">Factory reset</button>
+            <button id="btn-export-data" class="btn">Export data</button>
+            <button id="btn-import-data" class="btn">Import data</button>
+            <button id="btn-factory-reset" class="btn btn-lg btn-danger">Factory reset</button>
             <div id="factory-reset-confirm" style="display:none">
               <p class="meta">Boards, settings, plugins and keys — everything. This cannot be undone.</p>
-              <button id="btn-factory-reset-confirm">Reset everything</button>
+              <button id="btn-factory-reset-confirm" class="btn btn-lg btn-danger-filled">Reset everything</button>
             </div>
             <h3>Backups</h3>
             <div id="backups-list"></div>
             <h3>Send feedback</h3>
             <p class="meta">Opens in your email app, addressed to <span class="email">wren7762@gmail.com</span>.</p>
-            <textarea id="feedback-text" rows="4" placeholder="What happened, or what would you like?"></textarea>
-            <button id="btn-feedback">Send feedback</button>
+            <textarea id="feedback-text" class="text-field" rows="4" placeholder="What happened, or what would you like?"></textarea>
+            <button id="btn-feedback" class="btn">Send feedback</button>
           </div>
           <div id="settings-section-plugins" class="settings-section" style="display:none">
             <div id="plugin-list"></div>

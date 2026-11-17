@@ -32,7 +32,7 @@ export function activate(api: PluginContext): void {
   box.innerHTML = `
     <input id="search-input" type="text" placeholder="Search board" aria-label="Search board" autocomplete="off" spellcheck="false" />
     <span id="search-count" aria-live="polite"></span>
-    <button id="search-clear" title="Clear search (Esc)" aria-label="Clear search">×</button>
+    <button id="search-clear" class="icon-btn icon-btn-xs icon-btn-round" title="Clear search (Esc)" aria-label="Clear search">×</button>
     <div id="search-results" style="display:none"></div>`;
   const input = box.querySelector<HTMLInputElement>("#search-input");
   const count = box.querySelector<HTMLElement>("#search-count");

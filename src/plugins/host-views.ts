@@ -12,6 +12,7 @@
 // was null.
 import type { PluginHost, PluginViewDef } from "bowerbird-plugin-api";
 import { shell, views } from "./host-state";
+import { createSegButton } from "../ui/components";
 
 export interface ViewDeps {
   getHost: () => PluginHost | null;
@@ -40,10 +41,10 @@ export function renderViewSwitcher(): void {
   }
   el.style.display = "flex";
   const mk = (id: string, title: string) => {
-    const b = document.createElement("button");
-    b.textContent = title;
-    b.classList.toggle("active", activeView === id);
-    b.addEventListener("click", () => setActiveView(id));
+    const b = createSegButton(title, {
+      active: activeView === id,
+      onClick: () => setActiveView(id),
+    });
     el.appendChild(b);
   };
   mk("board", "Board");
