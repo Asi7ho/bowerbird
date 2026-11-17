@@ -2004,11 +2004,67 @@ async function main() {
     // must paint above the existing cards, not hide behind
     // them (it used to live in the canvas SVG below #cards).
     await check("the shape preview draws above an existing card", async () => {
-      // The bar-test note is already on the board from the
-      // checks above; fit so it is centred on screen.
-      await barTestNote();
-      const ctr = await barTestCentre();
-      assert.ok(ctr, "bar test note has a centre on screen");
+      // The bar-test note is buried under the cards the formats
+      // checks dropped at the screen centre, so clicking it
+      // would select the topmost import instead of the note.
+      // Put a fresh note in clear space for this check, past
+      // the rightmost card, where nothing overlaps it.
+      await page.evaluate(() => {
+        const t = document.querySelector("#toast");
+        if (t) t.textContent = "";
+      });
+      const board0 = readBoard();
+      const maxRight0 = board0.items.reduce((m, it) => Math.max(m, it.pos.x + it.size.w), 0);
+      const id0 = Math.max(board0.next_id, ...board0.items.map((it) => it.id)) + 1;
+      board0.items.push({ id: id0, pos: { x: maxRight0 + 200, y: 300 }, size: { w: 260, h: 80 }, group: null, kind: { Text: { text: "Preview test note", bold: false, size: 16, color: "#1A1A1A" } } });
+      board0.next_id = id0 + 1;
+      const tmp3 = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp3, JSON.stringify(board0));
+      fs.renameSync(tmp3, boardPath);
+      // The reload toast only shows once the new board is
+      // applied, so waiting for it beats the fixed 1.5s sleep
+      // the bar checks use — under load the watcher takes
+      // longer than that and F would fit the stale board.
+      await waitFor("preview note reloaded", () => page.evaluate(() => (document.querySelector("#toast")?.textContent ?? "").includes("Board updated on disk") ? true : null));
+      await page.keyboard.press("f");
+      await waitFor("preview test note in the DOM", async () => {
+        const n = await page.evaluate(() => [...document.querySelectorAll("#cards .card .note-body")].some((b) => (b.innerText || "").includes("Preview test note")));
+        return n ? true : null;
+      });
+      const ctr = await page.evaluate(() => {
+        const c = [...document.querySelectorAll("#cards .card .note-body")].find((b) => (b.innerText || "").includes("Preview test note"));
+        if (!c) return null;
+        const r = c.getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height };
+      });
+      assert.ok(ctr, "preview test note has a centre on screen");
+      // Select the note, so its colour bar and resize handle
+      // are showing: the preview must paint above those too,
+      // not just above the card. The click is at the note
+      // centre and the drag starts elsewhere, so it cannot
+      // pair with the drag's press as a double-click.
+      await page.mouse.click(ctr.x, ctr.y);
+      await waitFor("note bar and resize handle visible", async () => {
+        const s = await page.evaluate(() => {
+          const bar = document.querySelector("#note-colours");
+          const h = document.querySelector("#resize-handle");
+          return bar && getComputedStyle(bar).display === "flex" && h && getComputedStyle(h).display !== "none" ? true : null;
+        });
+        return s;
+      });
+      const geom = await page.evaluate(() => {
+        const bar = document.querySelector("#note-colours");
+        const sw = bar.querySelector(".swatch");
+        const h = document.querySelector("#resize-handle");
+        const br = bar.getBoundingClientRect();
+        const sr = sw.getBoundingClientRect();
+        const hr = h.getBoundingClientRect();
+        return {
+          barLeft: br.left,
+          swatch: { x: sr.left + sr.width / 2, y: sr.top + sr.height / 2 },
+          handle: { x: hr.left + hr.width / 2, y: hr.top + hr.height / 2 },
+        };
+      });
       // Select the rectangle shape tool, then draw across
       // the note in ONE gesture: a click first would select
       // the note, and a second press at the same spot reads
@@ -2016,11 +2072,18 @@ async function main() {
       // drawing.
       await page.keyboard.press("r");
       await new Promise((r) => setTimeout(r, 300));
-      // Drag diagonally across the note so the preview rect
-      // has real area over it (a horizontal drag makes a
-      // zero-height rect, which paints nothing).
-      const sx = ctr.x - ctr.w * 0.3, sy = ctr.y - ctr.h * 0.2;
-      const ex = ctr.x + ctr.w * 0.3, ey = ctr.y + ctr.h * 0.2;
+      // Drag diagonally from left of the colour bar to past
+      // the resize handle, so the preview rect covers the
+      // bar, the note and the handle alike (a horizontal drag
+      // makes a zero-height rect, which paints nothing). The
+      // drag starts 20px above the first swatch, so the swatch
+      // sits inside the preview fill: starting exactly on its
+      // centre would put it on the rect's top edge, and at a
+      // fit zoom below 1 the edge can round a fraction of a
+      // pixel past the point — a filled shape has no stroke to
+      // catch it.
+      const sx = geom.barLeft - 20, sy = geom.swatch.y - 20;
+      const ex = geom.handle.x + 15, ey = geom.handle.y + 15;
       const mx = (sx + ex) / 2, my = (sy + ey) / 2;
       const before = await page.evaluate(() => document.querySelectorAll("#cards .card").length);
       await page.mouse.move(sx, sy);
@@ -2054,6 +2117,29 @@ async function main() {
       assert.equal(hit.previewParent, "preview-world", "shape preview lives in the preview layer");
       assert.equal(hit.hitId, "shape-preview", "the preview is the topmost element over the note");
       assert.equal(hit.hitInCards, false, "the note does not cover the preview");
+      // The preview must also paint above the resize handle
+      // (z-index 100) and the note colour bar (40), not just
+      // above the card: the preview layer carries z-index 110.
+      // elementsFromPoint skips pointer-events: none elements,
+      // so flip the preview and the handle to auto just for
+      // this probe — that reveals the paint order without
+      // changing it.
+      const order = await page.evaluate(([hx, hy, bx, by]) => {
+        const svg = document.querySelector("#preview-svg");
+        const hd = document.querySelector("#resize-handle");
+        const prevSvg = svg.style.pointerEvents, prevHd = hd.style.pointerEvents;
+        svg.style.pointerEvents = "auto";
+        hd.style.pointerEvents = "auto";
+        const at = (x, y) => [...document.elementsFromPoint(x, y)].map((el) => el.id).filter(Boolean);
+        const out = { handle: at(hx, hy), bar: at(bx, by) };
+        svg.style.pointerEvents = prevSvg;
+        hd.style.pointerEvents = prevHd;
+        return out;
+      }, [geom.handle.x, geom.handle.y, geom.swatch.x, geom.swatch.y]);
+      assert.ok(order.handle.includes("shape-preview"), "preview is in the stack at the handle");
+      assert.ok(order.handle.indexOf("shape-preview") < order.handle.indexOf("resize-handle"), "preview paints above the resize handle");
+      assert.ok(order.bar.includes("shape-preview"), "preview is in the stack at the bar");
+      assert.ok(order.bar.indexOf("shape-preview") < order.bar.indexOf("note-colours"), "preview paints above the note colour bar");
       await page.mouse.up();
       await new Promise((r) => setTimeout(r, 500));
       // The preview is cleared by the render on mouseup, and
