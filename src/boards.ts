@@ -15,7 +15,7 @@ import { type UndoStore } from "./backend/undo";
 import { type Drops } from "./backend/drops";
 import { ensureVideoPoster } from "./backend/poster";
 import {
-  Board, Item,
+  Board, GroupEntry, Item,
   AUDIO_TRANSCRIPT_HIDDEN_H, boardGet, CARD_DECORATIONS_H,
   estimateTextHeight, healDuplicateIds,
 } from "./backend/model";
@@ -81,9 +81,15 @@ export function syncGroupLabels(b: Board): void {
     if (it.group === null) continue;
     counts.set(it.group, (counts.get(it.group) ?? 0) + 1);
   }
-  const labels: Record<number, { label: string }> = b.groups ?? {};
+  const labels: Record<number, GroupEntry> = b.groups ?? {};
   for (const key of Object.keys(labels)) {
-    if ((counts.get(Number(key)) ?? 0) < 2) delete labels[Number(key)];
+    const n = counts.get(Number(key)) ?? 0;
+    // A group with no members at all loses its entry, link
+    // or not — the import is gone with its cards. A live
+    // import is a section even with one card, so its entry
+    // survives below two members while its source does.
+    if (n === 0) { delete labels[Number(key)]; continue; }
+    if (n < 2 && !labels[Number(key)].source) delete labels[Number(key)];
   }
   for (const [g, n] of counts) {
     if (n >= 2 && !labels[g]) labels[g] = { label: `Section ${g}` };

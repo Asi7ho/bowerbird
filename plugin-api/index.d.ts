@@ -64,9 +64,28 @@ export interface Board {
   // carries the label its frame shows. Optional so old
   // boards load unchanged: a group with no entry gets
   // "Section <id>" on load.
-  groups?: Record<number, { label: string }>;
+  // A group can also be a live import: the cards came from
+  // one source file (.svg, .psd or .ai) kept in the board's
+  // assets, and the app re-imports it when that file
+  // changes on disk. The source is the board-local path
+  // the file was embedded at, never a path outside the
+  // board (see the security boundaries in electron/main.ts).
+  groups?: Record<number, GroupEntry>;
   bg: string;
   grid: "Lines" | "Dots" | "Off";
+}
+
+// One entry of Board.groups.
+export interface GroupEntry {
+  label: string;
+  source?: ImportSource;
+}
+
+// The file a live-import group came from: its kind, and the
+// board-local path it was embedded at.
+export interface ImportSource {
+  path: string;
+  kind: "svg" | "psd" | "ai";
 }
 
 // Arranging cards: the layout math for api.board.arrange.
