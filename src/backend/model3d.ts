@@ -353,7 +353,12 @@ function loop(): void {
   }
   const boardRect = sharedCanvas.getBoundingClientRect();
   renderer.setScissorTest(false);
-  renderer.setViewport(0, 0, wantW, wantH);
+  // setViewport and setScissor take logical pixels and
+  // scale by the pixel ratio themselves — passing device
+  // pixels scales twice, so on a Retina display the model
+  // lands at 4x its rect: off-screen, or oversized and
+  // offset where part of it still lands on the layer.
+  renderer.setViewport(0, 0, bw, bh);
   renderer.clear();
   // One pass over the views: each gets its card's screen
   // rect as a scissored viewport.
@@ -362,10 +367,11 @@ function loop(): void {
     const rect = view.rectRelativeTo(boardRect);
     if (!rect) continue;
     // WebGL y is from the bottom; DOM y is from the top.
-    const x = Math.round(rect.x * dpr);
-    const y = Math.round((bh - rect.y - rect.h) * dpr);
-    const w = Math.round(rect.w * dpr);
-    const h = Math.round(rect.h * dpr);
+    // Logical pixels, not device pixels (see above).
+    const x = Math.round(rect.x);
+    const y = Math.round(bh - rect.y - rect.h);
+    const w = Math.round(rect.w);
+    const h = Math.round(rect.h);
     if (w <= 0 || h <= 0) continue;
     view.setAspect(rect.w, rect.h);
     if (!view.step(now)) continue;
