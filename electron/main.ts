@@ -21,6 +21,7 @@ import { createExport, resolveBoardAssetPaths } from "./export";
 import { handleAppFileRequest, MIME } from "./appFile";
 import * as context from "./context";
 import { isPrivateHost, linkHref, metaContent, readCappedText, tagContent } from "./link-preview";
+import { openBoardFile } from "./open-with";
 // The plugin TypeScript transpiler, bundled into electron-dist at
 // build time (scripts/bundle-sucrase.mjs). The packaged app ships
 // no node_modules, so the transpiler is a file inside electron-dist.
@@ -1451,11 +1452,14 @@ function registerIpc(): void {
     // Local files: only board-local files (see isBoardLocal).
     // A file:// URL is unwrapped first, so file:///etc/passwd
     // does not slip past the check as a non-https string.
+    // A .psd or .ai opens in an editor on a Mac when one is
+    // installed (see open-with.ts) — the bare default, Preview,
+    // flattens both formats into a plain image.
     let local = target;
     if (target.startsWith("file://")) {
       try { local = decodeURIComponent(new URL(target).pathname); } catch { throw new Error("not a board-local file"); }
     }
-    if (isBoardLocal(local)) return shell.openPath(local);
+    if (isBoardLocal(local)) return openBoardFile(local, { openDefault: (p) => shell.openPath(p) });
     throw new Error("not a public web address or a board-local file");
   });
   ipcMain.handle("bowerbird:get-app-settings", () => ({ corner: cornerReveal, panelOrder: [...panelOrder], panelWidth, dockVisible }));
