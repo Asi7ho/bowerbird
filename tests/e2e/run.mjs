@@ -371,7 +371,7 @@ async function main() {
       // Catmull-Rom spline: cubic segments, no straight L
       // segments — the same path the selection halo uses.
       const d = await waitFor("smooth stroke path in the DOM", async () => {
-        const ds = await page.evaluate(() => [...document.querySelectorAll("#world path")].map((p) => p.getAttribute("d") ?? ""));
+        const ds = await page.evaluate(() => [...document.querySelectorAll("#cards .card.stroke path")].map((p) => p.getAttribute("d") ?? ""));
         const curved = ds.find((x) => x.includes(" C"));
         return curved ?? null;
       });

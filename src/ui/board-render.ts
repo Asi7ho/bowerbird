@@ -1,5 +1,5 @@
 // The board's render loop: the grid, the camera transform, the
-// SVG strokes/connectors, the group frames, the card HTML, the
+// SVG connectors, the group frames, the card HTML, the
 // selection and resize/rotate handles, and the drag previews.
 // Rendering reads the board through S.api and the cached board;
 // it never calls an input function (the dependency runs
@@ -9,11 +9,10 @@ import {
   ACCENT,
   boardSize, isFrameCard, toScreen,
 } from "./board-state";
-import { groupBounds, isRotatable, rotateHandleWorld, strokePath, svgEl2 } from "./board-geometry";
+import { groupBounds, isRotatable, rotateHandleWorld, svgEl2 } from "./board-geometry";
 import { rectsOverlap } from "./overlay-placement";
 import {
   Board, GRID, Item,
-  pressureWidth, smoothStrokePressures, smoothStrokeSamples, strokeMaxWidth, strokePressuresVary,
 } from "../backend/model";
 import { syncModel3DViews } from "../backend/model3d";
 
@@ -123,12 +122,12 @@ export function refreshContentIfVisibleChanged(): void {
 // it follow in real time without re-parsing every card.
 export function renderSvgOnly(): void {
   S.worldEl.innerHTML = "";
-  // A preview is a drag-time node like the strokes, so a
-  // rebuild wipes it too — it never outlives its drag.
+  // A preview is a drag-time node, so a rebuild wipes it
+  // too — it never outlives its drag.
   S.previewWorldEl.innerHTML = "";
   // Fresh board: a drag may have moved items since the last
   // render, and the SVG layer must follow the live board.
-  renderStrokesAndConnectors(S.api.board.get());
+  renderConnectors(S.api.board.get());
 }
 
 // The pencil's graphite texture, defined once in the
@@ -155,65 +154,19 @@ function ensurePencilFilter(): void {
   svg.appendChild(warm);
 }
 
-export function renderStrokesAndConnectors(board: Board): void {
+// Connectors are the only thing left in the board SVG:
+// strokes are cards now, so they stack, drag and select
+// with the cards. The pencil filter is still ensured
+// here, because the stroke cards reference it by id
+// (url(#pencil-texture)) and this runs before the card
+// loop on every render.
+export function renderConnectors(board: Board): void {
   ensurePencilFilter();
   const items = board.items;
   const selected = S.api.board.getSelected();
   const v = visibleRect();
   for (const item of items) {
-    // A rotated stroke's extent can exceed its unrotated
-    // bounding box, so culling it by that box would hide
-    // it at the viewport edge: rotated strokes are always
-    // drawn. The count is small, so this costs nothing.
-    if (!("Stroke" in item.kind && S.api.geometry.itemRotation(item) !== 0) && !isVisibleItem(item, v)) continue;
-    if ("Stroke" in item.kind) {
-      const { points, color, width, marker, pressures, pencil } = item.kind.Stroke;
-      if (points.length < 2) continue;
-      const d = strokePath(item, points, color, width);
-      const sel = selected.includes(item.id);
-      // Rotation is an SVG transform around the stroke's
-      // bounding-box centre, in world coords: the points
-      // themselves are never rewritten, so undo, resize
-      // and hit-testing all keep working in the local
-      // frame, and rotation is just item.rotation.
-      const rot = S.api.geometry.itemRotation(item);
-      const c = S.api.geometry.centre(item);
-      const transform = rot !== 0 ? `rotate(${rot} ${c.x} ${c.y})` : undefined;
-      if (sel) {
-        const selPath = svgEl2("path", { d, fill: "none", stroke: ACCENT, "stroke-width": String(strokeMaxWidth(item.kind.Stroke) + 6), "stroke-linecap": "round", "stroke-linejoin": "round" });
-        if (transform) selPath.setAttribute("transform", transform);
-        S.worldEl.appendChild(selPath);
-      }
-      // A pencil stroke's ink is wrapped in a group
-      // carrying the graphite texture filter, so the
-      // rough edge applies to the whole stroke at once,
-      // not per segment. The selection highlight above
-      // stays outside the group, and stays smooth.
-      const ink = pencil ? svgEl2("g", { filter: "url(#pencil-texture)" }) : null;
-      const target = ink ?? S.worldEl;
-      if (pressures && strokePressuresVary(item.kind.Stroke)) {
-        // A pen stroke is one line per short sample along
-        // the smooth curve, each at the width its pressure
-        // makes; a uniform stroke stays a single path, as
-        // before. Lines between the sparse raw points would
-        // kink at every joint when drawn fast.
-        const pts = smoothStrokeSamples(points);
-        const prs = smoothStrokePressures(pressures);
-        for (let i = 0; i + 1 < pts.length; i++) {
-          const w = pressureWidth(width, (prs[i] + prs[i + 1]) / 2);
-          const line = svgEl2("line", { x1: String(pts[i].x), y1: String(pts[i].y), x2: String(pts[i + 1].x), y2: String(pts[i + 1].y), stroke: color, "stroke-width": String(w), "stroke-linecap": "round" });
-          if (transform) line.setAttribute("transform", transform);
-          if (marker) line.setAttribute("opacity", "0.45");
-          target.appendChild(line);
-        }
-      } else {
-        const path = svgEl2("path", { d, fill: "none", stroke: color, "stroke-width": String(width), "stroke-linecap": "round", "stroke-linejoin": "round" });
-        if (transform) path.setAttribute("transform", transform);
-        if (marker) path.setAttribute("opacity", "0.45");
-        target.appendChild(path);
-      }
-      if (ink) S.worldEl.appendChild(ink);
-    }
+    if (!isVisibleItem(item, v)) continue;
     if ("Connector" in item.kind) {
       const ends = S.api.geometry.clippedEnds(item.kind.Connector.from, item.kind.Connector.to);
       if (!ends) continue;
@@ -312,7 +265,7 @@ export function render(): void {
   }
   S.worldEl.innerHTML = "";
   S.previewWorldEl.innerHTML = "";
-  renderStrokesAndConnectors(board);
+  renderConnectors(board);
   renderGroupFrames(board);
   // Cards: rebuild, except the note being edited (its textarea stays).
   // Only visible cards are built (see visibleRect).
@@ -335,9 +288,13 @@ export function render(): void {
   const v = visibleRect();
   let html = "";
   for (const item of board.items) {
-    if ("Stroke" in item.kind || "Connector" in item.kind) continue;
+    if ("Connector" in item.kind) continue;
     if (S.editingId === item.id) continue;
-    if (!isVisibleItem(item, v)) continue;
+    // A rotated stroke's extent can exceed its unrotated
+    // bounding box, so culling it by that box would hide
+    // it at the viewport edge: rotated strokes are always
+    // built. The count is small, so this costs nothing.
+    if (!isVisibleItem(item, v) && !("Stroke" in item.kind && S.api.geometry.itemRotation(item) !== 0)) continue;
     html += S.api.board.renderCardAt(item.id) ?? "";
   }
   S.cardsEl.innerHTML = html;
