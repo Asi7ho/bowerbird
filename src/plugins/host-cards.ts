@@ -93,6 +93,7 @@ export function builtinKindName(item: Item): string | null {
   if ("Video" in item.kind) return "Video";
   if ("Model3D" in item.kind) return "Model3D";
   if ("Shape" in item.kind) return "Shape";
+  if ("Stroke" in item.kind) return "Stroke";
   return null;
 }
 
