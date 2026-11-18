@@ -11,24 +11,23 @@ describe("welcomeBoard", () => {
 
   it("shows every capability once, with sequential ids", () => {
     const board = welcomeBoard("/b", 111, 222, 333, 444, 555);
-    expect(board.items).toHaveLength(29);
-    expect(board.items.map((it) => it.id)).toEqual(Array.from({ length: 29 }, (_, i) => i + 1));
-    expect(board.next_id).toBe(29);
+    expect(board.items).toHaveLength(48);
+    expect(board.items.map((it) => it.id)).toEqual(Array.from({ length: 48 }, (_, i) => i + 1));
+    expect(board.next_id).toBe(48);
     expect(board.next_group).toBe(2);
     const kinds = board.items.map((it) => Object.keys(it.kind)[0]);
     expect(kinds).toEqual([
       "Text", "Image", "UrlCard", "Swatch", "Swatch", "PdfCard",
       "Audio", "Video", "Text", "Swatch", "Text", "Stroke", "Connector",
-      // Formats section: heading, then SVG, PSD, AI, 3D — a 2x2 grid.
-      "Text",
-      "Text",
-      "Shape", "Shape", "Shape", "Stroke", "Stroke", "Stroke", "Text", "Shape",
-      "Text",
-      "FileCard",
-      "Text",
-      "FileCard",
-      "Text",
-      "Model3D",
+      // Woven-in formats: the bird (32 SVG items), then the AI
+      // FileCard, the PSD FileCard, and the cube — no heading,
+      // no labels, no grid.
+      "Shape", "Stroke", "Shape", "Shape", "Shape", "Shape",
+      "Stroke", "Shape", "Shape", "Shape", "Shape", "Shape", "Shape",
+      "Stroke", "Shape", "Shape", "Shape", "Shape", "Shape", "Shape",
+      "Shape", "Shape", "Shape", "Shape", "Shape", "Shape", "Shape",
+      "Shape", "Shape", "Shape", "Stroke", "Stroke",
+      "FileCard", "FileCard", "Model3D",
     ]);
     const connector = board.items.find((it) => "Connector" in it.kind);
     expect((connector?.kind as { Connector: { from: { Item: number }; to: { Item: number } } }).Connector).toEqual({
@@ -60,17 +59,17 @@ describe("welcomeBoard", () => {
     });
     const psd = board.items.find((it) => "FileCard" in it.kind && (it.kind as { FileCard: { format: string } }).FileCard.format === "psd");
     expect((psd?.kind as { FileCard: { path: string; size_bytes: number; format: string; preview?: string } }).FileCard).toEqual({
-      path: "/some/dir/sample.psd",
+      path: "/some/dir/welcome-garden.psd",
       size_bytes: 444,
       format: "psd",
-      preview: "/some/dir/welcome-psd-preview.png",
+      preview: "/some/dir/welcome-garden-preview.png",
     });
     const ai = board.items.find((it) => "FileCard" in it.kind && (it.kind as { FileCard: { format: string } }).FileCard.format === "ai");
     expect((ai?.kind as { FileCard: { path: string; size_bytes: number; format: string; preview?: string } }).FileCard).toEqual({
-      path: "/some/dir/sample.ai",
+      path: "/some/dir/welcome-heron.ai",
       size_bytes: 555,
       format: "ai",
-      preview: "/some/dir/welcome-ai-preview.png",
+      preview: "/some/dir/welcome-heron-preview.png",
     });
   });
 
