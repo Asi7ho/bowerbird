@@ -7,25 +7,27 @@
 // One WebGL context serves every model on the board. A
 // per-card renderer caps out at ~16 visible models
 // (Chromium's context limit) — the 17th gets a lost context
-// and renders blank. So there is one renderer and one canvas
-// covering the board viewport; each visible model is drawn
-// into its card's screen rect with a scissor. The layer
-// sits above #cards (a card's own background is opaque, so
-// a layer below it would be hidden) and is transparent
-// except where a model is drawn, so the card chrome and
-// pointer events stay on the card; the card's grey tile
-// underneath gives the model its rounded background. The
-// card keeps a <canvas> as its hit target (its grey tile
-// is the model's background; the model is drawn over it
-// by the shared layer).
+// and renders blank. So there is one renderer and one
+// offscreen canvas; each visible model is drawn into its
+// card's screen rect with a scissor, and the pixels are
+// then copied into the card's own canvas.
 //
-// The shared canvas lives in #board, so a render() that
-// rebuilds #cards never touches it — there is nothing to
-// detach or restore. A view is mounted when its card is
-// rendered and dropped when the card leaves the viewport.
-// The loaded model is cached by URL and the view angle is
-// kept per card, so coming back is fast and the angle is
-// where the user left it.
+// The copy is the whole point: the model lives inside its
+// card. A card dragged over a 3D card covers the cube, the
+// way it covers any card; the card's own chrome (the fit
+// button, the title) paints above the model, the way it
+// paints above any card; the rounded tile clips the model,
+// the way it clips any card. A shared layer above the cards
+// could do none of that — the cube floated over every card
+// it overlapped, including the fit button on its own card.
+//
+// The shared canvas is offscreen (never in the DOM), so a
+// render() that rebuilds #cards never touches it — there is
+// nothing to detach or restore. A view is mounted when its
+// card is rendered and dropped when the card leaves the
+// viewport. The loaded model is cached by URL and the view
+// angle is kept per card, so coming back is fast and the
+// angle is where the user left it.
 //
 // GLB only: a .gltf references external buffers and textures
 // that would not be embedded with it, so drops only accept
@@ -93,6 +95,10 @@ class Model3DView {
   // on. render() rebuilds the card DOM, so the element
   // changes and the listeners move with it (see sync).
   private canvas: HTMLCanvasElement | null = null;
+  // The card canvas's 2D context: the view's pixels are
+  // copied here each frame (see blit), so the model lives
+  // inside the card.
+  private ctx: CanvasRenderingContext2D | null = null;
 
   constructor(
     private cardId: number,
@@ -168,11 +174,45 @@ class Model3DView {
 
   // (Re)attach the pointer handlers to the card's current
   // placeholder canvas. Called by sync after every render.
+  // The canvas is a 2D canvas now: the shared layer renders
+  // offscreen and each frame is copied here, so size its
+  // backing store to the card at the device pixel ratio.
   attach(canvas: HTMLCanvasElement): void {
     if (this.canvas === canvas) return;
     this.canvas = canvas;
+    this.ctx = canvas.getContext("2d");
+    const dpr = Math.min(window.devicePixelRatio, 2);
+    canvas.width = Math.max(1, Math.round(canvas.clientWidth * dpr));
+    canvas.height = Math.max(1, Math.round(canvas.clientHeight * dpr));
     canvas.addEventListener("pointerdown", this.onPointerDown);
     canvas.addEventListener("wheel", this.onWheel, { passive: false });
+  }
+
+  // Copy this frame's pixels from the shared layer into the
+  // card's own canvas. The layer reads top-origin as an
+  // image, so the source rect is the card's rect without
+  // the WebGL y-flip; the copy scales into the canvas's
+  // backing store. The canvas is cleared first, or the
+  // previous frame would show through where the model
+  // moved. The card's grey tile is the canvas's own
+  // background, so transparent pixels stay grey — and the
+  // card's chrome (the fit button) paints above the copy,
+  // because it is above the canvas in the card.
+  blit(layer: HTMLCanvasElement, rect: { x: number; y: number; w: number; h: number }, dpr: number): void {
+    if (!this.ctx || !this.canvas) return;
+    const wantW = Math.max(1, Math.round(this.canvas.clientWidth * dpr));
+    const wantH = Math.max(1, Math.round(this.canvas.clientHeight * dpr));
+    if (this.canvas.width !== wantW || this.canvas.height !== wantH) {
+      this.canvas.width = wantW;
+      this.canvas.height = wantH;
+    }
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.ctx.drawImage(
+      layer,
+      Math.round(rect.x * dpr), Math.round(rect.y * dpr),
+      Math.round(rect.w * dpr), Math.round(rect.h * dpr),
+      0, 0, this.canvas.width, this.canvas.height,
+    );
   }
 
   private onPointerDown = (e: PointerEvent): void => {
@@ -289,6 +329,7 @@ class Model3DView {
       this.canvas.removeEventListener("pointerup", this.onPointerUp);
       this.canvas.removeEventListener("pointercancel", this.onPointerUp);
       this.canvas = null;
+      this.ctx = null;
     }
     viewState.set(this.cardId, {
       azimuth: this.azimuth,
@@ -333,22 +374,14 @@ let boardEl: HTMLElement | null = null;
 
 function ensureSharedCanvas(board: HTMLElement): void {
   boardEl = board;
-  if (sharedCanvas && sharedCanvas.isConnected) return;
+  if (renderer) return;
+  // An offscreen render target, never in the DOM: the
+  // pixels reach the screen only through the per-card
+  // copies (see blit), so nothing here can paint over a
+  // card or a button. preserveDrawingBuffer so the copies
+  // can read the layer after the frame is composited.
   sharedCanvas = document.createElement("canvas");
   sharedCanvas.id = "model3d-layer";
-  sharedCanvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%;pointer-events:none;display:block;";
-  // Above #cards, below the group frames and overlays: the
-  // card's own background is opaque, so a layer below it
-  // would be hidden. The layer is transparent except where
-  // a model is drawn, so the card chrome (title, sub,
-  // border) shows through untouched, and the card's grey
-  // tile underneath gives the model its rounded background.
-  const cards = board.querySelector("#cards");
-  if (cards && cards.nextSibling) board.insertBefore(sharedCanvas, cards.nextSibling);
-  else board.appendChild(sharedCanvas);
-  // preserveDrawingBuffer so the layer can be read back
-  // (tests, and a future export): without it toDataURL
-  // returns blank once the frame is composited.
   renderer = new THREE.WebGLRenderer({ canvas: sharedCanvas, antialias: true, alpha: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setClearColor(0x000000, 0);
@@ -374,7 +407,7 @@ function loop(): void {
   if (sharedCanvas.width !== wantW || sharedCanvas.height !== wantH) {
     renderer.setSize(bw, bh, false);
   }
-  const boardRect = sharedCanvas.getBoundingClientRect();
+  const boardRect = boardEl.getBoundingClientRect();
   renderer.setScissorTest(false);
   // setViewport and setScissor take logical pixels and
   // scale by the pixel ratio themselves — passing device
@@ -384,7 +417,9 @@ function loop(): void {
   renderer.setViewport(0, 0, bw, bh);
   renderer.clear();
   // One pass over the views: each gets its card's screen
-  // rect as a scissored viewport.
+  // rect as a scissored viewport, then its pixels are
+  // copied into its own card canvas (see blit) — the layer
+  // itself never reaches the screen.
   renderer.setScissorTest(true);
   for (const view of views.values()) {
     const rect = view.rectRelativeTo(boardRect);
@@ -400,10 +435,11 @@ function loop(): void {
     if (!view.step(now)) continue;
     renderer.setViewport(x, y, w, h);
     renderer.setScissor(x, y, w, h);
-    // No per-view clear: the tile's grey background comes
-    // from the card's own placeholder underneath, and the
-    // model draws over it with a transparent background.
+    // No per-view clear: the layer is cleared once above,
+    // and the card's grey tile is its own canvas's
+    // background, under the copy.
     renderer.render(view.drawScene, view.drawCamera);
+    view.blit(sharedCanvas, rect, dpr);
   }
   renderer.setScissorTest(false);
   raf = requestAnimationFrame(loop);
@@ -468,24 +504,14 @@ export function syncModel3DViews(
       views.delete(id);
     }
   }
-  if (views.size === 0 && renderer && sharedCanvas) {
-    // The loop stops when there are no views, so nothing
-    // clears the layer again: wipe the last frame here, or
-    // the deleted card's model lingers on the shared layer
-    // (preserveDrawingBuffer keeps it on screen).
-    const bw = board.clientWidth;
-    const bh = board.clientHeight;
-    if (bw > 0 && bh > 0) {
-      renderer.setScissorTest(false);
-      renderer.setViewport(0, 0, bw, bh);
-      renderer.clear();
-    }
-  }
+  // No wipe when the views hit zero: the layer is offscreen
+  // now, so a stale frame there never reaches the screen —
+  // and the next mount clears it at the frame start.
   kickLoop();
 }
 
-// Dispose every view (board switch / teardown) and remove
-// the shared layer.
+// Dispose every view (board switch / teardown) and drop
+// the offscreen layer.
 export function disposeAllModel3DViewers(): void {
   for (const [id, view] of Array.from(views)) {
     view.dispose();
@@ -502,9 +528,6 @@ export function disposeAllModel3DViewers(): void {
     pmrem = null;
     envTexture = null;
   }
-  if (sharedCanvas) {
-    sharedCanvas.remove();
-    sharedCanvas = null;
-  }
+  sharedCanvas = null;
   boardEl = null;
 }
