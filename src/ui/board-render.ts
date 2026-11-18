@@ -131,66 +131,26 @@ export function renderSvgOnly(): void {
   renderConnectors(S.api.board.get());
 }
 
-// The pencil's graphite noise, precomputed once as a
-// small tile instead of generated per stroke: the old
-// feTurbulence was re-generated over the whole stroke
-// on every move while drawing, so the first pencil
-// stroke lagged behind the hand. A tile is decoded once
-// and repeated (feTile) to cover any stroke, so the
-// live filter costs only the displacement over the ink.
-// White noise matches the old fractal noise here — its
-// base frequency was 0.9, near pixel-scale — and being
-// random per pixel it has no seams when tiled. Seeded,
-// so the texture is the same on every board and load.
-let noiseTileUrl: string | null = null;
-function pencilNoiseTile(): string {
-  if (noiseTileUrl) return noiseTileUrl;
-  const size = 128;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  const img = ctx!.createImageData(size, size);
-  let seed = 7;
-  const rand = (): number => {
-    seed |= 0;
-    seed = (seed + 0x6d2b79f5) | 0;
-    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-  for (let i = 0; i < img.data.length; i += 4) {
-    img.data[i] = Math.floor(rand() * 256);
-    img.data[i + 1] = Math.floor(rand() * 256);
-    img.data[i + 2] = 0;
-    img.data[i + 3] = 255;
-  }
-  ctx!.putImageData(img, 0, 0);
-  noiseTileUrl = canvas.toDataURL("image/png");
-  return noiseTileUrl;
-}
-
 // The pencil's graphite texture, defined once in the
 // canvas SVG (the parent of the world group), not in
 // the world group itself: the world group is cleared
 // and rebuilt on every render, so defs inside it would
-// be recreated each time and the noise tile re-decoded.
-// A tiny warm-up rect uses the filter at startup, so
-// the first pencil stroke does not pay the first-use
-// cost and lag.
+// be recreated each time and the turbulence would be
+// re-compiled. A tiny warm-up rect uses the filter at
+// startup, so the first pencil stroke does not pay the
+// first-use compile cost and lag.
 function ensurePencilFilter(): void {
   const svg = S.worldEl.ownerSVGElement;
   if (!svg || svg.querySelector("#pencil-texture")) return;
   const defs = svgEl2("defs", {});
   const filter = svgEl2("filter", { id: "pencil-texture", x: "-5%", y: "-5%", width: "110%", height: "110%" });
-  filter.appendChild(svgEl2("feImage", { href: pencilNoiseTile(), x: "0", y: "0", width: "128", height: "128", preserveAspectRatio: "none", result: "noiseTile" }));
-  filter.appendChild(svgEl2("feTile", { in: "noiseTile", result: "noise" }));
+  filter.appendChild(svgEl2("feTurbulence", { type: "fractalNoise", baseFrequency: "0.9", numOctaves: "2", seed: "7", result: "noise" }));
   filter.appendChild(svgEl2("feDisplacementMap", { in: "SourceGraphic", in2: "noise", scale: "2.5" }));
   defs.appendChild(filter);
   svg.appendChild(defs);
   // Warm-up: a 1px rect the filter paints once, so the
-  // tile is decoded before the first pencil stroke.
-  // Nearly transparent, so it reads as nothing.
+  // turbulence is compiled before the first pencil
+  // stroke. Nearly transparent, so it reads as nothing.
   const warm = svgEl2("rect", { x: "0", y: "0", width: "1", height: "1", fill: "#1A1A1A", opacity: "0.01", filter: "url(#pencil-texture)" });
   svg.appendChild(warm);
 }
