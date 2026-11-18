@@ -1,9 +1,10 @@
 // core-cards — the built-in card kinds, as a first-party
 // plugin. The core is headless: it owns the board model,
 // persistence, the plugin host and the API, and it renders
-// no card itself. This plugin provides the eight built-in
-// kinds (Text, Image, Swatch, UrlCard, PdfCard, Audio,
-// Video, Model3D, Shape) through the same `cards.registerBuiltin`
+// no card itself. This plugin provides the eleven built-in
+// kinds (Text, Shape, Image, UrlCard, PdfCard, FileCard,
+// Swatch, Audio, Video, Model3D, Stroke) through the same
+// `cards.registerBuiltin`
 // any plugin uses. It is the reference implementation for
 // a card plugin: a plugin that replaces a built-in kind is
 // built the same way, registering the same kind name.
@@ -24,7 +25,8 @@
 // renderMarkdownHtml; image/video sources go through
 // fileUrl(), which encodes each path segment.
 import type { PluginContext, PluginManifest } from "../plugins/host";
-import { isInlineVideo, type Item } from "../backend/model";
+import { isInlineVideo, pressureWidth, smoothStrokePressures, smoothStrokeSamples, strokeMaxWidth, strokePressuresVary, type Item } from "../backend/model";
+import { strokePath } from "./board-geometry";
 
 export const manifest: PluginManifest = {
   apiVersion: "2",
@@ -38,6 +40,7 @@ export const manifest: PluginManifest = {
 
 type TextData = { text: string; bold: boolean; size: number; color: string; bg?: string };
 type ShapeData = { shape: string; fill: string; outline?: boolean };
+type StrokeData = { points: { x: number; y: number }[]; color: string; width: number; marker: boolean; pressures?: number[]; pencil?: boolean };
 type ImageData = { path: string };
 type UrlCardData = { url: string; title: string | null; description: string | null; image?: string | null; icon?: string | null; embed?: boolean };
 type PdfCardData = { path: string; size_bytes: number };
@@ -190,6 +193,64 @@ export function activate(api: PluginContext): void {
       const clip = shapeClipPath(shape);
       const clipStyle = clip ? `clip-path:${clip};` : "";
       return `<div class="${c.cls} shape" data-id="${c.id}" style="${c.style}background:transparent;border:none;border-radius:${radius}"><div class="inner" style="background:${fillColor};border-radius:${radius};${clipStyle}width:100%;height:100%"></div></div>`;
+    },
+  });
+
+  // A stroke is a card, not a path in the board SVG: its ink
+  // must stack with the cards around it, not under all of
+  // them. The old renderer drew every stroke into #world,
+  // below #cards, so a dragged group split apart — its shape
+  // cards rose above the cards they passed over (selected
+  // cards stack on top) while its strokes slid underneath.
+  // As a card the stroke takes the same stacking rule, the
+  // same live drag (updateDraggedCards moves it by style),
+  // and the same selection ring as every other card.
+  // The points are absolute world coords, so they are
+  // rebased to the stroke's own bounding box — never to
+  // item.pos, which plain rendering zeroes — and the svg is
+  // padded by half the widest the stroke gets, so the ink
+  // is not shaved at the box edge. The card itself is
+  // transparent with no border and overflows visibly, like
+  // a shape card; the svg stretches with the card on a live
+  // resize, which is the right preview because resizing
+  // scales the points by the same factor.
+  api.cards.registerBuiltin({
+    kind: "Stroke",
+    title: "Stroke",
+    render: (item, data, plain = false) => {
+      const c = chrome(item, plain);
+      const st = data as StrokeData;
+      const raw = Array.isArray(st.points) ? st.points : [];
+      if (raw.length < 2) return "";
+      const pts = raw.map((p) => ({ x: num(p.x, 0), y: num(p.y, 0) }));
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      for (const p of pts) {
+        if (p.x < minX) minX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y > maxY) maxY = p.y;
+      }
+      const pad = Math.ceil(strokeMaxWidth(st) / 2) + 1;
+      const vw = Math.max(1, maxX - minX) + pad * 2;
+      const vh = Math.max(1, maxY - minY) + pad * 2;
+      const local = pts.map((p) => ({ x: p.x - minX + pad, y: p.y - minY + pad }));
+      const color = safeColor(st.color, "#1A1A1A");
+      const marker = st.marker ? ` opacity="0.45"` : "";
+      let inner = "";
+      if (st.pencil) inner += `<g filter="url(#pencil-texture)">`;
+      if (st.pressures && strokePressuresVary(st)) {
+        const spts = smoothStrokeSamples(local);
+        const sprs = smoothStrokePressures(st.pressures);
+        for (let i = 0; i + 1 < spts.length; i++) {
+          const w = pressureWidth(st.width, (sprs[i] + sprs[i + 1]) / 2);
+          inner += `<line x1="${spts[i].x}" y1="${spts[i].y}" x2="${spts[i + 1].x}" y2="${spts[i + 1].y}" stroke="${color}" stroke-width="${w}" stroke-linecap="round"${marker} />`;
+        }
+      } else {
+        const d = strokePath(item, local, color, st.width);
+        inner += `<path d="${d}" fill="none" stroke="${color}" stroke-width="${st.width}" stroke-linecap="round" stroke-linejoin="round"${marker} />`;
+      }
+      if (st.pencil) inner += `</g>`;
+      return `<div class="${c.cls} stroke" data-id="${c.id}" style="${c.style}background:transparent;border:none"><svg viewBox="0 0 ${vw} ${vh}" style="position:absolute;left:${-pad}px;top:${-pad}px;width:calc(100% + ${pad * 2}px);height:calc(100% + ${pad * 2}px);overflow:visible" aria-hidden="true">${inner}</svg></div>`;
     },
   });
 
