@@ -1,24 +1,45 @@
 import { describe, expect, it, vi } from "vitest";
-import { editorCandidates, openBoardFile } from "../../electron/open-with";
+import { editorCandidates, openBoardFile, type OpenTarget } from "../../electron/open-with";
+
+const bundle = (id: string): OpenTarget => ({ via: "bundle", id });
+const named = (name: string): OpenTarget => ({ via: "name", name });
 
 describe("editorCandidates", () => {
-  it("lists editors for .psd, in order", () => {
+  it("lists editors for .psd, bundle ids first, in order", () => {
     expect(editorCandidates(".psd")).toEqual([
-      "Adobe Photoshop",
-      "Photoshop",
-      "Affinity Photo",
-      "Pixelmator Pro",
-      "GIMP",
+      bundle("com.adobe.Photoshop"),
+      named("Adobe Photoshop"),
+      bundle("com.seriflabs.affinityphoto2"),
+      named("Affinity Photo 2"),
+      bundle("com.seriflabs.affinityphoto"),
+      named("Affinity Photo"),
+      named("Affinity"),
+      bundle("com.pixelmatorteam.pixelmator"),
+      named("Pixelmator Pro"),
+      named("GIMP"),
     ]);
   });
 
   it("lists editors for .ai, in order", () => {
     expect(editorCandidates(".ai")).toEqual([
-      "Adobe Illustrator",
-      "Illustrator",
-      "Affinity Designer",
-      "Inkscape",
+      bundle("com.adobe.Illustrator"),
+      named("Adobe Illustrator"),
+      bundle("com.seriflabs.affinitydesigner2"),
+      named("Affinity Designer 2"),
+      bundle("com.seriflabs.affinitydesigner"),
+      named("Affinity Designer"),
+      named("Affinity"),
+      named("Inkscape"),
     ]);
+  });
+
+  it("covers the versioned Affinity names, not just the bare ones", () => {
+    const psd = editorCandidates(".psd");
+    expect(psd).toContainEqual(named("Affinity Photo 2"));
+    expect(psd).toContainEqual(bundle("com.seriflabs.affinityphoto2"));
+    const ai = editorCandidates(".ai");
+    expect(ai).toContainEqual(named("Affinity Designer 2"));
+    expect(ai).toContainEqual(bundle("com.seriflabs.affinitydesigner2"));
   });
 
   it("has no editors for other formats", () => {
@@ -37,7 +58,7 @@ describe("openBoardFile", () => {
     const out = await openBoardFile(file, { platform: "darwin", runOpen, openDefault });
     expect(out).toBe("");
     expect(runOpen).toHaveBeenCalledTimes(1);
-    expect(runOpen).toHaveBeenCalledWith("Adobe Photoshop", file);
+    expect(runOpen).toHaveBeenCalledWith(bundle("com.adobe.Photoshop"), file);
     expect(openDefault).not.toHaveBeenCalled();
   });
 
@@ -49,7 +70,7 @@ describe("openBoardFile", () => {
     const openDefault = vi.fn().mockResolvedValue("");
     await openBoardFile(file, { platform: "darwin", runOpen, openDefault });
     expect(runOpen).toHaveBeenCalledTimes(2);
-    expect(runOpen).toHaveBeenNthCalledWith(2, "Photoshop", file);
+    expect(runOpen).toHaveBeenNthCalledWith(2, named("Adobe Photoshop"), file);
     expect(openDefault).not.toHaveBeenCalled();
   });
 
@@ -58,7 +79,7 @@ describe("openBoardFile", () => {
     const openDefault = vi.fn().mockResolvedValue("opened-by-default");
     const out = await openBoardFile(file, { platform: "darwin", runOpen, openDefault });
     expect(out).toBe("opened-by-default");
-    expect(runOpen).toHaveBeenCalledTimes(5);
+    expect(runOpen).toHaveBeenCalledTimes(10);
     expect(openDefault).toHaveBeenCalledTimes(1);
     expect(openDefault).toHaveBeenCalledWith(file);
   });
@@ -67,7 +88,7 @@ describe("openBoardFile", () => {
     const runOpen = vi.fn().mockResolvedValue(undefined);
     const openDefault = vi.fn();
     await openBoardFile("/boards/main/File.PSD", { platform: "darwin", runOpen, openDefault });
-    expect(runOpen).toHaveBeenCalledWith("Adobe Photoshop", "/boards/main/File.PSD");
+    expect(runOpen).toHaveBeenCalledWith(bundle("com.adobe.Photoshop"), "/boards/main/File.PSD");
   });
 
   it("uses the default directly on other platforms", async () => {
