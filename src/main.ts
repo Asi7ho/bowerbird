@@ -235,7 +235,7 @@ function applyPatch(it: Item, patch: { pos?: Pt; size?: Size; group?: number | n
 function renderCardHtml(id: number, plain: boolean): string | null {
   const it = boardGet(C.board, id);
   if (!it) return null;
-  if ("Stroke" in it.kind || "Connector" in it.kind) return null;
+  if ("Connector" in it.kind) return null;
   const html = C.cards.cardHtml(plain ? { ...it, pos: { x: 0, y: 0 } } : it, plain);
   return html === "" ? null : html;
 }

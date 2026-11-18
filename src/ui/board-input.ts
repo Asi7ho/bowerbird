@@ -70,7 +70,8 @@ export function updateEraserRing(clientX: number, clientY: number, show: boolean
 // changed. The board is not saved here: the drag saves
 // once, on mouseup, so a whole sweep is one undo step —
 // the new pieces are added silent, like the removed
-// stroke was, and only the SVG layer is rebuilt.
+// stroke was, and the board re-renders so the split
+// pieces (cards now, not SVG paths) show at once.
 export function eraseAt(world: Pt): boolean {
   const ids = S.api.board.strokesNear(world, ERASER_RADIUS);
   if (ids.length === 0) return false;
@@ -92,7 +93,7 @@ export function eraseAt(world: Pt): boolean {
     }
     changed = true;
   }
-  if (changed) renderSvgOnly();
+  if (changed) render();
   return changed;
 }
 
@@ -907,23 +908,20 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
     S.api.board.moveItems(S.api.board.getSelected(), dx, dy);
     S.drag.lastWorld = world;
     updateDraggedCards(S.api.board.getSelected());
-    // Strokes do not move when a card moves, so the SVG layer
-    // only changes when a connector follows a dragged card.
-    // Skipping the redraw on a board with no connectors also
-    // skips the full api.board.get() deep copy renderSvgOnly
-    // does on every pointermove. (cachedBoard is set on every
-    // render; if it is somehow null, redraw as before.)
+    // Strokes are cards now, so they move with the rest of
+    // the selection through updateDraggedCards; the SVG
+    // layer only changes when a connector follows a dragged
+    // card. Skipping the redraw on a board with no
+    // connectors also skips the full api.board.get() deep
+    // copy renderSvgOnly does on every pointermove.
+    // (cachedBoard is set on every render; if it is
+    // somehow null, redraw as before.)
     if (!S.cachedBoard || S.cachedBoard.items.some((it) => "Connector" in it.kind)) renderSvgOnly();
     updateResizeHandle();
   } else if (S.drag.kind === "resize") {
-    const it = S.api.board.getItem(S.drag.id);
     S.api.board.resizeItem(S.drag.id, S.drag.origW + (world.x - S.drag.startWorld.x), S.drag.origH + (world.y - S.drag.startWorld.y));
     if (Math.hypot(world.x - S.drag.startWorld.x, world.y - S.drag.startWorld.y) > 2) S.drag.moved = true;
     updateDraggedCards([S.drag.id]);
-    // Strokes have no card element to resize live, so rebuild
-    // the SVG layer instead: the stroke visibly follows the
-    // handle, like a card does. Same as the rotate drag below.
-    if (it && "Stroke" in it.kind) renderSvgOnly();
     updateResizeHandle();
   } else if (S.drag.kind === "stroke") {
     const cam = S.api.view.getCamera();
@@ -992,10 +990,6 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
       S.api.board.setItemRotation(S.drag.id, rot);
       const el = S.cardsEl.querySelector(`[data-id="${S.drag.id}"]`) as HTMLElement | null;
       if (el) el.style.transform = rot ? `rotate(${rot}deg)` : "";
-      // Strokes have no card element to transform live,
-      // so rebuild the SVG layer instead: the stroke
-      // visibly follows the handle, like a card does.
-      if ("Stroke" in it.kind) renderSvgOnly();
       updateResizeHandle();
     }
   } else if (S.drag.kind === "marquee") {
