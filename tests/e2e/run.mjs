@@ -1266,29 +1266,20 @@ async function main() {
       await new Promise((r) => setTimeout(r, 500));
       const canvas = page.locator(`#cards .card[data-id="${modelId}"] canvas.model3d`).first();
       await canvas.waitFor({ timeout: READY_TIMEOUT_MS });
-      // The model is drawn by the one shared WebGL layer
-      // (#model3d-layer), not the card's own canvas, so
-      // sample the layer at the card's screen rect. Read
-      // the layer through a 2D canvas (it sets
-      // preserveDrawingBuffer so this is reliable). The
+      // The model lives in the card's own canvas now (the
+      // shared layer renders offscreen and each frame is
+      // copied there), so sample the canvas directly. The
       // cube is blue; the card background is light grey,
       // where the channels are nearly equal.
       const sample = () => page.evaluate((mid) => {
-        const layer = document.querySelector("#model3d-layer");
         const cv = document.querySelector(`#cards .card[data-id="${mid}"] canvas.model3d`);
-        if (!layer || !cv) return null;
-        const r = cv.getBoundingClientRect();
-        const lr = layer.getBoundingClientRect();
-        const dpr = layer.width / lr.width;
-        const c = document.createElement("canvas");
-        c.width = layer.width; c.height = layer.height;
-        const x = c.getContext("2d");
+        if (!cv) return null;
+        const x = cv.getContext("2d");
         if (!x) return null;
-        x.drawImage(layer, 0, 0);
         const pts = [];
         for (const [fx, fy] of [[0.5, 0.5], [0.25, 0.5], [0.75, 0.5], [0.5, 0.25], [0.5, 0.75]]) {
-          const bx = Math.floor((r.x - lr.x + r.width * fx) * dpr);
-          const by = Math.floor((r.y - lr.y + r.height * fy) * dpr);
+          const bx = Math.floor(cv.width * fx);
+          const by = Math.floor(cv.height * fy);
           const d = x.getImageData(bx, by, 1, 1).data;
           pts.push([d[0], d[1], d[2]]);
         }
@@ -1375,29 +1366,23 @@ async function main() {
       // The blue silhouette's bounding box over the card
       // rect, in card-local CSS pixels, plus how many grid
       // points hit the cube. Null when the cube is not
-      // visible. Same layer readback as the render check.
+      // visible. The model lives in the card's own canvas
+      // now, so read it directly — no layer readback.
       const bbox = () => page.evaluate((mid) => {
-        const layer = document.querySelector("#model3d-layer");
         const cv = document.querySelector(`#cards .card[data-id="${mid}"] canvas.model3d`);
-        if (!layer || !cv) return null;
-        const r = cv.getBoundingClientRect();
-        const lr = layer.getBoundingClientRect();
-        const dpr = layer.width / lr.width;
-        const c = document.createElement("canvas");
-        c.width = layer.width; c.height = layer.height;
-        const x = c.getContext("2d");
+        if (!cv) return null;
+        const x = cv.getContext("2d");
         if (!x) return null;
-        x.drawImage(layer, 0, 0);
         const COLS = 28, ROWS = 20;
         let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, n = 0;
         for (let i = 0; i < COLS; i++) {
           for (let j = 0; j < ROWS; j++) {
             const fx = (i + 0.5) / COLS, fy = (j + 0.5) / ROWS;
-            const bx = Math.floor((r.x - lr.x + r.width * fx) * dpr);
-            const by = Math.floor((r.y - lr.y + r.height * fy) * dpr);
+            const bx = Math.floor(cv.width * fx);
+            const by = Math.floor(cv.height * fy);
             const d = x.getImageData(bx, by, 1, 1).data;
             if (d[3] > 10 && d[2] > d[0] + 30 && d[2] > 80) {
-              const px = r.width * fx, py = r.height * fy;
+              const px = cv.clientWidth * fx, py = cv.clientHeight * fy;
               if (px < x0) x0 = px; if (px > x1) x1 = px;
               if (py < y0) y0 = py; if (py > y1) y1 = py;
               n++;
@@ -1414,21 +1399,14 @@ async function main() {
       // box, whose edges move only a few screen pixels at
       // fit zoom.
       const sample5 = () => page.evaluate((mid) => {
-        const layer = document.querySelector("#model3d-layer");
         const cv = document.querySelector(`#cards .card[data-id="${mid}"] canvas.model3d`);
-        if (!layer || !cv) return null;
-        const r = cv.getBoundingClientRect();
-        const lr = layer.getBoundingClientRect();
-        const dpr = layer.width / lr.width;
-        const c = document.createElement("canvas");
-        c.width = layer.width; c.height = layer.height;
-        const x = c.getContext("2d");
+        if (!cv) return null;
+        const x = cv.getContext("2d");
         if (!x) return null;
-        x.drawImage(layer, 0, 0);
         const pts = [];
         for (const [fx, fy] of [[0.5, 0.5], [0.25, 0.5], [0.75, 0.5], [0.5, 0.25], [0.5, 0.75]]) {
-          const bx = Math.floor((r.x - lr.x + r.width * fx) * dpr);
-          const by = Math.floor((r.y - lr.y + r.height * fy) * dpr);
+          const bx = Math.floor(cv.width * fx);
+          const by = Math.floor(cv.height * fy);
           const d = x.getImageData(bx, by, 1, 1).data;
           pts.push([d[0], d[1], d[2]]);
         }
@@ -1497,6 +1475,98 @@ async function main() {
       assert.ok(back, "the fit button re-framed the model (pixels back)");
     });
 
+    await check("a card over a 3D card covers the cube", async () => {
+      // The model lives in its card's own canvas now, so a
+      // card over it must cover it — the way it covers any
+      // card. Before, the shared layer sat above every card
+      // and the cube floated over the covering card. This
+      // reads the composite (a screenshot), not the DOM:
+      // the old layer was pointer-events:none, so
+      // elementFromPoint would have called the covering
+      // card "on top" even while the cube showed through.
+      const board = readBoard();
+      const model = [...board.items].reverse().find((it) => it.kind.Model3D);
+      assert.ok(model, "a 3D card is on the board");
+      // Screenshot a clip to pixels: decode it in the page
+      // (an Image drawn to a canvas) and sample points.
+      const shot = async (clip) => {
+        const buf = await page.screenshot({ clip });
+        return page.evaluate(async (url) => {
+          const img = new Image();
+          await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+          const c = document.createElement("canvas");
+          c.width = img.width; c.height = img.height;
+          const x = c.getContext("2d");
+          if (!x) return null;
+          x.drawImage(img, 0, 0);
+          const pts = [];
+          for (const [fx, fy] of [[0.5, 0.5], [0.25, 0.5], [0.75, 0.5], [0.5, 0.25], [0.5, 0.75]]) {
+            const d = x.getImageData(Math.floor(c.width * fx), Math.floor(c.height * fy), 1, 1).data;
+            pts.push([d[0], d[1], d[2]]);
+          }
+          return pts;
+        }, "data:image/png;base64," + buf.toString("base64"));
+      };
+      const isBlue = (p) => p[2] > p[0] + 30 && p[2] > 80;
+      // The fit check left the model selected, and
+      // selection brings a card to the front — so the
+      // covering card would land underneath it. Escape
+      // clears the selection (a second press if the search
+      // box had text, which Escape clears first), so the
+      // cover is the top card by plain stacking order.
+      // This replaces clicking an empty spot: cards are
+      // pointer-events:none, so elementFromPoint can call
+      // a point "empty" while the board's geometric
+      // hit-test selects the card under it — which is how
+      // this timed out on CI's narrower window even with
+      // a retry.
+      let deselected = false;
+      for (let attempt = 0; attempt < 2 && !deselected; attempt++) {
+        await page.keyboard.press("Escape");
+        await new Promise((r) => setTimeout(r, 200));
+        deselected = await page.evaluate(() => document.querySelectorAll("#cards .card.selected").length === 0);
+      }
+      assert.ok(deselected, "the model deselected before covering");
+      await page.keyboard.press("f");
+      await new Promise((r) => setTimeout(r, 500));
+      const rect = await page.evaluate((mid) => {
+        const el = document.querySelector(`#cards .card[data-id="${mid}"]`);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { x: r.x, y: r.y, width: r.width, height: r.height };
+      }, String(model.id));
+      assert.ok(rect, "the 3D card is on screen");
+      // Baseline: the cube is visible at the card's centre.
+      const before = await shot(rect);
+      assert.ok(before && before.some(isBlue), "the cube shows before it is covered");
+      // Cover the whole card with a filled rectangle.
+      let id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
+      const coverId = id;
+      board.items.push({ id, pos: { x: model.pos.x, y: model.pos.y }, size: { w: 360, h: 300 }, group: null, kind: { Shape: { shape: "rect", fill: "#FFCC00" } } });
+      board.next_id = id + 1;
+      const tmp2 = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp2, JSON.stringify(board));
+      fs.renameSync(tmp2, boardPath);
+      await waitFor("cover card rendered", async () => {
+        const n = await page.evaluate((cid) => document.querySelector(`#cards .card[data-id="${cid}"]`) ? true : null, String(coverId));
+        return n;
+      });
+      await new Promise((r) => setTimeout(r, 500));
+      // The cube must be gone from the composite: the
+      // centre is the cover's yellow now, not the cube.
+      const after = await shot(rect);
+      assert.ok(after && !after.some(isBlue), "the covering card hides the cube");
+      // Take the cover back off, so later checks start clean.
+      const board2 = readBoard();
+      board2.items = board2.items.filter((it) => it.id !== coverId);
+      fs.writeFileSync(tmp2, JSON.stringify(board2));
+      fs.renameSync(tmp2, boardPath);
+      await waitFor("cover card removed", async () => {
+        const gone = await page.evaluate((cid) => document.querySelector(`#cards .card[data-id="${cid}"]`) ? null : true, String(coverId));
+        return gone;
+      });
+    });
+
     await check("more than 16 3D models all render (shared renderer)", async () => {
       // The old per-card renderer capped at 16 visible
       // models (Chromium's context limit); the 17th went
@@ -1528,30 +1598,23 @@ async function main() {
       });
       await page.keyboard.press("f");
       await new Promise((r) => setTimeout(r, 500));
-      const count = await page.evaluate(() => document.querySelectorAll("#model3d-layer").length);
-      assert.strictEqual(count, 1, "exactly one shared WebGL layer");
+      // No layer to count any more: the shared canvas is
+      // offscreen and the models live in their own cards.
+      // The check that matters is that every model's centre
+      // pixel is the cube's blue — a per-card renderer
+      // would have given up at 17 contexts.
       // Poll until every model's centre pixel is the cube's
       // blue (or time out): SwiftShader renders slowly.
       let rendered = 0;
       for (let i = 0; i < 60; i++) {
         rendered = await page.evaluate((mids) => {
-          const layer = document.querySelector("#model3d-layer");
-          if (!layer) return 0;
-          const lr = layer.getBoundingClientRect();
-          const dpr = layer.width / lr.width;
-          const c = document.createElement("canvas");
-          c.width = layer.width; c.height = layer.height;
-          const x = c.getContext("2d");
-          if (!x) return 0;
-          x.drawImage(layer, 0, 0);
           let n = 0;
           for (const mid of mids) {
             const cv = document.querySelector(`#cards .card[data-id="${mid}"] canvas.model3d`);
             if (!cv) continue;
-            const r = cv.getBoundingClientRect();
-            const bx = Math.floor((r.x - lr.x + r.width / 2) * dpr);
-            const by = Math.floor((r.y - lr.y + r.height / 2) * dpr);
-            const d = x.getImageData(bx, by, 1, 1).data;
+            const x = cv.getContext("2d");
+            if (!x) continue;
+            const d = x.getImageData(Math.floor(cv.width / 2), Math.floor(cv.height / 2), 1, 1).data;
             if (d[2] > d[0] + 30 && d[2] > 80) n++;
           }
           return n;
