@@ -66,7 +66,7 @@ export function handleAppFileRequest(request: Request, deps: AppFileDeps): Respo
     // copy is never overridden: if the user replaced a
     // welcome file with their own image of the same name,
     // that file is the one served.
-    const WELCOME = ["welcome-bower.jpg", "welcome-birdsong.mp3", "welcome-video.mp4", "sample.pdf", "welcome-cube.glb", "sample.psd", "sample.ai", "welcome-psd-preview.png", "welcome-ai-preview.png"];
+    const WELCOME = ["welcome-bower.jpg", "welcome-birdsong.mp3", "welcome-video.mp4", "sample.pdf", "welcome-cube.glb", "welcome-garden.psd", "welcome-heron.ai", "welcome-garden-preview.png", "welcome-heron-preview.png"];
     let servePath = filePath;
     if (WELCOME.includes(path.basename(filePath))) {
       let boardSize = -1;

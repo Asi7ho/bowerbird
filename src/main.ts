@@ -415,7 +415,7 @@ async function init(): Promise<void> {
     // on every load, and it works even if the board
     // folder itself is the wrong or broken one.
     try {
-      const WELCOME = ["welcome-bower.jpg", "welcome-birdsong.mp3", "welcome-video.mp4", "sample.pdf", "welcome-cube.glb", "sample.psd", "sample.ai", "welcome-psd-preview.png", "welcome-ai-preview.png"];
+      const WELCOME = ["welcome-bower.jpg", "welcome-birdsong.mp3", "welcome-video.mp4", "sample.pdf", "welcome-cube.glb", "welcome-garden.psd", "welcome-heron.ai", "welcome-garden-preview.png", "welcome-heron-preview.png"];
       let healed = false;
       for (const it of C.board.items) {
         // A FileCard holds two paths (source + preview); every

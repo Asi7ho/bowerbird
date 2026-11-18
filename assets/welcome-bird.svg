@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="360" height="260" viewBox="0 0 360 260">
+  <!-- A bird on a blossoming branch. Flat shapes only: ellipses and
+       circles become Shape cards, lines and paths become Strokes.
+       Drawn in the app's own palette, so it sits naturally on the
+       board next to the photo and the article. -->
+  <circle cx="316" cy="36" r="20" fill="#FFD700"/>
+  <path d="M 12 218 C 110 196, 230 208, 352 172" fill="none" stroke="#7A5230" stroke-width="6"/>
+  <ellipse cx="88" cy="204" rx="14" ry="6" fill="#2A6D09" transform="rotate(-28 88 204)"/>
+  <ellipse cx="176" cy="200" rx="14" ry="6" fill="#2A6D09" transform="rotate(18 176 200)"/>
+  <ellipse cx="262" cy="192" rx="14" ry="6" fill="#2A6D09" transform="rotate(-22 262 192)"/>
+  <ellipse cx="322" cy="178" rx="12" ry="5" fill="#2A6D09" transform="rotate(14 322 178)"/>
+  <line x1="64" y1="187" x2="62" y2="207" stroke="#2A6D09" stroke-width="2"/>
+  <circle cx="64" cy="174" r="5.5" fill="#F4A7B9"/>
+  <circle cx="56.4" cy="179.5" r="5.5" fill="#F4A7B9"/>
+  <circle cx="59.3" cy="188.5" r="5.5" fill="#F4A7B9"/>
+  <circle cx="68.7" cy="188.5" r="5.5" fill="#F4A7B9"/>
+  <circle cx="71.6" cy="179.5" r="5.5" fill="#F4A7B9"/>
+  <circle cx="64" cy="182" r="3" fill="#FFD700"/>
+  <line x1="300" y1="164" x2="300" y2="184" stroke="#2A6D09" stroke-width="2"/>
+  <circle cx="300" cy="150" r="5.5" fill="#F4A7B9"/>
+  <circle cx="292.4" cy="155.5" r="5.5" fill="#F4A7B9"/>
+  <circle cx="295.3" cy="164.5" r="5.5" fill="#F4A7B9"/>
+  <circle cx="304.7" cy="164.5" r="5.5" fill="#F4A7B9"/>
+  <circle cx="307.6" cy="155.5" r="5.5" fill="#F4A7B9"/>
+  <circle cx="300" cy="158" r="3" fill="#FFD700"/>
+  <circle cx="140" cy="198" r="4" fill="#F4A7B9"/>
+  <circle cx="240" cy="190" r="4" fill="#F4A7B9"/>
+  <circle cx="330" cy="150" r="3.5" fill="#F4A7B9"/>
+  <g>
+    <rect x="116" y="166" width="54" height="13" fill="#2A9D8F" transform="rotate(16 143 172)"/>
+    <ellipse cx="204" cy="156" rx="52" ry="38" fill="#2A9D8F"/>
+    <ellipse cx="196" cy="160" rx="28" ry="16" fill="#2E86AB" transform="rotate(-16 196 160)"/>
+    <circle cx="247" cy="120" r="24" fill="#2A9D8F"/>
+    <circle cx="254" cy="115" r="4" fill="#1A1A1A"/>
+    <circle cx="255.5" cy="113.5" r="1.5" fill="#FFFFFF"/>
+    <rect x="268" y="116" width="17" height="8" fill="#FF6B35" transform="rotate(6 268 120)"/>
+    <line x1="202" y1="190" x2="200" y2="202" stroke="#1A1A1A" stroke-width="3"/>
+    <line x1="216" y1="190" x2="218" y2="202" stroke="#1A1A1A" stroke-width="3"/>
+  </g>
+</svg>
