@@ -1567,6 +1567,101 @@ async function main() {
       });
     });
 
+    await check("a selected group's frame stays above a card it passes over", async () => {
+      // The frame lives below the cards at rest, so a card
+      // over its edge covers the dashed line. But a SELECTED
+      // group's frame is mirrored into #selected-groups
+      // above the cards, so the outline travels with the
+      // group instead of diving under the cards it passes
+      // over — the same rule as a selected card, which
+      // stacks on top. This reads the composite (a
+      // screenshot), not the DOM: the frame is
+      // pointer-events:none, so elementFromPoint cannot
+      // tell which layer paints on top.
+      const board = readBoard();
+      let id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
+      const aId = id++, bId = id++, coverId = id++;
+      board.items.push(
+        { id: aId, pos: { x: 100, y: 100 }, size: { w: 120, h: 120 }, group: null, kind: { Shape: { shape: "rect", fill: "#2E86AB" } } },
+        { id: bId, pos: { x: 260, y: 100 }, size: { w: 120, h: 120 }, group: null, kind: { Shape: { shape: "rect", fill: "#E63946" } } },
+        { id: coverId, pos: { x: 200, y: 150 }, size: { w: 200, h: 200 }, group: null, kind: { Shape: { shape: "rect", fill: "#FFCC00" } } },
+      );
+      board.next_id = id;
+      const tmp2 = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp2, JSON.stringify(board));
+      fs.renameSync(tmp2, boardPath);
+      await waitFor("cover card rendered", async () => {
+        const n = await page.evaluate((cid) => document.querySelector(`#cards .card[data-id="${cid}"]`) ? true : null, String(coverId));
+        return n;
+      });
+      await page.keyboard.press("f");
+      await new Promise((r) => setTimeout(r, 500));
+      const centre = async (cid) => page.evaluate((c) => {
+        const el = document.querySelector(`#cards .card[data-id="${c}"]`);
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      }, String(cid));
+      const ca = await centre(aId);
+      const cb = await centre(bId);
+      assert.ok(ca && cb, "both shapes are on screen");
+      await page.mouse.click(ca.x, ca.y);
+      await page.keyboard.down("Shift");
+      await page.mouse.click(cb.x, cb.y);
+      await page.keyboard.up("Shift");
+      await waitFor("two shapes selected", async () => {
+        const n = await page.evaluate(() => document.querySelectorAll("#cards .card.selected").length);
+        return n === 2 ? true : null;
+      });
+      await page.keyboard.press("Control+g");
+      await waitFor("overlay frame in the DOM", async () => {
+        const el = await page.evaluate(() => document.querySelector("#selected-groups .group-frame.selected") ? true : null);
+        return el;
+      });
+      // The frame's bottom edge (world y 244, the union
+      // 100-220 plus 24 of padding) crosses the yellow
+      // cover (200-400 x 150-350). Clip a strip around
+      // that edge, inside the cover, and count the
+      // frame's blue dash pixels in it. The strip holds
+      // nothing else: both shapes end at world y 220,
+      // above the edge.
+      const clip = await page.evaluate((cid) => {
+        const fr = document.querySelector("#selected-groups .group-frame.selected")?.getBoundingClientRect();
+        const cv = document.querySelector(`#cards .card[data-id="${cid}"]`)?.getBoundingClientRect();
+        if (!fr || !cv) return null;
+        const x = Math.max(fr.x, cv.x);
+        const y = fr.y + fr.height - 3;
+        return { x, y, width: Math.min(fr.x + fr.width, cv.x + cv.width) - x, height: 6 };
+      }, String(coverId));
+      assert.ok(clip && clip.width > 0, "frame edge crosses the cover card");
+      const buf = await page.screenshot({ clip });
+      const blue = await page.evaluate(async (url) => {
+        const img = new Image();
+        await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+        const c = document.createElement("canvas");
+        c.width = img.width; c.height = img.height;
+        const x = c.getContext("2d");
+        if (!x) return -1;
+        x.drawImage(img, 0, 0);
+        const d = x.getImageData(0, 0, c.width, c.height).data;
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i + 2] > d[i] + 15 && d[i + 2] > 60) n++;
+        }
+        return n;
+      }, "data:image/png;base64," + buf.toString("base64"));
+      assert.ok(blue > 8, `the selected frame shows over the cover card (blue pixels: ${blue})`);
+      // Take the three cards back off, so later checks start clean.
+      const board2 = readBoard();
+      board2.items = board2.items.filter((it) => it.id !== aId && it.id !== bId && it.id !== coverId);
+      fs.writeFileSync(tmp2, JSON.stringify(board2));
+      fs.renameSync(tmp2, boardPath);
+      await waitFor("frame cards removed", async () => {
+        const gone = await page.evaluate((cid) => document.querySelector(`#cards .card[data-id="${cid}"]`) ? null : true, String(coverId));
+        return gone;
+      });
+    });
+
     await check("more than 16 3D models all render (shared renderer)", async () => {
       // The old per-card renderer capped at 16 visible
       // models (Chromium's context limit); the 17th went

@@ -842,6 +842,24 @@ export function updateDraggedGroupFrames(ids: number[]): void {
       label.style.left = `${b.x + 12}px`;
       label.style.top = `${b.y - 11}px`;
     }
+    // The overlay mirrors the frame and label above the
+    // cards, so it follows the drag too — otherwise the
+    // outline would lag a step behind the group it belongs
+    // to, and snap to place only on the drop's render.
+    if (S.selectedGroupsEl) {
+      const oframe = S.selectedGroupsEl.querySelector(`.group-frame[data-group="${g}"]`) as HTMLElement | null;
+      if (oframe) {
+        oframe.style.left = `${b.x}px`;
+        oframe.style.top = `${b.y}px`;
+        oframe.style.width = `${b.w}px`;
+        oframe.style.height = `${b.h}px`;
+      }
+      const olabel = S.selectedGroupsEl.querySelector(`.group-label[data-group="${g}"]`) as HTMLElement | null;
+      if (olabel) {
+        olabel.style.left = `${b.x + 12}px`;
+        olabel.style.top = `${b.y - 11}px`;
+      }
+    }
   }
 }
 

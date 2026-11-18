@@ -57,9 +57,14 @@ export interface BoardState {
   // The group frames' dashed borders live in their own layer
   // BELOW the cards, so a card placed over a frame's edge
   // covers the border instead of the border painting over
-  // the card. The labels stay in #groups above the cards,
-  // so they keep taking clicks for rename.
+  // the card. The labels live in #groups, also below the
+  // cards, so a note placed over a label covers it the same
+  // way. Both are the resting rule only: a SELECTED group's
+  // frame and label are mirrored into #selected-groups,
+  // above the cards, so the outline travels with the group
+  // instead of diving under the cards it passes over.
   groupFramesEl: HTMLDivElement;
+  selectedGroupsEl: HTMLDivElement;
   // The board as last rendered (a copy from api.board.get()).
   // The render loop reads bg/grid/items from this; the
   // visible-set check reads it too, so panning does not pay
@@ -134,6 +139,7 @@ export const S: BoardState = {
   cardsEl: undefined as unknown as HTMLDivElement,
   groupsEl: undefined as unknown as HTMLDivElement,
   groupFramesEl: undefined as unknown as HTMLDivElement,
+  selectedGroupsEl: undefined as unknown as HTMLDivElement,
   cachedBoard: null,
   cardEls: new Map(),
   lastContentKey: 0,
