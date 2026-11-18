@@ -1347,6 +1347,156 @@ async function main() {
       assert.ok(changed, "dragging the model rotated the view (pixels changed)");
     });
 
+    await check("the fit button re-frames a rotated model", async () => {
+      // The cube is blue; the fit button must bring a
+      // rotated view back to the opening framing. The
+      // opening view is azimuth 0, so fit first (the model
+      // has been turning on its own since it loaded),
+      // measure its silhouette, drag to rotate it, then
+      // fit again and check the silhouette comes back.
+      const assetsDir = path.join(tmp, "assets");
+      fs.mkdirSync(assetsDir, { recursive: true });
+      fs.copyFileSync(path.join(repoRoot, "tests/e2e/fixtures/cube.glb"), path.join(assetsDir, "cube.glb"));
+      const board = readBoard();
+      let id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
+      const modelId = id;
+      board.items.push({ id, pos: { x: 100, y: 1250 }, size: { w: 360, h: 300 }, group: null, kind: { Model3D: { path: path.join(assetsDir, "cube.glb"), size_bytes: 1472 } } });
+      board.next_id = id + 1;
+      const tmp2 = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp2, JSON.stringify(board));
+      fs.renameSync(tmp2, boardPath);
+      await new Promise((r) => setTimeout(r, 1200));
+      await page.keyboard.press("f");
+      await new Promise((r) => setTimeout(r, 500));
+      const canvas = page.locator(`#cards .card[data-id="${modelId}"] canvas.model3d`).first();
+      await canvas.waitFor({ timeout: READY_TIMEOUT_MS });
+      const fitBtn = page.locator(`#cards .card[data-id="${modelId}"] .model3d-fit`).first();
+      await fitBtn.waitFor({ timeout: READY_TIMEOUT_MS });
+      // The blue silhouette's bounding box over the card
+      // rect, in card-local CSS pixels, plus how many grid
+      // points hit the cube. Null when the cube is not
+      // visible. Same layer readback as the render check.
+      const bbox = () => page.evaluate((mid) => {
+        const layer = document.querySelector("#model3d-layer");
+        const cv = document.querySelector(`#cards .card[data-id="${mid}"] canvas.model3d`);
+        if (!layer || !cv) return null;
+        const r = cv.getBoundingClientRect();
+        const lr = layer.getBoundingClientRect();
+        const dpr = layer.width / lr.width;
+        const c = document.createElement("canvas");
+        c.width = layer.width; c.height = layer.height;
+        const x = c.getContext("2d");
+        if (!x) return null;
+        x.drawImage(layer, 0, 0);
+        const COLS = 28, ROWS = 20;
+        let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, n = 0;
+        for (let i = 0; i < COLS; i++) {
+          for (let j = 0; j < ROWS; j++) {
+            const fx = (i + 0.5) / COLS, fy = (j + 0.5) / ROWS;
+            const bx = Math.floor((r.x - lr.x + r.width * fx) * dpr);
+            const by = Math.floor((r.y - lr.y + r.height * fy) * dpr);
+            const d = x.getImageData(bx, by, 1, 1).data;
+            if (d[3] > 10 && d[2] > d[0] + 30 && d[2] > 80) {
+              const px = r.width * fx, py = r.height * fy;
+              if (px < x0) x0 = px; if (px > x1) x1 = px;
+              if (py < y0) y0 = py; if (py > y1) y1 = py;
+              n++;
+            }
+          }
+        }
+        if (n === 0) return null;
+        return { x0, y0, x1, y1, n };
+      }, String(modelId));
+      // Five sample points over the card rect, like the
+      // render check: the RGB at each point. A rotated view
+      // moves the cube's faces across them; a fitted view
+      // puts them back. More sensitive than the silhouette
+      // box, whose edges move only a few screen pixels at
+      // fit zoom.
+      const sample5 = () => page.evaluate((mid) => {
+        const layer = document.querySelector("#model3d-layer");
+        const cv = document.querySelector(`#cards .card[data-id="${mid}"] canvas.model3d`);
+        if (!layer || !cv) return null;
+        const r = cv.getBoundingClientRect();
+        const lr = layer.getBoundingClientRect();
+        const dpr = layer.width / lr.width;
+        const c = document.createElement("canvas");
+        c.width = layer.width; c.height = layer.height;
+        const x = c.getContext("2d");
+        if (!x) return null;
+        x.drawImage(layer, 0, 0);
+        const pts = [];
+        for (const [fx, fy] of [[0.5, 0.5], [0.25, 0.5], [0.75, 0.5], [0.5, 0.25], [0.5, 0.75]]) {
+          const bx = Math.floor((r.x - lr.x + r.width * fx) * dpr);
+          const by = Math.floor((r.y - lr.y + r.height * fy) * dpr);
+          const d = x.getImageData(bx, by, 1, 1).data;
+          pts.push([d[0], d[1], d[2]]);
+        }
+        return pts;
+      }, String(modelId));
+      const differs = (a, b) =>
+        a.some((p, j) => {
+          const q = b[j];
+          return Math.abs(p[0] - q[0]) + Math.abs(p[1] - q[1]) + Math.abs(p[2] - q[2]) > 30;
+        });
+      // Wait for the cube to appear (same slow first load
+      // as the render check — up to 30s under SwiftShader).
+      let seen = null;
+      for (let i = 0; i < 60; i++) {
+        seen = await bbox();
+        if (seen) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      assert.ok(seen, "the model rendered");
+      // Force the opening view (azimuth 0): the model has
+      // been turning since it loaded, so its angle is
+      // unknown until a fit.
+      await fitBtn.click();
+      let fitted0 = null;
+      for (let i = 0; i < 8; i++) {
+        fitted0 = await sample5();
+        if (fitted0) break;
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      assert.ok(fitted0, "view readable after the first fit");
+      // Drag to rotate: the view must move.
+      let box = null;
+      for (let i = 0; i < 20; i++) {
+        box = await canvas.boundingBox();
+        if (box) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      assert.ok(box, "model canvas on screen");
+      const cx = box.x + box.width / 2;
+      const cy = box.y + box.height / 2;
+      await page.mouse.move(cx, cy);
+      await page.mouse.down();
+      await page.mouse.move(cx + 120, cy, { steps: 10 });
+      await page.mouse.up();
+      let rotated = null;
+      let didRotate = false;
+      for (let i = 0; i < 20; i++) {
+        rotated = await sample5();
+        if (rotated && differs(rotated, fitted0)) { didRotate = true; break; }
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      assert.ok(rotated, "view readable after the drag");
+      assert.ok(didRotate, "dragging rotated the view (pixels changed)");
+      // Fit again: the view must come back to the opening
+      // framing. Poll briefly — the fit also restarts the
+      // idle clock, so the model holds still for 3s.
+      await fitBtn.click();
+      let fitted1 = null;
+      let back = false;
+      for (let i = 0; i < 8; i++) {
+        fitted1 = await sample5();
+        if (fitted1 && !differs(fitted1, fitted0)) { back = true; break; }
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      assert.ok(fitted1, "view readable after the second fit");
+      assert.ok(back, "the fit button re-framed the model (pixels back)");
+    });
+
     await check("more than 16 3D models all render (shared renderer)", async () => {
       // The old per-card renderer capped at 16 visible
       // models (Chromium's context limit); the 17th went
