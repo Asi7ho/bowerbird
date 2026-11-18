@@ -437,6 +437,19 @@ export function syncModel3DViews(
       views.delete(id);
     }
   }
+  if (views.size === 0 && renderer && sharedCanvas) {
+    // The loop stops when there are no views, so nothing
+    // clears the layer again: wipe the last frame here, or
+    // the deleted card's model lingers on the shared layer
+    // (preserveDrawingBuffer keeps it on screen).
+    const bw = board.clientWidth;
+    const bh = board.clientHeight;
+    if (bw > 0 && bh > 0) {
+      renderer.setScissorTest(false);
+      renderer.setViewport(0, 0, bw, bh);
+      renderer.clear();
+    }
+  }
   kickLoop();
 }
 
