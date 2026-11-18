@@ -40,5 +40,10 @@
   "overrides": {
     "sharp": "0.35.5",
     "protobufjs": "7.6.6"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "fsevents@2.3.3": true,
+    "protobufjs@7.6.6": true
   }
 }
