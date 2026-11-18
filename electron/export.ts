@@ -43,8 +43,9 @@ interface AssetRef {
   value: string;
 }
 
-// The asset paths a board carries: Image, Audio, PDF and 3D
-// cards hold a path; a video holds a source when it is local
+// The asset paths a board carries: Image, Audio, PDF, 3D and
+// FileCard cards hold a path (a FileCard also holds a preview);
+// a video holds a source when it is local
 // (remote videos are URLs, not files) and a poster frame.
 // A path is an asset only when it is a string; anything else
 // is a corrupt field and is left alone.
@@ -67,6 +68,8 @@ function boardAssetRefs(board: unknown): AssetRef[] {
     push(k.Audio, "path");
     push(k.PdfCard, "path");
     push(k.Model3D, "path");
+    push(k.FileCard, "path");
+    push(k.FileCard, "preview");
     if (typeof k.Video === "object" && k.Video !== null) {
       const v = k.Video as Record<string, unknown>;
       if (v.remote !== true) push(v, "source");

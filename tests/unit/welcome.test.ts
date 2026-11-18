@@ -1,33 +1,34 @@
 // Unit tests for the welcome board (src/backend/welcome.ts):
-// a pure function of (boardDir, pdfSize, videoSize, modelSize), so these
+// a pure function of (boardDir, pdfSize, videoSize, modelSize, psdSize, aiSize), so these
 // run in plain vitest on every push and PR.
 import { describe, expect, it } from "vitest";
 import { welcomeBoard } from "../../src/backend/welcome";
 
 describe("welcomeBoard", () => {
   it("is deterministic for the same inputs", () => {
-    expect(welcomeBoard("/b", 111, 222, 333)).toEqual(welcomeBoard("/b", 111, 222, 333));
+    expect(welcomeBoard("/b", 111, 222, 333, 444, 555)).toEqual(welcomeBoard("/b", 111, 222, 333, 444, 555));
   });
 
   it("shows every capability once, with sequential ids", () => {
-    const board = welcomeBoard("/b", 111, 222, 333);
-    expect(board.items).toHaveLength(37);
-    expect(board.items.map((it) => it.id)).toEqual(Array.from({ length: 37 }, (_, i) => i + 1));
-    expect(board.next_id).toBe(37);
+    const board = welcomeBoard("/b", 111, 222, 333, 444, 555);
+    expect(board.items).toHaveLength(29);
+    expect(board.items.map((it) => it.id)).toEqual(Array.from({ length: 29 }, (_, i) => i + 1));
+    expect(board.next_id).toBe(29);
     expect(board.next_group).toBe(2);
     const kinds = board.items.map((it) => Object.keys(it.kind)[0]);
     expect(kinds).toEqual([
       "Text", "Image", "UrlCard", "Swatch", "Swatch", "PdfCard",
       "Audio", "Video", "Text", "Swatch", "Text", "Stroke", "Connector",
-      // Formats section: heading, then SVG, PSD, 3D, .ai.
-      "Text", "Text",
+      // Formats section: heading, then SVG, PSD, AI, 3D — a 2x2 grid.
+      "Text",
+      "Text",
       "Shape", "Shape", "Shape", "Stroke", "Stroke", "Stroke", "Text", "Shape",
       "Text",
-      "Image", "Text", "Image",
+      "FileCard",
+      "Text",
+      "FileCard",
       "Text",
       "Model3D",
-      "Text",
-      "Shape", "Shape", "Stroke", "Text", "Shape", "Image", "Image",
     ]);
     const connector = board.items.find((it) => "Connector" in it.kind);
     expect((connector?.kind as { Connector: { from: { Item: number }; to: { Item: number } } }).Connector).toEqual({
@@ -38,7 +39,7 @@ describe("welcomeBoard", () => {
   });
 
   it("references the board folder and the given sizes", () => {
-    const board = welcomeBoard("/some/dir", 111, 222, 333);
+    const board = welcomeBoard("/some/dir", 111, 222, 333, 444, 555);
     const image = board.items.find((it) => "Image" in it.kind);
     expect((image?.kind as { Image: { path: string } }).Image.path).toBe("/some/dir/welcome-bower.jpg");
     const pdf = board.items.find((it) => "PdfCard" in it.kind);
@@ -57,10 +58,24 @@ describe("welcomeBoard", () => {
       path: "/some/dir/welcome-cube.glb",
       size_bytes: 333,
     });
+    const psd = board.items.find((it) => "FileCard" in it.kind && (it.kind as { FileCard: { format: string } }).FileCard.format === "psd");
+    expect((psd?.kind as { FileCard: { path: string; size_bytes: number; format: string; preview?: string } }).FileCard).toEqual({
+      path: "/some/dir/sample.psd",
+      size_bytes: 444,
+      format: "psd",
+      preview: "/some/dir/welcome-psd-preview.png",
+    });
+    const ai = board.items.find((it) => "FileCard" in it.kind && (it.kind as { FileCard: { format: string } }).FileCard.format === "ai");
+    expect((ai?.kind as { FileCard: { path: string; size_bytes: number; format: string; preview?: string } }).FileCard).toEqual({
+      path: "/some/dir/sample.ai",
+      size_bytes: 555,
+      format: "ai",
+      preview: "/some/dir/welcome-ai-preview.png",
+    });
   });
 
   it("groups exactly the labelled pair", () => {
-    const board = welcomeBoard("/b", 111, 222, 333);
+    const board = welcomeBoard("/b", 111, 222, 333, 444, 555);
     const grouped = board.items.filter((it) => it.group === 1);
     expect(grouped).toHaveLength(2);
     expect(grouped.map((it) => Object.keys(it.kind)[0]).sort()).toEqual(["Swatch", "Text"]);
