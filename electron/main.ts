@@ -337,7 +337,7 @@ function assetsDir(): string {
   return candidates[0];
 }
 
-function installShowcaseAssets(dir: string, force = false): { pdf_size_bytes: number; video_size_bytes: number; model_size_bytes: number; copied: string[]; missing: string[]; srcDir: string; destDir: string } {
+function installShowcaseAssets(dir: string, force = false): { pdf_size_bytes: number; video_size_bytes: number; model_size_bytes: number; psd_size_bytes: number; ai_size_bytes: number; copied: string[]; missing: string[]; srcDir: string; destDir: string } {
   fs.mkdirSync(dir, { recursive: true });
   const src = assetsDir();
   const sizeOf = (file: string): number => { try { return fs.statSync(file).size; } catch { return 0; } };
@@ -352,7 +352,7 @@ function installShowcaseAssets(dir: string, force = false): { pdf_size_bytes: nu
   // file, and the old missing-only check left it broken
   // forever. So copy when missing, when forced (the Restore
   // button), or when the size does not match the bundle.
-  for (const name of ["welcome-bower.jpg", "welcome-birdsong.mp3", "welcome-video.mp4", "sample.pdf", "welcome-cube.glb", "welcome-psd-red.png", "welcome-psd-green.png", "welcome-ai-image.png", "welcome-ai-page.png"]) {
+  for (const name of ["welcome-bower.jpg", "welcome-birdsong.mp3", "welcome-video.mp4", "sample.pdf", "welcome-cube.glb", "sample.psd", "sample.ai", "welcome-psd-preview.png", "welcome-ai-preview.png"]) {
     const srcFile = path.join(src, name);
     const dest = path.join(dir, name);
     if (!fs.existsSync(srcFile)) { missing.push(name); continue; }
@@ -365,6 +365,8 @@ function installShowcaseAssets(dir: string, force = false): { pdf_size_bytes: nu
     pdf_size_bytes: sizeOf(pdf),
     video_size_bytes: sizeOf(path.join(dir, "welcome-video.mp4")),
     model_size_bytes: sizeOf(path.join(dir, "welcome-cube.glb")),
+    psd_size_bytes: sizeOf(path.join(dir, "sample.psd")),
+    ai_size_bytes: sizeOf(path.join(dir, "sample.ai")),
     copied,
     missing,
     srcDir: src,

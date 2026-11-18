@@ -404,7 +404,7 @@ async function init(): Promise<void> {
         healBoardItem(it, measureNoteCardHeight);
       }
     } else {
-      C.board = welcomeBoard(C.boardDir, loaded.pdf_size_bytes, loaded.video_size_bytes ?? 0, loaded.model_size_bytes ?? 0);
+      C.board = welcomeBoard(C.boardDir, loaded.pdf_size_bytes, loaded.video_size_bytes ?? 0, loaded.model_size_bytes ?? 0, loaded.psd_size_bytes ?? 0, loaded.ai_size_bytes ?? 0);
       C.undoStore.save();
     }
     // Self-heal for welcome media: if a welcome item points
@@ -415,33 +415,39 @@ async function init(): Promise<void> {
     // on every load, and it works even if the board
     // folder itself is the wrong or broken one.
     try {
-      const WELCOME = ["welcome-bower.jpg", "welcome-birdsong.mp3", "welcome-video.mp4", "sample.pdf", "welcome-cube.glb", "welcome-psd-red.png", "welcome-psd-green.png", "welcome-ai-image.png", "welcome-ai-page.png"];
+      const WELCOME = ["welcome-bower.jpg", "welcome-birdsong.mp3", "welcome-video.mp4", "sample.pdf", "welcome-cube.glb", "sample.psd", "sample.ai", "welcome-psd-preview.png", "welcome-ai-preview.png"];
       let healed = false;
       for (const it of C.board.items) {
-        const getPath = (): string | null =>
-          ("Image" in it.kind) ? it.kind.Image.path
-          : ("Audio" in it.kind) ? it.kind.Audio.path
-          : ("Video" in it.kind) ? it.kind.Video.source
-          : ("PdfCard" in it.kind) ? it.kind.PdfCard.path
-          : ("Model3D" in it.kind) ? it.kind.Model3D.path : null;
-        const p = getPath();
-        if (!p) continue;
-        const name = p.split("/").pop() ?? "";
-        if (!WELCOME.includes(name)) continue;
-        const info = await api.checkFile(p);
-        if ((info.exists && info.size > 0) || !info.bundleExists || info.bundleSize <= 0) continue;
-        if ("Image" in it.kind) it.kind.Image.path = info.bundlePath;
-        else if ("Audio" in it.kind) it.kind.Audio.path = info.bundlePath;
-        else if ("Video" in it.kind) it.kind.Video.source = info.bundlePath;
-        else if ("PdfCard" in it.kind) it.kind.PdfCard.path = info.bundlePath;
-        else if ("Model3D" in it.kind) it.kind.Model3D.path = info.bundlePath;
-        healed = true;
+        // A FileCard holds two paths (source + preview); every
+        // other welcome card holds one. The kind's data is
+        // captured in a const so the closures below keep the
+        // narrowed type (a closure over it.kind does not).
+        const paths: Array<{ get: () => string; set: (p: string) => void }> = [];
+        if ("Image" in it.kind) { const d = it.kind.Image; paths.push({ get: () => d.path, set: (p: string) => { d.path = p; } }); }
+        else if ("Audio" in it.kind) { const d = it.kind.Audio; paths.push({ get: () => d.path, set: (p: string) => { d.path = p; } }); }
+        else if ("Video" in it.kind) { const d = it.kind.Video; paths.push({ get: () => d.source, set: (p: string) => { d.source = p; } }); }
+        else if ("PdfCard" in it.kind) { const d = it.kind.PdfCard; paths.push({ get: () => d.path, set: (p: string) => { d.path = p; } }); }
+        else if ("Model3D" in it.kind) { const d = it.kind.Model3D; paths.push({ get: () => d.path, set: (p: string) => { d.path = p; } }); }
+        else if ("FileCard" in it.kind) {
+          const fc = it.kind.FileCard;
+          paths.push({ get: () => fc.path, set: (p: string) => { fc.path = p; } });
+          if (fc.preview) paths.push({ get: () => fc.preview as string, set: (p: string) => { fc.preview = p; } });
+        }
+        for (const { get, set } of paths) {
+          const p = get();
+          const name = p.split("/").pop() ?? "";
+          if (!WELCOME.includes(name)) continue;
+          const info = await api.checkFile(p);
+          if ((info.exists && info.size > 0) || !info.bundleExists || info.bundleSize <= 0) continue;
+          set(info.bundlePath);
+          healed = true;
+        }
       }
       if (healed) C.undoStore.saveWithoutUndo();
     } catch { /* a failed heal must never block startup */ }
   } catch (err) {
     toast(`Could not load the board: ${String(err)}`);
-    C.board = welcomeBoard(C.boardDir, 0, 0, 0);
+    C.board = welcomeBoard(C.boardDir, 0, 0, 0, 0, 0);
   }
   // The loaded board is the first undo baseline: nothing before
   // it is undoable, and the first saved change pushes it as step 1.

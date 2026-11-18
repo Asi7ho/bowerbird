@@ -4,13 +4,13 @@
 // interaction state, no DOM and no plugin wiring. It
 // takes the board folder as a parameter, instead of
 // reading the core's boardDir global, so it is a pure
-// function of (boardDir, pdfSize, videoSize, modelSize) — same
+// function of (boardDir, pdfSize, videoSize, modelSize, psdSize, aiSize) — same
 // inputs, same board, every time.
 
 import type { Board, Item } from "./model";
 import { estimateTextHeight } from "./model";
 
-export function welcomeBoard(boardDir: string, pdfSize: number, videoSize: number, modelSize: number): Board {
+export function welcomeBoard(boardDir: string, pdfSize: number, videoSize: number, modelSize: number, psdSize: number, aiSize: number): Board {
   const b: Board = {
     items: [], camera: { x: 0, y: 0, zoom: 1 }, next_id: 0, next_group: 0,
     bg: "#FFFFFF", grid: "Dots",
@@ -48,51 +48,43 @@ export function welcomeBoard(boardDir: string, pdfSize: number, videoSize: numbe
   // neighbours, crossing nothing.
   add({ id: next(), pos: { x: 1, y: 1 }, size: { w: 1, h: 1 }, group: null, kind: { Connector: { from: { Item: 2 }, to: { Item: 3 }, color: "#333333" } } });
   // Formats, one screen to the right: what dropping a file
-  // onto the board produces. These cards are not hand-drawn —
-  // they are the literal output of dropping the sample files
-  // (sample.svg, sample.psd, sample-vector.ai, cube.glb)
-  // through the real importers, translated to this section,
-  // so the board shows exactly what a drop gives you. The
-  // raster layers and the AI's embedded images live in
-  // assets/ as welcome-*.png and are installed with the
-  // other welcome files. If an importer changes, these
-  // snapshots do not follow on their own — regenerate them
-  // by dropping the samples again and re-translating.
+  // onto the board produces. One format per column, in a
+  // two-by-two grid — a one-word label above each card, the
+  // card tops aligned, nothing overlapping its label. The
+  // PSD and AI cards are single FileCards, exactly what a
+  // drop gives you; the SVG stays exploded editable cards,
+  // and the 3D card is the model itself. The FileCard
+  // previews are the real importer output (renderPsdPreview
+  // / renderAiPreview over the sample files), installed with
+  // the other welcome files. If an importer changes,
+  // regenerate the previews by dropping the samples again.
   const formatsText = "## Formats";
   add({ id: next(), pos: { x: 1300, y: 40 }, size: { w: 320, h: estimateTextHeight(formatsText, 16, 320) }, group: null, kind: note(formatsText, 320) });
-  const svgText = "SVG — shapes, strokes and text";
-  add({ id: next(), pos: { x: 1300, y: 88 }, size: { w: 320, h: estimateTextHeight(svgText, 16, 320) }, group: null, kind: note(svgText, 320) });
+  // Row 1: SVG (left), PSD (right). Labels at y 120, cards at 180.
+  const svgLabel = "SVG";
+  add({ id: next(), pos: { x: 1300, y: 120 }, size: { w: 360, h: estimateTextHeight(svgLabel, 16, 360) }, group: null, kind: note(svgLabel, 360) });
   // SVG: dropped from the sample file — the cards the importer produces.
-  add({ id: next(), pos: { x: 1300, y: 120 }, size: { w: 100, h: 50 }, group: null, kind: { Shape: { shape: "rect", fill: "#ff0000" } } });
-  add({ id: next(), pos: { x: 1465, y: 125 }, size: { w: 50, h: 50 }, group: null, kind: { Shape: { shape: "ellipse", fill: "#0000ff" } } });
-  add({ id: next(), pos: { x: 1560, y: 135 }, size: { w: 60, h: 30 }, group: null, kind: { Shape: { shape: "ellipse", fill: "#00ff00", outline: true } } });
-  add({ id: next(), pos: { x: 1300, y: 200 }, size: { w: 100, h: 1 }, group: null, kind: { Stroke: { points: [{ x: 1300, y: 200 }, { x: 1400, y: 200 }], color: "#000000", width: 2, marker: false } } });
-  add({ id: next(), pos: { x: 1440, y: 200 }, size: { w: 40, h: 20 }, group: null, kind: { Stroke: { points: [{ x: 1440, y: 200 }, { x: 1460, y: 220 }, { x: 1480, y: 200 }], color: "#000000", width: 1, marker: false } } });
-  add({ id: next(), pos: { x: 1500, y: 200 }, size: { w: 50, h: 50 }, group: null, kind: { Stroke: { points: [{ x: 1500, y: 200 }, { x: 1550, y: 200 }, { x: 1550, y: 250 }, { x: 1500, y: 200 }], color: "#0000ff", width: 2, marker: false } } });
-  add({ id: next(), pos: { x: 1300, y: 260 }, size: { w: 136, h: 51 }, group: null, kind: { Text: { text: "Hello SVG", bold: false, size: 20, color: "#333333" } } });
-  add({ id: next(), pos: { x: 1610, y: 200 }, size: { w: 40, h: 40 }, group: null, kind: { Shape: { shape: "rect", fill: "#ffd700" } } });
-  const psdText = "PSD — layers as cards";
-  add({ id: next(), pos: { x: 1300, y: 348 }, size: { w: 320, h: estimateTextHeight(psdText, 16, 320) }, group: null, kind: note(psdText, 320) });
-  // PSD: dropped from the sample file — the cards the importer produces.
-  // One nudge: the green layer sits 7px under the text card in
-  // the PSD's own layout, so it is moved down 17px to clear it.
-  add({ id: next(), pos: { x: 1410, y: 457 }, size: { w: 40, h: 30 }, group: null, kind: { Image: { path: `${boardDir}/welcome-psd-green.png` } } });
-  add({ id: next(), pos: { x: 1390, y: 390 }, size: { w: 120, h: 57 }, group: null, kind: { Text: { text: "Hello PSD", bold: false, size: 24, color: "#000000" } } });
-  add({ id: next(), pos: { x: 1300, y: 380 }, size: { w: 80, h: 60 }, group: null, kind: { Image: { path: `${boardDir}/welcome-psd-red.png` } } });
-  const glbText = "3D — drag to rotate";
-  add({ id: next(), pos: { x: 1300, y: 508 }, size: { w: 320, h: estimateTextHeight(glbText, 16, 320) }, group: null, kind: note(glbText, 320) });
+  add({ id: next(), pos: { x: 1300, y: 180 }, size: { w: 100, h: 50 }, group: null, kind: { Shape: { shape: "rect", fill: "#ff0000" } } });
+  add({ id: next(), pos: { x: 1465, y: 185 }, size: { w: 50, h: 50 }, group: null, kind: { Shape: { shape: "ellipse", fill: "#0000ff" } } });
+  add({ id: next(), pos: { x: 1560, y: 195 }, size: { w: 60, h: 30 }, group: null, kind: { Shape: { shape: "ellipse", fill: "#00ff00", outline: true } } });
+  add({ id: next(), pos: { x: 1300, y: 260 }, size: { w: 100, h: 1 }, group: null, kind: { Stroke: { points: [{ x: 1300, y: 260 }, { x: 1400, y: 260 }], color: "#000000", width: 2, marker: false } } });
+  add({ id: next(), pos: { x: 1440, y: 260 }, size: { w: 40, h: 20 }, group: null, kind: { Stroke: { points: [{ x: 1440, y: 260 }, { x: 1460, y: 280 }, { x: 1480, y: 260 }], color: "#000000", width: 1, marker: false } } });
+  add({ id: next(), pos: { x: 1500, y: 260 }, size: { w: 50, h: 50 }, group: null, kind: { Stroke: { points: [{ x: 1500, y: 260 }, { x: 1550, y: 260 }, { x: 1550, y: 310 }, { x: 1500, y: 260 }], color: "#0000ff", width: 2, marker: false } } });
+  add({ id: next(), pos: { x: 1300, y: 320 }, size: { w: 136, h: 51 }, group: null, kind: { Text: { text: "Hello SVG", bold: false, size: 20, color: "#333333" } } });
+  add({ id: next(), pos: { x: 1610, y: 260 }, size: { w: 40, h: 40 }, group: null, kind: { Shape: { shape: "rect", fill: "#ffd700" } } });
+  const psdLabel = "PSD";
+  add({ id: next(), pos: { x: 1700, y: 120 }, size: { w: 360, h: estimateTextHeight(psdLabel, 16, 360) }, group: null, kind: note(psdLabel, 360) });
+  // PSD: dropped from the sample file — one FileCard.
+  add({ id: next(), pos: { x: 1700, y: 180 }, size: { w: 360, h: 272 }, group: null, kind: { FileCard: { path: `${boardDir}/sample.psd`, size_bytes: psdSize, format: "psd", preview: `${boardDir}/welcome-psd-preview.png` } } });
+  // Row 2: AI (left), 3D (right). Labels at y 492, cards at 552.
+  const aiLabel = "AI";
+  add({ id: next(), pos: { x: 1300, y: 492 }, size: { w: 360, h: estimateTextHeight(aiLabel, 16, 360) }, group: null, kind: note(aiLabel, 360) });
+  // AI: dropped from the sample file — one FileCard.
+  add({ id: next(), pos: { x: 1300, y: 552 }, size: { w: 360, h: 294 }, group: null, kind: { FileCard: { path: `${boardDir}/sample.ai`, size_bytes: aiSize, format: "ai", preview: `${boardDir}/welcome-ai-preview.png` } } });
+  const glbLabel = "3D";
+  add({ id: next(), pos: { x: 1700, y: 492 }, size: { w: 360, h: estimateTextHeight(glbLabel, 16, 360) }, group: null, kind: note(glbLabel, 360) });
   // GLB: dropped from the sample file — the cards the importer produces.
-  add({ id: next(), pos: { x: 1300, y: 540 }, size: { w: 360, h: 300 }, group: null, kind: { Model3D: { path: `${boardDir}/welcome-cube.glb`, size_bytes: modelSize } } });
-  const aiText = ".ai — editable artwork";
-  add({ id: next(), pos: { x: 1700, y: 88 }, size: { w: 320, h: estimateTextHeight(aiText, 16, 320) }, group: null, kind: note(aiText, 320) });
-  // AI: dropped from the sample file — the cards the importer produces.
-  add({ id: next(), pos: { x: 1720, y: 125 }, size: { w: 80, h: 40 }, group: null, kind: { Shape: { shape: "rect", fill: "#ff0000" } } });
-  add({ id: next(), pos: { x: 1875, y: 120 }, size: { w: 50, h: 50 }, group: null, kind: { Shape: { shape: "ellipse", fill: "#0000ff" } } });
-  add({ id: next(), pos: { x: 1720, y: 225 }, size: { w: 80, h: 60 }, group: null, kind: { Stroke: { points: [{ x: 1720, y: 285 }, { x: 1760, y: 225 }, { x: 1800, y: 275 }], color: "#008000", width: 2, marker: false } } });
-  add({ id: next(), pos: { x: 1720, y: 181 }, size: { w: 120, h: 48 }, group: null, kind: { Text: { text: "Hello AI", bold: false, size: 14, color: "#000000" } } });
-  add({ id: next(), pos: { x: 1850, y: 255 }, size: { w: 40, h: 30 }, group: null, kind: { Shape: { shape: "rect", fill: "#ff8000" } } });
-  add({ id: next(), pos: { x: 1750, y: 369 }, size: { w: 100, h: 60 }, group: null, kind: { Image: { path: `${boardDir}/welcome-ai-image.png` } } });
-  add({ id: next(), pos: { x: 1700, y: 553 }, size: { w: 300, h: 200 }, group: null, kind: { Image: { path: `${boardDir}/welcome-ai-page.png` } } });
+  add({ id: next(), pos: { x: 1700, y: 552 }, size: { w: 360, h: 300 }, group: null, kind: { Model3D: { path: `${boardDir}/welcome-cube.glb`, size_bytes: modelSize } } });
   b.next_group = 2;
   return b;
 }
