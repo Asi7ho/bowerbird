@@ -125,6 +125,14 @@ class Model3DView {
     this.load();
   }
 
+  // The environment arrives after the view when the
+  // renderer was set up on the startup path (see
+  // ensureEnvTexture): apply it then, so the view never
+  // renders unlit.
+  setEnvironment(env: THREE.Texture): void {
+    this.scene.environment = env;
+  }
+
   // For sync: the model this view was built for. Card ids
   // restart at 1 on every board, so a board switch can reuse
   // an id for a different model — the view must not survive that.
@@ -294,12 +302,14 @@ class Model3DView {
 
   // Advance the idle auto-rotate and place the camera for
   // this frame. Returns false when the view has nothing to
-  // draw yet (model still loading).
+  // draw yet (model still loading, or the shared room
+  // environment not built yet — the card keeps its grey
+  // tile until then, so a model never shows unlit).
   step(now: number): boolean {
     if (!this.dragging && now - this.lastInteract > IDLE_MS) {
       this.azimuth += AUTO_ROTATE;
     }
-    if (!this.loaded) return false;
+    if (!this.loaded || !this.scene.environment) return false;
     const { azimuth, elevation, distance } = this;
     this.camera.position.set(
       distance * Math.cos(elevation) * Math.sin(azimuth),
@@ -371,10 +381,36 @@ let envTexture: THREE.Texture | null = null;
 let pmrem: THREE.PMREMGenerator | null = null;
 let raf = 0;
 let boardEl: HTMLElement | null = null;
+let sharedSetupScheduled = false;
 
 function ensureSharedCanvas(board: HTMLElement): void {
   boardEl = board;
-  if (renderer) return;
+  if (renderer || sharedSetupScheduled) return;
+  // Creating the WebGL context is the expensive part of
+  // this setup, and the first render is the startup path
+  // — so the whole shared layer (context, room
+  // environment) is built once the renderer is idle, not
+  // here. Views mount and load without it; the loop only
+  // starts once it exists (see setupSharedCanvas), and
+  // views render only once the environment exists (see
+  // step), so a model never shows unlit. Until then the
+  // card keeps its grey tile.
+  sharedSetupScheduled = true;
+  if (typeof requestIdleCallback === "function") {
+    requestIdleCallback(() => setupSharedCanvas(), { timeout: 1000 });
+  } else {
+    setTimeout(() => setupSharedCanvas(), 100);
+  }
+}
+
+// Build the shared offscreen layer (context, room
+// environment) once the renderer is idle after setup. A
+// board switch before it fires disposes the board, so
+// there is nothing to build for; a new board's setup
+// schedules its own.
+function setupSharedCanvas(): void {
+  sharedSetupScheduled = false;
+  if (renderer || !boardEl) return;
   // An offscreen render target, never in the DOM: the
   // pixels reach the screen only through the per-card
   // copies (see blit), so nothing here can paint over a
@@ -387,6 +423,8 @@ function ensureSharedCanvas(board: HTMLElement): void {
   renderer.setClearColor(0x000000, 0);
   pmrem = new THREE.PMREMGenerator(renderer);
   envTexture = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+  for (const view of views.values()) view.setEnvironment(envTexture);
+  kickLoop();
 }
 
 function loop(): void {
@@ -528,6 +566,7 @@ export function disposeAllModel3DViewers(): void {
     pmrem = null;
     envTexture = null;
   }
+  sharedSetupScheduled = false;
   sharedCanvas = null;
   boardEl = null;
 }
