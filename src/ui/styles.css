@@ -239,9 +239,19 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    no-overflow rule as #cards: frames live in world coordinates.
    It sits BEFORE #cards in the DOM, so it paints below them:
    a card placed over a frame's edge covers the dashed line,
-   instead of the line painting over the card. #groups, after
-   #cards, holds only the labels, so they keep taking clicks. */
+   instead of the line painting over the card. */
 #group-frames { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; pointer-events: none; }
+/* #selected-groups mirrors the frames and labels ABOVE the
+   cards, so a selected group's outline travels with the
+   group instead of diving under the cards it passes over.
+   Only the .selected copies show — the rest are hidden —
+   so an unselected group keeps the resting rule above.
+   The layer never takes clicks: its labels are display
+   only, and renaming still goes through the #groups label
+   below, exactly where no card covers it. */
+#selected-groups { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; pointer-events: none; }
+#selected-groups .group-frame:not(.selected), #selected-groups .group-label:not(.selected) { display: none; }
+#selected-groups .group-label { pointer-events: none; }
 /* #groups holds the group labels. Same no-overflow rule
    as #cards: labels live in world coordinates. The layer
    sits above the cards so a frame's label takes clicks —

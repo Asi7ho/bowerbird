@@ -61,6 +61,7 @@ export function activate(a: PluginContext): void {
     <div id="group-frames"></div>
     <div id="groups"></div>
     <div id="cards" role="listbox" aria-label="Board cards"></div>
+    <div id="selected-groups"></div>
     <svg id="preview-svg"><g id="preview-world"></g></svg>
     <div id="plugin-view" style="display:none"></div>
     <div id="plugin-overlays"></div>
@@ -82,13 +83,14 @@ export function activate(a: PluginContext): void {
   const groupFrames = S.boardEl.querySelector<HTMLElement>("#group-frames");
   const cards = S.boardEl.querySelector<HTMLElement>("#cards");
   const groups = S.boardEl.querySelector<HTMLElement>("#groups");
+  const selectedGroups = S.boardEl.querySelector<HTMLElement>("#selected-groups");
   const resizeHandle = S.boardEl.querySelector<HTMLElement>("#resize-handle");
   const rotateHandle = S.boardEl.querySelector<HTMLElement>("#rotate-handle");
   const pluginView = S.boardEl.querySelector<HTMLElement>("#plugin-view");
   const overlays = S.boardEl.querySelector<HTMLElement>("#plugin-overlays");
   const viewSwitcher = S.boardEl.querySelector<HTMLElement>("#view-switcher");
   const toast = S.boardEl.querySelector<HTMLElement>("#toast");
-  if (grid && canvasSvg && previewSvg && groupFrames && cards && groups && resizeHandle && rotateHandle && pluginView && overlays && viewSwitcher && toast) {
+  if (grid && canvasSvg && previewSvg && groupFrames && cards && groups && selectedGroups && resizeHandle && rotateHandle && pluginView && overlays && viewSwitcher && toast) {
     S.gridEl = grid as HTMLDivElement;
     // The SVG world group, inside the canvas SVG.
     const w = canvasSvg.querySelector("#world") as unknown as SVGGElement | null;
@@ -97,6 +99,7 @@ export function activate(a: PluginContext): void {
     const pw = previewSvg?.querySelector("#preview-world") as unknown as SVGGElement | null;
     if (pw) S.previewWorldEl = pw;
     S.groupFramesEl = groupFrames as HTMLDivElement;
+    S.selectedGroupsEl = selectedGroups as HTMLDivElement;
     S.cardsEl = cards as HTMLDivElement;
     S.groupsEl = groups as HTMLDivElement;
     // Hand the plugin system the board DOM elements, so the

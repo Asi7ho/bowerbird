@@ -61,6 +61,7 @@ export function applyCamera(): void {
   S.groupFramesEl.style.transform = `translate(${-cam.x * cam.zoom}px,${-cam.y * cam.zoom}px) scale(${cam.zoom})`;
   S.cardsEl.style.transform = `translate(${-cam.x * cam.zoom}px,${-cam.y * cam.zoom}px) scale(${cam.zoom})`;
   S.groupsEl.style.transform = `translate(${-cam.x * cam.zoom}px,${-cam.y * cam.zoom}px) scale(${cam.zoom})`;
+  S.selectedGroupsEl.style.transform = `translate(${-cam.x * cam.zoom}px,${-cam.y * cam.zoom}px) scale(${cam.zoom})`;
   applyGrid();
   updateResizeHandle();
 }
@@ -190,17 +191,23 @@ export function renderConnectors(board: Board): void {
 }
 
 export function renderGroupFrames(board: Board): void {
-  if (!S.groupsEl || !S.groupFramesEl) return;
+  if (!S.groupsEl || !S.groupFramesEl || !S.selectedGroupsEl) return;
   const selected = S.api.board.getSelected();
   const v = visibleRect();
   // The border and its label live in separate layers: the
   // border goes below the cards, so a card placed over a
   // frame's edge covers the dashed line instead of the line
-  // painting over the card; the label stays above the cards
-  // in #groups, so it keeps taking clicks for rename. The
-  // label sits astride the frame's top border, half above
-  // it, so its position is the frame's top-left plus the
-  // same 12px in and 11px up it had as the frame's child.
+  // painting over the card; the label sits below the cards
+  // in #groups the same way, so a note placed over it
+  // covers it. That is the resting rule. A SELECTED group's
+  // frame and label are mirrored into #selected-groups,
+  // above the cards (only .selected copies show there), so
+  // the outline travels with the group instead of diving
+  // under the cards it passes over — the same rule as a
+  // selected card, which stacks on top. The label sits
+  // astride the frame's top border, half above it, so its
+  // position is the frame's top-left plus the same 12px in
+  // and 11px up it had as the frame's child.
   let framesHtml = "";
   let labelsHtml = "";
   // One pass over the items, grouped by group id: the old
@@ -241,6 +248,7 @@ export function renderGroupFrames(board: Board): void {
   }
   S.groupFramesEl.innerHTML = framesHtml;
   S.groupsEl.innerHTML = labelsHtml;
+  S.selectedGroupsEl.innerHTML = framesHtml + labelsHtml;
 }
 
 export function render(): void {
@@ -494,6 +502,18 @@ export function updateSelectionInner(): void {
   }
   if (S.groupFramesEl) {
     for (const child of Array.from(S.groupFramesEl.children)) {
+      const el = child as HTMLElement;
+      const g = Number(el.dataset.group);
+      el.classList.toggle("selected", board.items.some((it) => it.group === g && selected.includes(it.id)));
+    }
+  }
+  // The overlay mirrors the frames and labels above the
+  // cards, so it follows a plain click the same way: only
+  // a selected group's copies show there (see styles.css),
+  // and toggling here is what makes them appear without a
+  // full render.
+  if (S.selectedGroupsEl) {
+    for (const child of Array.from(S.selectedGroupsEl.children)) {
       const el = child as HTMLElement;
       const g = Number(el.dataset.group);
       el.classList.toggle("selected", board.items.some((it) => it.group === g && selected.includes(it.id)));
