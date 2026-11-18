@@ -719,16 +719,13 @@ export function dragPreview(id: string, tag: string, toPreview = false): SVGElem
 // tool's base width: the pencil draws thinner than the pen,
 // the highlighter much wider. A marker (highlighter) draws
 // translucent, like the stored stroke.
-//
-// The live stroke is never filtered: the pencil's graphite
-// texture (feTurbulence) is rasterized again on every move
-// while it sits on the preview, so the first pencil stroke
-// lagged behind the hand. The texture lands with the
-// committed card instead (see cards.ts), where it is
-// rasterized once per stroke.
-export function updateLiveStroke(points: Pt[], pressures: number[], width: number, marker: boolean): void {
+export function updateLiveStroke(points: Pt[], pressures: number[], width: number, marker: boolean, pencil = false): void {
   const el = dragPreview("live-stroke", "g");
   while (el.firstChild) el.removeChild(el.firstChild);
+  // A pencil stroke shows its graphite texture while it
+  // is being drawn, not only once it is committed.
+  if (pencil) el.setAttribute("filter", "url(#pencil-texture)");
+  else el.removeAttribute("filter");
   const opacity = marker ? "0.45" : "1";
   if (pressures.length === points.length && strokePressuresVary({ pressures })) {
     const pts = smoothStrokeSamples(points);
@@ -950,7 +947,7 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
     if (Math.hypot(world.x - last.x, world.y - last.y) > 2 / cam.zoom) {
       S.drag.points.push(world);
       if (e.pointerType === "pen" && !S.drag.marker) S.drag.pressures.push(e.pressure);
-      updateLiveStroke(S.drag.points, S.drag.pressures, S.drag.width, S.drag.marker);
+      updateLiveStroke(S.drag.points, S.drag.pressures, S.drag.width, S.drag.marker, S.drag.pencil);
     }
   } else if (S.drag.kind === "lasso") {
     const cam = S.api.view.getCamera();
