@@ -49,6 +49,14 @@ interface ViewState {
   distance: number;
 }
 
+// The view a model opens with: straight on, slightly
+// above the horizon, far enough that the whole model
+// fills the card. The opening load and the fit button
+// both use it, so a fitted model looks like a fresh one.
+export function initialViewState(modelRadius: number): ViewState {
+  return { azimuth: 0, elevation: 0.35, distance: modelRadius * 2.4 };
+}
+
 // The view angle per card, so a re-mount after the card
 // leaves and re-enters the viewport restores it.
 const viewState = new Map<number, ViewState>();
@@ -140,7 +148,7 @@ class Model3DView {
     this.root.add(model);
     this.modelRadius = Math.max(sphere.radius, 0.01);
     if (!viewState.has(this.cardId)) {
-      this.distance = this.modelRadius * 2.4;
+      this.distance = initialViewState(this.modelRadius).distance;
     }
     this.distance = THREE.MathUtils.clamp(this.distance, this.modelRadius * 1.1, this.modelRadius * 6);
     this.loaded = true;
@@ -218,6 +226,21 @@ class Model3DView {
     );
     this.lastInteract = performance.now();
   };
+
+  // Back to the opening view: straight on, slightly above,
+  // the whole model in frame. The shared loop draws the
+  // next frame, so there is nothing to kick — and the
+  // angle is saved on dispose, like any view, so a fitted
+  // model stays fitted when it leaves and re-enters the
+  // viewport. lastInteract restarts the idle clock, so the
+  // model holds still for a few seconds after a fit.
+  fit(): void {
+    const init = initialViewState(this.modelRadius);
+    this.azimuth = init.azimuth;
+    this.elevation = init.elevation;
+    this.distance = init.distance;
+    this.lastInteract = performance.now();
+  }
 
   // The placeholder's screen rect, in CSS pixels relative
   // to the shared canvas. Null when the card is gone or
@@ -388,6 +411,14 @@ function loop(): void {
 
 function kickLoop(): void {
   if (raf === 0 && views.size > 0) raf = requestAnimationFrame(loop);
+}
+
+// Re-frame one card's model to fill its tile (the fit
+// button on the card). A missing view — the card is
+// off-screen or gone — is a no-op; mounting restores the
+// saved angle, so the fit is not lost.
+export function fitModel3DView(cardId: number): void {
+  views.get(cardId)?.fit();
 }
 
 // Mount views for the Model3D cards currently in the DOM
