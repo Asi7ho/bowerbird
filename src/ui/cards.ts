@@ -445,10 +445,14 @@ export function activate(api: PluginContext): void {
       // shows through it onto this grey tile. The title
       // row below it is the grab area — it takes no pointer
       // events, so pressing there hits the board and moves
-      // the card.
+      // the card. The fit button in the corner re-frames
+      // the model to fill the tile.
       const canvasH = Math.max(80, c.hh - 70);
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
-        <canvas class="model3d clickable" data-id="${c.id}" data-path="${api.text.escapeHtml(path)}" style="width:${c.ww - 24}px;height:${canvasH}px;border-radius:10px;background:var(--bg-system)"></canvas>
+        <div style="position:relative;width:${c.ww - 24}px;height:${canvasH}px;flex:none">
+          <canvas class="model3d clickable" data-id="${c.id}" data-path="${api.text.escapeHtml(path)}" style="width:100%;height:100%;border-radius:10px;background:var(--bg-system)"></canvas>
+          <button type="button" class="model3d-fit clickable" data-action="fit-model3d" data-id="${c.id}" aria-label="Fit model"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4" /></svg></button>
+        </div>
         ${titleHtml(name, c.ww - 24)}<div class="sub" style="font-size:12px">${sub}</div></div></div>`;
     },
   });
