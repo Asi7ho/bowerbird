@@ -726,6 +726,20 @@ export function updateLiveStroke(points: Pt[], pressures: number[], width: numbe
   // is being drawn, not only once it is committed.
   if (pencil) el.setAttribute("filter", "url(#pencil-texture)");
   else el.removeAttribute("filter");
+  if (pencil && points.length > 0) {
+    // Pin the filter region for the whole drag. Without
+    // this, the group's box — and so the filter region —
+    // grows with every move, and the turbulence is
+    // re-generated over the new region each time: the
+    // first-stroke lag. A fixed transparent rect holds
+    // the box steady, so the noise is generated once and
+    // reused while the stroke grows inside it. It paints
+    // nothing (fill none) and takes no part in
+    // hit-testing. A stroke longer than the rect just
+    // outgrows it and the region grows from there.
+    const s = points[0];
+    el.appendChild(svgEl2("rect", { x: String(s.x - 256), y: String(s.y - 256), width: "512", height: "512", fill: "none" }));
+  }
   const opacity = marker ? "0.45" : "1";
   if (pressures.length === points.length && strokePressuresVary({ pressures })) {
     const pts = smoothStrokeSamples(points);
