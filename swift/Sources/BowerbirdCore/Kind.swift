@@ -41,6 +41,14 @@ public struct TextPayload: Codable, Equatable {
     public var size: Double
     public var color: String
     public var bg: String?
+
+    public init(text: String, bold: Bool, size: Double, color: String, bg: String?) {
+        self.text = text
+        self.bold = bold
+        self.size = size
+        self.color = color
+        self.bg = bg
+    }
 }
 
 public struct ShapePayload: Codable, Equatable {

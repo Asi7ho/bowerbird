@@ -10,6 +10,15 @@ public struct Item: Codable, Equatable {
     /// Rotation in degrees, clockwise, around the item's
     /// centre. Missing means 0.
     public var rotation: Double?
+
+    public init(id: Int, pos: Pt, size: Size, group: Int?, kind: Kind, rotation: Double?) {
+        self.id = id
+        self.pos = pos
+        self.size = size
+        self.group = group
+        self.kind = kind
+        self.rotation = rotation
+    }
 }
 
 /// The view: `x`/`y` is the world point at the top-left of
@@ -18,6 +27,12 @@ public struct Camera: Codable, Equatable {
     public var x: Double
     public var y: Double
     public var zoom: Double
+
+    public init(x: Double, y: Double, zoom: Double) {
+        self.x = x
+        self.y = y
+        self.zoom = zoom
+    }
 }
 
 public enum Grid: String, Codable, Equatable {
@@ -68,6 +83,16 @@ public struct Board: Codable, Equatable {
         case groups
         case bg
         case grid
+    }
+
+    public init(items: [Item], camera: Camera, nextId: Int, nextGroup: Int, groups: [Int: GroupEntry]?, bg: String, grid: Grid) {
+        self.items = items
+        self.camera = camera
+        self.nextId = nextId
+        self.nextGroup = nextGroup
+        self.groups = groups
+        self.bg = bg
+        self.grid = grid
     }
 
     public static func decode(from data: Data) throws -> Board {

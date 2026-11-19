@@ -1,0 +1,62 @@
+import XCTest
+@testable import BowerbirdCore
+
+final class BoardHealingTests: XCTestCase {
+    private func textItem(id: Int, text: String) -> Item {
+        Item(
+            id: id,
+            pos: Pt(x: 0, y: 0),
+            size: Size(w: 100, h: 50),
+            group: nil,
+            kind: .text(TextPayload(text: text, bold: false, size: 16, color: "#1A1A1A", bg: nil)),
+            rotation: nil
+        )
+    }
+
+    func testHealDuplicateIds() {
+        var board = Board(
+            items: [textItem(id: 1, text: "first"), textItem(id: 1, text: "second"), textItem(id: 2, text: "third")],
+            camera: Camera(x: 0, y: 0, zoom: 1),
+            nextId: 1,
+            nextGroup: 0,
+            groups: nil,
+            bg: "#FFFFFF",
+            grid: .dots
+        )
+        healDuplicateIds(&board)
+        XCTAssertEqual(board.items[0].id, 1)
+        XCTAssertEqual(board.items[1].id, 3)
+        XCTAssertEqual(board.items[2].id, 2)
+        XCTAssertEqual(board.nextId, 3)
+    }
+
+    func testHealRaisesStaleNextId() {
+        var board = Board(
+            items: [textItem(id: 9, text: "only")],
+            camera: Camera(x: 0, y: 0, zoom: 1),
+            nextId: 1,
+            nextGroup: 0,
+            groups: nil,
+            bg: "#FFFFFF",
+            grid: .dots
+        )
+        healDuplicateIds(&board)
+        XCTAssertEqual(board.nextId, 9)
+        XCTAssertEqual(allocId(&board), 10)
+    }
+
+    func testHealCleanBoardUnchanged() {
+        var board = Board(
+            items: [textItem(id: 1, text: "a"), textItem(id: 2, text: "b")],
+            camera: Camera(x: 0, y: 0, zoom: 1),
+            nextId: 2,
+            nextGroup: 0,
+            groups: nil,
+            bg: "#FFFFFF",
+            grid: .dots
+        )
+        healDuplicateIds(&board)
+        XCTAssertEqual(board.items.map(\.id), [1, 2])
+        XCTAssertEqual(board.nextId, 2)
+    }
+}
