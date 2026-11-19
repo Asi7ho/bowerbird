@@ -1,4 +1,5 @@
 import AppKit
+import BowerbirdCore
 
 /// The shape's fill as a `CGPath` in a rect, mirroring the
 /// Electron app's `SHAPE_POLYGONS` (model.ts) — the same

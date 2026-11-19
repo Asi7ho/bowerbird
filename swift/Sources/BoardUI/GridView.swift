@@ -85,7 +85,7 @@ public final class GridView: MTKView, MTKViewDelegate {
         let bg = HexColor.parse(backgroundHex) ?? HexColor(r: 1, g: 1, b: 1)
         let luminance = 0.299 * bg.r + 0.587 * bg.g + 0.114 * bg.b
         let gridHex = luminance > 140.0 / 255.0 ? "#d8d8de" : "#55555a"
-        let grid = HexColor.parse(gridHex) ?? HexColor(r: 0.85, g: 0.85, b: 0.87)
+        let gridColour = HexColor.parse(gridHex) ?? HexColor(r: 0.85, g: 0.85, b: 0.87)
         let gridType: Float = grid == .off ? 0 : (grid == .dots ? 1 : 2)
         return GridUniforms(
             camera: SIMD2<Float>(Float(camera.x), Float(camera.y)),
@@ -94,7 +94,7 @@ public final class GridView: MTKView, MTKViewDelegate {
             scale: Float(window?.backingScaleFactor ?? 1),
             gridType: gridType,
             bgColor: SIMD4<Float>(Float(bg.r), Float(bg.g), Float(bg.b), 1),
-            gridColor: SIMD4<Float>(Float(grid.r), Float(grid.g), Float(grid.b), 1)
+            gridColor: SIMD4<Float>(Float(gridColour.r), Float(gridColour.g), Float(gridColour.b), 1)
         )
     }
 
