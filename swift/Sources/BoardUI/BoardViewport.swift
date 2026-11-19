@@ -47,6 +47,10 @@ public final class BoardViewport: NSView {
     /// mutate the viewport's own board and re-render; only
     /// the commit goes through here.
     public var onBoardMutate: ((Board) -> Void)?
+    /// Called on Cmd+Z / Cmd+Shift+Z: the app undoes or
+    /// redoes one step through the store (which saves).
+    public var onUndo: (() -> Void)?
+    public var onRedo: (() -> Void)?
 
     /// The selected item ids. The viewport owns the
     /// interaction state; the host only renders it.
@@ -339,6 +343,28 @@ public final class BoardViewport: NSView {
     // MARK: - Space+drag pan (a grab, not a scroll)
 
     override public func keyDown(with event: NSEvent) {
+        // Undo / redo: Cmd+Z undoes one step, Cmd+Shift+Z
+        // redoes it. The store owns the stacks and saves.
+        if event.modifierFlags.contains(.command),
+           let chars = event.charactersIgnoringModifiers?.lowercased(), chars == "z" {
+            if event.modifierFlags.contains(.shift) {
+                onRedo?()
+            } else {
+                onUndo?()
+            }
+            return
+        }
+        // Delete: remove the selection (one undo step, one
+        // save) and clear it. A group that drops below two
+        // members loses its label, like on load.
+        if event.keyCode == 51, !selected.isEmpty {
+            var next = board
+            next.items.removeAll { selected.contains($0.id) }
+            syncGroupLabels(&next)
+            onBoardMutate?(next)
+            selected = []
+            return
+        }
         if event.charactersIgnoringModifiers == " " {
             spaceHeld = true
             window?.invalidateCursorRects(for: self)
