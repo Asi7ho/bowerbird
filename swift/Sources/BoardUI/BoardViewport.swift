@@ -37,6 +37,15 @@ public final class BoardViewport: NSView {
     /// host can re-cull and the app can save the camera.
     public var onCameraChanged: ((Camera) -> Void)?
     public var onBoardChanged: ((Board) -> Void)?
+    /// Called when the selection changes, so the host can
+    /// show the rings and stack the selected cards on top.
+    public var onSelectionChanged: ((Set<Int>) -> Void)?
+
+    /// The selected item ids. The viewport owns the
+    /// interaction state; the host only renders it.
+    public private(set) var selected: Set<Int> = [] {
+        didSet { onSelectionChanged?(selected) }
+    }
     /// Called when the viewport is laid out or resized, so
     /// the host can re-cull for the new size. The first
     /// layout is the first time the viewport has a real
@@ -179,6 +188,10 @@ public final class BoardViewport: NSView {
             zoomToFit()
             return
         }
+        if event.keyCode == 53 { // Escape: deselect.
+            selected = []
+            return
+        }
         super.keyDown(with: event)
     }
 
@@ -195,8 +208,38 @@ public final class BoardViewport: NSView {
         window?.makeFirstResponder(self)
         if spaceHeld {
             panStart = (convert(event.locationInWindow, from: nil), camera)
+            return
         }
-        // Selection and tools take the event from here (M2/M3).
+        // Click selection (the Electron app's setSelected):
+        // a card, or its whole group, is selected; Shift
+        // toggles it in the selection; empty space clears
+        // it. Clicking an already-selected card keeps the
+        // selection, so a drag can start from it (M3).
+        let point = convert(event.locationInWindow, from: nil)
+        let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
+        let shift = event.modifierFlags.contains(.shift)
+        guard let item = HitTest.hit(board: board, at: world) else {
+            if !shift { selected = [] }
+            return
+        }
+        let group = groupIds(of: item)
+        if shift {
+            if group.isSubset(of: selected) {
+                selected.subtract(group)
+            } else {
+                selected.formUnion(group)
+            }
+        } else if !group.isSubset(of: selected) {
+            selected = group
+        }
+    }
+
+    /// The ids a click on this item selects: the whole
+    /// group when the item is grouped, just the item when
+    /// it is not.
+    private func groupIds(of item: Item) -> Set<Int> {
+        guard let group = item.group else { return [item.id] }
+        return Set(board.items.filter { $0.group == group }.map { $0.id })
     }
 
     override public func mouseDragged(with event: NSEvent) {
