@@ -31,6 +31,9 @@ public struct BoardView: NSViewRepresentable {
         viewport.onBoardChanged = { [weak host] board in
             host?.board = board
         }
+        viewport.onViewportResized = { [weak host] in
+            host?.render()
+        }
         return viewport
     }
 

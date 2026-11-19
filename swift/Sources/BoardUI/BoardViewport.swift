@@ -37,6 +37,13 @@ public final class BoardViewport: NSView {
     /// host can re-cull and the app can save the camera.
     public var onCameraChanged: ((Camera) -> Void)?
     public var onBoardChanged: ((Board) -> Void)?
+    /// Called when the viewport is laid out or resized, so
+    /// the host can re-cull for the new size. The first
+    /// layout is the first time the viewport has a real
+    /// size: the host is built while the frame is still
+    /// zero, so without this the canvas stays empty until
+    /// the user moves.
+    public var onViewportResized: (() -> Void)?
 
     public let gridView = GridView()
     let cardContainer = WorldView()
@@ -72,6 +79,7 @@ public final class BoardViewport: NSView {
         gridView.frame = bounds
         cardContainer.frame = bounds
         applyCamera()
+        onViewportResized?()
     }
 
     /// The world rect currently visible, with the culling

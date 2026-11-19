@@ -62,7 +62,13 @@ public final class CardHost {
     /// to run on every camera move (it only creates views
     /// for cards entering the viewport).
     public func render() {
-        let viewport = Size(w: Double(container.bounds.width), h: Double(container.bounds.height))
+        // The viewport size is the container's FRAME (screen
+        // points), not its bounds: the bounds are the camera,
+        // already in world units (viewport / zoom), and
+        // visibleRect divides by the zoom itself — passing
+        // the bounds double-divides, so at zoom > 1 cards at
+        // the edge were culled and never shown.
+        let viewport = Size(w: Double(container.frame.width), h: Double(container.frame.height))
         let visible = CameraMath.visibleRect(camera: camera, viewport: viewport)
         var visibleIds = Set<Int>()
         var ordered: [Item] = []
