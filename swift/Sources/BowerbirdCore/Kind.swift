@@ -1,7 +1,7 @@
 import Foundation
 
 /// The shape a Shape card draws.
-public enum ShapeKind: String, Codable, Equatable {
+public enum ShapeKind: String, Codable, Equatable, CaseIterable {
     case rect, ellipse, triangle, diamond, hexagon, star, arrow
 }
 

@@ -12,13 +12,16 @@ import BowerbirdCore
 /// flow back through the store so they persist.
 public struct BoardView: NSViewRepresentable {
     @ObservedObject public var store: BoardStore
+    @ObservedObject public var tools: ToolState
 
-    public init(store: BoardStore) {
+    public init(store: BoardStore, tools: ToolState) {
         self.store = store
+        self.tools = tools
     }
 
     public func makeNSView(context: Context) -> BoardViewport {
         let viewport = BoardViewport(board: store.board)
+        viewport.toolState = tools
         let host = CardHost(container: viewport.cardContainer, board: store.board, camera: store.board.camera)
         context.coordinator.host = host
         viewport.onCameraChanged = { [weak host, weak store] camera in

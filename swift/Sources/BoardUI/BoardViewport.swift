@@ -51,6 +51,10 @@ public final class BoardViewport: NSView {
     /// redoes one step through the store (which saves).
     public var onUndo: (() -> Void)?
     public var onRedo: (() -> Void)?
+    /// The toolbar's state: the viewport reads the active
+    /// tool to decide what a pointer gesture does, and
+    /// closes the flyout when the user clicks the board.
+    public weak var toolState: ToolState?
 
     /// The selected item ids. The viewport owns the
     /// interaction state; the host only renders it.
@@ -388,6 +392,37 @@ public final class BoardViewport: NSView {
                 return
             }
         }
+        // Tool shortcuts: V select, P draw, R geometry, A
+        // connector, X eraser. A family shortcut restores
+        // the last tool of that family and opens its flyout;
+        // it never resets the tool in use. (A keypress with
+        // the command key held is an app shortcut, not a
+        // tool shortcut — Cmd+Z and friends are handled
+        // above.)
+        if !event.modifierFlags.contains(.command),
+           let chars = event.charactersIgnoringModifiers?.lowercased() {
+            switch chars {
+            case "v":
+                toolState?.selectShortcut()
+                return
+            case "p":
+                toolState?.drawShortcut()
+                return
+            case "r":
+                toolState?.shapeShortcut()
+                return
+            case "a":
+                toolState?.activate(.connector)
+                toolState?.pickerOpen = nil
+                return
+            case "x":
+                toolState?.activate(.eraser)
+                toolState?.pickerOpen = nil
+                return
+            default:
+                break
+            }
+        }
         if event.charactersIgnoringModifiers == " " {
             spaceHeld = true
             window?.invalidateCursorRects(for: self)
@@ -427,6 +462,10 @@ public final class BoardViewport: NSView {
 
     override public func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
+        // A click on the board closes the toolbar flyout
+        // (flyouts are transient: they disappear once the
+        // user clicks anywhere else).
+        toolState?.pickerOpen = nil
         if spaceHeld {
             panStart = (convert(event.locationInWindow, from: nil), camera)
             return

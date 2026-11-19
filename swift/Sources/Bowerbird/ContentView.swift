@@ -10,6 +10,7 @@ import BowerbirdCore
 /// viewport through BoardView.
 public struct ContentView: View {
     @ObservedObject public var store: BoardStore
+    @StateObject private var tools = ToolState()
 
     public init(store: BoardStore) {
         self.store = store
@@ -32,8 +33,14 @@ public struct ContentView: View {
             TitleBarView(background: NSColor.fromHex(store.board.bg) ?? NSColor.white)
                 .frame(height: 28)
             Divider()
-            BoardView(store: store)
-                .frame(minWidth: 800, minHeight: 600)
+            ZStack(alignment: .topLeading) {
+                BoardView(store: store, tools: tools)
+                    .frame(minWidth: 800, minHeight: 600)
+                // The floating toolbar, over the board's
+                // top-left corner, like the Electron app's.
+                ToolbarView(tools: tools)
+                    .padding(12)
+            }
         }
     }
 }
