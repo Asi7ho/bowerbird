@@ -45,6 +45,21 @@ public class CardView: NSView {
         didSet { layer?.masksToBounds = clipsContent }
     }
 
+    /// Run a block with Core Animation's implicit actions
+    /// disabled, so a layout pass (a zoom step, a pan)
+    /// moves the layers instantly instead of animating
+    /// them over 0.25s. A CALayer animates its frame, path
+    /// and font size by default, which made the text and
+    /// the strokes visibly drift inside the card while
+    /// zooming. The card's own frame (an NSView) is not
+    /// animated — only its layers are.
+    public static func withoutLayerActions(_ body: () -> Void) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        body()
+        CATransaction.commit()
+    }
+
     public init() {
         super.init(frame: .zero)
         wantsLayer = true

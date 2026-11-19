@@ -161,6 +161,11 @@ public final class BoardViewport: NSView {
         // and the keyboard (Space, F) work without a click
         // first — AppKit sends those to the first responder.
         if window != nil {
+            // The window is resizable: the hidden title bar
+            // style left it without the resizable flag, so
+            // dragging an edge did nothing. (The Electron
+            // app's window is 1280x850, min 1100x720.)
+            window?.styleMask.insert(.resizable)
             window?.makeFirstResponder(self)
             updateWindowBackground()
             startEventMonitor()
@@ -178,9 +183,19 @@ public final class BoardViewport: NSView {
         stopEventMonitor()
     }
 
+    /// A local event monitor for the wheel only. A pinch
+    /// (magnify) is NOT monitored: it is a gesture event
+    /// that AppKit delivers to the first responder, and
+    /// intercepting it here consumed it without zooming —
+    /// the wheel goes through the monitor because a card
+    /// under the cursor would otherwise swallow it, but a
+    /// pinch reaches the viewport through the responder
+    /// chain (see `magnify(with:)`). The monitor consumes
+    /// the wheel event so the responder chain never
+    /// handles it twice.
     private func startEventMonitor() {
         guard eventMonitor == nil else { return }
-        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify, .scrollWheel]) { [weak self] event in
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel]) { [weak self] event in
             guard let self, self.window != nil else { return event }
             // Only the board's own events: the pointer must
             // be over this view. The window is not checked
@@ -188,11 +203,7 @@ public final class BoardViewport: NSView {
             // bounds check is the gate.
             let location = self.convert(event.locationInWindow, from: nil)
             guard self.bounds.contains(location) else { return event }
-            if event.type == .magnify {
-                self.magnify(with: event)
-            } else {
-                self.scrollWheel(with: event)
-            }
+            self.scrollWheel(with: event)
             return nil
         }
     }
@@ -246,13 +257,19 @@ public final class BoardViewport: NSView {
     }
 
     override public func magnify(with event: NSEvent) {
-        // A pinch zooms around the cursor: factor 1 + the
-        // relative magnification.
+        // A pinch zooms around the cursor. The magnification
+        // is the relative change since the last event; it is
+        // doubled, because at 1x a pinch was barely
+        // perceptible next to Cmd+scroll (5% a notch).
+        // The pinch arrives through the responder chain
+        // (the viewport is the first responder) — it is
+        // deliberately not routed through the event monitor,
+        // which consumed it without zooming.
         let location = convert(event.locationInWindow, from: nil)
         camera = CameraMath.zoomCamera(
             camera,
             around: Pt(x: Double(location.x), y: Double(location.y)),
-            factor: 1 + Double(event.magnification)
+            factor: 1 + Double(event.magnification) * 2
         )
     }
 

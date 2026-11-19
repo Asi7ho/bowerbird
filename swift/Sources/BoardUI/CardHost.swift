@@ -34,7 +34,7 @@ public final class CardHost {
     }
 
     public var camera: Camera {
-        didSet { render() }
+        didSet { reposition() }
     }
 
     /// The selected item ids. Setting it updates the rings
@@ -72,10 +72,29 @@ public final class CardHost {
     }
 
     /// Rebuild the visible set: which cards are shown, in
-    /// which order, and the connector overlay. Cheap enough
-    /// to run on every camera move (it only creates views
-    /// for cards entering the viewport).
+    /// which order, and the connector overlay. Called when
+    /// the BOARD changes (a card's content moved, was added
+    /// or removed): every visible card is reconfigured.
+    /// A camera move calls `reposition()` instead, which
+    /// only moves the cards — reconfiguring on every zoom
+    /// step reloaded the images and rebuilt the text, so
+    /// the content visibly shifted inside the card while
+    /// zooming.
     public func render() {
+        layoutVisible(reconfigure: true)
+    }
+
+    /// A camera move: the visible set is recomputed and the
+    /// cards are moved to their new screen positions, but a
+    /// card that was already shown keeps its content — it
+    /// is not reconfigured, so its text and image do not
+    /// rebuild and shift while zooming or panning. Only a
+    /// card entering the viewport is configured (once).
+    public func reposition() {
+        layoutVisible(reconfigure: false)
+    }
+
+    private func layoutVisible(reconfigure: Bool) {
         // The viewport size is the container's FRAME (screen
         // points), not its bounds: the bounds are the camera,
         // already in world units (viewport / zoom), and
@@ -106,11 +125,22 @@ public final class CardHost {
         // transform on the container — a layer transform is
         // applied about the layer's centre, which shifted
         // the display away from the hit-test). A recycled
-        // view is reconfigured for its new item.
+        // view is reconfigured for its new item; a view
+        // that was already showing this item is only moved.
+        // The frames are set with layer actions disabled:
+        // a CALayer animates its frame by default, so a
+        // zoom step made the content drift inside the card
+        // for a quarter of a second.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
         for item in ordered {
+            let alreadyShown = shown[item.id] != nil
             let view = shown[item.id] ?? dequeueView(for: item) ?? CardViews.view(for: item)
             guard let view else { continue }
-            view.configure(item: item)
+            if reconfigure || !alreadyShown {
+                view.configure(item: item)
+            }
             view.frame = CGRect(
                 x: (item.pos.x - camera.x) * camera.zoom,
                 y: (item.pos.y - camera.y) * camera.zoom,
@@ -145,7 +175,9 @@ public final class CardHost {
         for (id, view) in shown {
             view.isSelected = selected.contains(id)
         }
-        render()
+        // Re-apply the stacking (selected cards on top)
+        // without reconfiguring the content.
+        reposition()
     }
 
     private func isVisible(item: Item, visible: WorldRect) -> Bool {

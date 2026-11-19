@@ -103,17 +103,22 @@ public final class TextCardView: CardView {
         // 14px padding on every side. The card is y-up
         // (a plain NSView), so the inset rect is the text
         // area and the layer draws top-down inside it.
-        textLayer.frame = bounds.insetBy(dx: 14, dy: 14)
-        // The font size is in world units; the card is
-        // screen-sized, so it scales by the zoom — the
-        // card's screen width over its world width.
-        // Without the scale the text drew at world size
-        // inside a screen-sized card.
-        if let item = currentItem, case .text(let text) = item.kind {
-            let zoom = item.size.w > 0 ? bounds.width / CGFloat(item.size.w) : 1
-            let font = NSFont.systemFont(ofSize: CGFloat(text.size) * zoom, weight: text.bold ? .bold : .regular)
-            textLayer.font = font
-            textLayer.fontSize = CGFloat(text.size) * zoom
+        // The layer moves instantly (no implicit animation):
+        // a zoom step would otherwise animate the text
+        // across the card for a quarter of a second.
+        CardView.withoutLayerActions {
+            textLayer.frame = bounds.insetBy(dx: 14, dy: 14)
+            // The font size is in world units; the card is
+            // screen-sized, so it scales by the zoom — the
+            // card's screen width over its world width.
+            // Without the scale the text drew at world size
+            // inside a screen-sized card.
+            if let item = currentItem, case .text(let text) = item.kind {
+                let zoom = item.size.w > 0 ? bounds.width / CGFloat(item.size.w) : 1
+                let font = NSFont.systemFont(ofSize: CGFloat(text.size) * zoom, weight: text.bold ? .bold : .regular)
+                textLayer.font = font
+                textLayer.fontSize = CGFloat(text.size) * zoom
+            }
         }
     }
 
@@ -172,10 +177,13 @@ public final class ShapeCardView: CardView {
         super.layout()
         // The path is built for the current bounds; rebuild
         // it when the view is laid out (its frame is set by
-        // the host after the view is created).
+        // the host after the view is created). The layer
+        // moves instantly (no implicit animation).
         if let item = currentItem, case .shape(let shape) = item.kind, shape.shape != .rect {
-            shapeLayer.path = ShapePath.path(for: shape.shape, in: bounds)
-            shapeLayer.frame = bounds
+            CardView.withoutLayerActions {
+                shapeLayer.path = ShapePath.path(for: shape.shape, in: bounds)
+                shapeLayer.frame = bounds
+            }
         }
     }
 
@@ -225,17 +233,20 @@ public final class StrokeCardView: CardView {
         // its world size. Without the scale the stroke drew
         // at world size inside a screen-sized card, which is
         // why the red circle and the branch looked huge and
-        // offset at any zoom other than 1.
-        let zoomX = item.size.w > 0 ? bounds.width / CGFloat(item.size.w) : 1
-        let zoomY = item.size.h > 0 ? bounds.height / CGFloat(item.size.h) : 1
-        if let path = StrokePath.path(for: stroke.points) {
-            var transform = CGAffineTransform(scaleX: zoomX, y: zoomY)
-            shapeLayer.path = path.copy(using: &transform)
-        } else {
-            shapeLayer.path = nil
+        // offset at any zoom other than 1. The layer moves
+        // instantly (no implicit animation).
+        CardView.withoutLayerActions {
+            let zoomX = item.size.w > 0 ? bounds.width / CGFloat(item.size.w) : 1
+            let zoomY = item.size.h > 0 ? bounds.height / CGFloat(item.size.h) : 1
+            if let path = StrokePath.path(for: stroke.points) {
+                var transform = CGAffineTransform(scaleX: zoomX, y: zoomY)
+                shapeLayer.path = path.copy(using: &transform)
+            } else {
+                shapeLayer.path = nil
+            }
+            shapeLayer.lineWidth = CGFloat(stroke.width) * zoomX
+            shapeLayer.frame = bounds
         }
-        shapeLayer.lineWidth = CGFloat(stroke.width) * zoomX
-        shapeLayer.frame = bounds
     }
 
     @available(*, unavailable)
@@ -375,16 +386,19 @@ public final class PlaceholderCardView: CardView {
         // The font sizes and the padding are in world units
         // (14 and 12, 12 and 4); the card is screen-sized,
         // so they scale by the zoom — the card's screen
-        // width over its world width.
-        let zoom = (currentItem?.size.w ?? 0) > 0 ? bounds.width / CGFloat(currentItem!.size.w) : 1
-        let pad = 12 * zoom
-        let width = bounds.width - pad * 2
-        titleLayer.font = NSFont.systemFont(ofSize: 14 * zoom, weight: .semibold)
-        titleLayer.fontSize = 14 * zoom
-        subtitleLayer.font = NSFont.systemFont(ofSize: 12 * zoom)
-        subtitleLayer.fontSize = 12 * zoom
-        titleLayer.frame = CGRect(x: pad, y: bounds.height - pad - 18 * zoom, width: width, height: 18 * zoom)
-        subtitleLayer.frame = CGRect(x: pad, y: bounds.height - pad - 18 * zoom - 4 * zoom - 16 * zoom, width: width, height: 16 * zoom)
+        // width over its world width. The layers move
+        // instantly (no implicit animation).
+        CardView.withoutLayerActions {
+            let zoom = (currentItem?.size.w ?? 0) > 0 ? bounds.width / CGFloat(currentItem!.size.w) : 1
+            let pad = 12 * zoom
+            let width = bounds.width - pad * 2
+            titleLayer.font = NSFont.systemFont(ofSize: 14 * zoom, weight: .semibold)
+            titleLayer.fontSize = 14 * zoom
+            subtitleLayer.font = NSFont.systemFont(ofSize: 12 * zoom)
+            subtitleLayer.fontSize = 12 * zoom
+            titleLayer.frame = CGRect(x: pad, y: bounds.height - pad - 18 * zoom, width: width, height: 18 * zoom)
+            subtitleLayer.frame = CGRect(x: pad, y: bounds.height - pad - 18 * zoom - 4 * zoom - 16 * zoom, width: width, height: 16 * zoom)
+        }
     }
 
     @available(*, unavailable)
