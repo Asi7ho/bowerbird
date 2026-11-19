@@ -270,6 +270,11 @@ public final class PlaceholderCardView: CardView {
 
     override public init() {
         super.init()
+        // A placeholder is not a blank card: a light grey
+        // background and its kind name, so a media card
+        // whose native view has not landed yet (M4/M5)
+        // reads as "coming", not as an empty white card.
+        layer?.backgroundColor = NSColor.systemGray.withAlphaComponent(0.08).cgColor
         titleField.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
         titleField.textColor = .labelColor
         titleField.lineBreakMode = .byTruncatingTail
