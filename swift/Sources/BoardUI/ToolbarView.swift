@@ -120,16 +120,11 @@ public struct ToolbarView: View {
         }
     }
 
+    /// The shape button keeps the icon of the last shape
+    /// used, in its filled or outline form, even when
+    /// another family is active.
     private var shapeIcon: String {
-        switch tools.lastShape {
-        case .rect: return "square"
-        case .ellipse: return "circle"
-        case .triangle: return "triangle"
-        case .diamond: return "diamond"
-        case .hexagon: return "hexagon"
-        case .star: return "star"
-        case .arrow: return "arrow.up.right"
-        }
+        shapeIcon(for: tools.lastShape, filled: !tools.shapeOutline)
     }
 
     private func toolButton(icon: String, label: String, active: Bool, action: @escaping () -> Void) -> some View {
@@ -158,36 +153,17 @@ public struct ToolbarView: View {
         }
     }
 
-    /// The geometry flyout: a Filled / Outline switch at
-    /// the top, then the six shapes. The switch stays open
-    /// when tapped (so the shape can be picked after it);
-    /// picking a shape closes the flyout.
+    /// The geometry flyout: two columns side by side —
+    /// the filled version of each shape on the left, the
+    /// outline version on the right. Picking a shape sets
+    /// the fill mode from its column and closes the flyout.
     private func shapeFlyout() -> some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 4) {
-                fillModeButton(icon: "square.fill", label: "Filled", active: !tools.shapeOutline) {
-                    tools.shapeOutline = false
-                }
-                fillModeButton(icon: "square", label: "Outline", active: tools.shapeOutline) {
-                    tools.shapeOutline = true
-                }
-            }
-            Divider()
-            ForEach(ShapeKind.allCases.filter { $0 != .arrow }, id: \.self) { shape in
-                toolButton(
-                    icon: shapeIcon(for: shape),
-                    label: shape.rawValue.capitalized,
-                    active: tools.tool == .shape(shape),
-                    action: {
-                        tools.activate(.shape(shape))
-                        tools.pickerOpen = nil
-                    }
-                )
-            }
+        HStack(spacing: 10) {
+            shapeColumn(filled: true)
+            shapeColumn(filled: false)
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 8)
-        .frame(width: 56)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
         .overlay(
             RoundedRectangle(cornerRadius: 16)
@@ -200,17 +176,21 @@ public struct ToolbarView: View {
         .onTapGesture {}
     }
 
-    private func fillModeButton(icon: String, label: String, active: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 16))
-                .frame(width: 18, height: 18)
-                .background(active ? Color.black.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
-                .foregroundStyle(Color.primary)
+    private func shapeColumn(filled: Bool) -> some View {
+        VStack(spacing: 10) {
+            ForEach(ShapeKind.allCases.filter { $0 != .arrow }, id: \.self) { shape in
+                toolButton(
+                    icon: shapeIcon(for: shape, filled: filled),
+                    label: shape.rawValue.capitalized + (filled ? " filled" : " outline"),
+                    active: tools.tool == .shape(shape) && tools.shapeOutline == !filled,
+                    action: {
+                        tools.shapeOutline = !filled
+                        tools.activate(.shape(shape))
+                        tools.pickerOpen = nil
+                    }
+                )
+            }
         }
-        .buttonStyle(.plain)
-        .contentShape(Rectangle())
-        .accessibilityLabel(label)
     }
 
     /// The colour flyout: the palette as coloured circles,
@@ -308,14 +288,14 @@ public struct ToolbarView: View {
         .onTapGesture {}
     }
 
-    private func shapeIcon(for shape: ShapeKind) -> String {
+    private func shapeIcon(for shape: ShapeKind, filled: Bool = false) -> String {
         switch shape {
-        case .rect: return "square"
-        case .ellipse: return "circle"
-        case .triangle: return "triangle"
-        case .diamond: return "diamond"
-        case .hexagon: return "hexagon"
-        case .star: return "star"
+        case .rect: return filled ? "square.fill" : "square"
+        case .ellipse: return filled ? "circle.fill" : "circle"
+        case .triangle: return filled ? "triangle.fill" : "triangle"
+        case .diamond: return filled ? "diamond.fill" : "diamond"
+        case .hexagon: return filled ? "hexagon.fill" : "hexagon"
+        case .star: return filled ? "star.fill" : "star"
         case .arrow: return "arrow.up.right"
         }
     }
