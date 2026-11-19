@@ -16,6 +16,10 @@ struct BowerbirdApp: App {
 
     init() {
         let url = BoardPaths.default().boardPath(for: nil)
+        // A fresh board gets the welcome board (its assets
+        // and board.json) before the store loads it, so the
+        // first launch shows the board, not an empty canvas.
+        WelcomeBoardSeeder.seedIfNeeded(boardURL: url)
         _store = StateObject(wrappedValue: BoardStore(boardURL: url))
     }
 

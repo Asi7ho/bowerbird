@@ -11,7 +11,10 @@ let package = Package(
     targets: [
         // Headless core: the board model, the store, the
         // plugin host. It knows nothing about UI.
-        .target(name: "BowerbirdCore"),
+        .target(
+            name: "BowerbirdCore",
+            resources: [.copy("Resources")]
+        ),
         // Board UI: the AppKit viewport, the Metal grid and
         // ink layer, the card host and card views. It knows
         // the core, never the other way round.
