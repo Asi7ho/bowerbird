@@ -205,6 +205,6 @@ public final class BoardViewport: NSView {
 /// The card container: a flipped view (y down), like the
 /// DOM, so a card's frame is its world position and the
 /// container's bounds are the camera.
-private final class WorldView: NSView {
+final class WorldView: NSView {
     override var isFlipped: Bool { true }
 }
