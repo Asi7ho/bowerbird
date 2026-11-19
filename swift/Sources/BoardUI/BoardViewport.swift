@@ -39,7 +39,7 @@ public final class BoardViewport: NSView {
     public var onBoardChanged: ((Board) -> Void)?
 
     public let gridView = GridView()
-    public let cardContainer = NSView()
+    let cardContainer = WorldView()
 
     private var spaceHeld = false
     private var panStart: (point: NSPoint, camera: Camera)?
@@ -71,11 +71,12 @@ public final class BoardViewport: NSView {
         super.resizeSubviews(withOldSize: oldSize)
         gridView.frame = bounds
         cardContainer.frame = bounds
+        applyCamera()
     }
 
     /// The world rect currently visible, with the culling
     /// margin — what the card host builds views for.
-    public var visibleRect: WorldRect {
+    public var visibleWorldRect: WorldRect {
         CameraMath.visibleRect(camera: camera, viewport: Size(w: Double(bounds.width), h: Double(bounds.height)))
     }
 
@@ -91,12 +92,20 @@ public final class BoardViewport: NSView {
     }
 
     private func applyCamera() {
-        let zoom = camera.zoom
-        let transform = CGAffineTransform(
-            a: zoom, b: 0, c: 0, d: zoom,
-            tx: -camera.x * zoom, ty: -camera.y * zoom
+        // The camera is the container's bounds: its origin is
+        // the world point at the top-left, and its size is the
+        // viewport in world units (viewport / zoom). A point in
+        // the container's (world) coordinates then maps to the
+        // screen exactly as the Electron app maps it:
+        // screen = (world − camera) × zoom. The frame is set
+        // first (it resets the bounds), then the bounds.
+        cardContainer.frame = bounds
+        cardContainer.bounds = CGRect(
+            x: camera.x,
+            y: camera.y,
+            width: bounds.width / camera.zoom,
+            height: bounds.height / camera.zoom
         )
-        cardContainer.setAffineTransform(transform)
         gridView.camera = camera
     }
 
@@ -191,4 +200,11 @@ public final class BoardViewport: NSView {
             addCursorRect(bounds, cursor: .openHand)
         }
     }
+}
+
+/// The card container: a flipped view (y down), like the
+/// DOM, so a card's frame is its world position and the
+/// container's bounds are the camera.
+private final class WorldView: NSView {
+    override var isFlipped: Bool { true }
 }

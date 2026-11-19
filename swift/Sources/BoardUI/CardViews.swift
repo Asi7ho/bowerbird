@@ -179,7 +179,7 @@ public final class StrokeCardView: CardView {
         shapeLayer.lineWidth = CGFloat(stroke.width)
         shapeLayer.lineCap = .round
         shapeLayer.lineJoin = .round
-        shapeLayer.opacity = stroke.marker == "highlighter" ? 0.45 : 1
+        shapeLayer.opacity = stroke.marker ? 0.45 : 1
         shapeLayer.frame = bounds
     }
 
@@ -291,7 +291,7 @@ public final class PlaceholderCardView: CardView {
             subtitleField.stringValue = "PDFView in M4"
         case .fileCard(let file):
             titleField.stringValue = file.path
-            subtitleField.stringValue = file.format.uppercased()
+            subtitleField.stringValue = file.format.rawValue.uppercased()
         case .audio(let audio):
             titleField.stringValue = audio.title ?? "Audio"
             subtitleField.stringValue = "AVPlayerView in M5"
