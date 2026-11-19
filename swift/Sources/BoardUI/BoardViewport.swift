@@ -278,7 +278,12 @@ public final class BoardViewport: NSView {
         for area in trackingAreas { removeTrackingArea(area) }
         addTrackingArea(NSTrackingArea(
             rect: bounds,
-            options: [.mouseEnteredAndExited, .activeInKeyWindow],
+            // mouseMoved is here so the resize cursor is set
+            // directly on every move (see `mouseMoved`): the
+            // cursor rects did not show it at the edges, so
+            // the cursor is set here instead of relying on
+            // the rect system.
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow],
             owner: self, userInfo: nil
         ))
     }
@@ -289,6 +294,36 @@ public final class BoardViewport: NSView {
         // AppKit sends those to the first responder, and
         // the board is the only focusable view for now.
         window?.makeFirstResponder(self)
+    }
+
+    override public func mouseMoved(with event: NSEvent) {
+        // The resize cursor, set directly on every move.
+        // The cursor rects did not show it at the window's
+        // edges — the view sits inside a SwiftUI hosting
+        // view, which does not reliably forward the rect
+        // system — so the cursor is set here instead.
+        // Within 6 points of an edge (or a corner) the
+        // resize arrow shows. A pan in progress (or Space
+        // held) takes precedence: while panning, the hand
+        // shows even at an edge. The view is flipped (y
+        // down), so the bottom edge is at bounds.height;
+        // the top edge is the title strip, not this view.
+        let location = convert(event.locationInWindow, from: nil)
+        let edge: CGFloat = 6
+        let nearLeft = location.x < edge
+        let nearRight = location.x > bounds.width - edge
+        let nearBottom = location.y > bounds.height - edge
+        if panStart != nil {
+            NSCursor.closedHand.set()
+        } else if spaceHeld {
+            NSCursor.openHand.set()
+        } else if nearLeft || nearRight {
+            NSCursor.resizeLeftRight.set()
+        } else if nearBottom {
+            NSCursor.resizeUpDown.set()
+        } else {
+            NSCursor.arrow.set()
+        }
     }
 
     // MARK: - Space+drag pan (a grab, not a scroll)
