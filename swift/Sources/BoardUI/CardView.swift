@@ -32,6 +32,13 @@ public class CardView: NSView {
         didSet { updateChrome() }
     }
 
+    /// Whether the card shows a border at all. Shape cards
+    /// do not (the Electron app's shape card is
+    /// `border:none`); their selection is the ring alone.
+    public var showsBorder: Bool = true {
+        didSet { updateChrome() }
+    }
+
     /// Whether the card clips its content (stroke cards do
     /// not — the stroke paints past the edge).
     public var clipsContent: Bool = true {
@@ -56,12 +63,18 @@ public class CardView: NSView {
         guard let layer else { return }
         layer.masksToBounds = clipsContent
         if isSelected {
-            layer.borderColor = NSColor.systemBlue.withAlphaComponent(0.5).cgColor
+            // A clear selection, not a whisper: a 2px blue
+            // border (the Electron app's is 1px at half
+            // strength, which read as too shy) and a
+            // stronger ring around it.
+            layer.borderWidth = showsBorder ? 2 : 0
+            layer.borderColor = NSColor.systemBlue.withAlphaComponent(0.9).cgColor
             layer.shadowColor = NSColor.systemBlue.cgColor
-            layer.shadowOpacity = 0.35
-            layer.shadowRadius = 2
+            layer.shadowOpacity = 0.5
+            layer.shadowRadius = 3
             layer.shadowOffset = .zero
         } else {
+            layer.borderWidth = showsBorder ? 1 : 0
             layer.borderColor = NSColor.separatorColor.cgColor
             if hasShadow {
                 layer.shadowColor = NSColor.black.cgColor

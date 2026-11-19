@@ -119,7 +119,7 @@ public final class ShapeCardView: CardView {
         // it would show as a rectangle, which is what the
         // bird's parts did. The fill lives on the shape
         // layer, clipped to the shape.
-        layer?.borderWidth = 0
+        showsBorder = false
         layer?.backgroundColor = NSColor.clear.cgColor
         layer?.addSublayer(shapeLayer)
     }
