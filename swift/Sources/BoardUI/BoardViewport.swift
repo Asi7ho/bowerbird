@@ -30,6 +30,7 @@ public final class BoardViewport: NSView {
             gridView.grid = board.grid
             gridView.backgroundHex = board.bg
             updateWindowBackground()
+            updateHandles()
             onBoardChanged?(board)
         }
     }
@@ -59,7 +60,10 @@ public final class BoardViewport: NSView {
     /// The selected item ids. The viewport owns the
     /// interaction state; the host only renders it.
     public private(set) var selected: Set<Int> = [] {
-        didSet { onSelectionChanged?(selected) }
+        didSet {
+            updateHandles()
+            onSelectionChanged?(selected)
+        }
     }
     /// Called when the viewport is laid out or resized, so
     /// the host can re-cull for the new size. The first
@@ -160,6 +164,27 @@ public final class BoardViewport: NSView {
     private let lassoOverlay = WorldView()
     private let lassoLayer = CAShapeLayer()
 
+    /// The resize and rotate handles: small grips over the
+    /// selected card (one card only), drawn as shape layers
+    /// in an overlay. The hit-testing is geometric (a
+    /// distance from the world point to the handle's world
+    /// position), so the layers are visual only.
+    private let handlesOverlay = WorldView()
+    private let resizeHandleLayer = CAShapeLayer()
+    private let rotateStemLayer = CAShapeLayer()
+    private let rotateGripLayer = CAShapeLayer()
+
+    /// A resize drag in progress: the id being resized,
+    /// the world point where it started, the size it
+    /// started at, and whether it actually moved.
+    private var resizeDrag: (id: Int, startWorld: Pt, origW: Double, origH: Double)?
+    private var resizeMoved = false
+    /// A rotate drag in progress: the id being rotated,
+    /// the rotation it started at, and whether it actually
+    /// moved.
+    private var rotateDrag: (id: Int, origRot: Double)?
+    private var rotateMoved = false
+
     /// A local event monitor for pinch and wheel, so the
     /// gestures reach the board whatever the first
     /// responder is. AppKit sends a pinch to the first
@@ -227,6 +252,18 @@ public final class BoardViewport: NSView {
         lassoLayer.fillColor = NSColor.systemBlue.withAlphaComponent(0.08).cgColor
         lassoLayer.strokeColor = NSColor.systemBlue.cgColor
         lassoOverlay.layer?.addSublayer(lassoLayer)
+        handlesOverlay.wantsLayer = true
+        handlesOverlay.autoresizingMask = [.width, .height]
+        addSubview(handlesOverlay)
+        resizeHandleLayer.fillColor = NSColor.white.cgColor
+        resizeHandleLayer.strokeColor = NSColor.labelColor.withAlphaComponent(0.4).cgColor
+        handlesOverlay.layer?.addSublayer(resizeHandleLayer)
+        rotateStemLayer.strokeColor = NSColor.labelColor.withAlphaComponent(0.4).cgColor
+        rotateStemLayer.fillColor = NSColor.clear.cgColor
+        handlesOverlay.layer?.addSublayer(rotateStemLayer)
+        rotateGripLayer.fillColor = NSColor.white.cgColor
+        rotateGripLayer.strokeColor = NSColor.labelColor.withAlphaComponent(0.4).cgColor
+        handlesOverlay.layer?.addSublayer(rotateGripLayer)
         applyCamera()
     }
 
@@ -248,6 +285,7 @@ public final class BoardViewport: NSView {
         connectorOverlay.frame = bounds
         eraserOverlay.frame = bounds
         lassoOverlay.frame = bounds
+        handlesOverlay.frame = bounds
         applyCamera()
         onViewportResized?()
     }
@@ -288,6 +326,7 @@ public final class BoardViewport: NSView {
         updateShapePreview()
         updateConnectorPreview()
         updateLassoPreview()
+        updateHandles()
     }
 
     /// The window behind the board is the board's own
@@ -676,6 +715,27 @@ public final class BoardViewport: NSView {
             updateLassoPreview()
             return
         }
+        // The handles, before the card hit-test: with one
+        // card selected, a press on its rotate grip starts
+        // a rotate drag, and a press on its resize corner
+        // starts a resize drag (the Electron app's
+        // rotateHit / cornerHit, in that order).
+        if toolState?.tool == .select(.select), selected.count == 1,
+           let id = selected.first,
+           let item = board.items.first(where: { $0.id == id }) {
+            let point = convert(event.locationInWindow, from: nil)
+            let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
+            if Handles.rotateHit(item: item, at: world, zoom: camera.zoom) {
+                rotateDrag = (id: id, origRot: Handles.itemRotation(of: item))
+                rotateMoved = false
+                return
+            }
+            if Handles.cornerHit(board: board, item: item, at: world, zoom: camera.zoom) {
+                resizeDrag = (id: id, startWorld: world, origW: item.size.w, origH: item.size.h)
+                resizeMoved = false
+                return
+            }
+        }
         // Click selection (the Electron app's setSelected):
         // a card, or its whole group, is selected; Shift
         // toggles it in the selection; empty space clears
@@ -712,6 +772,18 @@ public final class BoardViewport: NSView {
             if !shift { selected = [] }
             marqueeStart = world
             marqueeCurrent = world
+            return
+        }
+        // A press on the clicked card's resize corner starts
+        // a resize drag for that card (the Electron app's
+        // corner grab: it selects the card first, replacing
+        // the selection, then resizes it). This runs before
+        // the Shift-toggle selection below, so a corner grab
+        // never deselects the card it resizes.
+        if Handles.cornerHit(board: board, item: item, at: world, zoom: camera.zoom) {
+            selected = groupIds(of: item)
+            resizeDrag = (id: item.id, startWorld: world, origW: item.size.w, origH: item.size.h)
+            resizeMoved = false
             return
         }
         let group = groupIds(of: item)
@@ -754,6 +826,38 @@ public final class BoardViewport: NSView {
                 y: start.camera.y - Double(point.y - start.point.y) / start.camera.zoom,
                 zoom: start.camera.zoom
             )
+            return
+        }
+        // A resize drag: the size follows the pointer from
+        // the drag's start size (the Electron app's
+        // resizeItem, clamped to 48×48, with a stroke's
+        // points scaling with the frame). The board is
+        // mutated live so the card follows; the commit is
+        // on mouseUp.
+        if let resize = resizeDrag {
+            let point = convert(event.locationInWindow, from: nil)
+            let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
+            if hypot(world.x - resize.startWorld.x, world.y - resize.startWorld.y) > 2 {
+                resizeMoved = true
+            }
+            BoardResize.resize(&board, id: resize.id, newW: resize.origW + (world.x - resize.startWorld.x), newH: resize.origH + (world.y - resize.startWorld.y))
+            updateHandles()
+            return
+        }
+        // A rotate drag: the rotation follows the angle from
+        // the card's centre to the pointer (Shift snaps to
+        // 15°). The board is mutated live so the card
+        // follows; the commit is on mouseUp.
+        if let rotate = rotateDrag {
+            let point = convert(event.locationInWindow, from: nil)
+            let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
+            guard let item = board.items.first(where: { $0.id == rotate.id }) else { return }
+            let rot = Handles.rotateAngleFor(world: world, item: item, snap: event.modifierFlags.contains(.shift))
+            if abs(rot - rotate.origRot) > 1 {
+                rotateMoved = true
+            }
+            BoardRotate.setRotation(&board, id: rotate.id, rotation: rot)
+            updateHandles()
             return
         }
         // A card drag: the total world delta from the drag
@@ -838,6 +942,20 @@ public final class BoardViewport: NSView {
 
     override public func mouseUp(with event: NSEvent) {
         panStart = nil
+        // A resize or rotate drag that moved commits as one
+        // undo step and one save. A click on a handle that
+        // never moved commits nothing.
+        if resizeDrag != nil || rotateDrag != nil {
+            if resizeMoved || rotateMoved {
+                onBoardMutate?(board)
+            }
+            resizeDrag = nil
+            resizeMoved = false
+            rotateDrag = nil
+            rotateMoved = false
+            updateHandles()
+            return
+        }
         // A stroke that drew at least two points commits
         // as one item (one undo step, one save). A click
         // that never moved is a single point and commits
@@ -1098,6 +1216,83 @@ public final class BoardViewport: NSView {
             lassoLayer.path = path
             lassoLayer.lineWidth = 1 * camera.zoom
             lassoLayer.frame = bounds
+        }
+    }
+
+    /// Draws (or hides) the resize and rotate handles.
+    /// They show only when exactly one item is selected:
+    /// the resize grip at the item's bottom-right corner
+    /// (never for a connector), and the rotate grip 28
+    /// world pixels above its top edge centre, with a stem
+    /// pointing back at the card. A handle off-screen is
+    /// hidden. The grips are 10 screen pixels across.
+    private func updateHandles() {
+        handlesOverlay.frame = bounds
+        guard selected.count == 1,
+              let id = selected.first,
+              let item = board.items.first(where: { $0.id == id }) else {
+            resizeHandleLayer.path = nil
+            rotateStemLayer.path = nil
+            rotateGripLayer.path = nil
+            return
+        }
+        let size: CGFloat = 10
+        CardView.withoutLayerActions {
+            // Resize: a white square with a grey border, at
+            // the bottom-right corner (rotated with the
+            // item). Hidden for a connector and off-screen.
+            if let corner = Handles.cornerWorld(board: board, item: item) {
+                let sx = CGFloat((corner.x - camera.x) * camera.zoom)
+                let sy = CGFloat((corner.y - camera.y) * camera.zoom)
+                if sx >= 0, sy >= 0, sx <= bounds.width, sy <= bounds.height {
+                    resizeHandleLayer.path = CGPath(
+                        roundedRect: CGRect(x: sx - size / 2, y: sy - size / 2, width: size, height: size),
+                        cornerWidth: 2, cornerHeight: 2, transform: nil
+                    )
+                    resizeHandleLayer.lineWidth = 1
+                } else {
+                    resizeHandleLayer.path = nil
+                }
+            } else {
+                resizeHandleLayer.path = nil
+            }
+            // Rotate: a circle above the top edge, with a
+            // stem back to the card's top centre (the grip
+            // rotates with the card, so the stem always
+            // points at it). Hidden when the item is not
+            // rotatable, and off-screen.
+            if let handle = Handles.rotateHandleWorld(item: item, zoom: camera.zoom) {
+                let hx = CGFloat((handle.x - camera.x) * camera.zoom)
+                let hy = CGFloat((handle.y - camera.y) * camera.zoom)
+                let centre = CameraMath.centre(of: item)
+                let top = Handles.rotatePoint(
+                    Pt(x: centre.x, y: item.pos.y),
+                    around: centre, by: Handles.itemRotation(of: item)
+                )
+                let tx = CGFloat((top.x - camera.x) * camera.zoom)
+                let ty = CGFloat((top.y - camera.y) * camera.zoom)
+                if hx >= 0, hy >= 0, hx <= bounds.width, hy <= bounds.height {
+                    let stem = CGMutablePath()
+                    stem.move(to: CGPoint(x: hx, y: hy))
+                    stem.addLine(to: CGPoint(x: tx, y: ty))
+                    rotateStemLayer.path = stem
+                    rotateStemLayer.lineWidth = 1
+                    rotateGripLayer.path = CGPath(
+                        ellipseIn: CGRect(x: hx - size / 2, y: hy - size / 2, width: size, height: size),
+                        transform: nil
+                    )
+                    rotateGripLayer.lineWidth = 1
+                } else {
+                    rotateStemLayer.path = nil
+                    rotateGripLayer.path = nil
+                }
+            } else {
+                rotateStemLayer.path = nil
+                rotateGripLayer.path = nil
+            }
+            resizeHandleLayer.frame = bounds
+            rotateStemLayer.frame = bounds
+            rotateGripLayer.frame = bounds
         }
     }
 
