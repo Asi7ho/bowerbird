@@ -19,10 +19,20 @@ struct BowerbirdApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
-                    _ = store?.saveSync()
+            ContentView(
+                board: store?.board ?? BoardStore.emptyBoard(),
+                onCameraChanged: { [store] camera in
+                    // The camera is part of the board: keep the
+                    // store's copy current so a quit flush (or
+                    // the next edit's save) persists where the
+                    // user was looking. The camera is not saved
+                    // on every move — only on quit or on edit.
+                    store?.update { $0.camera = camera }
                 }
+            )
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+                _ = store?.saveSync()
+            }
         }
         .windowStyle(.titleBar)
     }
