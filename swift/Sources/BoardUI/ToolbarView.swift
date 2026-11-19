@@ -151,9 +151,66 @@ public struct ToolbarView: View {
     private func flyout(for picker: Picker) -> some View {
         if picker == .color {
             colorFlyout()
+        } else if picker == .shape {
+            shapeFlyout()
         } else {
             iconFlyout(for: picker)
         }
+    }
+
+    /// The geometry flyout: a Filled / Outline switch at
+    /// the top, then the six shapes. The switch stays open
+    /// when tapped (so the shape can be picked after it);
+    /// picking a shape closes the flyout.
+    private func shapeFlyout() -> some View {
+        VStack(spacing: 10) {
+            HStack(spacing: 4) {
+                fillModeButton(icon: "square.fill", label: "Filled", active: !tools.shapeOutline) {
+                    tools.shapeOutline = false
+                }
+                fillModeButton(icon: "square", label: "Outline", active: tools.shapeOutline) {
+                    tools.shapeOutline = true
+                }
+            }
+            Divider()
+            ForEach(ShapeKind.allCases.filter { $0 != .arrow }, id: \.self) { shape in
+                toolButton(
+                    icon: shapeIcon(for: shape),
+                    label: shape.rawValue.capitalized,
+                    active: tools.tool == .shape(shape),
+                    action: {
+                        tools.activate(.shape(shape))
+                        tools.pickerOpen = nil
+                    }
+                )
+            }
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 8)
+        .frame(width: 56)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.black.opacity(0.08), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
+        // Like the bar, the flyout consumes clicks on its
+        // own background so they do not reach the board.
+        .contentShape(Rectangle())
+        .onTapGesture {}
+    }
+
+    private func fillModeButton(icon: String, label: String, active: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 16))
+                .frame(width: 18, height: 18)
+                .background(active ? Color.black.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+                .foregroundStyle(Color.primary)
+        }
+        .buttonStyle(.plain)
+        .contentShape(Rectangle())
+        .accessibilityLabel(label)
     }
 
     /// The colour flyout: the palette as coloured circles,
@@ -191,8 +248,9 @@ public struct ToolbarView: View {
         .onTapGesture {}
     }
 
-    /// The icon flyout: the select, draw and shape
-    /// families, as icon buttons.
+    /// The icon flyout: the select and draw families, as
+    /// icon buttons. (The shape family has its own flyout
+    /// with the Filled / Outline switch.)
     private func iconFlyout(for picker: Picker) -> some View {
         let options: [(icon: String, label: String, active: Bool, pick: () -> Void)] = {
             switch picker {
@@ -226,18 +284,7 @@ public struct ToolbarView: View {
                         tools.pickerOpen = nil
                     }),
                 ]
-            case .shape:
-                // The arrow is not offered here: the
-                // toolbar already has it as the connector
-                // (the A tool), so the shape family is the
-                // six shapes.
-                return ShapeKind.allCases.filter { $0 != .arrow }.map { shape in
-                    (shapeIcon(for: shape), shape.rawValue.capitalized, tools.tool == .shape(shape), {
-                        tools.activate(.shape(shape))
-                        tools.pickerOpen = nil
-                    })
-                }
-            case .color:
+            case .shape, .color:
                 return []
             }
         }()

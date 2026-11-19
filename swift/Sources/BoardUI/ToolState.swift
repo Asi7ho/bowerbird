@@ -26,6 +26,10 @@ public final class ToolState: ObservableObject {
     @Published public var tool: Tool = .select(.select)
     @Published public var penColor: String = "#1A1A1A"
     @Published public var pickerOpen: Picker?
+    /// Whether the next shape drawn is an outline (just
+    /// the border, no fill) or filled. The geometry flyout
+    /// switches it; the shape drawing reads it.
+    @Published public var shapeOutline: Bool = false
 
     @Published public private(set) var lastSelectMode: SelectMode = .select
     @Published public private(set) var lastDrawTool: DrawTool = .pen
