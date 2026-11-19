@@ -44,7 +44,13 @@ public final class CardHost {
     }
 
     private let container: NSView
-    private let connectorOverlay = NSView()
+    // Flipped (y down), like the container: the connector
+    // paths are computed in world coordinates, y down, and a
+    // plain NSView's layer is y-up, which mirrored the line
+    // inside the overlay — and the mirror moved as the
+    // overlay's frame (the visible rect) changed with the
+    // pan, so the arrow drifted while the cards stayed put.
+    private let connectorOverlay = WorldView()
     private var shown: [Int: CardView] = [:]
     private var pool: [String: [CardView]] = [:]
 
