@@ -96,7 +96,7 @@ public final class TextCardView: CardView {
         textLayer.foregroundColor = (NSColor.fromHex(text.color) ?? .labelColor).cgColor
         textLayer.string = text.text
         layer?.backgroundColor = (text.bg.flatMap { NSColor.fromHex($0) } ?? NSColor.white).cgColor
-        setNeedsLayout()
+        needsLayout = true
     }
 
     override public func layout() {
@@ -335,7 +335,7 @@ public final class PlaceholderCardView: CardView {
             titleLayer.string = ""
             subtitleLayer.string = ""
         }
-        setNeedsLayout()
+        needsLayout = true
     }
 
     override public func layout() {
