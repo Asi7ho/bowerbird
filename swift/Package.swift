@@ -11,6 +11,6 @@ let package = Package(
     targets: [
         .target(name: "BowerbirdCore"),
         .executableTarget(name: "Bowerbird", dependencies: ["BowerbirdCore"]),
-        .testTarget(name: "BowerbirdTests", dependencies: ["BowerbirdCore"]),
+        .testTarget(name: "BowerbirdTests", dependencies: ["BowerbirdCore"], resources: [.copy("Fixtures")]),
     ]
 )
