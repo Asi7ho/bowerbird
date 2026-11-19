@@ -80,13 +80,38 @@ design rules for the Swift line, not aspirations.
 - **App shell:** SwiftUI `App` + `WindowGroup`. AppKit where
   SwiftUI cannot do the job (window chrome, drag regions, file
   watching, global shortcuts). One window, like the Electron app.
-- **Board canvas:** the scaling problem is a DOM problem in the
-  Electron app (2,000 cards, software compositing). The Swift
-  canvas must not repeat it by making 2,000 SwiftUI views. The
-  leading design (decide in M2, measure before committing): one
-  `Canvas` (or a Metal-backed layer) that draws cards as vector
-  content, with SwiftUI views only for the card being edited.
-  Measure pan/select at 2,000 cards before choosing.
+- **Board canvas — DECIDED by the user 2026-11-19 (M2):**
+  three layers, each doing what it is best at.
+  1. **AppKit for the spatial viewport and native file
+     hosting.** An `NSView` backed by Core Animation layers
+     owns the world-to-screen transform
+     (`CGAffineTransform` / `CATransform3D`) and handles
+     trackpad magnify/scroll with zero SwiftUI layout-pass
+     overhead. File cards are real `NSView` instances,
+     recycled as they enter/exit the viewport, so the app
+     gets the system frameworks for free: PDFs via `PDFView`
+     (text selection, search, page rendering), arbitrary
+     files (3D USDZ, Keynote, Pages, Office, ZIPs, code) via
+     `QLPreviewView` (Quick Look), video and audio via
+     `AVPlayerView`, rich text / Markdown via `NSTextView`
+     (TextKit 2), web and interactive embeds via `WKWebView`.
+     **LOD switching:** below 25% zoom, heavy live views
+     (`PDFView`, `WKWebView`) are swapped for cached
+     `CGImage`/`CALayer` snapshots, so hundreds of files
+     stay at 120 fps; the live view comes back when the user
+     zooms in or clicks to interact.
+  2. **Metal (`CAMetalLayer`) for the canvas surface and the
+     vector/ink layer.** The background grid is a single
+     full-screen `CAMetalLayer` rendering an infinite
+     procedural dot/line grid in a fragment shader — zero
+     memory cost at any canvas size or zoom. Freehand ink,
+     Bezier connectors, lasso boxes and drop shadows render
+     in Metal at 120 Hz without triggering AppKit view
+     invalidations.
+  3. **SwiftUI for chrome and inspectors.** The AppKit
+     viewport is wrapped in `NSViewRepresentable`; SwiftUI
+     is strictly the surrounding UI — floating toolbars,
+     file-inspector sidebars, command palettes, settings.
 - **Data:** Swift `Codable` types mirroring `board.json`
   (`swift/Sources/BowerbirdCore/Model.swift`). All board mutation
   goes through one store (undo, save, recovery journal, backups),
@@ -148,18 +173,32 @@ design rules for the Swift line, not aspirations.
   Electron data dir and saves it back with no loss; a crash
   mid-edit offers recovery, like the Electron app.
 
-### M2 — Canvas + camera
+### M2 — Canvas + camera (architecture decided 2026-11-19)
 
-- Infinite canvas, pan (Space+drag, trackpad), wheel/trackpad
-  zoom, zoom-to-fit, grid (Dots/Lines/None), background
-  colour. Card rendering for every kind, visible-set culling,
-  selection (click, Shift-add, marquee, lasso), selection
-  stacking (selected to front, visually only), groups with
-  frames + labels, selected-group frame above cards.
+- **Viewport (AppKit):** an `NSView` (Core Animation layers)
+  owns the camera (world-to-screen transform, zoom clamped
+  0.01–8, zoom around the cursor, zoom-to-fit with the
+  Electron app's 48px padding and zoom capped at 1), pan
+  (Space+drag, trackpad scroll) and trackpad magnify — no
+  SwiftUI layout passes on the hot path.
+- **Metal grid + ink:** a full-screen `CAMetalLayer` draws
+  the procedural dot/line grid (Dots/Lines/None, background
+  colour) in a fragment shader; ink, connectors, lasso and
+  shadows render in Metal at 120 Hz.
+- **Card host:** file cards are recycled `NSView`s, built
+  only for the visible set (200 world-unit margin, like the
+  Electron app's culling), with LOD below 25% zoom (live
+  views swapped for cached snapshots, restored on zoom-in
+  or click). Card rendering for every kind (native
+  frameworks where they exist: `PDFView`, `QLPreviewView`,
+  `AVPlayerView`, `NSTextView`, `WKWebView`); selection
+  (click, Shift-add, marquee, lasso), selection stacking
+  (selected to front, visually only), groups with frames +
+  labels, selected-group frame above cards.
 - Done: the welcome board renders and reads like the
   Electron version at the same zoom; pan/zoom/fit feel the
-  same; 2,000-card board measured (the M2 canvas decision
-  is made on this measurement).
+  same; 2,000-card board measured (pan/select at fit, and
+  the LOD threshold confirmed).
 
 ### M3 — Editing + drawing tools
 
@@ -256,8 +295,13 @@ one check, run against both apps on the same board:
 
 ## Open decisions (do not guess — spike or ask)
 
-1. Canvas tech (M2): SwiftUI `Canvas` vs AppKit `NSView` vs
-   Metal. Decide on the 2,000-card measurement.
+1. Canvas tech (M2): **DECIDED by the user 2026-11-19** —
+   AppKit `NSView` viewport (Core Animation layers) +
+   Metal `CAMetalLayer` for the grid and the ink layer +
+   SwiftUI for chrome and inspectors. File cards are
+   recycled `NSView`s with native frameworks (`PDFView`,
+   `QLPreviewView`, `AVPlayerView`, `NSTextView`,
+   `WKWebView`) and LOD snapshots below 25% zoom.
 2. GLB loading (M5): SceneKit vs custom loader vs converting
    at import. Decide early — it can change M4/M5 scope.
 3. Python host (M7): embedded CPython vs helper process.
