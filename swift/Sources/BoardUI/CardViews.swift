@@ -229,7 +229,8 @@ public final class StrokeCardView: CardView {
         let zoomX = item.size.w > 0 ? bounds.width / CGFloat(item.size.w) : 1
         let zoomY = item.size.h > 0 ? bounds.height / CGFloat(item.size.h) : 1
         if let path = StrokePath.path(for: stroke.points) {
-            shapeLayer.path = path.copy(using: CGAffineTransform(scaleX: zoomX, y: zoomY))
+            var transform = CGAffineTransform(scaleX: zoomX, y: zoomY)
+            shapeLayer.path = path.copy(using: &transform)
         } else {
             shapeLayer.path = nil
         }
