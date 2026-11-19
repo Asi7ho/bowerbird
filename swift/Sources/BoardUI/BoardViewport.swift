@@ -61,6 +61,18 @@ public final class BoardViewport: NSView {
     private var spaceHeld = false
     private var panStart: (point: NSPoint, camera: Camera)?
 
+    /// A marquee drag in progress: the world point where the
+    /// drag started and where the pointer is now. A drag on
+    /// empty space (no card hit, no Space pan) starts one.
+    private var marqueeStart: Pt?
+    private var marqueeCurrent: Pt?
+    /// The marquee rect overlay, above the cards: a
+    /// WorldView (flipped, like the card container)
+    /// carrying one CAShapeLayer — the same pattern as the
+    /// CardHost's connector and group-frame overlays.
+    private let marqueeOverlay = WorldView()
+    private let marqueeLayer = CAShapeLayer()
+
     /// A local event monitor for pinch and wheel, so the
     /// gestures reach the board whatever the first
     /// responder is. AppKit sends a pinch to the first
@@ -92,6 +104,12 @@ public final class BoardViewport: NSView {
         cardContainer.wantsLayer = true
         cardContainer.autoresizingMask = [.width, .height]
         addSubview(cardContainer)
+        marqueeOverlay.wantsLayer = true
+        marqueeOverlay.autoresizingMask = [.width, .height]
+        addSubview(marqueeOverlay)
+        marqueeLayer.fillColor = NSColor.clear.cgColor
+        marqueeLayer.strokeColor = NSColor.systemBlue.cgColor
+        marqueeOverlay.layer?.addSublayer(marqueeLayer)
         applyCamera()
     }
 
@@ -107,6 +125,7 @@ public final class BoardViewport: NSView {
         super.resizeSubviews(withOldSize: oldSize)
         gridView.frame = bounds
         cardContainer.frame = bounds
+        marqueeOverlay.frame = bounds
         applyCamera()
         onViewportResized?()
     }
@@ -142,6 +161,7 @@ public final class BoardViewport: NSView {
         // hit-test checks. The grid takes the camera
         // directly (its shader does the same mapping).
         gridView.camera = camera
+        updateMarqueeOverlay()
     }
 
     /// The window behind the board is the board's own
@@ -365,7 +385,14 @@ public final class BoardViewport: NSView {
         // A connector is drawn, not a view, so it is the
         // only thing that still uses the board-order walk.
         guard let item = hitItem ?? HitTest.hit(board: board, at: world) else {
+            // Empty space: a drag from here is a marquee.
+            // Shift keeps the existing selection until the
+            // drag ends (the Electron app clears it only
+            // without Shift); the marquee result replaces
+            // the selection on mouseUp either way.
             if !shift { selected = [] }
+            marqueeStart = world
+            marqueeCurrent = world
             return
         }
         let group = groupIds(of: item)
@@ -389,19 +416,51 @@ public final class BoardViewport: NSView {
     }
 
     override public func mouseDragged(with event: NSEvent) {
-        guard let start = panStart else { return }
+        if let start = panStart {
+            let point = convert(event.locationInWindow, from: nil)
+            // A grab moves the paper with the pointer: the content
+            // follows the hand, so the camera moves against it.
+            camera = Camera(
+                x: start.camera.x - Double(point.x - start.point.x) / start.camera.zoom,
+                y: start.camera.y - Double(point.y - start.point.y) / start.camera.zoom,
+                zoom: start.camera.zoom
+            )
+            return
+        }
+        guard marqueeStart != nil else { return }
         let point = convert(event.locationInWindow, from: nil)
-        // A grab moves the paper with the pointer: the content
-        // follows the hand, so the camera moves against it.
-        camera = Camera(
-            x: start.camera.x - Double(point.x - start.point.x) / start.camera.zoom,
-            y: start.camera.y - Double(point.y - start.point.y) / start.camera.zoom,
-            zoom: start.camera.zoom
-        )
+        marqueeCurrent = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
+        updateMarqueeOverlay()
     }
 
     override public func mouseUp(with event: NSEvent) {
         panStart = nil
+        guard let start = marqueeStart else { return }
+        let end = marqueeCurrent ?? start
+        selected = Set(MarqueeSelection.select(board: board, from: start, to: end))
+        marqueeStart = nil
+        marqueeCurrent = nil
+        updateMarqueeOverlay()
+    }
+
+    /// Draws (or hides) the marquee rect. The rect is the
+    /// drag's world corners mapped to screen coordinates;
+    /// the stroke is the Electron app's 1 world pixel of the
+    /// accent blue, so it scales with the zoom, with no fill.
+    private func updateMarqueeOverlay() {
+        marqueeOverlay.frame = bounds
+        guard let start = marqueeStart, let current = marqueeCurrent else {
+            marqueeLayer.path = nil
+            return
+        }
+        let a = Pt(x: (start.x - camera.x) * camera.zoom, y: (start.y - camera.y) * camera.zoom)
+        let b = Pt(x: (current.x - camera.x) * camera.zoom, y: (current.y - camera.y) * camera.zoom)
+        let rect = CGRect(
+            x: min(a.x, b.x), y: min(a.y, b.y),
+            width: abs(b.x - a.x), height: abs(b.y - a.y)
+        )
+        marqueeLayer.path = CGPath(rect: rect, transform: nil)
+        marqueeLayer.lineWidth = 1 * camera.zoom
     }
 
     // MARK: - Cursor
