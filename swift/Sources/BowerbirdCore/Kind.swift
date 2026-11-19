@@ -141,6 +141,15 @@ public struct StrokePayload: Codable, Equatable {
     public var marker: Bool
     public var pressures: [Double]?
     public var pencil: Bool?
+
+    public init(points: [Pt], color: String, width: Double, marker: Bool, pressures: [Double]?, pencil: Bool?) {
+        self.points = points
+        self.color = color
+        self.width = width
+        self.marker = marker
+        self.pressures = pressures
+        self.pencil = pencil
+    }
 }
 
 public struct ConnectorPayload: Codable, Equatable {

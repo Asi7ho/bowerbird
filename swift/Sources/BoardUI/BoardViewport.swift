@@ -106,6 +106,18 @@ public final class BoardViewport: NSView {
     private let marqueeOverlay = WorldView()
     private let marqueeLayer = CAShapeLayer()
 
+    /// A stroke in progress (pen, pencil or highlighter):
+    /// the world points so far, the draw tool in use, and
+    /// the stylus pressures (only when the stroke started
+    /// with a stylus — a mouse records none, and draws a
+    /// uniform stroke). The live preview is a shape layer
+    /// over the cards, like the marquee overlay.
+    private var strokePoints: [Pt]?
+    private var strokePressures: [Double]?
+    private var strokeTool: DrawTool?
+    private let strokeOverlay = WorldView()
+    private let strokeLayer = CAShapeLayer()
+
     /// A local event monitor for pinch and wheel, so the
     /// gestures reach the board whatever the first
     /// responder is. AppKit sends a pinch to the first
@@ -143,6 +155,13 @@ public final class BoardViewport: NSView {
         marqueeLayer.fillColor = NSColor.clear.cgColor
         marqueeLayer.strokeColor = NSColor.systemBlue.cgColor
         marqueeOverlay.layer?.addSublayer(marqueeLayer)
+        strokeOverlay.wantsLayer = true
+        strokeOverlay.autoresizingMask = [.width, .height]
+        addSubview(strokeOverlay)
+        strokeLayer.fillColor = NSColor.clear.cgColor
+        strokeLayer.lineCap = .round
+        strokeLayer.lineJoin = .round
+        strokeOverlay.layer?.addSublayer(strokeLayer)
         applyCamera()
     }
 
@@ -159,6 +178,7 @@ public final class BoardViewport: NSView {
         gridView.frame = bounds
         cardContainer.frame = bounds
         marqueeOverlay.frame = bounds
+        strokeOverlay.frame = bounds
         applyCamera()
         onViewportResized?()
     }
@@ -195,6 +215,7 @@ public final class BoardViewport: NSView {
         // directly (its shader does the same mapping).
         gridView.camera = camera
         updateMarqueeOverlay()
+        updateStrokePreview()
     }
 
     /// The window behind the board is the board's own
@@ -469,6 +490,26 @@ public final class BoardViewport: NSView {
             panStart = (convert(event.locationInWindow, from: nil), camera)
             return
         }
+        // A draw tool (pen, pencil, highlighter) starts a
+        // stroke on press, whatever is under the cursor —
+        // the Electron app's pen check comes before the
+        // card hit-test, so a stroke can start on a card.
+        // The eraser is a draw tool in the toolbar but a
+        // different interaction, so it is not started here.
+        if case .draw(let drawTool) = toolState?.tool, drawTool != .eraser {
+            let point = convert(event.locationInWindow, from: nil)
+            let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
+            strokePoints = [world]
+            strokeTool = drawTool
+            // A stylus records its pressure per point, so
+            // the stroke can thicken and thin with the
+            // press; a mouse records none, and draws a
+            // uniform stroke. A pressure is recorded only
+            // when the first point carries one — a mouse
+            // reports zero, a stylus reports its press.
+            strokePressures = event.pressure > 0 ? [Double(event.pressure)] : nil
+            return
+        }
         // Click selection (the Electron app's setSelected):
         // a card, or its whole group, is selected; Shift
         // toggles it in the selection; empty space clears
@@ -562,6 +603,25 @@ public final class BoardViewport: NSView {
             }
             return
         }
+        // A stroke: a point is appended only once the
+        // pointer has moved more than 2 world pixels from
+        // the last one (2 / zoom), so a slow drag does not
+        // pile up duplicate points. The preview redraws
+        // from the points so far.
+        if var points = strokePoints {
+            let point = convert(event.locationInWindow, from: nil)
+            let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
+            let last = points[points.count - 1]
+            if hypot(world.x - last.x, world.y - last.y) > 2 / camera.zoom {
+                points.append(world)
+                strokePoints = points
+                if strokePressures != nil {
+                    strokePressures?.append(Double(event.pressure))
+                }
+                updateStrokePreview()
+            }
+            return
+        }
         guard marqueeStart != nil else { return }
         let point = convert(event.locationInWindow, from: nil)
         marqueeCurrent = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
@@ -570,6 +630,32 @@ public final class BoardViewport: NSView {
 
     override public func mouseUp(with event: NSEvent) {
         panStart = nil
+        // A stroke that drew at least two points commits
+        // as one item (one undo step, one save). A click
+        // that never moved is a single point and commits
+        // nothing — BoardStroke.add returns nil for it.
+        if let points = strokePoints {
+            if points.count >= 2, let tool = strokeTool {
+                let style = BoardViewport.strokeStyle(for: tool)
+                var next = board
+                if BoardStroke.add(
+                    &next,
+                    points: points,
+                    color: toolState?.penColor ?? "#1A1A1A",
+                    width: style.width,
+                    marker: style.marker,
+                    pencil: style.pencil ? true : nil,
+                    pressures: strokePressures
+                ) != nil {
+                    onBoardMutate?(next)
+                }
+            }
+            strokePoints = nil
+            strokePressures = nil
+            strokeTool = nil
+            updateStrokePreview()
+            return
+        }
         // A card drag that moved: commit the final board
         // (one undo step, one save). A click that never
         // moved commits nothing.
@@ -611,6 +697,50 @@ public final class BoardViewport: NSView {
         )
         marqueeLayer.path = CGPath(rect: rect, transform: nil)
         marqueeLayer.lineWidth = 1 * camera.zoom
+    }
+
+    /// The stroke's width, marker flag and pencil flag, by
+    /// draw tool — the Electron app's widths: pen 3, pencil
+    /// 2, highlighter 12 (a marker, drawn at 0.45 opacity).
+    private static func strokeStyle(for tool: DrawTool) -> (width: Double, marker: Bool, pencil: Bool) {
+        switch tool {
+        case .pen: return (3, false, false)
+        case .pencil: return (2, false, true)
+        case .highlighter: return (12, true, false)
+        case .eraser: return (3, false, false)
+        }
+    }
+
+    /// Draws (or hides) the live stroke preview: the smooth
+    /// Catmull-Rom path through the points so far, in the
+    /// pen colour at the tool's width (scaled by the zoom),
+    /// with the highlighter at 0.45 opacity. The path is
+    /// built in world-local coordinates (rebased by the
+    /// points' bbox min, like the committed card) and then
+    /// mapped to screen coordinates, so the preview is the
+    /// same curve the committed stroke will be.
+    private func updateStrokePreview() {
+        strokeOverlay.frame = bounds
+        guard let points = strokePoints, let tool = strokeTool, points.count >= 2 else {
+            strokeLayer.path = nil
+            return
+        }
+        let style = BoardViewport.strokeStyle(for: tool)
+        let minX = points.map(\.x).min() ?? 0
+        let minY = points.map(\.y).min() ?? 0
+        let screenMinX = (minX - camera.x) * camera.zoom
+        let screenMinY = (minY - camera.y) * camera.zoom
+        var transform = CGAffineTransform(
+            a: camera.zoom, b: 0, c: 0, d: camera.zoom,
+            tx: screenMinX, ty: screenMinY
+        )
+        CardView.withoutLayerActions {
+            strokeLayer.path = StrokePath.path(for: points)?.copy(using: &transform)
+            strokeLayer.lineWidth = CGFloat(style.width) * camera.zoom
+            strokeLayer.strokeColor = (NSColor.fromHex(toolState?.penColor ?? "#1A1A1A") ?? .labelColor).cgColor
+            strokeLayer.opacity = style.marker ? 0.45 : 1
+            strokeLayer.frame = bounds
+        }
     }
 
     // MARK: - Cursor
