@@ -1,3 +1,5 @@
+import Foundation
+
 /// Committing a drawn connector as a board item, ported
 /// from the Electron app's pointerup (`board.ts`): a drag
 /// from one anchor to another becomes one Connector item.
