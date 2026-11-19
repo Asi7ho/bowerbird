@@ -117,13 +117,27 @@ public final class BoardViewport: NSView {
         gridView.camera = camera
     }
 
+    override public func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        // Be the first responder from the start, so a pinch
+        // and the keyboard (Space, F) work without a click
+        // first — AppKit sends those to the first responder.
+        if window != nil {
+            window?.makeFirstResponder(self)
+        }
+    }
+
     // MARK: - Trackpad and wheel
 
     override public func scrollWheel(with event: NSEvent) {
-        if event.modifierFlags.contains(.control) {
-            // Ctrl+wheel zooms around the cursor (the Electron
-            // app's wheel zoom: factor exp(−dy × 0.003)).
-            let factor = exp(-Double(event.scrollingDeltaY) * 0.003)
+        if event.modifierFlags.contains(.control) || event.modifierFlags.contains(.command) {
+            // Ctrl or Cmd+wheel zooms around the cursor (the
+            // Electron app's wheel zoom: factor
+            // exp(−dy × 0.003) for the DOM's dy, which is
+            // y-down. AppKit's delta is y-up, so the sign
+            // flips: scroll down zooms out, as in the
+            // Electron app.
+            let factor = exp(Double(event.scrollingDeltaY) * 0.003)
             let location = convert(event.locationInWindow, from: nil)
             camera = CameraMath.zoomCamera(camera, around: Pt(x: Double(location.x), y: Double(location.y)), factor: factor)
             return
