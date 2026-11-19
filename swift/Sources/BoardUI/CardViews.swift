@@ -161,24 +161,19 @@ public final class ShapeCardView: CardView {
         super.configure(item: item)
         guard case .shape(let shape) = item.kind else { return }
         let fill = NSColor.fromHex(shape.fill) ?? .labelColor
-        if shape.shape == .rect {
-            // A rect fills the whole card, so the card
-            // itself is the fill (12px radius from the base).
+        if shape.shape == .rect, shape.outline != true {
+            // A filled rect fills the whole card, so the
+            // card itself is the fill (12px radius from the
+            // base).
             layer?.backgroundColor = fill.cgColor
             shapeLayer.path = nil
         } else {
             layer?.backgroundColor = NSColor.clear.cgColor
-            shapeLayer.path = ShapePath.path(for: shape.shape, in: bounds)
-            shapeLayer.frame = bounds
-            if shape.outline == true {
-                shapeLayer.fillColor = NSColor.clear.cgColor
-                shapeLayer.strokeColor = fill.cgColor
-                shapeLayer.lineWidth = 2
-            } else {
-                shapeLayer.fillColor = fill.cgColor
-                shapeLayer.strokeColor = NSColor.clear.cgColor
+            CardView.withoutLayerActions {
+                updateShapeLayer()
             }
         }
+        needsLayout = true
     }
 
     override public func layout() {
@@ -186,12 +181,41 @@ public final class ShapeCardView: CardView {
         // The path is built for the current bounds; rebuild
         // it when the view is laid out (its frame is set by
         // the host after the view is created). The layer
-        // moves instantly (no implicit animation).
-        if let item = currentItem, case .shape(let shape) = item.kind, shape.shape != .rect {
+        // moves instantly (no implicit animation). A filled
+        // rect has no path (the card is the fill).
+        if let item = currentItem, case .shape(let shape) = item.kind,
+           !(shape.shape == .rect && shape.outline != true) {
             CardView.withoutLayerActions {
-                shapeLayer.path = ShapePath.path(for: shape.shape, in: bounds)
-                shapeLayer.frame = bounds
+                updateShapeLayer()
             }
+        }
+    }
+
+    /// The shape's path and colours for the current bounds.
+    /// A rect is a rounded rect (12px radius, scaled by
+    /// the zoom like the card chrome); every other shape
+    /// comes from ShapePath. An outline shape is a 2px
+    /// stroke in the fill colour with no fill; a filled
+    /// shape is solid.
+    private func updateShapeLayer() {
+        guard let item = currentItem, case .shape(let shape) = item.kind else { return }
+        let fill = NSColor.fromHex(shape.fill) ?? .labelColor
+        let zoom = bounds.width / max(item.size.w, 1)
+        if shape.shape == .rect {
+            shapeLayer.path = CGPath(
+                roundedRect: bounds, cornerWidth: 12 * zoom, cornerHeight: 12 * zoom, transform: nil
+            )
+        } else {
+            shapeLayer.path = ShapePath.path(for: shape.shape, in: bounds)
+        }
+        shapeLayer.frame = bounds
+        if shape.outline == true {
+            shapeLayer.fillColor = NSColor.clear.cgColor
+            shapeLayer.strokeColor = fill.cgColor
+            shapeLayer.lineWidth = 2 * zoom
+        } else {
+            shapeLayer.fillColor = fill.cgColor
+            shapeLayer.strokeColor = NSColor.clear.cgColor
         }
     }
 

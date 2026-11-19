@@ -118,6 +118,16 @@ public final class BoardViewport: NSView {
     private let strokeOverlay = WorldView()
     private let strokeLayer = CAShapeLayer()
 
+    /// A shape drag in progress: the world point where the
+    /// drag started, where the pointer is now, and the
+    /// shape being drawn. The live preview is a shape layer
+    /// over the cards, in the pen colour.
+    private var shapeStart: Pt?
+    private var shapeCurrent: Pt?
+    private var shapeKind: ShapeKind?
+    private let shapeOverlay = WorldView()
+    private let shapeLayer = CAShapeLayer()
+
     /// A local event monitor for pinch and wheel, so the
     /// gestures reach the board whatever the first
     /// responder is. AppKit sends a pinch to the first
@@ -162,6 +172,12 @@ public final class BoardViewport: NSView {
         strokeLayer.lineCap = .round
         strokeLayer.lineJoin = .round
         strokeOverlay.layer?.addSublayer(strokeLayer)
+        shapeOverlay.wantsLayer = true
+        shapeOverlay.autoresizingMask = [.width, .height]
+        addSubview(shapeOverlay)
+        shapeLayer.lineCap = .round
+        shapeLayer.lineJoin = .round
+        shapeOverlay.layer?.addSublayer(shapeLayer)
         applyCamera()
     }
 
@@ -179,6 +195,7 @@ public final class BoardViewport: NSView {
         cardContainer.frame = bounds
         marqueeOverlay.frame = bounds
         strokeOverlay.frame = bounds
+        shapeOverlay.frame = bounds
         applyCamera()
         onViewportResized?()
     }
@@ -216,6 +233,7 @@ public final class BoardViewport: NSView {
         gridView.camera = camera
         updateMarqueeOverlay()
         updateStrokePreview()
+        updateShapePreview()
     }
 
     /// The window behind the board is the board's own
@@ -510,6 +528,19 @@ public final class BoardViewport: NSView {
             strokePressures = event.pressure > 0 ? [Double(event.pressure)] : nil
             return
         }
+        // A shape tool starts a shape drag on press (the
+        // Electron app's shape check, also before the card
+        // hit-test): the drag sizes the shape, and it is
+        // committed on release.
+        if case .shape(let shape) = toolState?.tool {
+            let point = convert(event.locationInWindow, from: nil)
+            let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
+            shapeStart = world
+            shapeCurrent = world
+            shapeKind = shape
+            updateShapePreview()
+            return
+        }
         // Click selection (the Electron app's setSelected):
         // a card, or its whole group, is selected; Shift
         // toggles it in the selection; empty space clears
@@ -622,6 +653,15 @@ public final class BoardViewport: NSView {
             }
             return
         }
+        // A shape drag: the current corner follows the
+        // pointer, and the preview redraws at the drag's
+        // rect.
+        if shapeStart != nil {
+            let point = convert(event.locationInWindow, from: nil)
+            shapeCurrent = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
+            updateShapePreview()
+            return
+        }
         guard marqueeStart != nil else { return }
         let point = convert(event.locationInWindow, from: nil)
         marqueeCurrent = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
@@ -654,6 +694,30 @@ public final class BoardViewport: NSView {
             strokePressures = nil
             strokeTool = nil
             updateStrokePreview()
+            return
+        }
+        // A shape drag commits as one item (one undo step,
+        // one save) when it spans at least 10×10 world
+        // pixels on both axes; a smaller drag is a click
+        // and commits nothing. The fill is the pen colour
+        // and the outline flag comes from the geometry
+        // flyout's column.
+        if let start = shapeStart, let current = shapeCurrent, let kind = shapeKind {
+            var next = board
+            if BoardShape.add(
+                &next,
+                shape: kind,
+                from: start,
+                to: current,
+                fill: toolState?.penColor ?? "#1A1A1A",
+                outline: toolState?.shapeOutline ?? false
+            ) != nil {
+                onBoardMutate?(next)
+            }
+            shapeStart = nil
+            shapeCurrent = nil
+            shapeKind = nil
+            updateShapePreview()
             return
         }
         // A card drag that moved: commit the final board
@@ -699,9 +763,50 @@ public final class BoardViewport: NSView {
         marqueeLayer.lineWidth = 1 * camera.zoom
     }
 
-    /// The stroke's width, marker flag and pencil flag, by
-    /// draw tool — the Electron app's widths: pen 3, pencil
-    /// 2, highlighter 12 (a marker, drawn at 0.45 opacity).
+    /// Draws (or hides) the live shape preview: the shape
+    /// being dragged, in the pen colour, at the drag's
+    /// screen rect. A filled shape is solid at 0.85
+    /// opacity (the Electron preview); an outline shape is
+    /// a 2px stroke with no fill. A rect is a rounded rect
+    /// (12px radius, scaled by the zoom); every other shape
+    /// comes from ShapePath.
+    private func updateShapePreview() {
+        shapeOverlay.frame = bounds
+        guard let start = shapeStart, let current = shapeCurrent, let kind = shapeKind else {
+            shapeLayer.path = nil
+            return
+        }
+        let x0 = min(start.x, current.x), y0 = min(start.y, current.y)
+        let w = abs(current.x - start.x), h = abs(current.y - start.y)
+        let rect = CGRect(
+            x: (x0 - camera.x) * camera.zoom,
+            y: (y0 - camera.y) * camera.zoom,
+            width: w * camera.zoom,
+            height: h * camera.zoom
+        )
+        let fill = (NSColor.fromHex(toolState?.penColor ?? "#1A1A1A") ?? .labelColor).cgColor
+        let outline = toolState?.shapeOutline ?? false
+        CardView.withoutLayerActions {
+            if kind == .rect {
+                shapeLayer.path = CGPath(
+                    roundedRect: rect, cornerWidth: 12 * camera.zoom, cornerHeight: 12 * camera.zoom, transform: nil
+                )
+            } else {
+                shapeLayer.path = ShapePath.path(for: kind, in: rect)
+            }
+            if outline {
+                shapeLayer.fillColor = NSColor.clear.cgColor
+                shapeLayer.strokeColor = fill
+                shapeLayer.lineWidth = 2 * camera.zoom
+                shapeLayer.opacity = 1
+            } else {
+                shapeLayer.fillColor = fill
+                shapeLayer.strokeColor = NSColor.clear.cgColor
+                shapeLayer.opacity = 0.85
+            }
+            shapeLayer.frame = bounds
+        }
+    }
     private static func strokeStyle(for tool: DrawTool) -> (width: Double, marker: Bool, pencil: Bool) {
         switch tool {
         case .pen: return (3, false, false)

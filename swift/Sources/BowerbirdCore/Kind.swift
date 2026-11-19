@@ -55,6 +55,12 @@ public struct ShapePayload: Codable, Equatable {
     public var shape: ShapeKind
     public var fill: String
     public var outline: Bool?
+
+    public init(shape: ShapeKind, fill: String, outline: Bool?) {
+        self.shape = shape
+        self.fill = fill
+        self.outline = outline
+    }
 }
 
 public struct ImagePayload: Codable, Equatable {
