@@ -98,6 +98,14 @@ public final class TextCardView: CardView {
         needsLayout = true
     }
 
+    /// Hides or shows the card's text layer. While a note
+    /// is being edited, the editor (an NSTextView over the
+    /// card) shows the text, so the layer is hidden and the
+    /// text does not draw twice.
+    public func setEditing(_ editing: Bool) {
+        textLayer.isHidden = editing
+    }
+
     override public func layout() {
         super.layout()
         // 14px padding on every side, in world units — the

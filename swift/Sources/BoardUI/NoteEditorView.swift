@@ -1,0 +1,66 @@
+import AppKit
+
+/// The in-place text editor for a note: an NSTextView placed
+/// over the text card, showing its text at its size and
+/// colour, on the note's background. Escape commits the
+/// edit (it resigns first responder, which ends editing);
+/// leaving the field (a click elsewhere) commits it too.
+/// The commit carries the text; the viewport decides
+/// whether to save it or remove the note when it is empty.
+public final class NoteEditorView: NSTextView {
+    /// Called once, with the text, when editing ends.
+    public var onEndEditing: ((String) -> Void)?
+
+    private var didEnd = false
+
+    public init() {
+        super.init(frame: .zero)
+        // A plain text editor: no rich text, no
+        // substitutions, wrapping at the view's width.
+        isRichText = false
+        isAutomaticQuoteSubstitutionEnabled = false
+        isAutomaticDashSubstitutionEnabled = false
+        isAutomaticTextReplacementEnabled = false
+        isAutomaticSpellingCorrectionEnabled = false
+        isFieldEditor = false
+        drawsBackground = true
+        textContainer?.widthTracksTextView = true
+        textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
+        textContainerInset = NSSize(width: 14, height: 14)
+        delegate = self
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("NoteEditorView is not Interface Builder backed")
+    }
+
+    override public func cancelOperation(_ sender: Any?) {
+        // Escape commits the edit: resigning first responder
+        // ends editing, which calls textDidEndEditing once.
+        window?.makeFirstResponder(nil)
+    }
+
+    override public func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        // The editor is a subview of its card; when the
+        // card is culled (panned off-screen) the editor
+        // leaves the window with it. Committing here keeps
+        // the typed text instead of losing it.
+        if newWindow == nil {
+            endEditingOnce()
+        }
+    }
+
+    private func endEditingOnce() {
+        guard !didEnd else { return }
+        didEnd = true
+        onEndEditing?(string)
+    }
+}
+
+extension NoteEditorView: NSTextViewDelegate {
+    public func textDidEndEditing(_ notification: Notification) {
+        endEditingOnce()
+    }
+}

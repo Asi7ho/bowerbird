@@ -185,6 +185,15 @@ public final class BoardViewport: NSView {
     private var rotateDrag: (id: Int, origRot: Double)?
     private var rotateMoved = false
 
+    /// The last mouse press (time and screen point), for
+    /// double-click detection: two presses within 500 ms
+    /// and 5 screen pixels are a double-click.
+    private var lastMouseDown: (time: Date, point: NSPoint)?
+    /// The note being edited (its id), and the editor view
+    /// over its card. Nil when no note is being edited.
+    private var editingNoteId: Int?
+    private var noteEditor: NoteEditorView?
+
     /// A local event monitor for pinch and wheel, so the
     /// gestures reach the board whatever the first
     /// responder is. AppKit sends a pinch to the first
@@ -640,6 +649,11 @@ public final class BoardViewport: NSView {
         // (flyouts are transient: they disappear once the
         // user clicks anywhere else).
         toolState?.pickerOpen = nil
+        // Track the press for double-click detection (two
+        // presses within 500 ms and 5 screen pixels).
+        let pressPoint = convert(event.locationInWindow, from: nil)
+        let doubleClick = isDoubleClick(pressPoint)
+        lastMouseDown = (Date(), pressPoint)
         if spaceHeld {
             panStart = (convert(event.locationInWindow, from: nil), camera)
             return
@@ -764,6 +778,12 @@ public final class BoardViewport: NSView {
         // A connector is drawn, not a view, so it is the
         // only thing that still uses the board-order walk.
         guard let item = hitItem ?? HitTest.hit(board: board, at: world) else {
+            // A double-click on empty space creates a note
+            // there and opens it for editing.
+            if doubleClick, toolState?.tool == .select(.select) {
+                createTextNoteAt(world)
+                return
+            }
             // Empty space: a drag from here is a marquee.
             // Shift keeps the existing selection until the
             // drag ends (the Electron app clears it only
@@ -772,6 +792,14 @@ public final class BoardViewport: NSView {
             if !shift { selected = [] }
             marqueeStart = world
             marqueeCurrent = world
+            return
+        }
+        // A double-click on a text note opens it for
+        // editing (a double-click on any other card does
+        // nothing special yet — it falls through to the
+        // normal selection below).
+        if doubleClick, toolState?.tool == .select(.select), case .text = item.kind {
+            startTextEdit(id: item.id)
             return
         }
         // A press on the clicked card's resize corner starts
@@ -814,6 +842,106 @@ public final class BoardViewport: NSView {
     private func groupIds(of item: Item) -> Set<Int> {
         guard let group = item.group else { return [item.id] }
         return Set(board.items.filter { $0.group == group }.map { $0.id })
+    }
+
+    // MARK: - Text notes
+
+    /// Whether this press is a double-click: within 500 ms
+    /// and 5 screen pixels of the last press (the Electron
+    /// app's double-click rule — pointer events carry no
+    /// click count, so it is tracked by time and distance).
+    private func isDoubleClick(_ point: NSPoint) -> Bool {
+        guard let last = lastMouseDown else { return false }
+        return Date().timeIntervalSince(last.time) < 0.5
+            && hypot(point.x - last.point.x, point.y - last.point.y) < 5
+    }
+
+    /// Creates a text note at this world point and opens
+    /// it for editing: a silent add (260×48, empty, size
+    /// 16, ink colour), with no save yet. The commit saves
+    /// the typed text, or removes the note when it is
+    /// empty — so an empty note leaves no board change and
+    /// no undo step behind.
+    private func createTextNoteAt(_ world: Pt) {
+        var next = board
+        let id = next.nextId
+        next.nextId += 1
+        let text = TextPayload(text: "", bold: false, size: 16, color: "#1A1A1A", bg: nil)
+        next.items.append(Item(id: id, pos: world, size: Size(w: 260, h: 48), group: nil, kind: .text(text), rotation: nil))
+        board = next
+        startTextEdit(id: id)
+    }
+
+    /// Opens the in-place editor over a text card: the
+    /// editor shows the card's text at its size and colour,
+    /// on its background, with the cursor at the end. The
+    /// editor is a subview of the card, so it moves and
+    /// resizes with it; the card's own text layer is hidden
+    /// while editing, so the text does not draw twice.
+    private func startTextEdit(id: Int) {
+        guard let item = board.items.first(where: { $0.id == id }),
+              case .text(let payload) = item.kind else { return }
+        // Remove any editor already open.
+        if let editor = noteEditor {
+            editor.removeFromSuperview()
+            noteEditor = nil
+            editingNoteId = nil
+        }
+        guard let cardView = cardContainer.subviews.compactMap({ $0 as? TextCardView }).first(where: { $0.currentItem?.id == id }) else { return }
+        let editor = NoteEditorView()
+        editor.string = payload.text
+        // The editor is inside the card, which is
+        // screen-sized, so the font is the text size scaled
+        // by the zoom — the same size the card renders it
+        // at — and the text lands where the card drew it.
+        let zoom = item.size.w > 0 ? Double(cardView.bounds.width) / item.size.w : 1
+        editor.font = NSFont.systemFont(ofSize: CGFloat(payload.size) * CGFloat(zoom), weight: payload.bold ? .bold : .regular)
+        editor.textColor = NSColor.fromHex(payload.color) ?? .labelColor
+        editor.backgroundColor = NSColor.fromHex(payload.bg ?? "#FFFFFF") ?? .white
+        editor.frame = cardView.bounds
+        editor.autoresizingMask = [.width, .height]
+        editor.onEndEditing = { [weak self] _ in self?.commitTextEdit() }
+        cardView.setEditing(true)
+        cardView.addSubview(editor)
+        noteEditor = editor
+        editingNoteId = id
+        window?.makeFirstResponder(editor)
+        // Cursor at the end of the text.
+        editor.setSelectedRange(NSRange(location: editor.string.count, length: 0))
+    }
+
+    /// Commits the open editor: the text is saved (with
+    /// the card's height re-measured) as one undo step, or
+    /// the note is removed when the text is empty or only
+    /// whitespace. The editor is removed and the card's
+    /// text layer shown again, either way.
+    private func commitTextEdit() {
+        guard let id = editingNoteId, let editor = noteEditor else { return }
+        let text = editor.string
+        editor.removeFromSuperview()
+        noteEditor = nil
+        editingNoteId = nil
+        if let cardView = cardContainer.subviews.compactMap({ $0 as? TextCardView }).first(where: { $0.currentItem?.id == id }) {
+            cardView.setEditing(false)
+        }
+        var next = board
+        guard let index = next.items.firstIndex(where: { $0.id == id }) else { return }
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            // An empty note is not a note: remove it. For a
+            // new note (never saved) this leaves no board
+            // change and no undo step; for an existing note
+            // it is one undo step.
+            next.items.remove(at: index)
+            board = next
+            onBoardMutate?(next)
+            return
+        }
+        guard case .text(var payload) = next.items[index].kind else { return }
+        payload.text = text
+        next.items[index].kind = .text(payload)
+        next.items[index].size.h = TextMeasure.noteHeight(text: text, fontSize: payload.size, width: next.items[index].size.w)
+        board = next
+        onBoardMutate?(next)
     }
 
     override public func mouseDragged(with event: NSEvent) {
