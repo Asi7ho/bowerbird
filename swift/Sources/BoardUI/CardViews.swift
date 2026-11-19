@@ -112,6 +112,15 @@ public final class ShapeCardView: CardView {
     override public init() {
         super.init()
         hasShadow = false
+        // The Electron app's shape card is transparent with
+        // no hairline border (cards.ts: the outer div is
+        // `background:transparent;border:none`), so an
+        // ellipse is really an ellipse — a white card behind
+        // it would show as a rectangle, which is what the
+        // bird's parts did. The fill lives on the shape
+        // layer, clipped to the shape.
+        layer?.borderWidth = 0
+        layer?.backgroundColor = NSColor.clear.cgColor
         layer?.addSublayer(shapeLayer)
     }
 
@@ -120,10 +129,12 @@ public final class ShapeCardView: CardView {
         guard case .shape(let shape) = item.kind else { return }
         let fill = NSColor.fromHex(shape.fill) ?? .labelColor
         if shape.shape == .rect {
+            // A rect fills the whole card, so the card
+            // itself is the fill (12px radius from the base).
             layer?.backgroundColor = fill.cgColor
             shapeLayer.path = nil
         } else {
-            layer?.backgroundColor = NSColor.white.cgColor
+            layer?.backgroundColor = NSColor.clear.cgColor
             shapeLayer.path = ShapePath.path(for: shape.shape, in: bounds)
             shapeLayer.frame = bounds
             if shape.outline == true {
