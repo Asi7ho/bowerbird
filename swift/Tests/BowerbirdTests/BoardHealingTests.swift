@@ -63,10 +63,31 @@ final class BoardHealingTests: XCTestCase {
         )
         syncGroupLabels(&board)
         // Group 1 has two members and no entry: it is
-        // named "Section 1". Group 3 has one member: it
+        // named "Group 1". Group 3 has one member: it
         // gets no entry.
-        XCTAssertEqual(board.groups?[1]?.label, "Section 1")
+        XCTAssertEqual(board.groups?[1]?.label, "Group 1")
         XCTAssertNil(board.groups?[3])
+    }
+
+    func testSyncGroupLabelsRenamesSectionToGroup() {
+        var a = textItem(id: 1, text: "a")
+        a.group = 1
+        var b = textItem(id: 2, text: "b")
+        b.group = 1
+        var board = Board(
+            items: [a, b],
+            camera: Camera(x: 0, y: 0, zoom: 1),
+            nextId: 2,
+            nextGroup: 0,
+            groups: [1: GroupEntry(label: "Section 1", source: nil)],
+            bg: "#FFFFFF",
+            grid: .dots
+        )
+        syncGroupLabels(&board)
+        // An old default label from the Electron app is
+        // renamed to "Group 1"; a custom label is left
+        // alone (see the test below).
+        XCTAssertEqual(board.groups?[1]?.label, "Group 1")
     }
 
     func testSyncGroupLabelsKeepsExistingLabelAndDropsSmallGroups() {
