@@ -37,7 +37,6 @@ public final class NoteColourBarView: NSView {
         for hex in Self.colours {
             let button = NSButton()
             button.title = ""
-            button.bezelStyle = .plain
             button.isBordered = false
             button.wantsLayer = true
             button.layer?.backgroundColor = (NSColor.fromHex(hex) ?? .white).cgColor
