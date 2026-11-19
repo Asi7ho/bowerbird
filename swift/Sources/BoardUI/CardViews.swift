@@ -107,18 +107,24 @@ public final class TextCardView: CardView {
         // a zoom step would otherwise animate the text
         // across the card for a quarter of a second.
         CardView.withoutLayerActions {
-            textLayer.frame = bounds.insetBy(dx: 14, dy: 14)
-            // The font size is in world units; the card is
-            // screen-sized, so it scales by the zoom — the
-            // card's screen width over its world width.
-            // Without the scale the text drew at world size
-            // inside a screen-sized card. But the size never
-            // drops below 6pt on screen: below that the text
-            // was unreadable and the card read as a blank
-            // white card when zoomed out.
+            // The font size and the padding are in world
+            // units; the card is screen-sized, so they scale
+            // by the zoom — the card's screen width over its
+            // world width. That is the Electron app's
+            // behaviour (the CSS transform scales the whole
+            // card), so zoomed out the note reads as a
+            // miniature with tiny text, not as a blank card
+            // with a fixed-size margin. A fixed 14px margin
+            // ate the card at low zoom (a 72px card kept
+            // only 44px for the text), which is why the text
+            // vanished; and a 6pt minimum font held the text
+            // too big for the shrunken card, which read as
+            // wrong. Both are reverted to a plain scale.
             if let item = currentItem, case .text(let text) = item.kind {
                 let zoom = item.size.w > 0 ? bounds.width / CGFloat(item.size.w) : 1
-                let size = max(CGFloat(text.size) * zoom, 6)
+                let pad = 14 * zoom
+                textLayer.frame = bounds.insetBy(dx: pad, dy: pad)
+                let size = CGFloat(text.size) * zoom
                 let font = NSFont.systemFont(ofSize: size, weight: text.bold ? .bold : .regular)
                 textLayer.font = font
                 textLayer.fontSize = size
@@ -396,12 +402,12 @@ public final class PlaceholderCardView: CardView {
             let zoom = (currentItem?.size.w ?? 0) > 0 ? bounds.width / CGFloat(currentItem!.size.w) : 1
             let pad = 12 * zoom
             let width = bounds.width - pad * 2
-            // The fonts scale with the zoom, but never below
-            // 6pt on screen: below that the title was
-            // unreadable and the card read as a blank tile
-            // when zoomed out.
-            let titleSize = max(14 * zoom, 6)
-            let subtitleSize = max(12 * zoom, 6)
+            // The fonts scale with the zoom, plainly (the
+            // Electron app's transform scales the whole
+            // card). A 6pt minimum held the title too big
+            // for the shrunken card, which read as wrong.
+            let titleSize = 14 * zoom
+            let subtitleSize = 12 * zoom
             titleLayer.font = NSFont.systemFont(ofSize: titleSize, weight: .semibold)
             titleLayer.fontSize = titleSize
             subtitleLayer.font = NSFont.systemFont(ofSize: subtitleSize)
