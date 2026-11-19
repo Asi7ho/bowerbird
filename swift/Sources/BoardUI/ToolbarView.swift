@@ -119,36 +119,46 @@ public struct ToolbarView: View {
 
     @ViewBuilder
     private func flyout(for picker: Picker) -> some View {
-        // The colour flyout shows the palette as coloured
-        // circles, not icons — it is rendered on its own.
         if picker == .color {
-            VStack(spacing: 10) {
-                ForEach(ToolState.palette, id: \.self) { hex in
-                    Button {
-                        tools.penColor = hex
-                        tools.pickerOpen = nil
-                    } label: {
-                        Circle()
-                            .fill(Color(nsColor: NSColor.fromHex(hex) ?? .black))
-                            .frame(width: 20, height: 20)
-                            .frame(width: 40, height: 40)
-                            .background(tools.penColor == hex ? Color.black.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(hex)
-                }
-            }
-            .padding(.vertical, 12)
-            .padding(.horizontal, 8)
-            .frame(width: 56)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.black.opacity(0.08), lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
-            return
+            colorFlyout()
+        } else {
+            iconFlyout(for: picker)
         }
+    }
+
+    /// The colour flyout: the palette as coloured circles,
+    /// not icons.
+    private func colorFlyout() -> some View {
+        VStack(spacing: 10) {
+            ForEach(ToolState.palette, id: \.self) { hex in
+                Button {
+                    tools.penColor = hex
+                    tools.pickerOpen = nil
+                } label: {
+                    Circle()
+                        .fill(Color(nsColor: NSColor.fromHex(hex) ?? .black))
+                        .frame(width: 20, height: 20)
+                        .frame(width: 40, height: 40)
+                        .background(tools.penColor == hex ? Color.black.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(hex)
+            }
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 8)
+        .frame(width: 56)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.black.opacity(0.08), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
+    }
+
+    /// The icon flyout: the select, draw and shape
+    /// families, as icon buttons.
+    private func iconFlyout(for picker: Picker) -> some View {
         let options: [(icon: String, label: String, active: Bool, pick: () -> Void)] = {
             switch picker {
             case .select:
@@ -196,7 +206,7 @@ public struct ToolbarView: View {
                 return []
             }
         }()
-        VStack(spacing: 10) {
+        return VStack(spacing: 10) {
             ForEach(options, id: \.label) { option in
                 toolButton(icon: option.icon, label: option.label, active: option.active, action: option.pick)
             }
