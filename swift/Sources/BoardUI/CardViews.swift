@@ -2,42 +2,65 @@ import AppKit
 import BowerbirdCore
 
 /// A card view for one board item. The host builds one per
-/// visible item and recycles it by kind. Media kinds that
-/// do not have their native view yet (M4/M5) render as a
-/// placeholder tile with the kind name — the board still
-/// shows every card, and the native view replaces the tile
-/// in its milestone.
+/// visible item and recycles it by kind: a view is
+/// reconfigured for its new item through `configure(item:)`,
+/// so a view that leaves the viewport can come back for
+/// another card of the same kind without being rebuilt.
+/// Media kinds that do not have their native view yet
+/// (M4/M5) render as a placeholder tile with the kind name
+/// — the board still shows every card, and the native view
+/// replaces the tile in its milestone.
 public enum CardViews {
-    /// Build the view for an item, or nil for a connector
-    /// (connectors are drawn in the ink layer, not as cards).
+    /// Build a fresh view for an item, or nil for a
+    /// connector (connectors are drawn in the ink layer,
+    /// not as cards).
     public static func view(for item: Item) -> CardView? {
         switch item.kind {
-        case .text(let text):
-            return TextCardView(text: text)
-        case .shape(let shape):
-            return ShapeCardView(shape: shape)
-        case .stroke(let stroke):
-            return StrokeCardView(stroke: stroke)
-        case .swatch(let swatch):
-            return SwatchCardView(hex: swatch.hex)
-        case .image(let image):
-            return ImageCardView(path: image.path)
-        case .urlCard(let url):
-            return PlaceholderCardView(title: url.title ?? url.url, subtitle: "Link")
+        case .text:
+            return TextCardView()
+        case .shape:
+            return ShapeCardView()
+        case .stroke:
+            return StrokeCardView()
+        case .swatch:
+            return SwatchCardView()
+        case .image:
+            return ImageCardView()
+        case .urlCard:
+            return PlaceholderCardView()
         case .pdfCard:
-            return PlaceholderCardView(title: "PDF", subtitle: "PDFView in M4")
-        case .fileCard(let file):
-            return PlaceholderCardView(title: file.path, subtitle: file.format.uppercased())
-        case .audio(let audio):
-            return PlaceholderCardView(title: audio.title ?? "Audio", subtitle: "AVPlayerView in M5")
+            return PlaceholderCardView()
+        case .fileCard:
+            return PlaceholderCardView()
+        case .audio:
+            return PlaceholderCardView()
         case .video:
-            return PlaceholderCardView(title: "Video", subtitle: "AVPlayerView in M5")
+            return PlaceholderCardView()
         case .model3D:
-            return PlaceholderCardView(title: "3D model", subtitle: "SceneKit in M5")
-        case .plugin(let plugin):
-            return PlaceholderCardView(title: plugin.kind, subtitle: "Plugin in M7")
+            return PlaceholderCardView()
+        case .plugin:
+            return PlaceholderCardView()
         case .connector:
             return nil
+        }
+    }
+
+    /// The kind name, used as the recycling pool's key.
+    public static func kindName(of item: Item) -> String {
+        switch item.kind {
+        case .text: return "Text"
+        case .shape: return "Shape"
+        case .image: return "Image"
+        case .urlCard: return "UrlCard"
+        case .pdfCard: return "PdfCard"
+        case .fileCard: return "FileCard"
+        case .swatch: return "Swatch"
+        case .audio: return "Audio"
+        case .video: return "Video"
+        case .model3D: return "Model3D"
+        case .stroke: return "Stroke"
+        case .connector: return "Connector"
+        case .plugin: return "Plugin"
         }
     }
 }
@@ -47,18 +70,14 @@ public enum CardViews {
 /// colour (or white). Editing is M3; this view does not
 /// edit or select text.
 public final class TextCardView: CardView {
-    public init(text: TextPayload) {
+    private let field = NSTextField(labelWithString: "")
+
+    override public init() {
         super.init()
-        if let bg = text.bg, let color = NSColor.fromHex(bg) {
-            layer?.backgroundColor = color.cgColor
-        }
-        let field = NSTextField(labelWithString: text.text)
         field.isEditable = false
         field.isSelectable = false
         field.usesSingleLineMode = false
         field.lineBreakMode = .byWordWrapping
-        field.font = NSFont.systemFont(ofSize: CGFloat(text.size), weight: text.bold ? .bold : .regular)
-        field.textColor = NSColor.fromHex(text.color) ?? .labelColor
         field.translatesAutoresizingMaskIntoConstraints = false
         addSubview(field)
         NSLayoutConstraint.activate([
@@ -67,6 +86,15 @@ public final class TextCardView: CardView {
             field.topAnchor.constraint(equalTo: topAnchor, constant: 14),
             field.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -14),
         ])
+    }
+
+    override public func configure(item: Item) {
+        super.configure(item: item)
+        guard case .text(let text) = item.kind else { return }
+        field.stringValue = text.text
+        field.font = NSFont.systemFont(ofSize: CGFloat(text.size), weight: text.bold ? .bold : .regular)
+        field.textColor = NSColor.fromHex(text.color) ?? .labelColor
+        layer?.backgroundColor = (text.bg.flatMap { NSColor.fromHex($0) } ?? NSColor.white).cgColor
     }
 
     @available(*, unavailable)
@@ -79,36 +107,42 @@ public final class TextCardView: CardView {
 /// ellipse and polygons are a shape layer). An outline shape
 /// is stroked, not filled.
 public final class ShapeCardView: CardView {
-    public init(shape: ShapePayload) {
+    private let shapeLayer = CAShapeLayer()
+
+    override public init() {
         super.init()
         hasShadow = false
+        layer?.addSublayer(shapeLayer)
+    }
+
+    override public func configure(item: Item) {
+        super.configure(item: item)
+        guard case .shape(let shape) = item.kind else { return }
         let fill = NSColor.fromHex(shape.fill) ?? .labelColor
         if shape.shape == .rect {
             layer?.backgroundColor = fill.cgColor
-        } else if let path = ShapePath.path(for: shape.shape, in: bounds) {
-            let shapeLayer = CAShapeLayer()
-            shapeLayer.path = path
+            shapeLayer.path = nil
+        } else {
+            layer?.backgroundColor = NSColor.white.cgColor
+            shapeLayer.path = ShapePath.path(for: shape.shape, in: bounds)
+            shapeLayer.frame = bounds
             if shape.outline == true {
                 shapeLayer.fillColor = NSColor.clear.cgColor
                 shapeLayer.strokeColor = fill.cgColor
                 shapeLayer.lineWidth = 2
             } else {
                 shapeLayer.fillColor = fill.cgColor
+                shapeLayer.strokeColor = NSColor.clear.cgColor
             }
-            layer?.addSublayer(shapeLayer)
-            // The path is built for the current bounds; it is
-            // rebuilt when the view is laid out.
-            self.shapeLayer = shapeLayer
-            self.shape = shape
         }
     }
 
-    private var shapeLayer: CAShapeLayer?
-    private var shape: ShapePayload?
-
     override public func layout() {
         super.layout()
-        if let shapeLayer, let shape {
+        // The path is built for the current bounds; rebuild
+        // it when the view is laid out (its frame is set by
+        // the host after the view is created).
+        if let item = currentItem, case .shape(let shape) = item.kind, shape.shape != .rect {
             shapeLayer.path = ShapePath.path(for: shape.shape, in: bounds)
             shapeLayer.frame = bounds
         }
@@ -126,36 +160,32 @@ public final class ShapeCardView: CardView {
 /// stroke renders as a plain stroke for now — the graphite
 /// texture lands with the drawing tools in M3.
 public final class StrokeCardView: CardView {
-    public init(stroke: StrokePayload) {
+    private let shapeLayer = CAShapeLayer()
+
+    override public init() {
         super.init()
         hasShadow = false
         clipsContent = false
         layer?.backgroundColor = NSColor.clear.cgColor
-        guard let path = StrokePath.path(for: stroke.points) else { return }
-        let shapeLayer = CAShapeLayer()
-        shapeLayer.path = path
+        layer?.addSublayer(shapeLayer)
+    }
+
+    override public func configure(item: Item) {
+        super.configure(item: item)
+        guard case .stroke(let stroke) = item.kind else { return }
+        shapeLayer.path = StrokePath.path(for: stroke.points)
         shapeLayer.fillColor = NSColor.clear.cgColor
         shapeLayer.strokeColor = (NSColor.fromHex(stroke.color) ?? .labelColor).cgColor
         shapeLayer.lineWidth = CGFloat(stroke.width)
         shapeLayer.lineCap = .round
         shapeLayer.lineJoin = .round
-        if stroke.marker == "highlighter" {
-            shapeLayer.opacity = 0.45
-        }
-        // The path is in the card's local space (points minus
-        // their bbox min); the layer fills the card.
+        shapeLayer.opacity = stroke.marker == "highlighter" ? 0.45 : 1
         shapeLayer.frame = bounds
-        layer?.addSublayer(shapeLayer)
-        self.shapeLayer = shapeLayer
-        self.stroke = stroke
     }
-
-    private var shapeLayer: CAShapeLayer?
-    private var stroke: StrokePayload?
 
     override public func layout() {
         super.layout()
-        if let shapeLayer, let stroke {
+        if let item = currentItem, case .stroke(let stroke) = item.kind {
             shapeLayer.path = StrokePath.path(for: stroke.points)
             shapeLayer.frame = bounds
         }
@@ -169,11 +199,15 @@ public final class StrokeCardView: CardView {
 
 /// A swatch: the card is the colour.
 public final class SwatchCardView: CardView {
-    public init(hex: String) {
+    override public init() {
         super.init()
         hasShadow = false
-        layer?.backgroundColor = (NSColor.fromHex(hex) ?? .labelColor).cgColor
-        layer?.borderWidth = 0
+    }
+
+    override public func configure(item: Item) {
+        super.configure(item: item)
+        guard case .swatch(let swatch) = item.kind else { return }
+        layer?.backgroundColor = (NSColor.fromHex(swatch.hex) ?? .labelColor).cgColor
     }
 
     @available(*, unavailable)
@@ -186,13 +220,11 @@ public final class SwatchCardView: CardView {
 /// missing file shows a placeholder tile instead of an
 /// empty card.
 public final class ImageCardView: CardView {
-    public init(path: String) {
+    private let imageView = NSImageView()
+
+    override public init() {
         super.init()
-        let imageView = NSImageView()
         imageView.imageScaling = .scaleProportionallyUpOrDown
-        if let image = NSImage(contentsOfFile: path) {
-            imageView.image = image
-        }
         imageView.translatesAutoresizingMaskIntoConstraints = false
         addSubview(imageView)
         NSLayoutConstraint.activate([
@@ -201,9 +233,15 @@ public final class ImageCardView: CardView {
             imageView.topAnchor.constraint(equalTo: topAnchor),
             imageView.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
-        if imageView.image == nil {
-            layer?.backgroundColor = NSColor.systemGray.withAlphaComponent(0.15).cgColor
-        }
+    }
+
+    override public func configure(item: Item) {
+        super.configure(item: item)
+        guard case .image(let image) = item.kind else { return }
+        imageView.image = NSImage(contentsOfFile: image.path)
+        layer?.backgroundColor = imageView.image == nil
+            ? NSColor.systemGray.withAlphaComponent(0.15).cgColor
+            : NSColor.white.cgColor
     }
 
     @available(*, unavailable)
@@ -216,13 +254,14 @@ public final class ImageCardView: CardView {
 /// landed yet (M4/M5/M7). The board still shows the card,
 /// with its title and what is coming.
 public final class PlaceholderCardView: CardView {
-    public init(title: String, subtitle: String) {
+    private let titleField = NSTextField(labelWithString: "")
+    private let subtitleField = NSTextField(labelWithString: "")
+
+    override public init() {
         super.init()
-        let titleField = NSTextField(labelWithString: title)
         titleField.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
         titleField.textColor = .labelColor
         titleField.lineBreakMode = .byTruncatingTail
-        let subtitleField = NSTextField(labelWithString: subtitle)
         subtitleField.font = NSFont.systemFont(ofSize: 12)
         subtitleField.textColor = .secondaryLabelColor
         for field in [titleField, subtitleField] {
@@ -239,6 +278,36 @@ public final class PlaceholderCardView: CardView {
             subtitleField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
             subtitleField.topAnchor.constraint(equalTo: titleField.bottomAnchor, constant: 4),
         ])
+    }
+
+    override public func configure(item: Item) {
+        super.configure(item: item)
+        switch item.kind {
+        case .urlCard(let url):
+            titleField.stringValue = url.title ?? url.url
+            subtitleField.stringValue = "Link"
+        case .pdfCard:
+            titleField.stringValue = "PDF"
+            subtitleField.stringValue = "PDFView in M4"
+        case .fileCard(let file):
+            titleField.stringValue = file.path
+            subtitleField.stringValue = file.format.uppercased()
+        case .audio(let audio):
+            titleField.stringValue = audio.title ?? "Audio"
+            subtitleField.stringValue = "AVPlayerView in M5"
+        case .video:
+            titleField.stringValue = "Video"
+            subtitleField.stringValue = "AVPlayerView in M5"
+        case .model3D:
+            titleField.stringValue = "3D model"
+            subtitleField.stringValue = "SceneKit in M5"
+        case .plugin(let plugin):
+            titleField.stringValue = plugin.kind
+            subtitleField.stringValue = "Plugin in M7"
+        default:
+            titleField.stringValue = ""
+            subtitleField.stringValue = ""
+        }
     }
 
     @available(*, unavailable)

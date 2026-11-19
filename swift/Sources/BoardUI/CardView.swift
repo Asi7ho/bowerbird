@@ -1,4 +1,5 @@
 import AppKit
+import BowerbirdCore
 
 /// A card's chrome, mirroring the Electron app's `.card`
 /// (styles.css): a white background, a 1px hairline border,
@@ -7,6 +8,19 @@ import AppKit
 /// shadow; stroke cards do not clip their content (the
 /// stroke paints past the card's edge by half its width).
 public class CardView: NSView {
+    /// The item this view is currently showing. Set by
+    /// `configure(item:)`; the host reads it when the view
+    /// is laid out (shape and stroke paths are rebuilt for
+    /// the frame).
+    public private(set) var currentItem: Item?
+
+    /// Reconfigure the view for an item (the recycling
+    /// entry point). Subclasses override it, call super
+    /// first, then update their content.
+    open func configure(item: Item) {
+        currentItem = item
+    }
+
     /// Whether the card is selected (blue border + ring).
     public var isSelected: Bool = false {
         didSet { updateChrome() }
