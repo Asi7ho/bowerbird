@@ -1,0 +1,28 @@
+# Swift: build and test the macOS app (Swift/SwiftUI, Python plugins).
+#
+# Trigger: every pull request and every push to the macos/swift
+# branch. One platform only (macOS) — this is the macOS-only
+# line. The Electron test suite (test.yml) does not run here:
+# it does not cover the Swift package, and it runs on Ubuntu.
+name: Swift
+
+on:
+  pull_request:
+  push:
+    branches:
+      - macos/swift
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    name: Build and test
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: swift build --package-path swift
+      - name: Test
+        run: swift test --package-path swift
