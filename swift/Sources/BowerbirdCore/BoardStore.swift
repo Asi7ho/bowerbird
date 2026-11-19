@@ -24,6 +24,12 @@ public final class BoardStore {
     public let boardDir: URL
     public private(set) var board: Board
 
+    /// The undo history for this board. Every content
+    /// change recorded through `update` pushes the previous
+    /// content as one step; a board switch, a reset or an
+    /// external reload clears it.
+    public let undoStore = UndoStore()
+
     private var lastSavedJson: String?
     private var lastSavedContentKey: String?
     private let journal: RecoveryJournal
@@ -67,6 +73,8 @@ public final class BoardStore {
 
     /// Reload the board from disk (an external change, or a
     /// restore the app performed on disk). Decodes and heals.
+    /// The undo history is dropped: its snapshots belong to
+    /// the board they were taken from.
     public func load() throws {
         let raw = try String(contentsOf: boardURL, encoding: .utf8)
         guard let data = raw.data(using: .utf8) else { throw BoardStoreError.unreadable }
@@ -76,18 +84,46 @@ public final class BoardStore {
         board = decoded
         lastSavedJson = raw
         lastSavedContentKey = Self.contentKey(for: decoded)
+        undoStore.reset()
     }
 
     /// Apply a mutation to the board. The single entry point
-    /// for board changes (undo wraps this in M3).
+    /// for board changes: when the undoable content changes
+    /// (items, ids, groups, background, grid — not the
+    /// camera), the content before the mutation becomes one
+    /// undo step, so every edit is undoable without hunting
+    /// for it.
     public func update(_ mutate: (inout Board) -> Void) {
+        let before = BoardSnapshot(board: board)
         mutate(&board)
+        if BoardSnapshot(board: board) != before {
+            undoStore.recordChange(from: before)
+        }
+    }
+
+    /// Undo one step: restore the top undo snapshot and
+    /// save. False when there is nothing to undo.
+    @discardableResult
+    public func undo() -> Bool {
+        guard let snapshot = undoStore.undo(current: BoardSnapshot(board: board)) else { return false }
+        snapshot.apply(to: &board)
+        return save()
+    }
+
+    /// Redo one step. False when there is nothing to redo.
+    @discardableResult
+    public func redo() -> Bool {
+        guard let snapshot = undoStore.redo(current: BoardSnapshot(board: board)) else { return false }
+        snapshot.apply(to: &board)
+        return save()
     }
 
     /// Replace the whole board (a restore, a reset, a board
-    /// switch). The caller saves.
+    /// switch). The caller saves. The undo history is
+    /// dropped: it belongs to the board being replaced.
     public func replace(with board: Board) {
         self.board = board
+        undoStore.reset()
     }
 
     /// A hash of the board's canonical encoding: items,
@@ -166,6 +202,7 @@ public final class BoardStore {
               let data = entry.json.data(using: .utf8),
               var restored = try? Board.decode(from: data) else { return false }
         healDuplicateIds(&restored)
+        undoStore.recordChange(from: BoardSnapshot(board: board))
         board = restored
         return true
     }
