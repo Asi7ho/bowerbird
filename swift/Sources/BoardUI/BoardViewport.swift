@@ -31,6 +31,7 @@ public final class BoardViewport: NSView {
             gridView.backgroundHex = board.bg
             updateWindowBackground()
             updateHandles()
+            updateNoteColourBar()
             onBoardChanged?(board)
         }
     }
@@ -62,6 +63,7 @@ public final class BoardViewport: NSView {
     public private(set) var selected: Set<Int> = [] {
         didSet {
             updateHandles()
+            updateNoteColourBar()
             onSelectionChanged?(selected)
         }
     }
@@ -193,6 +195,10 @@ public final class BoardViewport: NSView {
     /// over its card. Nil when no note is being edited.
     private var editingNoteId: Int?
     private var noteEditor: NoteEditorView?
+
+    /// The note colour bar, shown beside a selected text
+    /// note (nil until first shown).
+    private var noteColourBar: NoteColourBarView?
 
     /// A local event monitor for pinch and wheel, so the
     /// gestures reach the board whatever the first
@@ -336,6 +342,7 @@ public final class BoardViewport: NSView {
         updateConnectorPreview()
         updateLassoPreview()
         updateHandles()
+        updateNoteColourBar()
     }
 
     /// The window behind the board is the board's own
@@ -940,6 +947,97 @@ public final class BoardViewport: NSView {
         payload.text = text
         next.items[index].kind = .text(payload)
         next.items[index].size.h = TextMeasure.noteHeight(text: text, fontSize: payload.size, width: next.items[index].size.w)
+        board = next
+        onBoardMutate?(next)
+    }
+
+    // MARK: - Note colour bar
+
+    /// Shows, hides and positions the note colour bar. It
+    /// appears when at least one selected card is a text
+    /// note, beside the first one (in board order), with
+    /// the notes' background as the active swatch when they
+    /// agree. Placement follows the Electron app's rule:
+    /// 8px left of the note, top-aligned, flipping right
+    /// when the left side has no room (the toolbar occupies
+    /// the left edge) — and hidden when the note is fully
+    /// off-screen or neither side is safe.
+    private func updateNoteColourBar() {
+        let selectedTextNotes = board.items.filter { item in
+            guard selected.contains(item.id) else { return false }
+            if case .text = item.kind { return true }
+            return false
+        }
+        guard let first = selectedTextNotes.first else {
+            noteColourBar?.isHidden = true
+            return
+        }
+        // The note's screen frame, computed from the model
+        // and the camera (not the card view's frame, which
+        // the host repositions after the camera changes —
+        // the bar must follow the note in the same step).
+        let zoom = camera.zoom
+        let frame = NSRect(
+            x: (first.pos.x - camera.x) * zoom,
+            y: (first.pos.y - camera.y) * zoom,
+            width: first.size.w * zoom,
+            height: first.size.h * zoom
+        )
+        // The note must be at least partly on-screen.
+        guard frame.intersects(bounds) else {
+            noteColourBar?.isHidden = true
+            return
+        }
+        let size = NoteColourBarView.barSize
+        let gap: CGFloat = 8
+        // The toolbar occupies x 12..68; the bar on the
+        // left must clear it entirely.
+        let toolbarRight: CGFloat = 68
+        let leftX = frame.minX - gap - size.width
+        let rightX = frame.maxX + gap
+        // Top-aligned with the note (the view is flipped,
+        // so the origin is the top edge; the top is never
+        // clamped — the bar may extend past the bottom).
+        let y = frame.minY
+        let origin: NSPoint?
+        if leftX >= toolbarRight {
+            origin = NSPoint(x: leftX, y: y)
+        } else if rightX + size.width <= bounds.width - gap {
+            origin = NSPoint(x: rightX, y: y)
+        } else {
+            origin = nil
+        }
+        guard let origin else {
+            noteColourBar?.isHidden = true
+            return
+        }
+        if noteColourBar == nil {
+            let bar = NoteColourBarView()
+            bar.onPick = { [weak self] hex in self?.setNoteBackground(hex) }
+            addSubview(bar)
+            noteColourBar = bar
+        }
+        guard let bar = noteColourBar else { return }
+        // The active swatch is the notes' background when
+        // they agree (a note with no bg is white).
+        let bgs = Set(selectedTextNotes.compactMap { item -> String? in
+            guard case .text(let payload) = item.kind else { return nil }
+            return payload.bg ?? "#FFFFFF"
+        })
+        bar.activeHex = bgs.count == 1 ? bgs.first : nil
+        bar.frame = NSRect(origin: origin, size: size)
+        bar.isHidden = false
+    }
+
+    /// Sets the background of every selected text note to
+    /// this colour, as one undo step.
+    private func setNoteBackground(_ hex: String) {
+        var next = board
+        for index in next.items.indices where selected.contains(next.items[index].id) {
+            guard case .text(var payload) = next.items[index].kind else { continue }
+            payload.bg = hex
+            next.items[index].kind = .text(payload)
+        }
         board = next
         onBoardMutate?(next)
     }
