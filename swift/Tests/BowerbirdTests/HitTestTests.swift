@@ -35,4 +35,24 @@ final class HitTestTests: XCTestCase {
         XCTAssertEqual(HitTest.hit(board: b, at: Pt(x: 200, y: 352))?.id, 3)
         XCTAssertNil(HitTest.hit(board: b, at: Pt(x: 200, y: 380)))
     }
+
+    func testEllipseHitInsideTheShapeNotItsCorner() {
+        var b = board()
+        // An ellipse at (100,100) 200x100: its centre hits,
+        // its top-left corner (inside the box, outside the
+        // ellipse) does not.
+        b.items.append(Item(id: 5, pos: Pt(x: 100, y: 100), size: Size(w: 200, h: 100), group: nil, kind: .shape(ShapePayload(shape: .ellipse, fill: "#2A9D8F", outline: nil)), rotation: nil))
+        XCTAssertEqual(HitTest.hit(board: b, at: Pt(x: 200, y: 150))?.id, 5)
+        XCTAssertNil(HitTest.hit(board: b, at: Pt(x: 105, y: 105)))
+    }
+
+    func testTriangleHitInsideTheShapeNotItsCorner() {
+        var b = board()
+        // A triangle at (100,100) 200x100: its centre hits,
+        // its top-left corner (inside the box, outside the
+        // triangle) does not.
+        b.items.append(Item(id: 6, pos: Pt(x: 100, y: 100), size: Size(w: 200, h: 100), group: nil, kind: .shape(ShapePayload(shape: .triangle, fill: "#2A9D8F", outline: nil)), rotation: nil))
+        XCTAssertEqual(HitTest.hit(board: b, at: Pt(x: 200, y: 170))?.id, 6)
+        XCTAssertNil(HitTest.hit(board: b, at: Pt(x: 105, y: 105)))
+    }
 }
