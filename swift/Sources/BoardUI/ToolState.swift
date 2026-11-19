@@ -27,9 +27,9 @@ public final class ToolState: ObservableObject {
     @Published public var penColor: String = "#1A1A1A"
     @Published public var pickerOpen: Picker?
 
-    public private(set) var lastSelectMode: SelectMode = .select
-    public private(set) var lastDrawTool: DrawTool = .pen
-    public private(set) var lastShape: ShapeKind = .rect
+    @Published public private(set) var lastSelectMode: SelectMode = .select
+    @Published public private(set) var lastDrawTool: DrawTool = .pen
+    @Published public private(set) var lastShape: ShapeKind = .rect
 
     public init() {}
 

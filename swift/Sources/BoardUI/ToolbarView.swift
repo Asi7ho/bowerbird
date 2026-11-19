@@ -15,50 +15,56 @@ public struct ToolbarView: View {
     }
 
     public var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            VStack(spacing: 10) {
-                toolButton(icon: "cursorarrow", label: "Select", active: isSelect) {
-                    tools.selectShortcut()
-                }
-                toolButton(icon: drawIcon, label: "Draw", active: isDraw) {
-                    tools.drawShortcut()
-                }
-                toolButton(icon: shapeIcon, label: "Shape", active: isShape) {
-                    tools.shapeShortcut()
-                }
-                toolButton(icon: "arrow.up.right", label: "Connector", active: isConnector) {
-                    tools.activate(.connector)
-                    tools.pickerOpen = nil
-                }
-                // The colour: a button showing the pen's
-                // current colour, opening the palette
-                // flyout — like the pen, select and geometry
-                // buttons open theirs.
-                Button {
-                    tools.pickerOpen = .color
-                } label: {
-                    Circle()
-                        .fill(Color(nsColor: NSColor.fromHex(tools.penColor) ?? .black))
-                        .frame(width: 20, height: 20)
-                        .frame(width: 40, height: 40)
-                        .background(tools.pickerOpen == .color ? Color.black.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
-                }
-                .buttonStyle(.plain)
-                .contentShape(Rectangle())
-                .accessibilityLabel("Colour")
+        VStack(spacing: 10) {
+            toolButton(icon: selectIcon, label: "Select", active: isSelect) {
+                tools.selectShortcut()
             }
-            .padding(.vertical, 12)
-            .padding(.horizontal, 8)
-            .frame(width: 56)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.black.opacity(0.08), lineWidth: 1)
-            )
-            .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
-
+            toolButton(icon: drawIcon, label: "Draw", active: isDraw) {
+                tools.drawShortcut()
+            }
+            toolButton(icon: shapeIcon, label: "Shape", active: isShape) {
+                tools.shapeShortcut()
+            }
+            toolButton(icon: "arrow.up.right", label: "Connector", active: isConnector) {
+                tools.activate(.connector)
+                tools.pickerOpen = nil
+            }
+            // The colour: a button showing the pen's
+            // current colour, opening the palette
+            // flyout — like the pen, select and geometry
+            // buttons open theirs.
+            Button {
+                tools.pickerOpen = .color
+            } label: {
+                Circle()
+                    .fill(Color(nsColor: NSColor.fromHex(tools.penColor) ?? .black))
+                    .frame(width: 20, height: 20)
+                    .frame(width: 40, height: 40)
+                    .background(tools.pickerOpen == .color ? Color.black.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+            .accessibilityLabel("Colour")
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 8)
+        .frame(width: 56)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.black.opacity(0.08), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
+        // The flyout is an overlay, not a sibling: it sits
+        // beside the bar without taking part in its layout,
+        // so opening or closing it never moves the bar —
+        // the bar stays centred and fixed. It is centred on
+        // the bar, so the bar and its flyout read as one
+        // centred unit.
+        .overlay(alignment: .leading) {
             if let picker = tools.pickerOpen {
                 flyout(for: picker)
+                    .offset(x: 64)
             }
         }
         // The toolbar consumes its own clicks: a click on
@@ -91,9 +97,20 @@ public struct ToolbarView: View {
         return false
     }
 
+    // Each family button shows the icon of the tool that
+    // family is set to — the last one used there — not the
+    // family's default. Picking the lasso keeps the lasso
+    // on the select button even after switching to another
+    // tool, and the same for the pencil and the triangle.
+    private var selectIcon: String {
+        switch tools.lastSelectMode {
+        case .select: return "cursorarrow"
+        case .lasso: return "lasso"
+        }
+    }
+
     private var drawIcon: String {
-        guard case .draw(let draw) = tools.tool else { return "pencil" }
-        switch draw {
+        switch tools.lastDrawTool {
         case .pen: return "pencil"
         case .pencil: return "pencil.tip"
         case .highlighter: return "highlighter"
@@ -102,8 +119,7 @@ public struct ToolbarView: View {
     }
 
     private var shapeIcon: String {
-        guard case .shape(let shape) = tools.tool else { return "square" }
-        switch shape {
+        switch tools.lastShape {
         case .rect: return "square"
         case .ellipse: return "circle"
         case .triangle: return "triangle"
@@ -154,6 +170,7 @@ public struct ToolbarView: View {
                         .background(tools.penColor == hex ? Color.black.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
                 }
                 .buttonStyle(.plain)
+                .contentShape(Rectangle())
                 .accessibilityLabel(hex)
             }
         }
@@ -166,6 +183,10 @@ public struct ToolbarView: View {
                 .stroke(Color.black.opacity(0.08), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
+        // Like the bar, the flyout consumes clicks on its
+        // own background so they do not reach the board.
+        .contentShape(Rectangle())
+        .onTapGesture {}
     }
 
     /// The icon flyout: the select, draw and shape
@@ -232,6 +253,10 @@ public struct ToolbarView: View {
                 .stroke(Color.black.opacity(0.08), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
+        // Like the bar, the flyout consumes clicks on its
+        // own background so they do not reach the board.
+        .contentShape(Rectangle())
+        .onTapGesture {}
     }
 
     private func shapeIcon(for shape: ShapeKind) -> String {
