@@ -137,6 +137,21 @@ public final class BoardViewport: NSView {
     private let connectorOverlay = WorldView()
     private let connectorLayer = CAShapeLayer()
 
+    /// An erase sweep in progress: the ids erased so far.
+    /// The viewport's board is mutated live (the strokes
+    /// disappear as the eraser touches them, like the
+    /// Electron app), and the sweep is committed as one
+    /// undo step on mouseup. The ids are tracked so the
+    /// commit re-applies them even if the board was
+    /// refreshed mid-sweep.
+    private var eraseIds: Set<Int> = []
+    private var eraseActive = false
+    /// The eraser ring: a circle over the board, following
+    /// the cursor while the eraser tool is active, sized
+    /// to the eraser's radius (12 world pixels).
+    private let eraserOverlay = WorldView()
+    private let eraserLayer = CAShapeLayer()
+
     /// A local event monitor for pinch and wheel, so the
     /// gestures reach the board whatever the first
     /// responder is. AppKit sends a pinch to the first
@@ -192,6 +207,12 @@ public final class BoardViewport: NSView {
         addSubview(connectorOverlay)
         connectorLayer.lineCap = .round
         connectorOverlay.layer?.addSublayer(connectorLayer)
+        eraserOverlay.wantsLayer = true
+        eraserOverlay.autoresizingMask = [.width, .height]
+        addSubview(eraserOverlay)
+        eraserLayer.fillColor = NSColor.clear.cgColor
+        eraserLayer.strokeColor = NSColor.labelColor.withAlphaComponent(0.6).cgColor
+        eraserOverlay.layer?.addSublayer(eraserLayer)
         applyCamera()
     }
 
@@ -211,6 +232,7 @@ public final class BoardViewport: NSView {
         strokeOverlay.frame = bounds
         shapeOverlay.frame = bounds
         connectorOverlay.frame = bounds
+        eraserOverlay.frame = bounds
         applyCamera()
         onViewportResized?()
     }
@@ -386,7 +408,7 @@ public final class BoardViewport: NSView {
         for area in trackingAreas { removeTrackingArea(area) }
         addTrackingArea(NSTrackingArea(
             rect: bounds,
-            options: [.mouseEnteredAndExited, .activeInKeyWindow],
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow],
             owner: self, userInfo: nil
         ))
     }
@@ -397,6 +419,49 @@ public final class BoardViewport: NSView {
         // AppKit sends those to the first responder, and
         // the board is the only focusable view for now.
         window?.makeFirstResponder(self)
+        updateEraserRing(at: convert(event.locationInWindow, from: nil))
+    }
+
+    override public func mouseExited(with event: NSEvent) {
+        updateEraserRing(at: nil)
+    }
+
+    override public func mouseMoved(with event: NSEvent) {
+        updateEraserRing(at: convert(event.locationInWindow, from: nil))
+    }
+
+    /// The eraser ring: a circle at the cursor, sized to
+    /// the eraser's radius (12 world pixels, so 24 × zoom
+    /// screen pixels across). It shows while the eraser
+    /// tool is active and the pointer is over the board.
+    private func updateEraserRing(at point: NSPoint?) {
+        eraserOverlay.frame = bounds
+        guard let point, toolState?.tool == .draw(.eraser) else {
+            eraserLayer.path = nil
+            return
+        }
+        let r = CGFloat(BoardErase.radius) * camera.zoom
+        let circle = CGPath(ellipseIn: CGRect(x: point.x - r, y: point.y - r, width: r * 2, height: r * 2), transform: nil)
+        CardView.withoutLayerActions {
+            eraserLayer.path = circle
+            eraserLayer.lineWidth = 1
+            eraserLayer.frame = bounds
+        }
+    }
+
+    /// Erases the strokes the eraser touches at this world
+    /// point, live: the ids join the sweep's set and the
+    /// board loses them at once (the host re-renders, so
+    /// they disappear as the eraser touches them). The
+    /// sweep is committed as one undo step on mouseup.
+    /// Returns true when at least one stroke went.
+    @discardableResult
+    private func eraseAt(_ world: Pt) -> Bool {
+        let ids = BoardErase.strokesWithin(board: board, at: world)
+        guard !ids.isEmpty else { return false }
+        eraseIds.formUnion(ids)
+        board.items.removeAll { eraseIds.contains($0.id) }
+        return true
     }
 
     // MARK: - Space+drag pan (a grab, not a scroll)
@@ -544,6 +609,18 @@ public final class BoardViewport: NSView {
             strokePressures = event.pressure > 0 ? [Double(event.pressure)] : nil
             return
         }
+        // The eraser starts a sweep on press: it erases the
+        // strokes it touches at once, and keeps erasing as
+        // the pointer moves. The sweep is one undo step.
+        if toolState?.tool == .draw(.eraser) {
+            let point = convert(event.locationInWindow, from: nil)
+            let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
+            eraseActive = true
+            eraseIds = []
+            _ = eraseAt(world)
+            updateEraserRing(at: point)
+            return
+        }
         // A shape tool starts a shape drag on press (the
         // Electron app's shape check, also before the card
         // hit-test): the drag sizes the shape, and it is
@@ -684,6 +761,15 @@ public final class BoardViewport: NSView {
             }
             return
         }
+        // An erase sweep: every stroke the eraser touches
+        // goes at once, and the ring follows the cursor.
+        if eraseActive {
+            let point = convert(event.locationInWindow, from: nil)
+            let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
+            _ = eraseAt(world)
+            updateEraserRing(at: point)
+            return
+        }
         // A shape drag: the current corner follows the
         // pointer, and the preview redraws at the drag's
         // rect.
@@ -734,6 +820,21 @@ public final class BoardViewport: NSView {
             strokePressures = nil
             strokeTool = nil
             updateStrokePreview()
+            return
+        }
+        // An erase sweep that erased anything commits as
+        // one undo step and one save. A sweep that erased
+        // nothing leaves no step behind. The ids are
+        // re-applied to the current board, so the commit
+        // holds even if the board was refreshed mid-sweep.
+        if eraseActive {
+            if !eraseIds.isEmpty {
+                var next = board
+                next.items.removeAll { eraseIds.contains($0.id) }
+                onBoardMutate?(next)
+            }
+            eraseActive = false
+            eraseIds = []
             return
         }
         // A shape drag commits as one item (one undo step,
