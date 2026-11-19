@@ -152,6 +152,14 @@ public final class BoardViewport: NSView {
     private let eraserOverlay = WorldView()
     private let eraserLayer = CAShapeLayer()
 
+    /// A lasso loop in progress (the select tool's lasso
+    /// mode): the world points of the loop so far. The live
+    /// preview is a closed path over the cards, filled
+    /// with the accent at 0.08 and stroked with it.
+    private var lassoPoints: [Pt]?
+    private let lassoOverlay = WorldView()
+    private let lassoLayer = CAShapeLayer()
+
     /// A local event monitor for pinch and wheel, so the
     /// gestures reach the board whatever the first
     /// responder is. AppKit sends a pinch to the first
@@ -213,6 +221,12 @@ public final class BoardViewport: NSView {
         eraserLayer.fillColor = NSColor.clear.cgColor
         eraserLayer.strokeColor = NSColor.labelColor.withAlphaComponent(0.6).cgColor
         eraserOverlay.layer?.addSublayer(eraserLayer)
+        lassoOverlay.wantsLayer = true
+        lassoOverlay.autoresizingMask = [.width, .height]
+        addSubview(lassoOverlay)
+        lassoLayer.fillColor = NSColor.systemBlue.withAlphaComponent(0.08).cgColor
+        lassoLayer.strokeColor = NSColor.systemBlue.cgColor
+        lassoOverlay.layer?.addSublayer(lassoLayer)
         applyCamera()
     }
 
@@ -233,6 +247,7 @@ public final class BoardViewport: NSView {
         shapeOverlay.frame = bounds
         connectorOverlay.frame = bounds
         eraserOverlay.frame = bounds
+        lassoOverlay.frame = bounds
         applyCamera()
         onViewportResized?()
     }
@@ -272,6 +287,7 @@ public final class BoardViewport: NSView {
         updateStrokePreview()
         updateShapePreview()
         updateConnectorPreview()
+        updateLassoPreview()
     }
 
     /// The window behind the board is the board's own
@@ -649,6 +665,17 @@ public final class BoardViewport: NSView {
             updateConnectorPreview()
             return
         }
+        // The lasso mode (the select tool's loop) starts a
+        // loop on press, whatever is under the cursor —
+        // the Electron app's lasso check comes before the
+        // card hit-test, so a loop can start on a card.
+        if toolState?.tool == .select(.lasso) {
+            let point = convert(event.locationInWindow, from: nil)
+            let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
+            lassoPoints = [world]
+            updateLassoPreview()
+            return
+        }
         // Click selection (the Electron app's setSelected):
         // a card, or its whole group, is selected; Shift
         // toggles it in the selection; empty space clears
@@ -788,6 +815,21 @@ public final class BoardViewport: NSView {
             updateConnectorPreview()
             return
         }
+        // A lasso loop: a point is appended only once the
+        // pointer has moved more than 2 world pixels from
+        // the last one (2 / zoom), and the preview redraws
+        // from the points so far.
+        if var points = lassoPoints {
+            let point = convert(event.locationInWindow, from: nil)
+            let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
+            let last = points[points.count - 1]
+            if hypot(world.x - last.x, world.y - last.y) > 2 / camera.zoom {
+                points.append(world)
+                lassoPoints = points
+                updateLassoPreview()
+            }
+            return
+        }
         guard marqueeStart != nil else { return }
         let point = convert(event.locationInWindow, from: nil)
         marqueeCurrent = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
@@ -881,6 +923,31 @@ public final class BoardViewport: NSView {
             connectorFrom = nil
             connectorCurrent = nil
             updateConnectorPreview()
+            return
+        }
+        // A lasso loop selects on release: a real loop
+        // (at least 3 points, spanning at least 4 world
+        // pixels on an axis) selects everything it
+        // touches; a click, not a loop, selects what is
+        // under the cursor, the way the select tool does.
+        // Either way it is only a selection change, never
+        // an undo step.
+        if let points = lassoPoints {
+            let xs = points.map(\.x), ys = points.map(\.y)
+            let w = (xs.max() ?? 0) - (xs.min() ?? 0)
+            let h = (ys.max() ?? 0) - (ys.min() ?? 0)
+            if points.count < 3 || (w < 4 && h < 4) {
+                let end = points.last ?? Pt(x: 0, y: 0)
+                if let hit = HitTest.hit(board: board, at: end) {
+                    selected = groupIds(of: hit)
+                } else {
+                    selected = []
+                }
+            } else {
+                selected = Set(LassoSelection.select(board: board, points: points))
+            }
+            lassoPoints = nil
+            updateLassoPreview()
             return
         }
         // A card drag that moved: commit the final board
@@ -1005,6 +1072,32 @@ public final class BoardViewport: NSView {
         switch item.kind {
         case .stroke, .connector: return false
         default: return true
+        }
+    }
+
+    /// Draws (or hides) the live lasso loop: a closed path
+    /// through the points so far (the last point joins back
+    /// to the first), filled with the accent at 0.08 and
+    /// stroked with it at 1 world pixel — the Electron
+    /// app's lasso preview. The fill shows the region the
+    /// loop will select.
+    private func updateLassoPreview() {
+        lassoOverlay.frame = bounds
+        guard let points = lassoPoints, points.count >= 2 else {
+            lassoLayer.path = nil
+            return
+        }
+        let screen = points.map { Pt(x: ($0.x - camera.x) * camera.zoom, y: ($0.y - camera.y) * camera.zoom) }
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: screen[0].x, y: screen[0].y))
+        for pt in screen.dropFirst() {
+            path.addLine(to: CGPoint(x: pt.x, y: pt.y))
+        }
+        path.closeSubpath()
+        CardView.withoutLayerActions {
+            lassoLayer.path = path
+            lassoLayer.lineWidth = 1 * camera.zoom
+            lassoLayer.frame = bounds
         }
     }
 
