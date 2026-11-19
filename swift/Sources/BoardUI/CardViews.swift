@@ -100,21 +100,29 @@ public final class TextCardView: CardView {
 
     override public func layout() {
         super.layout()
-        // 14px padding on every side. The card is y-up
-        // (a plain NSView), so the inset rect is the text
-        // area and the layer draws top-down inside it.
-        // The layer moves instantly (no implicit animation):
-        // a zoom step would otherwise animate the text
-        // across the card for a quarter of a second.
+        // 14px padding on every side, in world units — the
+        // card is screen-sized, so the padding scales by
+        // the zoom. A fixed 14 screen pixels ate the card
+        // when dezoomed (a 72px-wide card kept only 44px
+        // for text, a 28px card kept none), so the text
+        // disappeared. The layer moves instantly (no
+        // implicit animation): a zoom step would otherwise
+        // animate the text across the card for a quarter
+        // of a second.
         CardView.withoutLayerActions {
-            textLayer.frame = bounds.insetBy(dx: 14, dy: 14)
-            // The font size is in world units; the card is
-            // screen-sized, so it scales by the zoom — the
-            // card's screen width over its world width.
-            // Without the scale the text drew at world size
-            // inside a screen-sized card.
+            // The zoom: the card's screen width over its
+            // world width. The font size is in world units,
+            // so it scales by the zoom — without the scale
+            // the text drew at world size inside a
+            // screen-sized card.
+            let zoom: CGFloat
+            if let item = currentItem, item.size.w > 0 {
+                zoom = bounds.width / CGFloat(item.size.w)
+            } else {
+                zoom = 1
+            }
+            textLayer.frame = bounds.insetBy(dx: 14 * zoom, dy: 14 * zoom)
             if let item = currentItem, case .text(let text) = item.kind {
-                let zoom = item.size.w > 0 ? bounds.width / CGFloat(item.size.w) : 1
                 let font = NSFont.systemFont(ofSize: CGFloat(text.size) * zoom, weight: text.bold ? .bold : .regular)
                 textLayer.font = font
                 textLayer.fontSize = CGFloat(text.size) * zoom
