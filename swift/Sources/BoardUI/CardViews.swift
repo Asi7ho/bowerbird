@@ -69,32 +69,42 @@ public enum CardViews {
 /// 14px padding, line-height 1.55, on the note's background
 /// colour (or white). Editing is M3; this view does not
 /// edit or select text.
+///
+/// The text is a `CATextLayer`, not an `NSTextField`: a
+/// control does not reliably draw when an ancestor layer
+/// carries the camera transform (the notes went blank
+/// after the transform landed), while a layer draws
+/// exactly where its frame is.
 public final class TextCardView: CardView {
-    private let field = NSTextField(labelWithString: "")
+    private let textLayer = CATextLayer()
 
     override public init() {
         super.init()
-        field.isEditable = false
-        field.isSelectable = false
-        field.usesSingleLineMode = false
-        field.lineBreakMode = .byWordWrapping
-        field.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(field)
-        NSLayoutConstraint.activate([
-            field.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 14),
-            field.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -14),
-            field.topAnchor.constraint(equalTo: topAnchor, constant: 14),
-            field.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -14),
-        ])
+        textLayer.isWrapped = true
+        textLayer.truncationMode = .none
+        textLayer.alignmentMode = .left
+        textLayer.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
+        layer?.addSublayer(textLayer)
     }
 
     override public func configure(item: Item) {
         super.configure(item: item)
         guard case .text(let text) = item.kind else { return }
-        field.stringValue = text.text
-        field.font = NSFont.systemFont(ofSize: CGFloat(text.size), weight: text.bold ? .bold : .regular)
-        field.textColor = NSColor.fromHex(text.color) ?? .labelColor
+        let font = NSFont.systemFont(ofSize: CGFloat(text.size), weight: text.bold ? .bold : .regular)
+        textLayer.font = font
+        textLayer.fontSize = CGFloat(text.size)
+        textLayer.foregroundColor = (NSColor.fromHex(text.color) ?? .labelColor).cgColor
+        textLayer.string = text.text
         layer?.backgroundColor = (text.bg.flatMap { NSColor.fromHex($0) } ?? NSColor.white).cgColor
+        setNeedsLayout()
+    }
+
+    override public func layout() {
+        super.layout()
+        // 14px padding on every side. The card is y-up
+        // (a plain NSView), so the inset rect is the text
+        // area and the layer draws top-down inside it.
+        textLayer.frame = bounds.insetBy(dx: 14, dy: 14)
     }
 
     @available(*, unavailable)
@@ -264,9 +274,15 @@ public final class ImageCardView: CardView {
 /// A placeholder tile for a kind whose native view has not
 /// landed yet (M4/M5/M7). The board still shows the card,
 /// with its title and what is coming.
+///
+/// The text is two `CATextLayer`s, not `NSTextField`s: a
+/// control does not reliably draw when an ancestor layer
+/// carries the camera transform (the placeholders went
+/// blank after the transform landed), while a layer draws
+/// exactly where its frame is.
 public final class PlaceholderCardView: CardView {
-    private let titleField = NSTextField(labelWithString: "")
-    private let subtitleField = NSTextField(labelWithString: "")
+    private let titleLayer = CATextLayer()
+    private let subtitleLayer = CATextLayer()
 
     override public init() {
         super.init()
@@ -275,55 +291,61 @@ public final class PlaceholderCardView: CardView {
         // whose native view has not landed yet (M4/M5)
         // reads as "coming", not as an empty white card.
         layer?.backgroundColor = NSColor.systemGray.withAlphaComponent(0.08).cgColor
-        titleField.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
-        titleField.textColor = .labelColor
-        titleField.lineBreakMode = .byTruncatingTail
-        subtitleField.font = NSFont.systemFont(ofSize: 12)
-        subtitleField.textColor = .secondaryLabelColor
-        for field in [titleField, subtitleField] {
-            field.isEditable = false
-            field.isSelectable = false
-            field.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(field)
+        titleLayer.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
+        titleLayer.fontSize = 14
+        titleLayer.foregroundColor = NSColor.labelColor.cgColor
+        titleLayer.truncationMode = .end
+        titleLayer.alignmentMode = .left
+        subtitleLayer.font = NSFont.systemFont(ofSize: 12)
+        subtitleLayer.fontSize = 12
+        subtitleLayer.foregroundColor = NSColor.secondaryLabelColor.cgColor
+        subtitleLayer.truncationMode = .end
+        subtitleLayer.alignmentMode = .left
+        for textLayer in [titleLayer, subtitleLayer] {
+            textLayer.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
+            layer?.addSublayer(textLayer)
         }
-        NSLayoutConstraint.activate([
-            titleField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            titleField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            titleField.topAnchor.constraint(equalTo: topAnchor, constant: 12),
-            subtitleField.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            subtitleField.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            subtitleField.topAnchor.constraint(equalTo: titleField.bottomAnchor, constant: 4),
-        ])
     }
 
     override public func configure(item: Item) {
         super.configure(item: item)
         switch item.kind {
         case .urlCard(let url):
-            titleField.stringValue = url.title ?? url.url
-            subtitleField.stringValue = "Link"
+            titleLayer.string = url.title ?? url.url
+            subtitleLayer.string = "Link"
         case .pdfCard:
-            titleField.stringValue = "PDF"
-            subtitleField.stringValue = "PDFView in M4"
+            titleLayer.string = "PDF"
+            subtitleLayer.string = "PDFView in M4"
         case .fileCard(let file):
-            titleField.stringValue = file.path
-            subtitleField.stringValue = file.format.rawValue.uppercased()
+            titleLayer.string = file.path
+            subtitleLayer.string = file.format.rawValue.uppercased()
         case .audio(let audio):
-            titleField.stringValue = audio.title ?? "Audio"
-            subtitleField.stringValue = "AVPlayerView in M5"
+            titleLayer.string = audio.title ?? "Audio"
+            subtitleLayer.string = "AVPlayerView in M5"
         case .video:
-            titleField.stringValue = "Video"
-            subtitleField.stringValue = "AVPlayerView in M5"
+            titleLayer.string = "Video"
+            subtitleLayer.string = "AVPlayerView in M5"
         case .model3D:
-            titleField.stringValue = "3D model"
-            subtitleField.stringValue = "SceneKit in M5"
+            titleLayer.string = "3D model"
+            subtitleLayer.string = "SceneKit in M5"
         case .plugin(let plugin):
-            titleField.stringValue = plugin.kind
-            subtitleField.stringValue = "Plugin in M7"
+            titleLayer.string = plugin.kind
+            subtitleLayer.string = "Plugin in M7"
         default:
-            titleField.stringValue = ""
-            subtitleField.stringValue = ""
+            titleLayer.string = ""
+            subtitleLayer.string = ""
         }
+        setNeedsLayout()
+    }
+
+    override public func layout() {
+        super.layout()
+        // 12px in from the left, the title at the top and
+        // the subtitle 4px below it. The card is y-up (a
+        // plain NSView), so the top is at bounds.height.
+        let width = bounds.width - 24
+        titleLayer.frame = CGRect(x: 12, y: bounds.height - 12 - 18, width: width, height: 18)
+        subtitleLayer.frame = CGRect(x: 12, y: bounds.height - 12 - 18 - 4 - 16, width: width, height: 16)
     }
 
     @available(*, unavailable)
