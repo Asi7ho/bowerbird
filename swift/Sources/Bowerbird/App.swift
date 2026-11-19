@@ -30,6 +30,10 @@ struct BowerbirdApp: App {
                     store?.update { $0.camera = camera }
                 }
             )
+            // The app is light, like the Electron app: a dark
+            // system appearance turned the title bar dark
+            // brown, so the window is forced light.
+            .preferredColorScheme(.light)
             .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
                 _ = store?.saveSync()
             }

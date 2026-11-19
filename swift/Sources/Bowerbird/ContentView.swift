@@ -15,7 +15,17 @@ public struct ContentView: View {
     }
 
     public var body: some View {
-        BoardView(board: board, onCameraChanged: onCameraChanged)
-            .frame(minWidth: 800, minHeight: 600)
+        VStack(spacing: 0) {
+            // The title bar: a light strip at the top, like
+            // the Electron app's #title-bar. The system
+            // traffic lights sit in it (hiddenTitleBar), and
+            // the board starts below it, so a card can never
+            // be panned over the traffic lights or the title.
+            Color.white
+                .frame(height: 28)
+            Divider()
+            BoardView(board: board, onCameraChanged: onCameraChanged)
+                .frame(minWidth: 800, minHeight: 600)
+        }
     }
 }
