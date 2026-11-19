@@ -132,9 +132,12 @@ public final class BoardViewport: NSView {
         // moves the content up, as in Safari and Notes. The
         // deltas are in screen points; the camera moves in
         // world units, so they are divided by the zoom.
+        // AppKit's deltas are y-up (the opposite sign to the
+        // DOM's, whose y is down), so they are negated to
+        // match the Electron app's `cam + delta / zoom`.
         camera = Camera(
-            x: camera.x + Double(event.scrollingDeltaX) / camera.zoom,
-            y: camera.y + Double(event.scrollingDeltaY) / camera.zoom,
+            x: camera.x - Double(event.scrollingDeltaX) / camera.zoom,
+            y: camera.y - Double(event.scrollingDeltaY) / camera.zoom,
             zoom: camera.zoom
         )
     }
