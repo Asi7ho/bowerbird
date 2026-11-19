@@ -167,8 +167,36 @@ public final class CardHost {
                 container.addSubview(view, positioned: .above, relativeTo: nil)
             }
         }
-        renderConnectors()
-        renderGroupFrames()
+        renderConnectors(board: board)
+        renderGroupFrames(board: board)
+    }
+
+    /// Move the given items' views by a world delta, without
+    /// reconfiguring them and without touching the board: a
+    /// live drag moves the views, and the board is committed
+    /// on pointerup. The connectors and group frames are
+    /// redrawn from the dragged positions, so they follow
+    /// the cards. The delta is the TOTAL from the drag
+    /// start, so each frame is computed from the board's
+    /// positions and cannot drift.
+    public func moveViews(_ ids: Set<Int>, by delta: Pt) {
+        var dragged = board
+        BoardMove.move(&dragged, ids: ids, by: delta)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        for id in ids {
+            guard let view = shown[id],
+                  let item = dragged.items.first(where: { $0.id == id }) else { continue }
+            view.frame = CGRect(
+                x: (item.pos.x - camera.x) * camera.zoom,
+                y: (item.pos.y - camera.y) * camera.zoom,
+                width: item.size.w * camera.zoom,
+                height: item.size.h * camera.zoom
+            )
+        }
+        renderConnectors(board: dragged)
+        renderGroupFrames(board: dragged)
     }
 
     private func updateSelection() {
@@ -205,7 +233,7 @@ public final class CardHost {
     /// Electron app's GROUP_PAD).
     private static let groupPad: Double = 24
 
-    private func renderGroupFrames() {
+    private func renderGroupFrames(board: Board) {
         // The overlay fills the viewport (screen
         // coordinates); the frame rects and labels are
         // mapped to the screen, so they sit on the cards.
@@ -304,7 +332,7 @@ public final class CardHost {
 
     // MARK: - Connectors
 
-    private func renderConnectors() {
+    private func renderConnectors(board: Board) {
         // The overlay fills the viewport (screen
         // coordinates); the connector endpoints are mapped
         // to the screen, so the lines are drawn where the

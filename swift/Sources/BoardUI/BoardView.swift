@@ -44,6 +44,9 @@ public struct BoardView: NSViewRepresentable {
             store?.update { $0 = board }
             store?.save()
         }
+        viewport.onDragMove = { [weak host] ids, delta in
+            host?.moveViews(ids, by: delta)
+        }
         return viewport
     }
 

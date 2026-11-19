@@ -67,6 +67,25 @@ public final class BoardViewport: NSView {
     private var spaceHeld = false
     private var panStart: (point: NSPoint, camera: Camera)?
 
+    /// Called during a card drag with the dragged ids and
+    /// the TOTAL world delta from the drag start, so the
+    /// host can move the views (no reconfigure, no board
+    /// change) while the drag is live. The commit goes
+    /// through onBoardMutate on mouseUp.
+    public var onDragMove: ((Set<Int>, Pt) -> Void)?
+
+    /// A card drag in progress: the world point where the
+    /// drag started, the ids being dragged (the selection
+    /// at the drag start), the total world delta from the
+    /// drag start (the commit uses this, so the board lands
+    /// exactly where the drag last drew it), and whether
+    /// the pointer has actually moved — a click that never
+    /// moved is a selection, not a drag, and commits nothing.
+    private var dragStart: Pt?
+    private var dragIds: Set<Int> = []
+    private var dragDelta = Pt(x: 0, y: 0)
+    private var dragMoved = false
+
     /// A marquee drag in progress: the world point where the
     /// drag started and where the pointer is now. A drag on
     /// empty space (no card hit, no Space pan) starts one.
@@ -411,6 +430,16 @@ public final class BoardViewport: NSView {
         } else if !group.isSubset(of: selected) {
             selected = group
         }
+        // A drag from a selected card: the drag moves the
+        // whole selection (the group, when the card is
+        // grouped). A Shift-click that deselected the card
+        // starts no drag.
+        if group.isSubset(of: selected) {
+            dragStart = world
+            dragIds = selected
+            dragDelta = Pt(x: 0, y: 0)
+            dragMoved = false
+        }
     }
 
     /// The ids a click on this item selects: the whole
@@ -433,6 +462,19 @@ public final class BoardViewport: NSView {
             )
             return
         }
+        // A card drag: the total world delta from the drag
+        // start moves the views (no reconfigure, no board
+        // change — the board is committed on mouseUp).
+        if let start = dragStart {
+            let point = convert(event.locationInWindow, from: nil)
+            let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
+            dragDelta = Pt(x: world.x - start.x, y: world.y - start.y)
+            if dragDelta.x != 0 || dragDelta.y != 0 {
+                dragMoved = true
+                onDragMove?(dragIds, dragDelta)
+            }
+            return
+        }
         guard marqueeStart != nil else { return }
         let point = convert(event.locationInWindow, from: nil)
         marqueeCurrent = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
@@ -441,6 +483,21 @@ public final class BoardViewport: NSView {
 
     override public func mouseUp(with event: NSEvent) {
         panStart = nil
+        // A card drag that moved: commit the final board
+        // (one undo step, one save). A click that never
+        // moved commits nothing.
+        if dragStart != nil {
+            if dragMoved {
+                var final = board
+                BoardMove.move(&final, ids: dragIds, by: dragDelta)
+                onBoardMutate?(final)
+            }
+            dragStart = nil
+            dragIds = []
+            dragDelta = Pt(x: 0, y: 0)
+            dragMoved = false
+            return
+        }
         guard let start = marqueeStart else { return }
         let end = marqueeCurrent ?? start
         selected = Set(MarqueeSelection.select(board: board, from: start, to: end))
