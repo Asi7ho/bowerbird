@@ -44,6 +44,7 @@ public struct ToolbarView: View {
                         .background(tools.pickerOpen == .color ? Color.black.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
                 }
                 .buttonStyle(.plain)
+                .contentShape(Rectangle())
                 .accessibilityLabel("Colour")
             }
             .padding(.vertical, 12)
@@ -60,6 +61,14 @@ public struct ToolbarView: View {
                 flyout(for: picker)
             }
         }
+        // The toolbar consumes its own clicks: a click on
+        // the bar's background (between the buttons, on the
+        // padding) must not fall through to the board below,
+        // or the board would close the flyout and clear the
+        // selection — which is why a tool sometimes took
+        // several clicks to select.
+        .contentShape(Rectangle())
+        .onTapGesture {}
     }
 
     private var isSelect: Bool {
@@ -114,6 +123,9 @@ public struct ToolbarView: View {
                 .foregroundStyle(Color.primary)
         }
         .buttonStyle(.plain)
+        // The whole 40×40 is the hit area, not just the
+        // icon — a click on the button's edge must land.
+        .contentShape(Rectangle())
         .accessibilityLabel(label)
     }
 

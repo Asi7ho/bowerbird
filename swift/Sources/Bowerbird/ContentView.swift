@@ -33,13 +33,14 @@ public struct ContentView: View {
             TitleBarView(background: NSColor.fromHex(store.board.bg) ?? NSColor.white)
                 .frame(height: 28)
             Divider()
-            ZStack(alignment: .topLeading) {
+            ZStack(alignment: .leading) {
                 BoardView(store: store, tools: tools)
                     .frame(minWidth: 800, minHeight: 600)
-                // The floating toolbar, over the board's
-                // top-left corner, like the Electron app's.
+                // The floating toolbar, vertically centred
+                // on the board's left edge, like the
+                // Electron app's (top 50%, left 12px).
                 ToolbarView(tools: tools)
-                    .padding(12)
+                    .padding(.leading, 12)
             }
         }
     }
