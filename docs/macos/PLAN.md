@@ -38,6 +38,43 @@ without losing anything the Electron version does.
   user runs from source. Nothing is called done from a code read
   alone.
 
+## Philosophy — the same as the current app
+
+The user (2026-11-19): the refactor keeps the Electron app's
+philosophy — small files, performance, core + plugin. These are
+design rules for the Swift line, not aspirations.
+
+- **Small files.** One file is one job. When a file grows past
+  ~500 lines it gets split — the Electron app learned this the
+  hard way (board.ts hit 2,157 lines, main.ts 1,045, split in
+  PRs #37/#38) and the Swift line starts split: the board model
+  is already `Geometry.swift` / `Kind.swift` / `Board.swift`,
+  not one `Model.swift`. A file that does two things is a file
+  waiting to be split. Tests sit next to the code they cover.
+- **Performance.** Measure before choosing, and never do work
+  at rest. The canvas decision (M2) is made on the 2,000-card
+  measurement, not on preference. No frame loop runs while
+  nothing moves (the PR #51 lesson: on-demand rendering);
+  what is off-screen is not built (culling); heavy things
+  load lazily (Whisper, the PDF worker, the 3D environment);
+  the startup path stays lean (the PR #63 lesson: defer the
+  3D layer out of the first render). Every milestone that
+  touches the frame carries a measurement with it.
+- **Core + plugin.** A small headless core that knows nothing
+  about UI — the board model, the store (undo/save/recovery/
+  backups), the camera, and the plugin host — and everything
+  else a plugin, including the first-party ones (board,
+  toolbar, cards, search, settings, titlebar), exactly like
+  the Electron app's core plugins. Plugins are isolated the
+  same way (PR #36: a plugin runs only its own commands,
+  shortcuts and cards; it cannot replace the board
+  controller or emit core events). The core API is the
+  contract (it mirrors `PluginContext`). The boundary is
+  drawn in M0/M1 so the core never grows UI code; the Python
+  host itself lands in M7, but the shape of it — what the
+  core offers, what a plugin may touch — is fixed from the
+  start.
+
 ## Architecture sketch
 
 - **App shell:** SwiftUI `App` + `WindowGroup`. AppKit where
@@ -90,10 +127,15 @@ without losing anything the Electron version does.
 - [x] Branch `macos/swift` from `main`, own worktree.
 - [x] This plan.
 - [ ] Swift package skeleton (`swift/`): `Package.swift`, an
-  app entry that opens an empty window, the board model
-  (`Model.swift`) with a decoding test, and the macOS CI
-  workflow (`swift.yml`: `swift build` + `swift test` on a
-  macOS runner, on push to this branch).
+  app entry that opens an empty window, the board model —
+  split into small files (`Geometry.swift`, `Kind.swift`,
+  `Board.swift`), not one `Model.swift` — with a decoding
+  test, and the macOS CI workflow (`swift.yml`:
+  `swift build` + `swift test` on a macOS runner, on push
+  to this branch). The core/plugin boundary is drawn here:
+  `BowerbirdCore` is the headless core (model, and later
+  the store and the plugin host); the app shell and the
+  features are not core code.
 - Done: CI green on the branch.
 
 ### M1 — Board data + persistence
