@@ -34,6 +34,11 @@ struct BowerbirdApp: App {
                 _ = store?.saveSync()
             }
         }
-        .windowStyle(.titleBar)
+        // No standard title bar: the Electron app's window
+        // is frameless (`frame: false`) with its own title
+        // bar drawn in the page, so the Swift window hides
+        // the title the same way — the traffic lights stay,
+        // the "Bowerbird" title and the dark bar go.
+        .windowStyle(.hiddenTitleBar)
     }
 }
