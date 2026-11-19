@@ -44,5 +44,13 @@ struct BowerbirdApp: App {
         // the title the same way — the traffic lights stay,
         // the "Bowerbird" title and the dark bar go.
         .windowStyle(.hiddenTitleBar)
+        // The window is resizable, explicitly in SwiftUI:
+        // setting the AppKit styleMask from the viewport
+        // did not stick — SwiftUI owns the window and reset
+        // it, so the window was not resizable at all (no
+        // resize drag, and no resize cursor at the edges,
+        // which is why the cursor rects and the mouseMoved
+        // workaround never showed it).
+        .windowResizability(.contentSize)
     }
 }
