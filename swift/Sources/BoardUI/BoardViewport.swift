@@ -138,7 +138,19 @@ public final class BoardViewport: NSView {
 
     // MARK: - Trackpad and wheel
 
+    /// The scroll deltas in screen points. A trackpad
+    /// reports precise pixel deltas; a mouse wheel reports
+    /// lines. The Electron app multiplies line deltas by 16
+    /// (deltaMode), so a wheel notch moves and zooms by the
+    /// same amount as a trackpad gesture — without it a
+    /// wheel notch barely zooms at all.
+    private func scrollDelta(_ event: NSEvent) -> (x: Double, y: Double) {
+        let scale = event.hasPreciseScrollingDeltas ? 1.0 : 16.0
+        return (Double(event.scrollingDeltaX) * scale, Double(event.scrollingDeltaY) * scale)
+    }
+
     override public func scrollWheel(with event: NSEvent) {
+        let delta = scrollDelta(event)
         if event.modifierFlags.contains(.control) || event.modifierFlags.contains(.command) {
             // Ctrl or Cmd+wheel zooms around the cursor (the
             // Electron app's wheel zoom: factor
@@ -146,7 +158,7 @@ public final class BoardViewport: NSView {
             // y-down. AppKit's delta is y-up, so the sign
             // flips: scroll down zooms out, as in the
             // Electron app.
-            let factor = exp(Double(event.scrollingDeltaY) * 0.003)
+            let factor = exp(delta.y * 0.003)
             let location = convert(event.locationInWindow, from: nil)
             camera = CameraMath.zoomCamera(camera, around: Pt(x: Double(location.x), y: Double(location.y)), factor: factor)
             return
@@ -159,8 +171,8 @@ public final class BoardViewport: NSView {
         // DOM's, whose y is down), so they are negated to
         // match the Electron app's `cam + delta / zoom`.
         camera = Camera(
-            x: camera.x - Double(event.scrollingDeltaX) / camera.zoom,
-            y: camera.y - Double(event.scrollingDeltaY) / camera.zoom,
+            x: camera.x - delta.x / camera.zoom,
+            y: camera.y - delta.y / camera.zoom,
             zoom: camera.zoom
         )
     }
@@ -174,6 +186,24 @@ public final class BoardViewport: NSView {
             around: Pt(x: Double(location.x), y: Double(location.y)),
             factor: 1 + Double(event.magnification)
         )
+    }
+
+    override public func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for area in trackingAreas { removeTrackingArea(area) }
+        addTrackingArea(NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeInKeyWindow],
+            owner: self, userInfo: nil
+        ))
+    }
+
+    override public func mouseEntered(with event: NSEvent) {
+        // Take focus when the pointer arrives, so a pinch
+        // and the keyboard work without a click first —
+        // AppKit sends those to the first responder, and
+        // the board is the only focusable view for now.
+        window?.makeFirstResponder(self)
     }
 
     // MARK: - Space+drag pan (a grab, not a scroll)
