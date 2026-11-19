@@ -65,6 +65,12 @@ public final class BoardViewport: NSView {
         self.board = board
         super.init(frame: .zero)
         wantsLayer = true
+        // Clip to the viewport: an NSView does not clip its
+        // subviews by default, so the cards (which are
+        // positioned in world coordinates and transformed
+        // by the camera) drew outside the board — over the
+        // title bar strip and the window edges.
+        clipsToBounds = true
         gridView.grid = board.grid
         gridView.backgroundHex = board.bg
         gridView.autoresizingMask = [.width, .height]
@@ -109,20 +115,20 @@ public final class BoardViewport: NSView {
     }
 
     private func applyCamera() {
-        // The camera is the container's bounds: its origin is
-        // the world point at the top-left, and its size is the
-        // viewport in world units (viewport / zoom). A point in
-        // the container's (world) coordinates then maps to the
-        // screen exactly as the Electron app maps it:
-        // screen = (world − camera) × zoom. The frame is set
-        // first (it resets the bounds), then the bounds.
-        cardContainer.frame = bounds
-        cardContainer.bounds = CGRect(
-            x: camera.x,
-            y: camera.y,
-            width: bounds.width / camera.zoom,
-            height: bounds.height / camera.zoom
-        )
+        // The camera is a transform on the container's
+        // layer, not the container's bounds. An NSView's
+        // frame and bounds sizes are coupled: setting the
+        // bounds size to (viewport / zoom) shrank the frame
+        // to match, so the scale stayed 1 and the zoom
+        // cancelled itself out — pan worked (the bounds
+        // origin shifts the content) but zoom did nothing,
+        // which is why two rounds of gesture fixes changed
+        // nothing. A layer transform scales and translates
+        // the content while the container keeps filling the
+        // viewport. screen = (world − camera) × zoom.
+        let scale = CATransform3DMakeScale(camera.zoom, camera.zoom, 1)
+        let translate = CATransform3DMakeTranslation(-camera.x, -camera.y, 0)
+        cardContainer.layer?.transform = CATransform3DConcat(scale, translate)
         gridView.camera = camera
     }
 

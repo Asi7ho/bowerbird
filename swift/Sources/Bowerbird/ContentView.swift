@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import BoardUI
 import BowerbirdCore
 
@@ -21,7 +22,11 @@ public struct ContentView: View {
             // traffic lights sit in it (hiddenTitleBar), and
             // the board starts below it, so a card can never
             // be panned over the traffic lights or the title.
-            Color.white
+            // The strip is the board's own background colour,
+            // not plain white: the board is drawn by Metal
+            // from the same hex, and a plain white strip
+            // rendered a visibly different white next to it.
+            Color(nsColor: NSColor.fromHex(board.bg) ?? NSColor.white)
                 .frame(height: 28)
             Divider()
             BoardView(board: board, onCameraChanged: onCameraChanged)
