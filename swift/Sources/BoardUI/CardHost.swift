@@ -51,6 +51,12 @@ public final class CardHost {
     // overlay's frame (the visible rect) changed with the
     // pan, so the arrow drifted while the cards stayed put.
     private let connectorOverlay = WorldView()
+    // The group frames: a dashed rounded rect around each
+    // group's members, with the group's label, drawn below
+    // the cards (the Electron app's #group-frames layer).
+    // Same flipped overlay as the connectors, same visible
+    // rect frame.
+    private let groupFrameOverlay = WorldView()
     private var shown: [Int: CardView] = [:]
     private var pool: [String: [CardView]] = [:]
 
@@ -58,6 +64,8 @@ public final class CardHost {
         self.container = container
         self.board = board
         self.camera = camera
+        groupFrameOverlay.wantsLayer = true
+        container.addSubview(groupFrameOverlay)
         connectorOverlay.wantsLayer = true
         container.addSubview(connectorOverlay)
         render()
@@ -121,6 +129,7 @@ public final class CardHost {
             }
         }
         renderConnectors(visible: visible)
+        renderGroupFrames(visible: visible)
     }
 
     private func updateSelection() {
@@ -147,6 +156,111 @@ public final class CardHost {
         let view = views.removeLast()
         pool[key] = views
         return view
+    }
+
+    // MARK: - Group frames
+
+    /// The frame sits 24px outside the member union (the
+    /// Electron app's GROUP_PAD).
+    private static let groupPad: Double = 24
+
+    private var groupLabels: [Int: NSTextField] = [:]
+
+    private func renderGroupFrames(visible: WorldRect) {
+        groupFrameOverlay.frame = CGRect(x: visible.x, y: visible.y, width: visible.w, height: visible.h)
+        // One frame per group: the union of the members'
+        // bounds, padded. A group with fewer than two
+        // members has no frame (the Electron app's
+        // renderGroupFrames only draws groups of 2+).
+        let groupIds = Set(board.items.compactMap { $0.group })
+        var frames: [(group: Int, rect: WorldRect, isSelected: Bool)] = []
+        for group in groupIds {
+            let members = board.items.filter { $0.group == group }
+            guard members.count >= 2 else { continue }
+            var union: WorldRect?
+            for member in members {
+                let b = CameraMath.itemBounds(board: board, item: member)
+                union = union.map { WorldRect(
+                    x: min($0.x, b.x), y: min($0.y, b.y),
+                    w: max($0.x + $0.w, b.x + b.w) - min($0.x, b.x),
+                    h: max($0.y + $0.h, b.y + b.h) - min($0.y, b.y)
+                ) } ?? b
+            }
+            guard var rect = union else { continue }
+            rect = WorldRect(
+                x: rect.x - Self.groupPad, y: rect.y - Self.groupPad,
+                w: rect.w + Self.groupPad * 2, h: rect.h + Self.groupPad * 2
+            )
+            let isSelected = members.allSatisfy { selected.contains($0.id) }
+            frames.append((group, rect, isSelected))
+        }
+        // The frames, as shape layers (recreated each
+        // render, like the connector paths).
+        groupFrameOverlay.layer?.sublayers?.forEach { $0.removeFromSuperlayer() }
+        for (group, rect, isSelected) in frames {
+            let path = CGPath(
+                roundedRect: CGRect(
+                    x: rect.x - visible.x, y: rect.y - visible.y,
+                    width: rect.w, height: rect.h
+                ),
+                cornerWidth: 12, cornerHeight: 12, transform: nil
+            )
+            let layer = CAShapeLayer()
+            layer.path = path
+            layer.fillColor = NSColor.clear.cgColor
+            if isSelected {
+                layer.strokeColor = NSColor.systemBlue.withAlphaComponent(0.6).cgColor
+                layer.lineWidth = 2
+                layer.lineDashPattern = nil
+            } else {
+                layer.strokeColor = NSColor.black.withAlphaComponent(0.20).cgColor
+                layer.lineWidth = 2
+                layer.lineDashPattern = [6, 4]
+            }
+            groupFrameOverlay.layer?.addSublayer(layer)
+            _ = group
+        }
+        // The labels: a white chip at the frame's top-left,
+        // 12px in and 11px above the top edge (the Electron
+        // app's .group-label). Reused across renders, so a
+        // pan does not rebuild the text fields.
+        var liveLabels = Set<Int>()
+        for (group, rect, _) in frames {
+            guard let label = board.groups?[group]?.label, !label.isEmpty else { continue }
+            liveLabels.insert(group)
+            let field = groupLabels[group] ?? {
+                let f = NSTextField(labelWithString: "")
+                f.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+                f.textColor = NSColor.labelColor
+                f.backgroundColor = NSColor.white
+                f.isBordered = false
+                f.wantsLayer = true
+                f.layer?.borderColor = NSColor.separatorColor.cgColor
+                f.layer?.borderWidth = 1
+                f.layer?.cornerRadius = 6
+                groupLabels[group] = f
+                return f
+            }()
+            field.stringValue = label
+            field.sizeToFit()
+            // The chip, padded like the Electron app's
+            // (2px 8px) and straddling the frame's top edge.
+            let chip = CGRect(
+                x: rect.x + 12 - visible.x - 8,
+                y: rect.y - 11 - visible.y,
+                width: field.frame.width + 16,
+                height: field.frame.height + 4
+            )
+            field.frame = chip
+            if field.superview == nil {
+                groupFrameOverlay.addSubview(field)
+            }
+        }
+        // Drop the labels of groups that no longer exist.
+        for (group, field) in groupLabels where !liveLabels.contains(group) {
+            field.removeFromSuperview()
+            groupLabels.removeValue(forKey: group)
+        }
     }
 
     // MARK: - Connectors

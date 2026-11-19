@@ -224,6 +224,18 @@ public final class BoardViewport: NSView {
             zoomToFit()
             return
         }
+        if event.charactersIgnoringModifiers == "=" || event.charactersIgnoringModifiers == "+" {
+            // Zoom in around the centre (the Electron app's
+            // = / + shortcut).
+            let centre = Pt(x: Double(bounds.width) / 2, y: Double(bounds.height) / 2)
+            camera = CameraMath.zoomCamera(camera, around: centre, factor: 1.25)
+            return
+        }
+        if event.charactersIgnoringModifiers == "-" || event.charactersIgnoringModifiers == "_" {
+            let centre = Pt(x: Double(bounds.width) / 2, y: Double(bounds.height) / 2)
+            camera = CameraMath.zoomCamera(camera, around: centre, factor: 0.8)
+            return
+        }
         if event.keyCode == 53 { // Escape: deselect.
             selected = []
             return
