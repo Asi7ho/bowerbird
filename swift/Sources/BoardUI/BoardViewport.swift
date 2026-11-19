@@ -278,12 +278,7 @@ public final class BoardViewport: NSView {
         for area in trackingAreas { removeTrackingArea(area) }
         addTrackingArea(NSTrackingArea(
             rect: bounds,
-            // mouseMoved is here so the resize cursor is set
-            // directly on every move (see `mouseMoved`): the
-            // cursor rects did not show it at the edges, so
-            // the cursor is set here instead of relying on
-            // the rect system.
-            options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow],
+            options: [.mouseEnteredAndExited, .activeInKeyWindow],
             owner: self, userInfo: nil
         ))
     }
@@ -294,36 +289,6 @@ public final class BoardViewport: NSView {
         // AppKit sends those to the first responder, and
         // the board is the only focusable view for now.
         window?.makeFirstResponder(self)
-    }
-
-    override public func mouseMoved(with event: NSEvent) {
-        // The resize cursor, set directly on every move.
-        // The cursor rects did not show it at the window's
-        // edges — the view sits inside a SwiftUI hosting
-        // view, which does not reliably forward the rect
-        // system — so the cursor is set here instead.
-        // Within 6 points of an edge (or a corner) the
-        // resize arrow shows. A pan in progress (or Space
-        // held) takes precedence: while panning, the hand
-        // shows even at an edge. The view is flipped (y
-        // down), so the bottom edge is at bounds.height;
-        // the top edge is the title strip, not this view.
-        let location = convert(event.locationInWindow, from: nil)
-        let edge: CGFloat = 6
-        let nearLeft = location.x < edge
-        let nearRight = location.x > bounds.width - edge
-        let nearBottom = location.y > bounds.height - edge
-        if panStart != nil {
-            NSCursor.closedHand.set()
-        } else if spaceHeld {
-            NSCursor.openHand.set()
-        } else if nearLeft || nearRight {
-            NSCursor.resizeLeftRight.set()
-        } else if nearBottom {
-            NSCursor.resizeUpDown.set()
-        } else {
-            NSCursor.arrow.set()
-        }
     }
 
     // MARK: - Space+drag pan (a grab, not a scroll)
@@ -443,30 +408,10 @@ public final class BoardViewport: NSView {
 
     override public func resetCursorRects() {
         super.resetCursorRects()
-        // The resize cursor at the window's edges, as
-        // cursor rects — the mechanism AppKit is built
-        // for — as well as the mouseMoved setting below.
-        // The view sits inside a SwiftUI hosting view,
-        // which does not reliably forward the rect system,
-        // so both are here: the rects for when the system
-        // honours them, the mouseMoved for when it does
-        // not. The edges are 6 points wide. AppKit has no
-        // diagonal resize cursor, so the corners use the
-        // horizontal one. The view is flipped (y down), so
-        // the bottom edge is at bounds.height; the top edge
-        // is the title strip, not this view.
-        let edge: CGFloat = 6
-        let w = bounds.width, h = bounds.height
-        addCursorRect(NSRect(x: 0, y: 0, width: edge, height: h), cursor: .resizeLeftRight)
-        addCursorRect(NSRect(x: w - edge, y: 0, width: edge, height: h), cursor: .resizeLeftRight)
-        addCursorRect(NSRect(x: 0, y: h - edge, width: w, height: edge), cursor: .resizeUpDown)
-        // The pan hand, inset from the edges so it does not
-        // cover the resize rects.
-        let panRect = NSRect(x: edge, y: 0, width: max(0, w - edge * 2), height: max(0, h - edge))
         if panStart != nil {
-            addCursorRect(panRect, cursor: .closedHand)
+            addCursorRect(bounds, cursor: .closedHand)
         } else if spaceHeld {
-            addCursorRect(panRect, cursor: .openHand)
+            addCursorRect(bounds, cursor: .openHand)
         }
     }
 }
