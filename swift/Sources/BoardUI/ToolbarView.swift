@@ -55,26 +55,28 @@ public struct ToolbarView: View {
                 .stroke(Color.black.opacity(0.08), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
+        // The bar consumes its own background clicks (so
+        // they do not fall through to the board, which
+        // would close the flyout and clear the selection).
+        // This is applied to the bar only, BEFORE the
+        // flyout overlay: a content shape here would
+        // otherwise shrink the hit area to the bar's own
+        // rectangle and the flyout's buttons — offset to
+        // the bar's right — would fall through to the
+        // board instead of selecting their tool.
+        .contentShape(Rectangle())
+        .onTapGesture {}
         // The flyout is an overlay, not a sibling: it sits
         // beside the bar without taking part in its layout,
         // so opening or closing it never moves the bar —
-        // the bar stays centred and fixed. It is centred on
-        // the bar, so the bar and its flyout read as one
-        // centred unit.
-        .overlay(alignment: .leading) {
+        // the bar stays centred and fixed. Its top aligns
+        // with the bar's top.
+        .overlay(alignment: .topLeading) {
             if let picker = tools.pickerOpen {
                 flyout(for: picker)
                     .offset(x: 64)
             }
         }
-        // The toolbar consumes its own clicks: a click on
-        // the bar's background (between the buttons, on the
-        // padding) must not fall through to the board below,
-        // or the board would close the flyout and clear the
-        // selection — which is why a tool sometimes took
-        // several clicks to select.
-        .contentShape(Rectangle())
-        .onTapGesture {}
     }
 
     private var isSelect: Bool {
