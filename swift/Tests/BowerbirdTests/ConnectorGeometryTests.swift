@@ -26,15 +26,16 @@ final class ConnectorGeometryTests: XCTestCase {
 
     func testClippedEndsStopAtCardEdges() {
         let board = boardWithTwoCards()
-        let ends = ConnectorGeometry.clippedEnds(board: board, from: .item(1), to: .item(2))
-        XCTAssertNotNil(ends)
+        guard let (a, b) = ConnectorGeometry.clippedEnds(board: board, from: .item(1), to: .item(2)) else {
+            return XCTFail("no ends")
+        }
         // The line from (50,25) to (350,225) leaves the
         // first card through its bottom edge and enters the
         // second through its top edge.
-        XCTAssertEqual(ends?.0.x, 87.5, accuracy: 0.001)
-        XCTAssertEqual(ends?.0.y, 50, accuracy: 0.001)
-        XCTAssertEqual(ends?.1.x, 312.5, accuracy: 0.001)
-        XCTAssertEqual(ends?.1.y, 200, accuracy: 0.001)
+        XCTAssertEqual(a.x, 87.5, accuracy: 0.001)
+        XCTAssertEqual(a.y, 50, accuracy: 0.001)
+        XCTAssertEqual(b.x, 312.5, accuracy: 0.001)
+        XCTAssertEqual(b.y, 200, accuracy: 0.001)
     }
 
     func testPointAnchorsAreUsedAsIs() {
