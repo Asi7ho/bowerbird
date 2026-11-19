@@ -7,11 +7,11 @@ public enum SelectMode: String, Equatable {
     case select, lasso
 }
 
-/// The draw tool: pen, pencil (graphite texture) or
-/// highlighter (wide, translucent). P restores the last
-/// one used.
+/// The draw tool: pen, pencil (graphite texture),
+/// highlighter (wide, translucent) or eraser. P restores
+/// the last one used; X picks the eraser.
 public enum DrawTool: String, Equatable {
-    case pen, pencil, highlighter
+    case pen, pencil, highlighter, eraser
 }
 
 /// The active tool. The toolbar and the shortcuts both set
@@ -23,7 +23,6 @@ public enum Tool: Equatable {
     case draw(DrawTool)
     case shape(ShapeKind)
     case connector
-    case eraser
 
     /// The shortcut that activates this tool, as the
     /// Electron app binds it: V select, P draw, R geometry,
@@ -31,10 +30,9 @@ public enum Tool: Equatable {
     public var shortcut: String {
         switch self {
         case .select: return "V"
-        case .draw: return "P"
+        case .draw(let draw): return draw == .eraser ? "X" : "P"
         case .shape: return "R"
         case .connector: return "A"
-        case .eraser: return "X"
         }
     }
 }

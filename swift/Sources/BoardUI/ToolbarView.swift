@@ -30,28 +30,21 @@ public struct ToolbarView: View {
                     tools.activate(.connector)
                     tools.pickerOpen = nil
                 }
-                toolButton(icon: "eraser", label: "Eraser", active: isEraser) {
-                    tools.activate(.eraser)
-                    tools.pickerOpen = nil
+                // The colour: a button showing the pen's
+                // current colour, opening the palette
+                // flyout — like the pen, select and geometry
+                // buttons open theirs.
+                Button {
+                    tools.pickerOpen = .color
+                } label: {
+                    Circle()
+                        .fill(Color(nsColor: NSColor.fromHex(tools.penColor) ?? .black))
+                        .frame(width: 20, height: 20)
+                        .frame(width: 40, height: 40)
+                        .background(tools.pickerOpen == .color ? Color.black.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
                 }
-                if isDraw {
-                    Divider()
-                    ForEach(ToolState.palette, id: \.self) { hex in
-                        Button {
-                            tools.penColor = hex
-                        } label: {
-                            Circle()
-                                .fill(Color(nsColor: NSColor.fromHex(hex) ?? .black))
-                                .frame(width: 20, height: 20)
-                                .overlay(
-                                    Circle()
-                                        .stroke(tools.penColor == hex ? Color.primary : Color.clear, lineWidth: 2)
-                                )
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(hex)
-                    }
-                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Colour")
             }
             .padding(.vertical, 12)
             .padding(.horizontal, 8)
@@ -89,17 +82,13 @@ public struct ToolbarView: View {
         return false
     }
 
-    private var isEraser: Bool {
-        if case .eraser = tools.tool { return true }
-        return false
-    }
-
     private var drawIcon: String {
         guard case .draw(let draw) = tools.tool else { return "pencil" }
         switch draw {
         case .pen: return "pencil"
         case .pencil: return "pencil.tip"
         case .highlighter: return "highlighter"
+        case .eraser: return "eraser"
         }
     }
 
@@ -130,6 +119,36 @@ public struct ToolbarView: View {
 
     @ViewBuilder
     private func flyout(for picker: Picker) -> some View {
+        // The colour flyout shows the palette as coloured
+        // circles, not icons — it is rendered on its own.
+        if picker == .color {
+            VStack(spacing: 10) {
+                ForEach(ToolState.palette, id: \.self) { hex in
+                    Button {
+                        tools.penColor = hex
+                        tools.pickerOpen = nil
+                    } label: {
+                        Circle()
+                            .fill(Color(nsColor: NSColor.fromHex(hex) ?? .black))
+                            .frame(width: 20, height: 20)
+                            .frame(width: 40, height: 40)
+                            .background(tools.penColor == hex ? Color.black.opacity(0.08) : Color.clear, in: RoundedRectangle(cornerRadius: 10))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(hex)
+                }
+            }
+            .padding(.vertical, 12)
+            .padding(.horizontal, 8)
+            .frame(width: 56)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.black.opacity(0.08), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
+            return
+        }
         let options: [(icon: String, label: String, active: Bool, pick: () -> Void)] = {
             switch picker {
             case .select:
@@ -157,14 +176,24 @@ public struct ToolbarView: View {
                         tools.activate(.draw(.highlighter))
                         tools.pickerOpen = nil
                     }),
+                    ("eraser", "Eraser", tools.tool == .draw(.eraser), {
+                        tools.activate(.draw(.eraser))
+                        tools.pickerOpen = nil
+                    }),
                 ]
             case .shape:
-                return ShapeKind.allCases.map { shape in
+                // The arrow is not offered here: the
+                // toolbar already has it as the connector
+                // (the A tool), so the shape family is the
+                // six shapes.
+                return ShapeKind.allCases.filter { $0 != .arrow }.map { shape in
                     (shapeIcon(for: shape), shape.rawValue.capitalized, tools.tool == .shape(shape), {
                         tools.activate(.shape(shape))
                         tools.pickerOpen = nil
                     })
                 }
+            case .color:
+                return []
             }
         }()
         VStack(spacing: 10) {

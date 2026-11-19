@@ -416,8 +416,7 @@ public final class BoardViewport: NSView {
                 toolState?.pickerOpen = nil
                 return
             case "x":
-                toolState?.activate(.eraser)
-                toolState?.pickerOpen = nil
+                toolState?.eraserShortcut()
                 return
             default:
                 break

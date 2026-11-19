@@ -3,13 +3,15 @@ import Combine
 import SwiftUI
 
 /// Which flyout is open: the select family's (Select /
-/// Lasso), the draw family's (pen / pencil / highlighter)
-/// or the shape family's (the seven shapes). Transient:
-/// a flyout appears only on a tool button click or a tool
-/// shortcut, and disappears once a tool is picked or the
-/// user clicks anywhere else.
+/// Lasso), the draw family's (pen / pencil / highlighter /
+/// eraser), the shape family's (the six shapes — the arrow
+/// lives in the toolbar as the connector, not here) or the
+/// colour family's (the pen palette). Transient: a flyout
+/// appears only on a tool button click or a tool shortcut,
+/// and disappears once a tool is picked or the user clicks
+/// anywhere else.
 public enum Picker: Equatable {
-    case select, draw, shape
+    case select, draw, shape, color
 }
 
 /// The toolbar's state, shared between the SwiftUI toolbar
@@ -38,7 +40,7 @@ public final class ToolState: ObservableObject {
         case .select(let mode): lastSelectMode = mode
         case .draw(let draw): lastDrawTool = draw
         case .shape(let shape): lastShape = shape
-        case .connector, .eraser: break
+        case .connector: break
         }
         self.tool = tool
     }
@@ -51,10 +53,17 @@ public final class ToolState: ObservableObject {
     }
 
     /// The P shortcut: draw, restoring the last draw tool
-    /// (pen, pencil or highlighter), and open the draw
-    /// flyout.
+    /// (pen, pencil, highlighter or eraser), and open the
+    /// draw flyout.
     public func drawShortcut() {
         activate(.draw(lastDrawTool))
+        pickerOpen = .draw
+    }
+
+    /// The X shortcut: the eraser, and open the draw
+    /// flyout (the eraser lives in the draw family).
+    public func eraserShortcut() {
+        activate(.draw(.eraser))
         pickerOpen = .draw
     }
 
