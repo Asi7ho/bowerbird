@@ -100,14 +100,23 @@ public final class CardHost {
             shown.removeValue(forKey: id)
         }
         // Build or reuse a view for each visible card, in
-        // board order, and place it at the item's position.
-        // The container's camera transform does the rest.
-        // A recycled view is reconfigured for its new item.
+        // board order, and place it at its SCREEN position:
+        // screen = (world − camera) × zoom. The card is
+        // positioned where it is drawn (there is no camera
+        // transform on the container — a layer transform is
+        // applied about the layer's centre, which shifted
+        // the display away from the hit-test). A recycled
+        // view is reconfigured for its new item.
         for item in ordered {
             let view = shown[item.id] ?? dequeueView(for: item) ?? CardViews.view(for: item)
             guard let view else { continue }
             view.configure(item: item)
-            view.frame = CGRect(x: item.pos.x, y: item.pos.y, width: item.size.w, height: item.size.h)
+            view.frame = CGRect(
+                x: (item.pos.x - camera.x) * camera.zoom,
+                y: (item.pos.y - camera.y) * camera.zoom,
+                width: item.size.w * camera.zoom,
+                height: item.size.h * camera.zoom
+            )
             if let rotation = item.rotation {
                 view.layer?.transform = CATransform3DMakeRotation(CGFloat(rotation) * .pi / 180, 0, 0, 1)
             } else {
@@ -128,8 +137,8 @@ public final class CardHost {
                 container.addSubview(view, positioned: .above, relativeTo: nil)
             }
         }
-        renderConnectors(visible: visible)
-        renderGroupFrames(visible: visible)
+        renderConnectors()
+        renderGroupFrames()
     }
 
     private func updateSelection() {
@@ -166,14 +175,17 @@ public final class CardHost {
 
     private var groupLabels: [Int: NSTextField] = [:]
 
-    private func renderGroupFrames(visible: WorldRect) {
-        groupFrameOverlay.frame = CGRect(x: visible.x, y: visible.y, width: visible.w, height: visible.h)
+    private func renderGroupFrames() {
+        // The overlay fills the viewport (screen
+        // coordinates); the frame rects and labels are
+        // mapped to the screen, so they sit on the cards.
+        groupFrameOverlay.frame = CGRect(x: 0, y: 0, width: container.frame.width, height: container.frame.height)
         // One frame per group: the union of the members'
         // bounds, padded. A group with fewer than two
         // members has no frame (the Electron app's
         // renderGroupFrames only draws groups of 2+).
         let groupIds = Set(board.items.compactMap { $0.group })
-        var frames: [(group: Int, rect: WorldRect, isSelected: Bool)] = []
+        var frames: [(group: Int, rect: CGRect, isSelected: Bool)] = []
         for group in groupIds {
             let members = board.items.filter { $0.group == group }
             guard members.count >= 2 else { continue }
@@ -191,18 +203,22 @@ public final class CardHost {
                 x: rect.x - Self.groupPad, y: rect.y - Self.groupPad,
                 w: rect.w + Self.groupPad * 2, h: rect.h + Self.groupPad * 2
             )
+            // The frame, in screen coordinates.
+            let screenRect = CGRect(
+                x: (rect.x - camera.x) * camera.zoom,
+                y: (rect.y - camera.y) * camera.zoom,
+                width: rect.w * camera.zoom,
+                height: rect.h * camera.zoom
+            )
             let isSelected = members.allSatisfy { selected.contains($0.id) }
-            frames.append((group, rect, isSelected))
+            frames.append((group, screenRect, isSelected))
         }
         // The frames, as shape layers (recreated each
         // render, like the connector paths).
         groupFrameOverlay.layer?.sublayers?.forEach { $0.removeFromSuperlayer() }
         for (group, rect, isSelected) in frames {
             let path = CGPath(
-                roundedRect: CGRect(
-                    x: rect.x - visible.x, y: rect.y - visible.y,
-                    width: rect.w, height: rect.h
-                ),
+                roundedRect: rect,
                 cornerWidth: 12, cornerHeight: 12, transform: nil
             )
             let layer = CAShapeLayer()
@@ -246,8 +262,8 @@ public final class CardHost {
             // The chip, padded like the Electron app's
             // (2px 8px) and straddling the frame's top edge.
             let chip = CGRect(
-                x: rect.x + 12 - visible.x - 8,
-                y: rect.y - 11 - visible.y,
+                x: rect.origin.x + 12 - 8,
+                y: rect.origin.y - 11,
                 width: field.frame.width + 16,
                 height: field.frame.height + 4
             )
@@ -265,8 +281,13 @@ public final class CardHost {
 
     // MARK: - Connectors
 
-    private func renderConnectors(visible: WorldRect) {
-        connectorOverlay.frame = CGRect(x: visible.x, y: visible.y, width: visible.w, height: visible.h)
+    private func renderConnectors() {
+        // The overlay fills the viewport (screen
+        // coordinates); the connector endpoints are mapped
+        // to the screen, so the lines are drawn where the
+        // cards are. There is no camera transform on the
+        // container, so no visible-rect offset is needed.
+        connectorOverlay.frame = CGRect(x: 0, y: 0, width: container.frame.width, height: container.frame.height)
         var paths: [(CGPath, NSColor, CGFloat)] = []
         for item in board.items {
             guard case .connector(let payload) = item.kind,
@@ -274,24 +295,29 @@ public final class CardHost {
             let isSelected = selected.contains(item.id)
             let color = isSelected ? NSColor.systemBlue : (NSColor.fromHex(payload.color) ?? .labelColor)
             let width: CGFloat = isSelected ? 3 : 2
-            // The line, offset into the overlay's local space.
+            // The endpoints, in screen coordinates.
+            let aScreen = Pt(x: (a.x - camera.x) * camera.zoom, y: (a.y - camera.y) * camera.zoom)
+            let bScreen = Pt(x: (b.x - camera.x) * camera.zoom, y: (b.y - camera.y) * camera.zoom)
+            // The line.
             let line = CGMutablePath()
-            line.move(to: CGPoint(x: a.x - visible.x, y: a.y - visible.y))
-            line.addLine(to: CGPoint(x: b.x - visible.x, y: b.y - visible.y))
+            line.move(to: CGPoint(x: aScreen.x, y: aScreen.y))
+            line.addLine(to: CGPoint(x: bScreen.x, y: bScreen.y))
             paths.append((line, color, width))
             // The arrowhead: two 12px lines at ±0.45 rad from
-            // the direction, meeting at the end.
-            let dx = b.x - a.x, dy = b.y - a.y
+            // the direction, meeting at the end. The head is
+            // 12 screen pixels (the Electron app's 12px
+            // head), computed from the screen direction.
+            let dx = bScreen.x - aScreen.x, dy = bScreen.y - aScreen.y
             let len = max(1, hypot(dx, dy))
             let ux = dx / len, uy = dy / len
             let head = 12.0, spread = 0.45
             let c1 = cos(spread), s1 = sin(spread), c2 = cos(-spread), s2 = sin(-spread)
-            let p1 = Pt(x: b.x - head * (ux * c1 - uy * s1), y: b.y - head * (ux * s1 + uy * c1))
-            let p2 = Pt(x: b.x - head * (ux * c2 - uy * s2), y: b.y - head * (ux * s2 + uy * c2))
+            let p1 = Pt(x: bScreen.x - head * (ux * c1 - uy * s1), y: bScreen.y - head * (ux * s1 + uy * c1))
+            let p2 = Pt(x: bScreen.x - head * (ux * c2 - uy * s2), y: bScreen.y - head * (ux * s2 + uy * c2))
             let headPath = CGMutablePath()
-            headPath.move(to: CGPoint(x: p1.x - visible.x, y: p1.y - visible.y))
-            headPath.addLine(to: CGPoint(x: b.x - visible.x, y: b.y - visible.y))
-            headPath.addLine(to: CGPoint(x: p2.x - visible.x, y: p2.y - visible.y))
+            headPath.move(to: CGPoint(x: p1.x, y: p1.y))
+            headPath.addLine(to: CGPoint(x: bScreen.x, y: bScreen.y))
+            headPath.addLine(to: CGPoint(x: p2.x, y: p2.y))
             paths.append((headPath, color, width))
         }
         // One layer per connector path (a handful of paths;

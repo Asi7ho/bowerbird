@@ -16,7 +16,13 @@ public enum HitTest {
         return nil
     }
 
-    private static func hits(item: Item, board: Board, at world: Pt) -> Bool {
+    /// Whether one item is hit by a world point. Public so
+    /// the viewport can walk the container's subviews in
+    /// visual (back-to-front) order — the board order is
+    /// not the visual order once a selected card has been
+    /// re-added on top, so the board-order walk in `hit`
+    /// can return the card underneath the one on top.
+    public static func hits(item: Item, board: Board, at world: Pt) -> Bool {
         switch item.kind {
         case .shape(let shape):
             return hitsShape(shape, item: item, at: world)

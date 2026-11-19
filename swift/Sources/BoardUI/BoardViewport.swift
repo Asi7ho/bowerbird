@@ -29,6 +29,7 @@ public final class BoardViewport: NSView {
         didSet {
             gridView.grid = board.grid
             gridView.backgroundHex = board.bg
+            updateWindowBackground()
             onBoardChanged?(board)
         }
     }
@@ -59,6 +60,19 @@ public final class BoardViewport: NSView {
 
     private var spaceHeld = false
     private var panStart: (point: NSPoint, camera: Camera)?
+
+    /// A local event monitor for pinch and wheel, so the
+    /// gestures reach the board whatever the first
+    /// responder is. AppKit sends a pinch to the first
+    /// responder and a wheel to the view under the cursor,
+    /// and both proved unreliable in practice (the board
+    /// only became first responder after a click, and the
+    /// wheel went to the card under the cursor first) —
+    /// the fit key worked while the gestures did nothing,
+    /// which is how the camera itself was exonerated. The
+    /// monitor hands the event to the same handlers and
+    /// consumes it, so it is never handled twice.
+    private var eventMonitor: Any?
 
     public init(board: Board) {
         self.camera = board.camera
@@ -115,21 +129,30 @@ public final class BoardViewport: NSView {
     }
 
     private func applyCamera() {
-        // The camera is a transform on the container's
-        // layer, not the container's bounds. An NSView's
-        // frame and bounds sizes are coupled: setting the
-        // bounds size to (viewport / zoom) shrank the frame
-        // to match, so the scale stayed 1 and the zoom
-        // cancelled itself out — pan worked (the bounds
-        // origin shifts the content) but zoom did nothing,
-        // which is why two rounds of gesture fixes changed
-        // nothing. A layer transform scales and translates
-        // the content while the container keeps filling the
-        // viewport. screen = (world − camera) × zoom.
-        let scale = CATransform3DMakeScale(camera.zoom, camera.zoom, 1)
-        let translate = CATransform3DMakeTranslation(-camera.x, -camera.y, 0)
-        cardContainer.layer?.transform = CATransform3DConcat(scale, translate)
+        // The camera is NOT a transform on the container's
+        // layer. A layer transform is applied about the
+        // layer's anchor point (its centre), so the mapping
+        // was not (world − camera) × zoom but that plus a
+        // centre × (1 − zoom) offset — the cards displayed
+        // shifted from where the hit-test looked for them,
+        // which is why a click on a card missed and a click
+        // beside it hit. The host instead positions every
+        // card at its screen coordinates, computed from the
+        // camera, so what is drawn is exactly what the
+        // hit-test checks. The grid takes the camera
+        // directly (its shader does the same mapping).
         gridView.camera = camera
+    }
+
+    /// The window behind the board is the board's own
+    /// background colour, so the title bar strip and the
+    /// board are the same white: the strip is a SwiftUI
+    /// colour and the board is a Metal clear colour, and
+    /// the window's own background (the light grey it
+    /// shows where no view covers it) read as a second,
+    /// different white next to the board.
+    private func updateWindowBackground() {
+        window?.backgroundColor = NSColor.fromHex(board.bg) ?? .white
     }
 
     override public func viewDidMoveToWindow() {
@@ -139,6 +162,43 @@ public final class BoardViewport: NSView {
         // first — AppKit sends those to the first responder.
         if window != nil {
             window?.makeFirstResponder(self)
+            updateWindowBackground()
+            startEventMonitor()
+        } else {
+            stopEventMonitor()
+        }
+    }
+
+    override public func viewWillMove(toWindow newWindow: NSWindow?) {
+        super.viewWillMove(toWindow: newWindow)
+        if newWindow == nil { stopEventMonitor() }
+    }
+
+    deinit {
+        stopEventMonitor()
+    }
+
+    private func startEventMonitor() {
+        guard eventMonitor == nil else { return }
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify, .scrollWheel]) { [weak self] event in
+            guard let self, let window = self.window, event.window == window else { return event }
+            // Only the board's own events: the pointer must
+            // be over this view.
+            let location = self.convert(event.locationInWindow, from: nil)
+            guard self.bounds.contains(location) else { return event }
+            if event.type == .magnify {
+                self.magnify(with: event)
+            } else {
+                self.scrollWheel(with: event)
+            }
+            return nil
+        }
+    }
+
+    private func stopEventMonitor() {
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
         }
     }
 
@@ -263,10 +323,29 @@ public final class BoardViewport: NSView {
         // toggles it in the selection; empty space clears
         // it. Clicking an already-selected card keeps the
         // selection, so a drag can start from it (M3).
+        //
+        // The hit walks the container's subviews back to
+        // front (the visual order) and tests each card with
+        // the shape-aware geometry. The board order is not
+        // the visual order once a selected card has been
+        // re-added on top, and the cards are now positioned
+        // at their screen coordinates, so the point converts
+        // cleanly to world coordinates and the card under the
+        // cursor is the card that is hit.
         let point = convert(event.locationInWindow, from: nil)
         let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
         let shift = event.modifierFlags.contains(.shift)
-        guard let item = HitTest.hit(board: board, at: world) else {
+        var hitItem: Item?
+        for subview in cardContainer.subviews.reversed() {
+            guard let cardView = subview as? CardView, let item = cardView.currentItem else { continue }
+            if HitTest.hits(item: item, board: board, at: world) {
+                hitItem = item
+                break
+            }
+        }
+        // A connector is drawn, not a view, so it is the
+        // only thing that still uses the board-order walk.
+        guard let item = hitItem ?? HitTest.hit(board: board, at: world) else {
             if !shift { selected = [] }
             return
         }
