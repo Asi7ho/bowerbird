@@ -1,9 +1,13 @@
+import Combine
 import CryptoKit
 import Foundation
 
 /// The board store: one board on disk, held in memory. All
 /// board mutation goes through here, so save, undo-adjacent
 /// behaviour and the live-follow guard stay in one place.
+/// It is an ObservableObject: the app observes `board` and
+/// re-renders when it changes (a mutation, an undo, a
+/// restore), so the board is shared, not a snapshot.
 ///
 /// Save order (mirrors the Electron app):
 /// 1. the recovery journal is written first (the edit
@@ -19,10 +23,10 @@ import Foundation
 /// `lastSavedJson` stays the RAW on-disk content, like the
 /// Electron app's — the store never compares against its
 /// own re-encoded board.
-public final class BoardStore {
+public final class BoardStore: ObservableObject {
     public let boardURL: URL
     public let boardDir: URL
-    public private(set) var board: Board
+    @Published public private(set) var board: Board
 
     /// The undo history for this board. Every content
     /// change recorded through `update` pushes the previous
@@ -49,8 +53,10 @@ public final class BoardStore {
 
     /// Load the board at `boardURL` when it exists (decoded
     /// and healed), or start empty. The welcome board is
-    /// seeded by the app (M2), not by the store.
-    public init(boardURL: URL) throws {
+    /// seeded by the app (M2), not by the store. The init
+    /// does not throw: every read uses `try?`, so a missing
+    /// or broken file just starts an empty board.
+    public init(boardURL: URL) {
         self.boardURL = boardURL
         self.boardDir = boardURL.deletingLastPathComponent()
         self.journal = RecoveryJournal(boardDir: boardDir)

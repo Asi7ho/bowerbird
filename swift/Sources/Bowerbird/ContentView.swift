@@ -5,14 +5,14 @@ import BowerbirdCore
 
 /// The board window's content: the board viewport, filling
 /// the window. Toolbars, panels and the palette (M2/M3/M6)
-/// are SwiftUI around it.
+/// are SwiftUI around it. The store is observed, so a board
+/// change (an edit, an undo, a restore) re-renders the
+/// viewport through BoardView.
 public struct ContentView: View {
-    public var board: Board
-    public var onCameraChanged: ((Camera) -> Void)?
+    @ObservedObject public var store: BoardStore
 
-    public init(board: Board, onCameraChanged: ((Camera) -> Void)? = nil) {
-        self.board = board
-        self.onCameraChanged = onCameraChanged
+    public init(store: BoardStore) {
+        self.store = store
     }
 
     public var body: some View {
@@ -29,10 +29,10 @@ public struct ContentView: View {
             // It is a drag view, not a plain colour: the
             // whole strip moves the window, not just the
             // title bar area the system recognises.
-            TitleBarView(background: NSColor.fromHex(board.bg) ?? NSColor.white)
+            TitleBarView(background: NSColor.fromHex(store.board.bg) ?? NSColor.white)
                 .frame(height: 28)
             Divider()
-            BoardView(board: board, onCameraChanged: onCameraChanged)
+            BoardView(store: store)
                 .frame(minWidth: 800, minHeight: 600)
         }
     }

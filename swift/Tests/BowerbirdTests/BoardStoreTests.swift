@@ -22,11 +22,11 @@ final class BoardStoreTests: XCTestCase {
 
     func testSaveLoadRoundTrip() throws {
         let url = try makeBoardURL()
-        let store = try BoardStore(boardURL: url)
+        let store = BoardStore(boardURL: url)
         XCTAssertTrue(store.board.items.isEmpty)
         store.update { $0.items.append(textItem(id: 1, text: "hello")) }
         XCTAssertTrue(store.save())
-        let reloaded = try BoardStore(boardURL: url)
+        let reloaded = BoardStore(boardURL: url)
         XCTAssertEqual(reloaded.board.items.count, 1)
         guard case .text(let text) = reloaded.board.items[0].kind else { return XCTFail("not Text") }
         XCTAssertEqual(text.text, "hello")
@@ -34,7 +34,7 @@ final class BoardStoreTests: XCTestCase {
 
     func testNoChangeSaveIsNoOp() throws {
         let url = try makeBoardURL()
-        let store = try BoardStore(boardURL: url)
+        let store = BoardStore(boardURL: url)
         store.update { $0.items.append(textItem(id: 1, text: "a")) }
         XCTAssertTrue(store.save())
         let firstMtime = try XCTUnwrap(FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate] as? Date)
@@ -46,7 +46,7 @@ final class BoardStoreTests: XCTestCase {
 
     func testLiveFollowGuardRefusesExternalChange() throws {
         let url = try makeBoardURL()
-        let store = try BoardStore(boardURL: url)
+        let store = BoardStore(boardURL: url)
         store.update { $0.items.append(textItem(id: 1, text: "mine")) }
         XCTAssertTrue(store.save())
         // An external writer changes the file on disk.
@@ -67,7 +67,7 @@ final class BoardStoreTests: XCTestCase {
         board.items = [textItem(id: 1, text: "a"), textItem(id: 1, text: "b")]
         board.nextId = 1
         try String(data: board.encode(), encoding: .utf8)!.write(to: url, atomically: true, encoding: .utf8)
-        let store = try BoardStore(boardURL: url)
+        let store = BoardStore(boardURL: url)
         XCTAssertEqual(store.board.items.map(\.id), [1, 2])
     }
 }

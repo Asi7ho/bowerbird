@@ -35,7 +35,7 @@ final class BoardsTests: XCTestCase {
     func testMainListedWhenItExists() throws {
         let paths = try makeRoot()
         let boards = Boards(paths: paths)
-        let store = try BoardStore(boardURL: paths.boardPath(for: nil))
+        let store = BoardStore(boardURL: paths.boardPath(for: nil))
         XCTAssertTrue(store.save())
         let list = boards.list(current: "Main")
         XCTAssertEqual(list.count, 1)

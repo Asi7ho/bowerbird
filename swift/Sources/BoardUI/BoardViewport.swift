@@ -41,6 +41,12 @@ public final class BoardViewport: NSView {
     /// Called when the selection changes, so the host can
     /// show the rings and stack the selected cards on top.
     public var onSelectionChanged: ((Set<Int>) -> Void)?
+    /// Called when the user commits a board edit (a drag
+    /// ends, a card is deleted): the app applies the board
+    /// to the store (one undo step) and saves it. Live drags
+    /// mutate the viewport's own board and re-render; only
+    /// the commit goes through here.
+    public var onBoardMutate: ((Board) -> Void)?
 
     /// The selected item ids. The viewport owns the
     /// interaction state; the host only renders it.
