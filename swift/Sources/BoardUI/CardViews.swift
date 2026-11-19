@@ -90,12 +90,11 @@ public final class TextCardView: CardView {
     override public func configure(item: Item) {
         super.configure(item: item)
         guard case .text(let text) = item.kind else { return }
-        let font = NSFont.systemFont(ofSize: CGFloat(text.size), weight: text.bold ? .bold : .regular)
-        textLayer.font = font
-        textLayer.fontSize = CGFloat(text.size)
-        textLayer.foregroundColor = (NSColor.fromHex(text.color) ?? .labelColor).cgColor
         textLayer.string = text.text
+        textLayer.foregroundColor = (NSColor.fromHex(text.color) ?? .labelColor).cgColor
         layer?.backgroundColor = (text.bg.flatMap { NSColor.fromHex($0) } ?? NSColor.white).cgColor
+        // The font size is set in layout(), once the card
+        // has its screen size (it scales with the zoom).
         needsLayout = true
     }
 
@@ -105,6 +104,17 @@ public final class TextCardView: CardView {
         // (a plain NSView), so the inset rect is the text
         // area and the layer draws top-down inside it.
         textLayer.frame = bounds.insetBy(dx: 14, dy: 14)
+        // The font size is in world units; the card is
+        // screen-sized, so it scales by the zoom — the
+        // card's screen width over its world width.
+        // Without the scale the text drew at world size
+        // inside a screen-sized card.
+        if let item = currentItem, case .text(let text) = item.kind {
+            let zoom = item.size.w > 0 ? bounds.width / CGFloat(item.size.w) : 1
+            let font = NSFont.systemFont(ofSize: CGFloat(text.size) * zoom, weight: text.bold ? .bold : .regular)
+            textLayer.font = font
+            textLayer.fontSize = CGFloat(text.size) * zoom
+        }
     }
 
     @available(*, unavailable)
@@ -194,22 +204,37 @@ public final class StrokeCardView: CardView {
     override public func configure(item: Item) {
         super.configure(item: item)
         guard case .stroke(let stroke) = item.kind else { return }
-        shapeLayer.path = StrokePath.path(for: stroke.points)
         shapeLayer.fillColor = NSColor.clear.cgColor
         shapeLayer.strokeColor = (NSColor.fromHex(stroke.color) ?? .labelColor).cgColor
-        shapeLayer.lineWidth = CGFloat(stroke.width)
         shapeLayer.lineCap = .round
         shapeLayer.lineJoin = .round
         shapeLayer.opacity = stroke.marker ? 0.45 : 1
-        shapeLayer.frame = bounds
+        // The path and its width are set in layout(), once
+        // the card has its screen size (they scale with
+        // the zoom).
+        needsLayout = true
     }
 
     override public func layout() {
         super.layout()
-        if let item = currentItem, case .stroke(let stroke) = item.kind {
-            shapeLayer.path = StrokePath.path(for: stroke.points)
-            shapeLayer.frame = bounds
+        guard let item = currentItem, case .stroke(let stroke) = item.kind else { return }
+        // The path is in world units (the points are
+        // absolute, rebased by their bbox min); the card is
+        // screen-sized, so the path and the stroke width are
+        // scaled by the zoom — the card's screen size over
+        // its world size. Without the scale the stroke drew
+        // at world size inside a screen-sized card, which is
+        // why the red circle and the branch looked huge and
+        // offset at any zoom other than 1.
+        let zoomX = item.size.w > 0 ? bounds.width / CGFloat(item.size.w) : 1
+        let zoomY = item.size.h > 0 ? bounds.height / CGFloat(item.size.h) : 1
+        if let path = StrokePath.path(for: stroke.points) {
+            shapeLayer.path = path.copy(using: CGAffineTransform(scaleX: zoomX, y: zoomY))
+        } else {
+            shapeLayer.path = nil
         }
+        shapeLayer.lineWidth = CGFloat(stroke.width) * zoomX
+        shapeLayer.frame = bounds
     }
 
     @available(*, unavailable)
@@ -291,14 +316,17 @@ public final class PlaceholderCardView: CardView {
         // whose native view has not landed yet (M4/M5)
         // reads as "coming", not as an empty white card.
         layer?.backgroundColor = NSColor.systemGray.withAlphaComponent(0.08).cgColor
-        titleLayer.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
-        titleLayer.fontSize = 14
-        titleLayer.foregroundColor = NSColor.labelColor.cgColor
+        // Explicit colours, not the semantic label colours:
+        // a `CATextLayer`'s foreground is a fixed CGColor,
+        // resolved once when it is set, and the semantic
+        // colours resolved to white here (the AppKit side
+        // is in Dark Mode even though the SwiftUI side is
+        // forced light) — white text on the light grey tile
+        // read as blank. The Electron app's ink is #1d1d1f.
+        titleLayer.foregroundColor = NSColor(srgbRed: 0.11, green: 0.11, blue: 0.12, alpha: 1).cgColor
+        subtitleLayer.foregroundColor = NSColor(srgbRed: 0.42, green: 0.42, blue: 0.44, alpha: 1).cgColor
         titleLayer.truncationMode = .end
         titleLayer.alignmentMode = .left
-        subtitleLayer.font = NSFont.systemFont(ofSize: 12)
-        subtitleLayer.fontSize = 12
-        subtitleLayer.foregroundColor = NSColor.secondaryLabelColor.cgColor
         subtitleLayer.truncationMode = .end
         subtitleLayer.alignmentMode = .left
         for textLayer in [titleLayer, subtitleLayer] {
@@ -343,9 +371,19 @@ public final class PlaceholderCardView: CardView {
         // 12px in from the left, the title at the top and
         // the subtitle 4px below it. The card is y-up (a
         // plain NSView), so the top is at bounds.height.
-        let width = bounds.width - 24
-        titleLayer.frame = CGRect(x: 12, y: bounds.height - 12 - 18, width: width, height: 18)
-        subtitleLayer.frame = CGRect(x: 12, y: bounds.height - 12 - 18 - 4 - 16, width: width, height: 16)
+        // The font sizes and the padding are in world units
+        // (14 and 12, 12 and 4); the card is screen-sized,
+        // so they scale by the zoom — the card's screen
+        // width over its world width.
+        let zoom = (currentItem?.size.w ?? 0) > 0 ? bounds.width / CGFloat(currentItem!.size.w) : 1
+        let pad = 12 * zoom
+        let width = bounds.width - pad * 2
+        titleLayer.font = NSFont.systemFont(ofSize: 14 * zoom, weight: .semibold)
+        titleLayer.fontSize = 14 * zoom
+        subtitleLayer.font = NSFont.systemFont(ofSize: 12 * zoom)
+        subtitleLayer.fontSize = 12 * zoom
+        titleLayer.frame = CGRect(x: pad, y: bounds.height - pad - 18 * zoom, width: width, height: 18 * zoom)
+        subtitleLayer.frame = CGRect(x: pad, y: bounds.height - pad - 18 * zoom - 4 * zoom - 16 * zoom, width: width, height: 16 * zoom)
     }
 
     @available(*, unavailable)

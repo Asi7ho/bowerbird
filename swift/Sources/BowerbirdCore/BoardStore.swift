@@ -54,6 +54,7 @@ public final class BoardStore {
            let decoded = try? Board.decode(from: data) {
             var healed = decoded
             healDuplicateIds(&healed)
+            syncGroupLabels(&healed)
             self.board = healed
             self.lastSavedJson = raw
             self.lastSavedContentKey = Self.contentKey(for: healed)
@@ -71,6 +72,7 @@ public final class BoardStore {
         guard let data = raw.data(using: .utf8) else { throw BoardStoreError.unreadable }
         var decoded = try Board.decode(from: data)
         healDuplicateIds(&decoded)
+        syncGroupLabels(&decoded)
         board = decoded
         lastSavedJson = raw
         lastSavedContentKey = Self.contentKey(for: decoded)

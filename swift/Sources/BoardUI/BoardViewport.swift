@@ -181,9 +181,11 @@ public final class BoardViewport: NSView {
     private func startEventMonitor() {
         guard eventMonitor == nil else { return }
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify, .scrollWheel]) { [weak self] event in
-            guard let self, let window = self.window, event.window == window else { return event }
+            guard let self, self.window != nil else { return event }
             // Only the board's own events: the pointer must
-            // be over this view.
+            // be over this view. The window is not checked
+            // (a wheel event can carry no window), the
+            // bounds check is the gate.
             let location = self.convert(event.locationInWindow, from: nil)
             guard self.bounds.contains(location) else { return event }
             if event.type == .magnify {

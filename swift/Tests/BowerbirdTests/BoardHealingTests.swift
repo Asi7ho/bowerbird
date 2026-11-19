@@ -45,6 +45,49 @@ final class BoardHealingTests: XCTestCase {
         XCTAssertEqual(allocId(&board), 10)
     }
 
+    func testSyncGroupLabelsNamesUnlabelledGroups() {
+        var a = textItem(id: 1, text: "a")
+        a.group = 1
+        var b = textItem(id: 2, text: "b")
+        b.group = 1
+        var c = textItem(id: 3, text: "c")
+        c.group = 3
+        var board = Board(
+            items: [a, b, c],
+            camera: Camera(x: 0, y: 0, zoom: 1),
+            nextId: 3,
+            nextGroup: 0,
+            groups: nil,
+            bg: "#FFFFFF",
+            grid: .dots
+        )
+        syncGroupLabels(&board)
+        // Group 1 has two members and no entry: it is
+        // named "Section 1". Group 3 has one member: it
+        // gets no entry.
+        XCTAssertEqual(board.groups?[1]?.label, "Section 1")
+        XCTAssertNil(board.groups?[3])
+    }
+
+    func testSyncGroupLabelsKeepsExistingLabelAndDropsSmallGroups() {
+        var a = textItem(id: 1, text: "a")
+        a.group = 1
+        var b = textItem(id: 2, text: "b")
+        b.group = 1
+        var board = Board(
+            items: [a, b],
+            camera: Camera(x: 0, y: 0, zoom: 1),
+            nextId: 2,
+            nextGroup: 0,
+            groups: [1: GroupEntry(label: "Mine", source: nil), 9: GroupEntry(label: "Gone", source: nil)],
+            bg: "#FFFFFF",
+            grid: .dots
+        )
+        syncGroupLabels(&board)
+        XCTAssertEqual(board.groups?[1]?.label, "Mine")
+        XCTAssertNil(board.groups?[9])
+    }
+
     func testHealCleanBoardUnchanged() {
         var board = Board(
             items: [textItem(id: 1, text: "a"), textItem(id: 2, text: "b")],

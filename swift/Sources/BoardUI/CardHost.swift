@@ -239,16 +239,22 @@ public final class CardHost {
         // The labels: a white chip at the frame's top-left,
         // 12px in and 11px above the top edge (the Electron
         // app's .group-label). Reused across renders, so a
-        // pan does not rebuild the text fields.
+        // pan does not rebuild the text fields. A
+        // live-import group (one with a source — the bird,
+        // from an SVG) shows NO label: the Electron app
+        // treats it as a single imported piece, not a named
+        // group, so its frame is bare until it is selected.
         var liveLabels = Set<Int>()
         for (group, rect, _) in frames {
-            guard let label = board.groups?[group]?.label, !label.isEmpty else { continue }
+            guard board.groups?[group]?.source == nil,
+                  let label = board.groups?[group]?.label, !label.isEmpty else { continue }
             liveLabels.insert(group)
             let field = groupLabels[group] ?? {
                 let f = NSTextField(labelWithString: "")
-                f.font = NSFont.systemFont(ofSize: 12, weight: .semibold)
+                f.font = NSFont.systemFont(ofSize: 12 * camera.zoom, weight: .semibold)
                 f.textColor = NSColor.labelColor
                 f.backgroundColor = NSColor.white
+                f.drawsBackground = true
                 f.isBordered = false
                 f.wantsLayer = true
                 f.layer?.borderColor = NSColor.separatorColor.cgColor
@@ -257,6 +263,7 @@ public final class CardHost {
                 groupLabels[group] = f
                 return f
             }()
+            field.font = NSFont.systemFont(ofSize: 12 * camera.zoom, weight: .semibold)
             field.stringValue = label
             field.sizeToFit()
             // The chip, padded like the Electron app's
