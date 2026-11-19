@@ -79,10 +79,6 @@ public final class BoardViewport: NSView {
         self.board = board
         super.init(frame: .zero)
         wantsLayer = true
-        // Accept trackpad touches: the pinch is read from
-        // the fingers themselves (see the touch handlers
-        // below), because the magnify event never arrived.
-        acceptsTouchEvents = true
         // Clip to the viewport: an NSView does not clip its
         // subviews by default, so the cards (which are
         // positioned in world coordinates and transformed
@@ -304,80 +300,17 @@ public final class BoardViewport: NSView {
         recognizer.magnification = 0
     }
 
-    // MARK: - Pinch via raw touches
-
-    /// The pinch, via the raw trackpad touches — the route
-    /// that does not depend on the magnify event at all.
-    /// The magnify event never arrived (the zoom readout
-    /// stayed put through the responder chain, the gesture
-    /// recognizer and the event monitor), so the pinch is
-    /// read from the fingers themselves: two touches moving
-    /// apart or together, and the zoom is the ratio of the
-    /// distance between them. The touch positions are in
-    /// unit coordinates (0–1 across the view), converted to
-    /// view points here. `acceptsTouchEvents` is set in
-    /// `init` (it is a mutable property, not one to
-    /// override).
-    /// The live touches, by identity, in view points.
-    private var liveTouches: [ObjectIdentifier: NSPoint] = [:]
-    /// The distance between the two pinch fingers on the
-    /// last touch update, in view points.
-    private var pinchDistance: CGFloat?
-
-    private func touchPoint(_ touch: NSTouch) -> NSPoint {
-        let n = touch.normalizedPosition
-        return NSPoint(x: n.x * bounds.width, y: n.y * bounds.height)
-    }
-
-    private func pinchZoom(from touches: Set<NSTouch>, phase: NSTouch.Phase) {
-        // Refresh the live set from this event's touches.
-        for touch in touches {
-            let id = ObjectIdentifier(touch.identity as AnyObject)
-            if phase == .ended || phase == .cancelled {
-                liveTouches.removeValue(forKey: id)
-            } else {
-                liveTouches[id] = touchPoint(touch)
-            }
-        }
-        guard liveTouches.count == 2 else {
-            pinchDistance = nil
-            return
-        }
-        let points = Array(liveTouches.values)
-        let distance = hypot(points[0].x - points[1].x, points[0].y - points[1].y)
-        let midpoint = NSPoint(x: (points[0].x + points[1].x) / 2, y: (points[0].y + points[1].y) / 2)
-        if let prev = pinchDistance, prev > 0, distance > 0 {
-            camera = CameraMath.zoomCamera(
-                camera,
-                around: Pt(x: Double(midpoint.x), y: Double(midpoint.y)),
-                factor: Double(distance / prev)
-            )
-        }
-        pinchDistance = distance
-    }
-
-    override public func touchesBegan(with event: NSEvent) {
-        pinchZoom(from: event.touches(matching: .began, in: self), phase: .began)
-    }
-
-    override public func touchesMoved(with event: NSEvent) {
-        pinchZoom(from: event.touches(matching: .moved, in: self), phase: .moved)
-    }
-
-    override public func touchesEnded(with event: NSEvent) {
-        pinchZoom(from: event.touches(matching: .ended, in: self), phase: .ended)
-    }
-
-    override public func touchesCancelled(with event: NSEvent) {
-        pinchZoom(from: event.touches(matching: .cancelled, in: self), phase: .cancelled)
-    }
-
     override public func updateTrackingAreas() {
         super.updateTrackingAreas()
         for area in trackingAreas { removeTrackingArea(area) }
         addTrackingArea(NSTrackingArea(
             rect: bounds,
-            options: [.mouseEnteredAndExited, .activeInKeyWindow],
+            // mouseMoved is here so the resize cursor is set
+            // directly (see `mouseMoved`): the cursor rects
+            // did not show it at the edges, twice, so the
+            // cursor is now set on every move instead of
+            // relying on the rect system.
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow],
             owner: self, userInfo: nil
         ))
     }
@@ -388,6 +321,38 @@ public final class BoardViewport: NSView {
         // AppKit sends those to the first responder, and
         // the board is the only focusable view for now.
         window?.makeFirstResponder(self)
+    }
+
+    override public func mouseMoved(with event: NSEvent) {
+        // The resize cursor, set directly on every move.
+        // The cursor rects (resetCursorRects) did not show
+        // it at the window's edges — the view is inside a
+        // SwiftUI hosting view, which does not reliably
+        // forward the rect system — so the cursor is set
+        // here instead. Within 6 points of an edge (or a
+        // corner) the resize arrow shows; anywhere else the
+        // arrow returns (the pan hand is only while Space
+        // is held or a pan is in progress, handled by the
+        // cursor rects).
+        let location = convert(event.locationInWindow, from: nil)
+        let edge: CGFloat = 6
+        let nearLeft = location.x < edge
+        let nearRight = location.x > bounds.width - edge
+        let nearBottom = location.y > bounds.height - edge
+        // The view is flipped (y down), so the bottom edge
+        // is at bounds.height. The top edge is the title
+        // strip, not this view.
+        if nearLeft || nearRight {
+            NSCursor.resizeLeftRight.set()
+        } else if nearBottom {
+            NSCursor.resizeUpDown.set()
+        } else if panStart != nil {
+            NSCursor.closedHand.set()
+        } else if spaceHeld {
+            NSCursor.openHand.set()
+        } else {
+            NSCursor.arrow.set()
+        }
     }
 
     // MARK: - Space+drag pan (a grab, not a scroll)

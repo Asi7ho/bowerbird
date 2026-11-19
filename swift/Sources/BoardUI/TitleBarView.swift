@@ -11,13 +11,6 @@ import SwiftUI
 /// the title) moves the window.
 public final class TitleBarDragView: NSView {
     override public func mouseDown(with event: NSEvent) {
-        // Drag the window — unless the click is on the
-        // window's top resize edge (the outer 6 points),
-        // where the window itself resizes. Without the
-        // check, a top-edge drag moved the window instead
-        // of resizing it.
-        let location = convert(event.locationInWindow, from: nil)
-        guard location.y < bounds.height - 6 else { return }
         window?.performDrag(with: event)
     }
 
@@ -26,9 +19,27 @@ public final class TitleBarDragView: NSView {
         for area in trackingAreas { removeTrackingArea(area) }
         addTrackingArea(NSTrackingArea(
             rect: bounds,
-            options: [.mouseEnteredAndExited, .activeInKeyWindow],
+            options: [.mouseEnteredAndExited, .mouseMoved, .activeInKeyWindow],
             owner: self, userInfo: nil
         ))
+    }
+
+    override public func mouseMoved(with event: NSEvent) {
+        // The resize cursor on the window's top edge, set
+        // directly (see BoardViewport.mouseMoved — the
+        // cursor rects did not show it). The view is y-up,
+        // so the top edge is at bounds.height.
+        let location = convert(event.locationInWindow, from: nil)
+        let edge: CGFloat = 6
+        if location.y > bounds.height - edge {
+            if location.x < edge || location.x > bounds.width - edge {
+                NSCursor.resizeLeftRight.set()
+            } else {
+                NSCursor.resizeUpDown.set()
+            }
+        } else {
+            NSCursor.arrow.set()
+        }
     }
 
     override public func resetCursorRects() {
