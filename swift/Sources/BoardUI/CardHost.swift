@@ -313,7 +313,13 @@ public final class CardHost {
                   let (a, b) = ConnectorGeometry.clippedEnds(board: board, from: payload.from, to: payload.to) else { continue }
             let isSelected = selected.contains(item.id)
             let color = isSelected ? NSColor.systemBlue : (NSColor.fromHex(payload.color) ?? .labelColor)
-            let width: CGFloat = isSelected ? 3 : 2
+            // The line width and the arrowhead are in world
+            // units in the Electron app (the CSS transform
+            // scales them), so here they scale by the zoom.
+            // Without the scale the head stayed 12 screen
+            // pixels while the cards shrank around it, so it
+            // read as a fixed-size arrow on a shrinking line.
+            let width: CGFloat = (isSelected ? 3 : 2) * camera.zoom
             // The endpoints, in screen coordinates.
             let aScreen = Pt(x: (a.x - camera.x) * camera.zoom, y: (a.y - camera.y) * camera.zoom)
             let bScreen = Pt(x: (b.x - camera.x) * camera.zoom, y: (b.y - camera.y) * camera.zoom)
@@ -324,12 +330,13 @@ public final class CardHost {
             paths.append((line, color, width))
             // The arrowhead: two 12px lines at ±0.45 rad from
             // the direction, meeting at the end. The head is
-            // 12 screen pixels (the Electron app's 12px
-            // head), computed from the screen direction.
+            // 12 world pixels (the Electron app's 12px head),
+            // scaled by the zoom and computed from the screen
+            // direction.
             let dx = bScreen.x - aScreen.x, dy = bScreen.y - aScreen.y
             let len = max(1, hypot(dx, dy))
             let ux = dx / len, uy = dy / len
-            let head = 12.0, spread = 0.45
+            let head = 12.0 * camera.zoom, spread = 0.45
             let c1 = cos(spread), s1 = sin(spread), c2 = cos(-spread), s2 = sin(-spread)
             let p1 = Pt(x: bScreen.x - head * (ux * c1 - uy * s1), y: bScreen.y - head * (ux * s1 + uy * c1))
             let p2 = Pt(x: bScreen.x - head * (ux * c2 - uy * s2), y: bScreen.y - head * (ux * s2 + uy * c2))

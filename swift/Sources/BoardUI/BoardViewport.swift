@@ -191,19 +191,19 @@ public final class BoardViewport: NSView {
         stopEventMonitor()
     }
 
-    /// A local event monitor for the wheel only. A pinch
-    /// (magnify) is NOT monitored: it is a gesture event
-    /// that AppKit delivers to the first responder, and
-    /// intercepting it here consumed it without zooming —
-    /// the wheel goes through the monitor because a card
-    /// under the cursor would otherwise swallow it, but a
-    /// pinch reaches the viewport through the responder
-    /// chain (see `magnify(with:)`). The monitor consumes
-    /// the wheel event so the responder chain never
-    /// handles it twice.
+    /// A local event monitor for the wheel and the pinch.
+    /// The monitor sees the event before it is dispatched
+    /// to any view, so it is the delivery route that does
+    /// not depend on first responder status or on the
+    /// SwiftUI hosting view forwarding the gesture — the
+    /// pinch did not arrive through the responder chain
+    /// (`magnify(with:)`) or through a gesture recognizer,
+    /// so the monitor is the route that catches it. The
+    /// monitor consumes the event so the responder chain
+    /// never handles it twice.
     private func startEventMonitor() {
         guard eventMonitor == nil else { return }
-        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel]) { [weak self] event in
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.magnify, .scrollWheel]) { [weak self] event in
             guard let self, self.window != nil else { return event }
             // Only the board's own events: the pointer must
             // be over this view. The window is not checked
@@ -211,7 +211,11 @@ public final class BoardViewport: NSView {
             // bounds check is the gate.
             let location = self.convert(event.locationInWindow, from: nil)
             guard self.bounds.contains(location) else { return event }
-            self.scrollWheel(with: event)
+            if event.type == .magnify {
+                self.magnify(with: event)
+            } else {
+                self.scrollWheel(with: event)
+            }
             return nil
         }
     }
@@ -267,35 +271,31 @@ public final class BoardViewport: NSView {
     override public func magnify(with event: NSEvent) {
         // A pinch zooms around the cursor. The magnification
         // is the relative change since the last event; it is
-        // doubled, because at 1x a pinch was barely
-        // perceptible next to Cmd+scroll (5% a notch).
-        // The pinch arrives through the responder chain
-        // (the viewport is the first responder) — it is
-        // deliberately not routed through the event monitor,
-        // which consumed it without zooming. A gesture
-        // recognizer (see `handlePinch`) is the primary
-        // route; this stays as the fallback.
+        // tripled, because at 1x a pinch was barely
+        // perceptible next to Cmd+scroll (5% a notch) — the
+        // multiplier is deliberately strong so a pinch is
+        // unmistakable.
         let location = convert(event.locationInWindow, from: nil)
         camera = CameraMath.zoomCamera(
             camera,
             around: Pt(x: Double(location.x), y: Double(location.y)),
-            factor: 1 + Double(event.magnification) * 2
+            factor: 1 + Double(event.magnification) * 3
         )
     }
 
-    /// The pinch, via a gesture recognizer (the reliable
-    /// route — it does not depend on first responder
-    /// status). The magnification is the relative change
-    /// since the last update; the recognizer resets it to 0
-    /// after each one, so the factor is applied per update
-    /// and the gesture accumulates.
+    /// The pinch, via a gesture recognizer (a second route,
+    /// in case the event monitor does not see it). The
+    /// magnification is the relative change since the last
+    /// update; the recognizer resets it to 0 after each one,
+    /// so the factor is applied per update and the gesture
+    /// accumulates.
     @objc private func handlePinch(_ recognizer: NSMagnificationGestureRecognizer) {
         guard recognizer.magnification != 0 else { return }
         let location = recognizer.location(in: self)
         camera = CameraMath.zoomCamera(
             camera,
             around: Pt(x: Double(location.x), y: Double(location.y)),
-            factor: 1 + Double(recognizer.magnification) * 2
+            factor: 1 + Double(recognizer.magnification) * 3
         )
         recognizer.magnification = 0
     }
@@ -435,14 +435,31 @@ public final class BoardViewport: NSView {
 
     override public func resetCursorRects() {
         super.resetCursorRects()
+        // The window's resize cursor, explicitly: the
+        // board's pan cursor is not the only thing that
+        // covers the edges — in the normal state there is
+        // no pan cursor at all, and the window's own resize
+        // cursor still did not show at the edges, so the
+        // edges get their own cursor rects. The view is
+        // flipped (y down), so the bottom edge is at
+        // bounds.height. The top edge is the title strip,
+        // not this view (see TitleBarDragView).
+        let edge: CGFloat = 6
+        let w = bounds.width, h = bounds.height
+        guard w > edge * 2, h > edge * 2 else { return }
+        addCursorRect(CGRect(x: 0, y: edge, width: edge, height: h - edge * 2), cursor: .resizeLeftRight)
+        addCursorRect(CGRect(x: w - edge, y: edge, width: edge, height: h - edge * 2), cursor: .resizeLeftRight)
+        addCursorRect(CGRect(x: edge, y: h - edge, width: w - edge * 2, height: edge), cursor: .resizeUpDown)
+        addCursorRect(CGRect(x: 0, y: h - edge, width: edge, height: edge), cursor: .resizeNorthEastSouthWest)
+        addCursorRect(CGRect(x: w - edge, y: h - edge, width: edge, height: edge), cursor: .resizeNorthWestSouthEast)
         // The pan cursor covers the board, but NOT the
         // window's edges: the resize zone is the outer few
         // points, and a cursor rect over the whole bounds
         // swallowed the window's resize cursor there, so
         // dragging an edge showed a hand and did nothing
-        // useful. Inset by 6 points (the resize zone) so
-        // the edges show the resize arrow.
-        let rect = bounds.insetBy(dx: 6, dy: 6)
+        // useful. Inset by the edge so the resize rects
+        // above win at the border.
+        let rect = bounds.insetBy(dx: edge, dy: edge)
         if panStart != nil {
             addCursorRect(rect, cursor: .closedHand)
         } else if spaceHeld {

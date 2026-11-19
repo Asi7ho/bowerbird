@@ -112,12 +112,16 @@ public final class TextCardView: CardView {
             // screen-sized, so it scales by the zoom — the
             // card's screen width over its world width.
             // Without the scale the text drew at world size
-            // inside a screen-sized card.
+            // inside a screen-sized card. But the size never
+            // drops below 6pt on screen: below that the text
+            // was unreadable and the card read as a blank
+            // white card when zoomed out.
             if let item = currentItem, case .text(let text) = item.kind {
                 let zoom = item.size.w > 0 ? bounds.width / CGFloat(item.size.w) : 1
-                let font = NSFont.systemFont(ofSize: CGFloat(text.size) * zoom, weight: text.bold ? .bold : .regular)
+                let size = max(CGFloat(text.size) * zoom, 6)
+                let font = NSFont.systemFont(ofSize: size, weight: text.bold ? .bold : .regular)
                 textLayer.font = font
-                textLayer.fontSize = CGFloat(text.size) * zoom
+                textLayer.fontSize = size
             }
         }
     }
@@ -392,10 +396,16 @@ public final class PlaceholderCardView: CardView {
             let zoom = (currentItem?.size.w ?? 0) > 0 ? bounds.width / CGFloat(currentItem!.size.w) : 1
             let pad = 12 * zoom
             let width = bounds.width - pad * 2
-            titleLayer.font = NSFont.systemFont(ofSize: 14 * zoom, weight: .semibold)
-            titleLayer.fontSize = 14 * zoom
-            subtitleLayer.font = NSFont.systemFont(ofSize: 12 * zoom)
-            subtitleLayer.fontSize = 12 * zoom
+            // The fonts scale with the zoom, but never below
+            // 6pt on screen: below that the title was
+            // unreadable and the card read as a blank tile
+            // when zoomed out.
+            let titleSize = max(14 * zoom, 6)
+            let subtitleSize = max(12 * zoom, 6)
+            titleLayer.font = NSFont.systemFont(ofSize: titleSize, weight: .semibold)
+            titleLayer.fontSize = titleSize
+            subtitleLayer.font = NSFont.systemFont(ofSize: subtitleSize)
+            subtitleLayer.fontSize = subtitleSize
             titleLayer.frame = CGRect(x: pad, y: bounds.height - pad - 18 * zoom, width: width, height: 18 * zoom)
             subtitleLayer.frame = CGRect(x: pad, y: bounds.height - pad - 18 * zoom - 4 * zoom - 16 * zoom, width: width, height: 16 * zoom)
         }
