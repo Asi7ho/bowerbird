@@ -443,10 +443,30 @@ public final class BoardViewport: NSView {
 
     override public func resetCursorRects() {
         super.resetCursorRects()
+        // The resize cursor at the window's edges, as
+        // cursor rects — the mechanism AppKit is built
+        // for — as well as the mouseMoved setting below.
+        // The view sits inside a SwiftUI hosting view,
+        // which does not reliably forward the rect system,
+        // so both are here: the rects for when the system
+        // honours them, the mouseMoved for when it does
+        // not. The edges are 6 points wide. AppKit has no
+        // diagonal resize cursor, so the corners use the
+        // horizontal one. The view is flipped (y down), so
+        // the bottom edge is at bounds.height; the top edge
+        // is the title strip, not this view.
+        let edge: CGFloat = 6
+        let w = bounds.width, h = bounds.height
+        addCursorRect(NSRect(x: 0, y: 0, width: edge, height: h), cursor: .resizeLeftRight)
+        addCursorRect(NSRect(x: w - edge, y: 0, width: edge, height: h), cursor: .resizeLeftRight)
+        addCursorRect(NSRect(x: 0, y: h - edge, width: w, height: edge), cursor: .resizeUpDown)
+        // The pan hand, inset from the edges so it does not
+        // cover the resize rects.
+        let panRect = NSRect(x: edge, y: 0, width: max(0, w - edge * 2), height: max(0, h - edge))
         if panStart != nil {
-            addCursorRect(bounds, cursor: .closedHand)
+            addCursorRect(panRect, cursor: .closedHand)
         } else if spaceHeld {
-            addCursorRect(bounds, cursor: .openHand)
+            addCursorRect(panRect, cursor: .openHand)
         }
     }
 }
