@@ -10,7 +10,7 @@ final class BackupsTests: XCTestCase {
     }
 
     private func boardJson(items: Int) throws -> String {
-        let items = (0..<items).map { i in
+        let boardItems = (0..<items).map { i in
             Item(
                 id: i + 1,
                 pos: Pt(x: 0, y: 0),
@@ -21,7 +21,7 @@ final class BackupsTests: XCTestCase {
             )
         }
         let board = Board(
-            items: items,
+            items: boardItems,
             camera: Camera(x: 0, y: 0, zoom: 1),
             nextId: items,
             nextGroup: 0,
@@ -36,7 +36,7 @@ final class BackupsTests: XCTestCase {
         let dir = try makeBoardDir()
         let backups = Backups(boardDir: dir)
         XCTAssertTrue(backups.list().isEmpty)
-        let name = try XCTUnwrap(backups.makeBackup(boardJson: boardJson(items: 3)))
+        let name = try XCTUnwrap(backups.makeBackup(boardJson: try boardJson(items: 3)))
         let entries = backups.list()
         XCTAssertEqual(entries.count, 1)
         XCTAssertEqual(entries[0].name, name)
@@ -48,10 +48,10 @@ final class BackupsTests: XCTestCase {
     func testMaybeBackupIsHourly() throws {
         let dir = try makeBoardDir()
         let backups = Backups(boardDir: dir)
-        backups.maybeBackup(boardJson: boardJson(items: 1))
+        backups.maybeBackup(boardJson: try boardJson(items: 1))
         XCTAssertEqual(backups.list().count, 1)
         // A second call within the hour makes no new backup.
-        backups.maybeBackup(boardJson: boardJson(items: 2))
+        backups.maybeBackup(boardJson: try boardJson(items: 2))
         XCTAssertEqual(backups.list().count, 1)
         XCTAssertEqual(backups.list()[0].items, 1)
     }
@@ -62,7 +62,7 @@ final class BackupsTests: XCTestCase {
         for i in 0..<12 {
             // Distinct stamps: a second apart is enough for
             // the YYYY-MM-DD-HHMMSS name to differ.
-            _ = backups.makeBackup(boardJson: boardJson(items: i + 1))
+            _ = backups.makeBackup(boardJson: try boardJson(items: i + 1))
             Thread.sleep(forTimeInterval: 1.05)
         }
         XCTAssertEqual(backups.list().count, 10)
