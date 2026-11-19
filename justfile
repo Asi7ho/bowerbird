@@ -1,15 +1,16 @@
 # Bowerbird (Swift) — one-command run and test.
-# Run `just` to launch the app, `just test` to run the tests.
-# Run `just app` to build a real .app bundle and open it:
-# `just` runs the raw executable, not a bundled app (no
-# bundle identifier, no Info.plist), and the system treats
-# a non-bundled process differently — trackpad gestures
-# and window chrome can degrade. The bundle is the full app.
+# Run `just` to build the .app bundle and open it, `just test`
+# to run the tests. `just` opens the bundle, not the raw
+# executable: `swift run` launches a non-bundled process
+# (no bundle identifier, no Info.plist), and the system
+# treats it differently — trackpad gestures and window
+# chrome degrade (the resize cursor and the pinch did not
+# work that way). The bundle is the full app.
 # The Swift package lives in `swift/`; every recipe runs
 # from there, so you never have to `cd` into it.
 
-# Launch the app (builds first if needed).
-default: run
+# Build the .app bundle and open it (builds first if needed).
+default: app
 
 # Build the app and the tests.
 build:
@@ -19,7 +20,8 @@ build:
 test:
     swift test --package-path swift
 
-# Build, then launch the app.
+# Launch the raw executable (fast, but not a full app —
+# gestures and window chrome can degrade).
 run:
     swift run --package-path swift Bowerbird
 
@@ -27,10 +29,10 @@ run:
 # runs as a full app (bundle identifier, Info.plist) rather
 # than a raw executable.
 app:
-    swift build --package-path swift -c release
+    swift build --package-path swift
     rm -rf Bowerbird.app
     mkdir -p Bowerbird.app/Contents/MacOS
-    cp swift/.build/release/Bowerbird Bowerbird.app/Contents/MacOS/Bowerbird
+    cp swift/.build/debug/Bowerbird Bowerbird.app/Contents/MacOS/Bowerbird
     cp Info.plist Bowerbird.app/Contents/Info.plist
     open Bowerbird.app
 
