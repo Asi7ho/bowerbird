@@ -79,6 +79,10 @@ public final class BoardViewport: NSView {
         self.board = board
         super.init(frame: .zero)
         wantsLayer = true
+        // Accept trackpad touches: the pinch is read from
+        // the fingers themselves (see the touch handlers
+        // below), because the magnify event never arrived.
+        acceptsTouchEvents = true
         // Clip to the viewport: an NSView does not clip its
         // subviews by default, so the cards (which are
         // positioned in world coordinates and transformed
@@ -311,9 +315,9 @@ public final class BoardViewport: NSView {
     /// apart or together, and the zoom is the ratio of the
     /// distance between them. The touch positions are in
     /// unit coordinates (0–1 across the view), converted to
-    /// view points here.
-    override public var acceptsTouchEvents: Bool { true }
-
+    /// view points here. `acceptsTouchEvents` is set in
+    /// `init` (it is a mutable property, not one to
+    /// override).
     /// The live touches, by identity, in view points.
     private var liveTouches: [ObjectIdentifier: NSPoint] = [:]
     /// The distance between the two pinch fingers on the
