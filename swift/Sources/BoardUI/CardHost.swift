@@ -205,8 +205,6 @@ public final class CardHost {
     /// Electron app's GROUP_PAD).
     private static let groupPad: Double = 24
 
-    private var groupLabels: [Int: NSTextField] = [:]
-
     private func renderGroupFrames() {
         // The overlay fills the viewport (screen
         // coordinates); the frame rects and labels are
@@ -246,7 +244,15 @@ public final class CardHost {
             frames.append((group, screenRect, isSelected))
         }
         // The frames, as shape layers (recreated each
-        // render, like the connector paths).
+        // render, like the connector paths). The label is a
+        // text layer in the same pass — a quiet name inside
+        // the frame's top-left corner, not a white chip
+        // straddling the border: the chip read as a floating
+        // box and the name sat on the dashed line. A
+        // live-import group (one with a source — the bird,
+        // from an SVG) shows NO label: the Electron app
+        // treats it as a single imported piece, not a named
+        // group, so its frame is bare until it is selected.
         groupFrameOverlay.layer?.sublayers?.forEach { $0.removeFromSuperlayer() }
         for (group, rect, isSelected) in frames {
             let path = CGPath(
@@ -266,55 +272,29 @@ public final class CardHost {
                 layer.lineDashPattern = [6, 4]
             }
             groupFrameOverlay.layer?.addSublayer(layer)
-            _ = group
-        }
-        // The labels: a white chip at the frame's top-left,
-        // 12px in and 11px above the top edge (the Electron
-        // app's .group-label). Reused across renders, so a
-        // pan does not rebuild the text fields. A
-        // live-import group (one with a source — the bird,
-        // from an SVG) shows NO label: the Electron app
-        // treats it as a single imported piece, not a named
-        // group, so its frame is bare until it is selected.
-        var liveLabels = Set<Int>()
-        for (group, rect, _) in frames {
             guard board.groups?[group]?.source == nil,
                   let label = board.groups?[group]?.label, !label.isEmpty else { continue }
-            liveLabels.insert(group)
-            let field = groupLabels[group] ?? {
-                let f = NSTextField(labelWithString: "")
-                f.font = NSFont.systemFont(ofSize: 12 * camera.zoom, weight: .semibold)
-                f.textColor = NSColor.labelColor
-                f.backgroundColor = NSColor.white
-                f.drawsBackground = true
-                f.isBordered = false
-                f.wantsLayer = true
-                f.layer?.borderColor = NSColor.separatorColor.cgColor
-                f.layer?.borderWidth = 1
-                f.layer?.cornerRadius = 6
-                groupLabels[group] = f
-                return f
-            }()
-            field.font = NSFont.systemFont(ofSize: 12 * camera.zoom, weight: .semibold)
-            field.stringValue = label
-            field.sizeToFit()
-            // The chip, padded like the Electron app's
-            // (2px 8px) and straddling the frame's top edge.
-            let chip = CGRect(
-                x: rect.origin.x + 12 - 8,
-                y: rect.origin.y - 11,
-                width: field.frame.width + 16,
-                height: field.frame.height + 4
+            // The name, inside the frame: 12px in from the
+            // left edge, 8px down from the top edge, in a
+            // muted grey. The font scales with the zoom, so
+            // the name stays the same size relative to the
+            // frame.
+            let textLayer = CATextLayer()
+            textLayer.string = label
+            let fontSize = 12 * camera.zoom
+            textLayer.font = NSFont.systemFont(ofSize: fontSize, weight: .semibold)
+            textLayer.fontSize = fontSize
+            textLayer.foregroundColor = NSColor.black.withAlphaComponent(0.55).cgColor
+            textLayer.alignmentMode = .left
+            textLayer.truncationMode = .end
+            textLayer.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
+            textLayer.frame = CGRect(
+                x: rect.origin.x + 12 * camera.zoom,
+                y: rect.origin.y + 8 * camera.zoom,
+                width: max(40, rect.width - 24 * camera.zoom),
+                height: 18 * camera.zoom
             )
-            field.frame = chip
-            if field.superview == nil {
-                groupFrameOverlay.addSubview(field)
-            }
-        }
-        // Drop the labels of groups that no longer exist.
-        for (group, field) in groupLabels where !liveLabels.contains(group) {
-            field.removeFromSuperview()
-            groupLabels.removeValue(forKey: group)
+            groupFrameOverlay.layer?.addSublayer(textLayer)
         }
     }
 

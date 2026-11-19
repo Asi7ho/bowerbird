@@ -92,6 +92,14 @@ public final class BoardViewport: NSView {
         cardContainer.wantsLayer = true
         cardContainer.autoresizingMask = [.width, .height]
         addSubview(cardContainer)
+        // A pinch is a gesture recognizer, not the
+        // responder chain: `magnify(with:)` needs the view
+        // to be the first responder, and the pinch kept not
+        // arriving (Cmd+scroll worked, pinch did not). The
+        // recognizer is attached to the view, so it sees the
+        // pinch whatever has focus.
+        let pinch = NSMagnificationGestureRecognizer(target: self, action: #selector(handlePinch(_:)))
+        addGestureRecognizer(pinch)
         applyCamera()
     }
 
@@ -264,13 +272,32 @@ public final class BoardViewport: NSView {
         // The pinch arrives through the responder chain
         // (the viewport is the first responder) — it is
         // deliberately not routed through the event monitor,
-        // which consumed it without zooming.
+        // which consumed it without zooming. A gesture
+        // recognizer (see `handlePinch`) is the primary
+        // route; this stays as the fallback.
         let location = convert(event.locationInWindow, from: nil)
         camera = CameraMath.zoomCamera(
             camera,
             around: Pt(x: Double(location.x), y: Double(location.y)),
             factor: 1 + Double(event.magnification) * 2
         )
+    }
+
+    /// The pinch, via a gesture recognizer (the reliable
+    /// route — it does not depend on first responder
+    /// status). The magnification is the relative change
+    /// since the last update; the recognizer resets it to 0
+    /// after each one, so the factor is applied per update
+    /// and the gesture accumulates.
+    @objc private func handlePinch(_ recognizer: NSMagnificationGestureRecognizer) {
+        guard recognizer.magnification != 0 else { return }
+        let location = recognizer.location(in: self)
+        camera = CameraMath.zoomCamera(
+            camera,
+            around: Pt(x: Double(location.x), y: Double(location.y)),
+            factor: 1 + Double(recognizer.magnification) * 2
+        )
+        recognizer.magnification = 0
     }
 
     override public func updateTrackingAreas() {
@@ -408,10 +435,18 @@ public final class BoardViewport: NSView {
 
     override public func resetCursorRects() {
         super.resetCursorRects()
+        // The pan cursor covers the board, but NOT the
+        // window's edges: the resize zone is the outer few
+        // points, and a cursor rect over the whole bounds
+        // swallowed the window's resize cursor there, so
+        // dragging an edge showed a hand and did nothing
+        // useful. Inset by 6 points (the resize zone) so
+        // the edges show the resize arrow.
+        let rect = bounds.insetBy(dx: 6, dy: 6)
         if panStart != nil {
-            addCursorRect(bounds, cursor: .closedHand)
+            addCursorRect(rect, cursor: .closedHand)
         } else if spaceHeld {
-            addCursorRect(bounds, cursor: .openHand)
+            addCursorRect(rect, cursor: .openHand)
         }
     }
 }

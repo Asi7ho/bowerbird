@@ -63,7 +63,6 @@ public class CardView: NSView {
     public init() {
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.cornerRadius = 12
         layer?.borderWidth = 1
         layer?.backgroundColor = NSColor.white.cgColor
         updateChrome()
@@ -74,28 +73,49 @@ public class CardView: NSView {
         fatalError("CardView is not Interface Builder backed")
     }
 
+    /// The zoom the card is drawn at: its screen width
+    /// over its world width.
+    private var zoom: CGFloat {
+        guard let item = currentItem, item.size.w > 0 else { return 1 }
+        return bounds.width / CGFloat(item.size.w)
+    }
+
+    override public func layout() {
+        super.layout()
+        // Re-apply the chrome when the frame changes: the
+        // border, radius and shadow scale with the zoom.
+        updateChrome()
+    }
+
     private func updateChrome() {
         guard let layer else { return }
         layer.masksToBounds = clipsContent
+        // The chrome is in world units in the Electron app
+        // (the CSS transform scales it), so here it scales
+        // by the zoom. Without the scale, a card zoomed out
+        // kept a 1px border and a 12px radius, which read
+        // as a heavy outline and a pill at small sizes.
+        let z = zoom
+        layer.cornerRadius = 12 * z
         if isSelected {
             // A clear selection, not a whisper: a 2px blue
             // border (the Electron app's is 1px at half
             // strength, which read as too shy) and a
             // stronger ring around it.
-            layer.borderWidth = showsBorder ? 2 : 0
+            layer.borderWidth = showsBorder ? 2 * z : 0
             layer.borderColor = NSColor.systemBlue.withAlphaComponent(0.9).cgColor
             layer.shadowColor = NSColor.systemBlue.cgColor
             layer.shadowOpacity = 0.5
-            layer.shadowRadius = 3
+            layer.shadowRadius = 3 * z
             layer.shadowOffset = .zero
         } else {
-            layer.borderWidth = showsBorder ? 1 : 0
+            layer.borderWidth = showsBorder ? 1 * z : 0
             layer.borderColor = NSColor.separatorColor.cgColor
             if hasShadow {
                 layer.shadowColor = NSColor.black.cgColor
                 layer.shadowOpacity = 0.08
-                layer.shadowRadius = 4
-                layer.shadowOffset = CGSize(width: 0, height: 1)
+                layer.shadowRadius = 4 * z
+                layer.shadowOffset = CGSize(width: 0, height: 1 * z)
             } else {
                 layer.shadowOpacity = 0
             }

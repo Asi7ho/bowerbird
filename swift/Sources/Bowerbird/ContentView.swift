@@ -26,7 +26,10 @@ public struct ContentView: View {
             // not plain white: the board is drawn by Metal
             // from the same hex, and a plain white strip
             // rendered a visibly different white next to it.
-            Color(nsColor: NSColor.fromHex(board.bg) ?? NSColor.white)
+            // It is a drag view, not a plain colour: the
+            // whole strip moves the window, not just the
+            // title bar area the system recognises.
+            TitleBarView(background: NSColor.fromHex(board.bg) ?? NSColor.white)
                 .frame(height: 28)
             Divider()
             BoardView(board: board, onCameraChanged: onCameraChanged)
