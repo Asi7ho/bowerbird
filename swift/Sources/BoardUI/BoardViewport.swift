@@ -365,13 +365,13 @@ public final class BoardViewport: NSView {
             selected = []
             return
         }
-        // Group / ungroup: Ctrl+G groups the selection (at
-        // least two), Ctrl+U ungroups the groups the
+        // Group / ungroup: Cmd+G groups the selection (at
+        // least two), Cmd+U ungroups the groups the
         // selection belongs to. The core owns the ids and
         // the labels; the commit is one undo step and one
         // save. Nothing is committed when there is nothing
         // to group or ungroup.
-        if event.modifierFlags.contains(.control),
+        if event.modifierFlags.contains(.command),
            let chars = event.charactersIgnoringModifiers?.lowercased() {
             if chars == "g" {
                 var next = board
