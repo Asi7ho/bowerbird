@@ -10,17 +10,11 @@ public func allocId(_ board: inout Board) -> Int {
 /// Give every group of two or more members a label when it
 /// has none, and drop the label of a group with fewer than
 /// two members. Mirrors the Electron app's `syncGroupLabels`
-/// (main.ts), except the name: the Electron app calls a
-/// group "Section N" and this app calls it "Group N" — a
-/// group is a group. A group with no label entry is named
-/// "Group N", and an existing default label ("Section N",
-/// from the Electron app) is renamed to "Group N" so an old
-/// board does not keep the old name. A custom label
-/// (anything that is not "Section N") is left alone. The
-/// label is data, not display — the renderer still hides it
-/// for a live-import group (one with a source), which the
-/// Electron app treats as a single imported piece, not a
-/// named group.
+/// (main.ts): a group with no label entry is named
+/// "Section N". The label is data, not display — the
+/// renderer still hides it for a live-import group (one
+/// with a source), which the Electron app treats as a
+/// single imported piece, not a named group.
 public func syncGroupLabels(_ board: inout Board) {
     var counts: [Int: Int] = [:]
     for item in board.items {
@@ -31,18 +25,8 @@ public func syncGroupLabels(_ board: inout Board) {
     for key in groups.keys where (counts[key] ?? 0) < 2 {
         groups.removeValue(forKey: key)
     }
-    for key in groups.keys {
-        guard let entry = groups[key] else { continue }
-        // Rename a default "Section N" label to "Group N".
-        // A custom label is left alone.
-        let label = entry.label
-        if label.hasPrefix("Section "),
-           let number = Int(label.dropFirst("Section ".count)) {
-            groups[key] = GroupEntry(label: "Group \(number)", source: entry.source)
-        }
-    }
     for (group, count) in counts where count >= 2 && groups[group] == nil {
-        groups[group] = GroupEntry(label: "Group \(group)", source: nil)
+        groups[group] = GroupEntry(label: "Section \(group)", source: nil)
     }
     board.groups = groups.isEmpty ? nil : groups
 }

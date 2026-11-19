@@ -205,6 +205,8 @@ public final class CardHost {
     /// Electron app's GROUP_PAD).
     private static let groupPad: Double = 24
 
+    private var groupLabels: [Int: NSTextField] = [:]
+
     private func renderGroupFrames() {
         // The overlay fills the viewport (screen
         // coordinates); the frame rects and labels are
@@ -244,15 +246,7 @@ public final class CardHost {
             frames.append((group, screenRect, isSelected))
         }
         // The frames, as shape layers (recreated each
-        // render, like the connector paths). The label is a
-        // text layer in the same pass — a quiet name inside
-        // the frame's top-left corner, not a white chip
-        // straddling the border: the chip read as a floating
-        // box and the name sat on the dashed line. A
-        // live-import group (one with a source — the bird,
-        // from an SVG) shows NO label: the Electron app
-        // treats it as a single imported piece, not a named
-        // group, so its frame is bare until it is selected.
+        // render, like the connector paths).
         groupFrameOverlay.layer?.sublayers?.forEach { $0.removeFromSuperlayer() }
         for (group, rect, isSelected) in frames {
             let path = CGPath(
@@ -272,29 +266,55 @@ public final class CardHost {
                 layer.lineDashPattern = [6, 4]
             }
             groupFrameOverlay.layer?.addSublayer(layer)
+            _ = group
+        }
+        // The labels: a white chip at the frame's top-left,
+        // 12px in and 11px above the top edge (the Electron
+        // app's .group-label). Reused across renders, so a
+        // pan does not rebuild the text fields. A
+        // live-import group (one with a source — the bird,
+        // from an SVG) shows NO label: the Electron app
+        // treats it as a single imported piece, not a named
+        // group, so its frame is bare until it is selected.
+        var liveLabels = Set<Int>()
+        for (group, rect, _) in frames {
             guard board.groups?[group]?.source == nil,
                   let label = board.groups?[group]?.label, !label.isEmpty else { continue }
-            // The name, inside the frame: 12px in from the
-            // left edge, 8px down from the top edge, in a
-            // muted grey. The font scales with the zoom, so
-            // the name stays the same size relative to the
-            // frame.
-            let textLayer = CATextLayer()
-            textLayer.string = label
-            let fontSize = 12 * camera.zoom
-            textLayer.font = NSFont.systemFont(ofSize: fontSize, weight: .semibold)
-            textLayer.fontSize = fontSize
-            textLayer.foregroundColor = NSColor.black.withAlphaComponent(0.55).cgColor
-            textLayer.alignmentMode = .left
-            textLayer.truncationMode = .end
-            textLayer.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
-            textLayer.frame = CGRect(
-                x: rect.origin.x + 12 * camera.zoom,
-                y: rect.origin.y + 8 * camera.zoom,
-                width: max(40, rect.width - 24 * camera.zoom),
-                height: 18 * camera.zoom
+            liveLabels.insert(group)
+            let field = groupLabels[group] ?? {
+                let f = NSTextField(labelWithString: "")
+                f.font = NSFont.systemFont(ofSize: 12 * camera.zoom, weight: .semibold)
+                f.textColor = NSColor.labelColor
+                f.backgroundColor = NSColor.white
+                f.drawsBackground = true
+                f.isBordered = false
+                f.wantsLayer = true
+                f.layer?.borderColor = NSColor.separatorColor.cgColor
+                f.layer?.borderWidth = 1
+                f.layer?.cornerRadius = 6
+                groupLabels[group] = f
+                return f
+            }()
+            field.font = NSFont.systemFont(ofSize: 12 * camera.zoom, weight: .semibold)
+            field.stringValue = label
+            field.sizeToFit()
+            // The chip, padded like the Electron app's
+            // (2px 8px) and straddling the frame's top edge.
+            let chip = CGRect(
+                x: rect.origin.x + 12 - 8,
+                y: rect.origin.y - 11,
+                width: field.frame.width + 16,
+                height: field.frame.height + 4
             )
-            groupFrameOverlay.layer?.addSublayer(textLayer)
+            field.frame = chip
+            if field.superview == nil {
+                groupFrameOverlay.addSubview(field)
+            }
+        }
+        // Drop the labels of groups that no longer exist.
+        for (group, field) in groupLabels where !liveLabels.contains(group) {
+            field.removeFromSuperview()
+            groupLabels.removeValue(forKey: group)
         }
     }
 
@@ -313,13 +333,7 @@ public final class CardHost {
                   let (a, b) = ConnectorGeometry.clippedEnds(board: board, from: payload.from, to: payload.to) else { continue }
             let isSelected = selected.contains(item.id)
             let color = isSelected ? NSColor.systemBlue : (NSColor.fromHex(payload.color) ?? .labelColor)
-            // The line width and the arrowhead are in world
-            // units in the Electron app (the CSS transform
-            // scales them), so here they scale by the zoom.
-            // Without the scale the head stayed 12 screen
-            // pixels while the cards shrank around it, so it
-            // read as a fixed-size arrow on a shrinking line.
-            let width: CGFloat = (isSelected ? 3 : 2) * camera.zoom
+            let width: CGFloat = isSelected ? 3 : 2
             // The endpoints, in screen coordinates.
             let aScreen = Pt(x: (a.x - camera.x) * camera.zoom, y: (a.y - camera.y) * camera.zoom)
             let bScreen = Pt(x: (b.x - camera.x) * camera.zoom, y: (b.y - camera.y) * camera.zoom)
@@ -330,13 +344,12 @@ public final class CardHost {
             paths.append((line, color, width))
             // The arrowhead: two 12px lines at ±0.45 rad from
             // the direction, meeting at the end. The head is
-            // 12 world pixels (the Electron app's 12px head),
-            // scaled by the zoom and computed from the screen
-            // direction.
+            // 12 screen pixels (the Electron app's 12px
+            // head), computed from the screen direction.
             let dx = bScreen.x - aScreen.x, dy = bScreen.y - aScreen.y
             let len = max(1, hypot(dx, dy))
             let ux = dx / len, uy = dy / len
-            let head = 12.0 * camera.zoom, spread = 0.45
+            let head = 12.0, spread = 0.45
             let c1 = cos(spread), s1 = sin(spread), c2 = cos(-spread), s2 = sin(-spread)
             let p1 = Pt(x: bScreen.x - head * (ux * c1 - uy * s1), y: bScreen.y - head * (ux * s1 + uy * c1))
             let p2 = Pt(x: bScreen.x - head * (ux * c2 - uy * s2), y: bScreen.y - head * (ux * s2 + uy * c2))
