@@ -128,6 +128,15 @@ public final class BoardViewport: NSView {
     private let shapeOverlay = WorldView()
     private let shapeLayer = CAShapeLayer()
 
+    /// A connector drag in progress: the anchor it starts
+    /// from (a card, or a bare point) and where the pointer
+    /// is now. The live preview is a line over the cards,
+    /// in the pen colour.
+    private var connectorFrom: Anchor?
+    private var connectorCurrent: Pt?
+    private let connectorOverlay = WorldView()
+    private let connectorLayer = CAShapeLayer()
+
     /// A local event monitor for pinch and wheel, so the
     /// gestures reach the board whatever the first
     /// responder is. AppKit sends a pinch to the first
@@ -178,6 +187,11 @@ public final class BoardViewport: NSView {
         shapeLayer.lineCap = .round
         shapeLayer.lineJoin = .round
         shapeOverlay.layer?.addSublayer(shapeLayer)
+        connectorOverlay.wantsLayer = true
+        connectorOverlay.autoresizingMask = [.width, .height]
+        addSubview(connectorOverlay)
+        connectorLayer.lineCap = .round
+        connectorOverlay.layer?.addSublayer(connectorLayer)
         applyCamera()
     }
 
@@ -196,6 +210,7 @@ public final class BoardViewport: NSView {
         marqueeOverlay.frame = bounds
         strokeOverlay.frame = bounds
         shapeOverlay.frame = bounds
+        connectorOverlay.frame = bounds
         applyCamera()
         onViewportResized?()
     }
@@ -234,6 +249,7 @@ public final class BoardViewport: NSView {
         updateMarqueeOverlay()
         updateStrokePreview()
         updateShapePreview()
+        updateConnectorPreview()
     }
 
     /// The window behind the board is the board's own
@@ -541,6 +557,21 @@ public final class BoardViewport: NSView {
             updateShapePreview()
             return
         }
+        // The connector tool starts a connector drag on
+        // press: from the card under the cursor when it is
+        // anchorable, otherwise from the bare point.
+        if toolState?.tool == .connector {
+            let point = convert(event.locationInWindow, from: nil)
+            let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
+            if let hit = HitTest.hit(board: board, at: world), isAnchorable(hit) {
+                connectorFrom = .item(hit.id)
+            } else {
+                connectorFrom = .point(world)
+            }
+            connectorCurrent = world
+            updateConnectorPreview()
+            return
+        }
         // Click selection (the Electron app's setSelected):
         // a card, or its whole group, is selected; Shift
         // toggles it in the selection; empty space clears
@@ -662,6 +693,15 @@ public final class BoardViewport: NSView {
             updateShapePreview()
             return
         }
+        // A connector drag: the target end follows the
+        // pointer, and the preview redraws from the source
+        // anchor to it.
+        if connectorFrom != nil {
+            let point = convert(event.locationInWindow, from: nil)
+            connectorCurrent = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
+            updateConnectorPreview()
+            return
+        }
         guard marqueeStart != nil else { return }
         let point = convert(event.locationInWindow, from: nil)
         marqueeCurrent = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
@@ -718,6 +758,28 @@ public final class BoardViewport: NSView {
             shapeCurrent = nil
             shapeKind = nil
             updateShapePreview()
+            return
+        }
+        // A connector drag commits as one item (one undo
+        // step, one save) when it is not degenerate and not
+        // a self-connector. The target is the anchorable
+        // card under the release point, otherwise the bare
+        // point. The drawn connector takes the selected pen
+        // colour.
+        if let from = connectorFrom, let current = connectorCurrent {
+            let to: Anchor
+            if let hit = HitTest.hit(board: board, at: current), isAnchorable(hit) {
+                to = .item(hit.id)
+            } else {
+                to = .point(current)
+            }
+            var next = board
+            if BoardConnector.add(&next, from: from, to: to, color: toolState?.penColor ?? "#1A1A1A") != nil {
+                onBoardMutate?(next)
+            }
+            connectorFrom = nil
+            connectorCurrent = nil
+            updateConnectorPreview()
             return
         }
         // A card drag that moved: commit the final board
@@ -807,6 +869,44 @@ public final class BoardViewport: NSView {
             shapeLayer.frame = bounds
         }
     }
+
+    /// Draws (or hides) the live connector preview: a line
+    /// from the source anchor's point to the pointer, in
+    /// the pen colour at 2 world pixels (the Electron
+    /// preview's width). The drawn connector takes the
+    /// selected pen colour; the toolbar's arrow stays
+    /// black.
+    private func updateConnectorPreview() {
+        connectorOverlay.frame = bounds
+        guard let from = connectorFrom, let current = connectorCurrent,
+              let a = CameraMath.anchorPoint(board: board, anchor: from) else {
+            connectorLayer.path = nil
+            return
+        }
+        let aScreen = Pt(x: (a.x - camera.x) * camera.zoom, y: (a.y - camera.y) * camera.zoom)
+        let bScreen = Pt(x: (current.x - camera.x) * camera.zoom, y: (current.y - camera.y) * camera.zoom)
+        let line = CGMutablePath()
+        line.move(to: CGPoint(x: aScreen.x, y: aScreen.y))
+        line.addLine(to: CGPoint(x: bScreen.x, y: bScreen.y))
+        CardView.withoutLayerActions {
+            connectorLayer.path = line
+            connectorLayer.strokeColor = (NSColor.fromHex(toolState?.penColor ?? "#1A1A1A") ?? .labelColor).cgColor
+            connectorLayer.lineWidth = 2 * camera.zoom
+            connectorLayer.fillColor = NSColor.clear.cgColor
+            connectorLayer.frame = bounds
+        }
+    }
+
+    /// Whether a card can be a connector anchor: anything
+    /// except a stroke or another connector (the Electron
+    /// app's anchorable rule).
+    private func isAnchorable(_ item: Item) -> Bool {
+        switch item.kind {
+        case .stroke, .connector: return false
+        default: return true
+        }
+    }
+
     private static func strokeStyle(for tool: DrawTool) -> (width: Double, marker: Bool, pencil: Bool) {
         switch tool {
         case .pen: return (3, false, false)

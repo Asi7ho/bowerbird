@@ -162,6 +162,12 @@ public struct ConnectorPayload: Codable, Equatable {
     public var from: Anchor
     public var to: Anchor
     public var color: String
+
+    public init(from: Anchor, to: Anchor, color: String) {
+        self.from = from
+        self.to = to
+        self.color = color
+    }
 }
 
 public struct PluginPayload: Codable, Equatable {
