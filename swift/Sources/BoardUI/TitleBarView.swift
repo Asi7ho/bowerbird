@@ -26,8 +26,12 @@ public final class TitleBarDragView: NSView {
         let w = bounds.width, h = bounds.height
         guard w > edge * 2, h > edge else { return }
         addCursorRect(CGRect(x: edge, y: h - edge, width: w - edge * 2, height: edge), cursor: .resizeUpDown)
-        addCursorRect(CGRect(x: 0, y: h - edge, width: edge, height: edge), cursor: .resizeNorthWestSouthEast)
-        addCursorRect(CGRect(x: w - edge, y: h - edge, width: edge, height: edge), cursor: .resizeNorthEastSouthWest)
+        // AppKit has no diagonal resize cursor (the
+        // diagonal arrow at a corner is drawn by the window
+        // server, not exposed as an NSCursor), so the
+        // corners take the horizontal resize cursor.
+        addCursorRect(CGRect(x: 0, y: h - edge, width: edge, height: edge), cursor: .resizeLeftRight)
+        addCursorRect(CGRect(x: w - edge, y: h - edge, width: edge, height: edge), cursor: .resizeLeftRight)
     }
 }
 

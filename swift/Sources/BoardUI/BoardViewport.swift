@@ -450,8 +450,12 @@ public final class BoardViewport: NSView {
         addCursorRect(CGRect(x: 0, y: edge, width: edge, height: h - edge * 2), cursor: .resizeLeftRight)
         addCursorRect(CGRect(x: w - edge, y: edge, width: edge, height: h - edge * 2), cursor: .resizeLeftRight)
         addCursorRect(CGRect(x: edge, y: h - edge, width: w - edge * 2, height: edge), cursor: .resizeUpDown)
-        addCursorRect(CGRect(x: 0, y: h - edge, width: edge, height: edge), cursor: .resizeNorthEastSouthWest)
-        addCursorRect(CGRect(x: w - edge, y: h - edge, width: edge, height: edge), cursor: .resizeNorthWestSouthEast)
+        // AppKit has no diagonal resize cursor (the
+        // diagonal arrow at a corner is drawn by the window
+        // server, not exposed as an NSCursor), so the
+        // corners take the horizontal resize cursor.
+        addCursorRect(CGRect(x: 0, y: h - edge, width: edge, height: edge), cursor: .resizeLeftRight)
+        addCursorRect(CGRect(x: w - edge, y: h - edge, width: edge, height: edge), cursor: .resizeLeftRight)
         // The pan cursor covers the board, but NOT the
         // window's edges: the resize zone is the outer few
         // points, and a cursor rect over the whole bounds
