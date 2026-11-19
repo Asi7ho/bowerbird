@@ -81,7 +81,7 @@ public final class CardHost {
     /// the content visibly shifted inside the card while
     /// zooming.
     public func render() {
-        layoutVisible(reconfigure: true)
+        layoutVisible(reconfigure: true, board: board)
     }
 
     /// A camera move: the visible set is recomputed and the
@@ -91,10 +91,18 @@ public final class CardHost {
     /// rebuild and shift while zooming or panning. Only a
     /// card entering the viewport is configured (once).
     public func reposition() {
-        layoutVisible(reconfigure: false)
+        layoutVisible(reconfigure: false, board: board)
     }
 
-    private func layoutVisible(reconfigure: Bool) {
+    /// The layout, for a given board: the visible set is
+    /// recomputed from that board's positions, and the
+    /// cards are placed at their screen positions. The
+    /// board is a parameter (not always `self.board`) so a
+    /// live drag can lay out the dragged positions with
+    /// the same code as a camera move — the drag and the
+    /// camera share this path, so a dragged card renders
+    /// exactly as a panned one does.
+    private func layoutVisible(reconfigure: Bool, board: Board) {
         // The viewport size is the container's FRAME (screen
         // points), not its bounds: the bounds are the camera,
         // already in world units (viewport / zoom), and
@@ -106,7 +114,7 @@ public final class CardHost {
         var visibleIds = Set<Int>()
         var ordered: [Item] = []
         for item in board.items {
-            guard isVisible(item: item, visible: visible) else { continue }
+            guard isVisible(item: item, board: board, visible: visible) else { continue }
             visibleIds.insert(item.id)
             ordered.append(item)
         }
@@ -174,29 +182,17 @@ public final class CardHost {
     /// Move the given items' views by a world delta, without
     /// reconfiguring them and without touching the board: a
     /// live drag moves the views, and the board is committed
-    /// on pointerup. The connectors and group frames are
-    /// redrawn from the dragged positions, so they follow
-    /// the cards. The delta is the TOTAL from the drag
+    /// on pointerup. The delta is the TOTAL from the drag
     /// start, so each frame is computed from the board's
-    /// positions and cannot drift.
+    /// positions and cannot drift. This is the reposition
+    /// path (frames only, like a camera move) run against
+    /// the dragged positions — the drag and the camera use
+    /// the same layout, so a dragged card renders exactly
+    /// as a panned one does.
     public func moveViews(_ ids: Set<Int>, by delta: Pt) {
         var dragged = board
         BoardMove.move(&dragged, ids: ids, by: delta)
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        defer { CATransaction.commit() }
-        for id in ids {
-            guard let view = shown[id],
-                  let item = dragged.items.first(where: { $0.id == id }) else { continue }
-            view.frame = CGRect(
-                x: (item.pos.x - camera.x) * camera.zoom,
-                y: (item.pos.y - camera.y) * camera.zoom,
-                width: item.size.w * camera.zoom,
-                height: item.size.h * camera.zoom
-            )
-        }
-        renderConnectors(board: dragged)
-        renderGroupFrames(board: dragged)
+        layoutVisible(reconfigure: false, board: dragged)
     }
 
     private func updateSelection() {
@@ -208,7 +204,7 @@ public final class CardHost {
         reposition()
     }
 
-    private func isVisible(item: Item, visible: WorldRect) -> Bool {
+    private func isVisible(item: Item, board: Board, visible: WorldRect) -> Bool {
         // Rotated strokes are exempt from the card-loop cull
         // (their bbox does not describe where they paint).
         if case .stroke = item.kind, item.rotation != nil { return true }
