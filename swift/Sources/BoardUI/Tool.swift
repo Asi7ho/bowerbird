@@ -1,3 +1,4 @@
+import BowerbirdCore
 import Foundation
 
 /// The select tool's mode: a plain click/drag selection,

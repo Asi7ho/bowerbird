@@ -1,3 +1,4 @@
+import BowerbirdCore
 import SwiftUI
 
 /// The floating toolbar, the Electron app's left bar: a
