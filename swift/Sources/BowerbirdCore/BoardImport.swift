@@ -34,7 +34,7 @@ public enum BoardImport {
         case "pdf": return .pdf
         case "mp3", "wav", "flac", "ogg", "m4a": return .audio
         case "mp4", "mov", "webm", "mkv", "avi", "m4v": return .video
-        case "glb": return .model3d
+        case "glb", "obj", "fbx", "usdz", "dae", "scn", "stl": return .model3d
         case "txt", "md": return .text
         case "url", "webloc": return .shortcut
         default: return nil

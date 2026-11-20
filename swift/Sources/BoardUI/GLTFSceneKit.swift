@@ -85,61 +85,13 @@ public enum GLTFSceneKit {
         return scn
     }
 
-    /// Frames the camera on the model's bounding box, in
-    /// world space: the centre of the box, at a distance
-    /// of the bounding sphere's radius × 2.4, slightly
-    /// above and straight on. The world transform is
-    /// threaded through the walk (not read off the nodes,
-    /// which SceneKit only fills in once the scene has
-    /// rendered). No geometry, no camera.
+    /// Frames the camera on the model's bounding box —
+    /// the shared fit (see Model3DFrame), so the model
+    /// fills the card on first sight; the user can orbit
+    /// from there (the card's view has camera control).
     private static func frameCamera(_ scene: SCNScene) {
-        var minPoint = SIMD3<Float>(Float.greatestFiniteMagnitude, Float.greatestFiniteMagnitude, Float.greatestFiniteMagnitude)
-        var maxPoint = SIMD3<Float>(-Float.greatestFiniteMagnitude, -Float.greatestFiniteMagnitude, -Float.greatestFiniteMagnitude)
-        var found = false
-        func walk(_ node: SCNNode, parent: simd_float4x4) {
-            let world = parent * simdMatrix(node.transform)
-            if let geometry = node.geometry {
-                let (localMin, localMax) = geometry.boundingBox
-                let corners = [
-                    SIMD3<Float>(Float(localMin.x), Float(localMin.y), Float(localMin.z)),
-                    SIMD3<Float>(Float(localMax.x), Float(localMin.y), Float(localMin.z)),
-                    SIMD3<Float>(Float(localMin.x), Float(localMax.y), Float(localMin.z)),
-                    SIMD3<Float>(Float(localMax.x), Float(localMax.y), Float(localMin.z)),
-                    SIMD3<Float>(Float(localMin.x), Float(localMin.y), Float(localMax.z)),
-                    SIMD3<Float>(Float(localMax.x), Float(localMin.y), Float(localMax.z)),
-                    SIMD3<Float>(Float(localMin.x), Float(localMax.y), Float(localMax.z)),
-                    SIMD3<Float>(Float(localMax.x), Float(localMax.y), Float(localMax.z)),
-                ]
-                for corner in corners {
-                    let p = world * SIMD4<Float>(corner, 1)
-                    minPoint = SIMD3<Float>(min(minPoint.x, p.x), min(minPoint.y, p.y), min(minPoint.z, p.z))
-                    maxPoint = SIMD3<Float>(max(maxPoint.x, p.x), max(maxPoint.y, p.y), max(maxPoint.z, p.z))
-                }
-                found = true
-            }
-            for child in node.childNodes { walk(child, parent: world) }
-        }
-        walk(scene.rootNode, parent: matrix_identity_float4x4)
-        guard found else { return }
-        let center = (minPoint + maxPoint) / 2
-        let radius = simd_length(maxPoint - minPoint) / 2
-        guard radius > 0 else { return }
-        let distance = radius * 2.4
-        // Straight on, slightly above (elevation 0.35,
-        // like the Electron app's initial view).
-        let direction = SIMD3<Float>(0, sin(0.35), cos(0.35))
-        let cameraNode = SCNNode()
-        let camera = SCNCamera()
-        camera.zNear = Double(distance) / 100
-        camera.zFar = Double(distance) * 100
-        cameraNode.camera = camera
-        cameraNode.position = SCNVector3(
-            CGFloat(center.x + direction.x * Float(distance)),
-            CGFloat(center.y + direction.y * Float(distance)),
-            CGFloat(center.z + direction.z * Float(distance))
-        )
-        cameraNode.look(at: SCNVector3(CGFloat(center.x), CGFloat(center.y), CGFloat(center.z)))
-        scene.rootNode.addChildNode(cameraNode)
+        guard let (center, radius) = Model3DFrame.boundingSphere(of: scene) else { return }
+        scene.rootNode.addChildNode(Model3DFrame.makeFramedCamera(center: center, radius: radius))
     }
 
     /// A simd matrix as a SceneKit matrix: SCNMatrix4's
@@ -158,13 +110,4 @@ public enum GLTFSceneKit {
         )
     }
 
-    /// The reverse: a SceneKit matrix as a simd matrix.
-    private static func simdMatrix(_ m: SCNMatrix4) -> simd_float4x4 {
-        simd_float4x4(
-            SIMD4<Float>(Float(m.m11), Float(m.m21), Float(m.m31), Float(m.m41)),
-            SIMD4<Float>(Float(m.m12), Float(m.m22), Float(m.m32), Float(m.m42)),
-            SIMD4<Float>(Float(m.m13), Float(m.m23), Float(m.m33), Float(m.m43)),
-            SIMD4<Float>(Float(m.m14), Float(m.m24), Float(m.m34), Float(m.m44))
-        )
-    }
 }

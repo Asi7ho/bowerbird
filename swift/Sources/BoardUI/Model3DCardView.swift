@@ -1,22 +1,28 @@
 import AppKit
 import BowerbirdCore
+import ModelIO
 import SceneKit
 
-/// A 3D model card, rendered natively with SceneKit from
-/// the app's own glTF reader. Quick Look was the first
-/// attempt — it is what the system uses to preview these
-/// files — but it does not render .glb on the user's Mac,
-/// so the welcome cube and every dropped model showed an
-/// empty card. SceneKit reads no glTF either, so the
-/// geometry comes from GLTFDocument (core) and is built
-/// into a scene here. A file the reader cannot parse
+/// A 3D model card, rendered natively with SceneKit. Quick
+/// Look was the first attempt — it is what the system uses
+/// to preview these files — but it does not render .glb on
+/// the user's Mac, so the welcome cube and every dropped
+/// model showed an empty card. SceneKit reads no glTF
+/// either, so .glb geometry comes from GLTFDocument (core)
+/// and is built into a scene here; other formats load
+/// natively (Collada, SceneKit, USDZ) or through ModelIO
+/// (Wavefront, FBX, STL). A file no loader understands
 /// keeps its file tile (title and size), never a blank
 /// card. The view renders on demand (no loop at rest)
-/// and the user can orbit the model (camera control).
+/// and the user can orbit the model (camera control); the
+/// fit button re-frames the camera on the whole model.
 public final class Model3DCardView: CardView {
     private let sceneView = SCNView()
     private let titleLayer = CATextLayer()
     private let subtitleLayer = CATextLayer()
+    /// The fit button: re-frames the camera on the whole
+    /// model (the Electron app's model3d-fit).
+    private let fitButton = NSButton()
     /// The file this view is showing, so a reconfigure
     /// for the same card does not reload the model.
     private var currentPath: String?
@@ -24,6 +30,9 @@ public final class Model3DCardView: CardView {
     /// will not parse shows its tile with a note, not a
     /// blank preview.
     private var modelLoaded = false
+    /// The zoom the fit button's icon was last sized for,
+    /// so the symbol is only rebuilt when the zoom moves.
+    private var lastFitButtonZoom: CGFloat = 0
 
     override public init() {
         super.init()
@@ -42,6 +51,54 @@ public final class Model3DCardView: CardView {
             textLayer.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
             layer?.addSublayer(textLayer)
         }
+        // The fit button: the Electron app's model3d-fit
+        // (28px, 8px radius, white, hairline border) with
+        // the expand-corners icon. It sits on the
+        // preview's top-right corner.
+        fitButton.isBordered = false
+        fitButton.imagePosition = .imageOnly
+        fitButton.target = self
+        fitButton.action = #selector(fitModel)
+        fitButton.toolTip = "Fit model"
+        fitButton.wantsLayer = true
+        fitButton.layer?.backgroundColor = NSColor(white: 1, alpha: 0.92).cgColor
+        fitButton.layer?.borderColor = NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 0.1).cgColor
+        fitButton.layer?.borderWidth = 1
+        fitButton.layer?.cornerRadius = 8
+        fitButton.layer?.shadowColor = NSColor.black.cgColor
+        fitButton.layer?.shadowOpacity = 0.08
+        fitButton.layer?.shadowRadius = 4
+        fitButton.layer?.shadowOffset = CGSize(width: 0, height: -1)
+        addSubview(fitButton)
+    }
+
+    /// Re-frames the camera on the whole model.
+    @objc private func fitModel() {
+        Model3DFrame.frame(sceneView)
+    }
+
+    /// Loads a 3D scene from a file, by extension. glTF
+    /// binary goes through the app's own glTF reader (its
+    /// textures are not loaded, base colour only);
+    /// Collada, SceneKit and USDZ scenes load natively;
+    /// Wavefront, FBX and STL go through ModelIO. A file
+    /// no loader understands returns nil, so the card
+    /// keeps its tile.
+    private static func loadScene(from url: URL) -> SCNScene? {
+        switch url.pathExtension.lowercased() {
+        case "glb", "gltf":
+            guard let data = try? Data(contentsOf: url),
+                  let doc = GLTFDocument.parse(data: data) else { return nil }
+            return GLTFSceneKit.scene(from: doc)
+        case "dae", "scn", "usdz":
+            return SCNScene(url: url, options: nil)
+        case "obj", "fbx", "stl":
+            let asset = MDLAsset(url: url)
+            guard asset.count > 0 else { return nil }
+            return SCNScene(mdlAsset: asset)
+        default:
+            return nil
+        }
     }
 
     override public func configure(item: Item) {
@@ -55,12 +112,9 @@ public final class Model3DCardView: CardView {
             modelLoaded = false
             sceneView.scene = nil
             sceneView.pointOfView = nil
-            if exists,
-               let data = try? Data(contentsOf: URL(fileURLWithPath: model.path)),
-               let doc = GLTFDocument.parse(data: data) {
-                let scene = GLTFSceneKit.scene(from: doc)
+            if exists, let scene = Model3DCardView.loadScene(from: URL(fileURLWithPath: model.path)) {
                 sceneView.scene = scene
-                sceneView.pointOfView = scene.rootNode.childNodes.first(where: { $0.camera != nil })
+                Model3DFrame.frame(sceneView)
                 modelLoaded = true
             }
         }
@@ -72,6 +126,7 @@ public final class Model3DCardView: CardView {
             subtitleLayer.string = "\(kb) KB"
         }
         sceneView.isHidden = !exists || !modelLoaded
+        fitButton.isHidden = !modelLoaded
         layer?.backgroundColor = NSColor.white.cgColor
         needsLayout = true
     }
@@ -102,6 +157,24 @@ public final class Model3DCardView: CardView {
             sceneView.layer?.cornerRadius = 10 * zoom
             titleLayer.frame = CGRect(x: pad, y: bounds.height - pad - mediaH - gap - titleH, width: width, height: titleH)
             subtitleLayer.frame = CGRect(x: pad, y: bounds.height - pad - mediaH - gap - titleH - gap - subH, width: width, height: subH)
+            // The fit button sits on the preview's
+            // top-right corner, 8px in, 28px square (the
+            // Electron app's model3d-fit). The card is
+            // y-up, so the preview's top is its maxY.
+            let buttonSize: CGFloat = 28 * zoom
+            let inset: CGFloat = 8 * zoom
+            fitButton.frame = CGRect(
+                x: sceneView.frame.maxX - inset - buttonSize,
+                y: sceneView.frame.maxY - inset - buttonSize,
+                width: buttonSize,
+                height: buttonSize
+            )
+            fitButton.layer?.cornerRadius = 8 * zoom
+            if abs(lastFitButtonZoom - zoom) > 0.001 {
+                lastFitButtonZoom = zoom
+                let config = NSImage.SymbolConfiguration(pointSize: 14 * zoom, weight: .regular)
+                fitButton.image = NSImage(systemSymbolName: "arrow.up.left.and.arrow.down.right", accessibilityDescription: "Fit model")?.withSymbolConfiguration(config)
+            }
         }
     }
 
