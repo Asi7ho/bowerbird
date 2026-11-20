@@ -37,7 +37,7 @@ public enum CardViews {
         case .video:
             return VideoCardView()
         case .model3D:
-            return PlaceholderCardView()
+            return Model3DCardView()
         case .plugin:
             return PlaceholderCardView()
         case .connector:
@@ -395,9 +395,11 @@ public final class PlaceholderCardView: CardView {
     override public init() {
         super.init()
         // A placeholder is not a blank card: a light grey
-        // background and its kind name, so a media card
-        // whose native view has not landed yet (M4/M5)
+        // background and its kind name, so a card whose
+        // native view has not landed yet (plugins, M7)
         // reads as "coming", not as an empty white card.
+        // Every media kind now has its own view, so only
+        // the plugin case is live here.
         layer?.backgroundColor = NSColor.systemGray.withAlphaComponent(0.08).cgColor
         // Explicit colours, not the semantic label colours:
         // a `CATextLayer`'s foreground is a fixed CGColor,
@@ -421,24 +423,6 @@ public final class PlaceholderCardView: CardView {
     override public func configure(item: Item) {
         super.configure(item: item)
         switch item.kind {
-        case .urlCard(let url):
-            titleLayer.string = url.title ?? url.url
-            subtitleLayer.string = "Link"
-        case .pdfCard:
-            titleLayer.string = "PDF"
-            subtitleLayer.string = "PDFView in M4"
-        case .fileCard(let file):
-            titleLayer.string = file.path
-            subtitleLayer.string = file.format.rawValue.uppercased()
-        case .audio(let audio):
-            titleLayer.string = audio.title ?? "Audio"
-            subtitleLayer.string = "AVPlayerView in M5"
-        case .video:
-            titleLayer.string = "Video"
-            subtitleLayer.string = "AVPlayerView in M5"
-        case .model3D:
-            titleLayer.string = "3D model"
-            subtitleLayer.string = "SceneKit in M5"
         case .plugin(let plugin):
             titleLayer.string = plugin.kind
             subtitleLayer.string = "Plugin in M7"
