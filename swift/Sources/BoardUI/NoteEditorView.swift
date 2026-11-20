@@ -13,8 +13,20 @@ public final class NoteEditorView: NSTextView {
 
     private var didEnd = false
 
-    public init() {
-        super.init(frame: .zero)
+    /// The editor's designated initializer, written out
+    /// explicitly — it must not be left to the compiler.
+    /// The editor used to define only `init()`, which
+    /// called `super.init(frame:)`; AppKit's convenience
+    /// initializer re-enters the designated
+    /// `init(frame:textContainer:)` on the subclass, and
+    /// the stub Swift generated for it trapped with
+    /// EXC_BREAKPOINT on every double-click that opened
+    /// an editor (crash 2026-11-20: startTextEdit →
+    /// NoteEditorView.init → the generated stub). Owning
+    /// the designated initializer makes the chain one
+    /// straight call: `init()` → this → super.
+    public override init(frame frameRect: NSRect, textContainer container: NSTextContainer?) {
+        super.init(frame: frameRect, textContainer: container)
         // A plain text editor: no rich text, no
         // substitutions, wrapping at the view's width.
         isRichText = false
@@ -28,6 +40,10 @@ public final class NoteEditorView: NSTextView {
         textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
         textContainerInset = NSSize(width: 14, height: 14)
         delegate = self
+    }
+
+    public convenience init() {
+        self.init(frame: .zero, textContainer: nil)
     }
 
     @available(*, unavailable)
