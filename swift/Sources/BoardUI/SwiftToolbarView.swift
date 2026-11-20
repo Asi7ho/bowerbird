@@ -280,7 +280,7 @@ public struct SwiftToolbarView: View {
 
 /// A SwiftUI Color from a hex string ("#1A1A1A" or
 /// "1A1A1A"); nil when the hex does not parse.
-extension Color {
+public extension Color {
     init?(hex: String) {
         let cleaned = hex.hasPrefix("#") ? String(hex.dropFirst()) : hex
         guard cleaned.count == 6, let value = UInt64(cleaned, radix: 16) else { return nil }
