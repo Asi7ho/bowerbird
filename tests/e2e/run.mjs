@@ -1543,7 +1543,15 @@ async function main() {
       }, String(model.id));
       assert.ok(rect, "the 3D card is on screen");
       // Baseline: the cube is visible at the card's centre.
-      const before = await shot(rect);
+      // Poll, not a single shot: after the fit the shared
+      // renderer repaints every model, and with more models
+      // on the board that can take longer than a fixed sleep.
+      let before = null;
+      for (let i = 0; i < 20; i++) {
+        before = await shot(rect);
+        if (before && before.some(isBlue)) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
       assert.ok(before && before.some(isBlue), "the cube shows before it is covered");
       // Cover the whole card with a filled rectangle.
       let id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
