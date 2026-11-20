@@ -13,9 +13,26 @@ import BowerbirdCore
 public final class AudioCardView: CardView {
     private let tileLayer = CALayer()
     private let playButton = NSButton()
-    private let seekSlider = NSSlider()
-    private let titleLayer = CATextLayer()
-    private let timeLayer = CATextLayer()
+    /// The seek track is drawn, not an NSSlider: AppKit
+    /// draws a slider's track and knob at a fixed size
+    /// whatever its frame, so at low zoom the slider
+    /// stayed chunky while the rest of the card shrank.
+    /// These three layers scale with the zoom like
+    /// everything else on the card.
+    private let trackLayer = CALayer()
+    private let fillLayer = CALayer()
+    private let thumbLayer = CALayer()
+    /// The seek position as a fraction of the track,
+    /// 0...1; the layers are placed from it in layout().
+    private var seekFraction: CGFloat = 0
+    /// The track's frame, and the taller hit area around
+    /// it (about 6 world pixels above and below), so the
+    /// track stays clickable at low zoom.
+    private var trackFrame = CGRect.zero
+    private var seekHitRect = CGRect.zero
+    /// Whether the user is dragging the thumb; while
+    /// true the time observer leaves the fraction alone.
+    private var seeking = false
     /// The player for this card's file (nil when the file
     /// is missing, or before the first configure).
     private var player: AVPlayer?
@@ -35,18 +52,22 @@ public final class AudioCardView: CardView {
         layer?.addSublayer(tileLayer)
         playButton.image = NSImage(systemSymbolName: "play.fill", accessibilityDescription: "Play audio")
         playButton.isBordered = false
+        // The symbol scales with the button's frame, so
+        // it shrinks with the card instead of staying at
+        // its fixed size (the same setting the video
+        // card's play button already has).
+        playButton.imageScaling = .scaleProportionallyUpOrDown
         playButton.contentTintColor = NSColor.fromHex("#6A4C93") ?? .labelColor
         playButton.target = self
         playButton.action = #selector(playTapped)
         addSubview(playButton)
-        seekSlider.minValue = 0
-        seekSlider.maxValue = 1
-        seekSlider.doubleValue = 0
-        seekSlider.controlSize = .small
-        seekSlider.isContinuous = true
-        seekSlider.target = self
-        seekSlider.action = #selector(seekChanged)
-        addSubview(seekSlider)
+        trackLayer.backgroundColor = NSColor.systemGray.withAlphaComponent(0.35).cgColor
+        fillLayer.backgroundColor = (NSColor.fromHex("#6A4C93") ?? .systemPurple).cgColor
+        thumbLayer.backgroundColor = NSColor.white.cgColor
+        thumbLayer.borderColor = NSColor.systemGray.withAlphaComponent(0.5).cgColor
+        for seekLayer in [trackLayer, fillLayer, thumbLayer] {
+            layer?.addSublayer(seekLayer)
+        }
         titleLayer.foregroundColor = NSColor(srgbRed: 0.11, green: 0.11, blue: 0.12, alpha: 1).cgColor
         timeLayer.foregroundColor = NSColor(srgbRed: 0.42, green: 0.42, blue: 0.44, alpha: 1).cgColor
         titleLayer.truncationMode = .end
@@ -65,6 +86,8 @@ public final class AudioCardView: CardView {
         if audio.path != currentPath {
             tearDownPlayer()
             currentPath = audio.path
+            seekFraction = 0
+            updateSeekLayers()
             if FileManager.default.fileExists(atPath: audio.path) {
                 let player = AVPlayer(url: URL(fileURLWithPath: audio.path))
                 self.player = player
@@ -84,7 +107,9 @@ public final class AudioCardView: CardView {
         }
         let missing = player == nil
         playButton.isEnabled = !missing
-        seekSlider.isEnabled = !missing
+        for seekLayer in [trackLayer, fillLayer, thumbLayer] {
+            seekLayer.isHidden = missing
+        }
         playButton.image = NSImage(
             systemSymbolName: isPlaying ? "pause.fill" : "play.fill",
             accessibilityDescription: isPlaying ? "Pause audio" : "Play audio"
@@ -109,12 +134,69 @@ public final class AudioCardView: CardView {
         )
     }
 
-    @objc private func seekChanged() {
-        guard let player else { return }
+    /// Seeks to the fraction of the track under `point`
+    /// (view coordinates) and moves the thumb there.
+    private func seek(to point: CGPoint) {
+        guard let player, trackFrame.width > 0 else { return }
         let duration = self.duration()
         guard duration > 0 else { return }
-        player.seek(to: CMTime(seconds: seekSlider.doubleValue * duration, preferredTimescale: 600))
+        seekFraction = min(1, max(0, (point.x - trackFrame.minX) / trackFrame.width))
+        player.seek(to: CMTime(seconds: Double(seekFraction) * duration, preferredTimescale: 600))
+        updateSeekLayers()
         updateTime()
+    }
+
+    /// Places the track, fill and thumb from the stored
+    /// fraction and the track frame layout() computed.
+    private func updateSeekLayers() {
+        guard let item = currentItem else { return }
+        let zoom = item.size.w > 0 ? bounds.width / CGFloat(item.size.w) : 1
+        let thumbDiameter: CGFloat = 12 * zoom
+        CardView.withoutLayerActions {
+            trackLayer.frame = trackFrame
+            trackLayer.cornerRadius = trackFrame.height / 2
+            let fillWidth = trackFrame.width * seekFraction
+            fillLayer.frame = CGRect(x: trackFrame.minX, y: trackFrame.minY, width: fillWidth, height: trackFrame.height)
+            fillLayer.cornerRadius = trackFrame.height / 2
+            thumbLayer.frame = CGRect(
+                x: trackFrame.minX + fillWidth - thumbDiameter / 2,
+                y: trackFrame.midY - thumbDiameter / 2,
+                width: thumbDiameter,
+                height: thumbDiameter
+            )
+            thumbLayer.cornerRadius = thumbDiameter / 2
+            thumbLayer.borderWidth = max(0.5, 1 * zoom)
+        }
+    }
+
+    /// A click on the seek track starts a seek drag and
+    /// consumes the event; anywhere else the event passes
+    /// up to the viewport, so the card can still be
+    /// selected and dragged.
+    override public func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        guard player != nil, seekHitRect.contains(point) else {
+            super.mouseDown(with: event)
+            return
+        }
+        seeking = true
+        seek(to: point)
+    }
+
+    override public func mouseDragged(with event: NSEvent) {
+        guard seeking else {
+            super.mouseDragged(with: event)
+            return
+        }
+        seek(to: convert(event.locationInWindow, from: nil))
+    }
+
+    override public func mouseUp(with event: NSEvent) {
+        if seeking {
+            seeking = false
+            return
+        }
+        super.mouseUp(with: event)
     }
 
     @objc private func playerDidFinish() {
@@ -134,17 +216,17 @@ public final class AudioCardView: CardView {
     }
 
     /// Refreshes the time line and the seek position from
-    /// the player. The slider is left alone while the user
-    /// is dragging it, so the thumb does not fight their
-    /// hand.
+    /// the player. The thumb is left alone while the user
+    /// is dragging it, so it does not fight their hand.
     private func updateTime() {
         guard let player else { return }
         let total = duration()
         let current = CMTimeGetSeconds(player.currentTime())
         let currentSeconds = current.isFinite && current > 0 ? current : 0
         timeLayer.string = "\(Self.formatTime(currentSeconds)) / \(Self.formatTime(total))"
-        if NSApp.currentEvent?.type != .leftMouseDragged, total > 0 {
-            seekSlider.doubleValue = currentSeconds / total
+        if !seeking, total > 0 {
+            seekFraction = CGFloat(currentSeconds / total)
+            updateSeekLayers()
         }
     }
 
@@ -195,12 +277,15 @@ public final class AudioCardView: CardView {
             tileLayer.cornerRadius = 10 * zoom
             let buttonSize: CGFloat = 32 * zoom
             playButton.frame = CGRect(x: tileRect.minX + 8 * zoom, y: tileRect.midY - buttonSize / 2, width: buttonSize, height: buttonSize)
-            seekSlider.frame = CGRect(
-                x: tileRect.minX + 8 * zoom + buttonSize + 8 * zoom,
-                y: tileRect.midY - 10 * zoom,
-                width: tileRect.width - (8 * zoom + buttonSize + 8 * zoom) - 8 * zoom,
-                height: 20 * zoom
-            )
+            // The track is 4 world pixels tall, centred
+            // in the tile; its hit area extends 6 world
+            // pixels above and below so it stays
+            // clickable when zoomed out.
+            let trackX = tileRect.minX + 8 * zoom + buttonSize + 8 * zoom
+            let trackWidth = tileRect.width - (8 * zoom + buttonSize + 8 * zoom) - 8 * zoom
+            trackFrame = CGRect(x: trackX, y: tileRect.midY - 2 * zoom, width: trackWidth, height: 4 * zoom)
+            seekHitRect = trackFrame.insetBy(dx: 0, dy: -6 * zoom)
+            updateSeekLayers()
             titleLayer.frame = CGRect(x: pad, y: bounds.height - pad - tileH - gap - titleH, width: width, height: titleH)
             timeLayer.frame = CGRect(x: pad, y: bounds.height - pad - tileH - gap - titleH - gap - subH, width: width, height: subH)
         }
