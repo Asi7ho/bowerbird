@@ -2623,6 +2623,24 @@ async function main() {
       await page.keyboard.press("v");
       await page.keyboard.press("r");
       assert.equal(await page.evaluate(toolOf), "ellipse", "R must remember the ellipse once it is chosen");
+      // The geometry flyout has two columns — filled on
+      // the left, outline on the right — and no switch.
+      // Picking a shape sets the fill mode from its column.
+      await page.click("#tool-shape");
+      await page.waitForSelector("#shape-picker .shape-column", { state: "visible" });
+      const shapeColumns = await page.evaluate(() => [...document.querySelectorAll("#shape-picker .shape-column")].map((c) => c.querySelectorAll("button.shape-option").length));
+      assert.deepEqual(shapeColumns, [7, 7], "the shape picker must have a filled and an outline column of seven shapes each");
+      assert.equal(await page.evaluate(() => document.querySelectorAll("#shape-picker .shape-mode").length), 0, "the filled/outline switch must be gone");
+      // Picking the filled triangle makes it the active one.
+      await page.click('#shape-picker button[data-shape="triangle"][data-mode="filled"]');
+      await page.keyboard.press("r");
+      await page.waitForSelector('#shape-picker button[data-shape="triangle"][data-mode="filled"].active', { state: "visible" });
+      // Picking the outline triangle makes that one active instead.
+      await page.click('#shape-picker button[data-shape="triangle"][data-mode="outline"]');
+      await page.keyboard.press("r");
+      await page.waitForSelector('#shape-picker button[data-shape="triangle"][data-mode="outline"].active', { state: "visible" });
+      // Back to the ellipse, so the E test below starts on it.
+      await page.click('#shape-picker button[data-shape="ellipse"][data-mode="filled"]');
       // E is gone: it must not switch to the ellipse, from
       // a shape or from select.
       await page.keyboard.press("e");

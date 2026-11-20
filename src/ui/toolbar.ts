@@ -392,39 +392,32 @@ export function activate(api: PluginContext): void {
     // colour bar is not open, and its flyout was opened by
     // the shape button or the R shortcut — like the draw and
     // select pickers, so only one flyout shows at a time.
-    // The top row switches filled and outline shapes.
+    // Two columns — filled on the left, outline on the
+    // right — and no switch: picking a shape sets the fill
+    // mode from its column.
     const showShape = isShape && !colorBarOpen && pickerOpen === "shape";
     shapePicker.style.display = showShape ? "flex" : "none";
     if (showShape && shapePicker.childElementCount === 0) {
-      for (const mode of [{ id: "filled", label: "Filled" }, { id: "outline", label: "Outline" }]) {
-        const b = document.createElement("button");
-        b.className = "shape-mode";
-        b.dataset.mode = mode.id;
-        b.title = mode.label;
-        b.setAttribute("aria-label", mode.label);
-        b.textContent = mode.label;
-        b.addEventListener("click", () => { pickerOpen = null; api.shapes.setOutline(mode.id === "outline"); update(); b.blur(); });
-        shapePicker.appendChild(b);
-      }
-      for (const meta of api.shapes.list()) {
-        const b = document.createElement("button");
-        b.className = "shape-option";
-        b.dataset.shape = meta.kind;
-        b.title = meta.key ? `${meta.label} (${meta.key})` : meta.label;
-        b.setAttribute("aria-label", meta.label);
-        b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${meta.svg}</svg>`;
-        b.addEventListener("click", () => { pickerOpen = null; api.ui.setTool(meta.kind); b.blur(); });
-        shapePicker.appendChild(b);
+      for (const mode of [{ id: "filled", outline: false }, { id: "outline", outline: true }]) {
+        const column = document.createElement("div");
+        column.className = "shape-column";
+        for (const meta of api.shapes.list()) {
+          const b = document.createElement("button");
+          b.className = "shape-option";
+          b.dataset.shape = meta.kind;
+          b.dataset.mode = mode.id;
+          b.title = meta.key ? `${meta.label} ${mode.id} (${meta.key})` : `${meta.label} ${mode.id}`;
+          b.setAttribute("aria-label", `${meta.label} ${mode.id}`);
+          b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${meta.svg}</svg>`;
+          b.addEventListener("click", () => { pickerOpen = null; api.shapes.setOutline(mode.outline); api.ui.setTool(meta.kind); b.blur(); });
+          column.appendChild(b);
+        }
+        shapePicker.appendChild(column);
       }
     }
     if (showShape) {
-      for (const child of Array.from(shapePicker.children)) {
-        const btn = child as HTMLButtonElement;
-        if (btn.dataset.mode) {
-          btn.classList.toggle("active", (btn.dataset.mode === "outline") === outline);
-        } else {
-          btn.classList.toggle("active", btn.dataset.shape === tool);
-        }
+      for (const btn of Array.from(shapePicker.querySelectorAll<HTMLButtonElement>(".shape-option"))) {
+        btn.classList.toggle("active", btn.dataset.shape === tool && (btn.dataset.mode === "outline") === outline);
       }
     }
 
