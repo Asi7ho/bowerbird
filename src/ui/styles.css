@@ -509,7 +509,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 }
 .card .swatch-pill {
   position: absolute; right: 10px; bottom: 10px;
-  background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(8px);
+  background: #fff;
   border: 1px solid var(--hairline); border-radius: 8px; padding: 4px 8px;
   font-weight: 600; font-size: 12px; box-shadow: var(--shadow-sm);
 }
@@ -536,7 +536,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   position: absolute; top: 8px; right: 8px;
   width: 28px; height: 28px; border-radius: 8px;
   display: flex; align-items: center; justify-content: center;
-  background: rgba(255, 255, 255, 0.92); backdrop-filter: blur(8px);
+  background: #fff;
   border: 1px solid var(--hairline); box-shadow: var(--shadow-sm);
   color: var(--ink); cursor: pointer; padding: 0;
 }
@@ -641,9 +641,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   position: relative;
   pointer-events: auto; display: flex; flex-direction: column; align-items: center;
   gap: 10px; padding: 12px 8px; width: 56px;
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  background: #fff;
   border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 16px;
   box-shadow: var(--shadow-md);
   -webkit-app-region: drag;
@@ -679,9 +677,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #toolbar .palette {
   position: absolute; left: calc(100% + 8px); top: 12px;
   display: flex; flex-direction: column; gap: 6px; align-items: center;
-  padding: 8px; background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  padding: 8px; background: #fff;
   border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 16px;
   box-shadow: var(--shadow-md);
 }
@@ -711,9 +707,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 .note-colour-bar {
   position: fixed; z-index: 40;
   display: flex; flex-direction: column; gap: 6px; align-items: center;
-  padding: 8px; background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  padding: 8px; background: #fff;
   border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 16px;
   box-shadow: var(--shadow-md);
 }
@@ -972,7 +966,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 
 #toast {
   position: absolute; left: 16px; bottom: 16px;
-  background: rgba(28, 28, 30, 0.88); backdrop-filter: blur(12px);
+  background: #1c1c1e;
   color: #fff; font-size: 13px; padding: 10px 14px; border-radius: 12px;
   display: none; z-index: 30; max-width: 70vw; box-shadow: var(--shadow-md);
 }
@@ -1192,9 +1186,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #view-switcher {
   position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
   gap: 4px; padding: 4px; z-index: 15;
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  background: #fff;
   border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 12px;
   box-shadow: var(--shadow-md);
 }
