@@ -994,7 +994,17 @@ public final class BoardViewport: NSView {
     /// when the left side has no room (the toolbar occupies
     /// the left edge) — and hidden when the note is fully
     /// off-screen or neither side is safe.
-    private func updateNoteColourBar() {
+    ///
+    /// `noteFrame` is the note's screen frame when the
+    /// caller already knows it live (a card drag moves the
+    /// views without touching the board, so the model lags
+    /// the card by a drag — the bar follows the card's
+    /// live frame instead). Without it, the frame is
+    /// computed from the model and the camera (not the card
+    /// view's frame, which the host repositions after the
+    /// camera changes — the bar must follow the note in
+    /// the same step).
+    private func updateNoteColourBar(noteFrame: NSRect? = nil) {
         let selectedTextNotes = board.items.filter { item in
             guard selected.contains(item.id) else { return false }
             if case .text = item.kind { return true }
@@ -1009,7 +1019,7 @@ public final class BoardViewport: NSView {
         // the host repositions after the camera changes —
         // the bar must follow the note in the same step).
         let zoom = camera.zoom
-        let frame = NSRect(
+        let frame = noteFrame ?? NSRect(
             x: (first.pos.x - camera.x) * zoom,
             y: (first.pos.y - camera.y) * zoom,
             width: first.size.w * zoom,
@@ -1128,6 +1138,19 @@ public final class BoardViewport: NSView {
             if dragDelta.x != 0 || dragDelta.y != 0 {
                 dragMoved = true
                 onDragMove?(dragIds, dragDelta)
+                // The colour bar follows the dragged note:
+                // the drag moves the views, not the board,
+                // so the bar is positioned from the note's
+                // live frame (the container fills the
+                // viewport, so the view's frame is already
+                // in the bar's coordinates).
+                if let noteView = cardContainer.subviews.compactMap({ $0 as? TextCardView }).first(where: {
+                    guard let item = $0.currentItem, selected.contains(item.id) else { return false }
+                    if case .text = item.kind { return true }
+                    return false
+                }) {
+                    updateNoteColourBar(noteFrame: noteView.frame)
+                }
             }
             return
         }
