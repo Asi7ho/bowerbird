@@ -734,7 +734,11 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
       ms = buildMiniSearch(docs);
       searchDocsCache = { version: ctx.getBoardSearchVersion(), docs, ms };
     }
-    const byId = new Map(docs.map((d) => [d.id, d]));
+    // Keep the first card per id, like buildMiniSearch's dedup:
+    // MiniSearch matches the first card, so the row must show it,
+    // not the last card that happens to share the id.
+    const byId = new Map<number, SearchDoc>();
+    for (const d of docs) if (!byId.has(d.id)) byId.set(d.id, d);
     let results: { id: number; terms: string[] }[];
     if (parsed.terms.length === 0) {
       // Phrase / filter only: no BM25 terms, so rank by
