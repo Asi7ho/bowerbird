@@ -1,5 +1,6 @@
 import AppKit
 import BowerbirdCore
+import Combine
 
 /// The spatial viewport: an AppKit `NSView` (Core Animation
 /// layers) that owns the camera and the world-to-screen
@@ -75,7 +76,23 @@ public final class BoardViewport: NSView {
     /// The toolbar's state: the viewport reads the active
     /// tool to decide what a pointer gesture does, and
     /// closes the flyout when the user clicks the board.
-    public weak var toolState: ToolState?
+    /// A tool change (a shortcut changes the tool without
+    /// the pointer moving) refreshes the cursor at the
+    /// pointer's last position — objectWillChange fires
+    /// before the change, so the refresh waits a turn.
+    public weak var toolState: ToolState? {
+        didSet {
+            toolCancellable?.cancel()
+            toolCancellable = nil
+            guard let tools = toolState else { return }
+            toolCancellable = tools.objectWillChange.sink { [weak self] _ in
+                DispatchQueue.main.async { [weak self] in
+                    guard let self, let point = self.lastMousePoint else { return }
+                    self.updateCursor(at: point)
+                }
+            }
+        }
+    }
 
     /// The selected item ids. The viewport owns the
     /// interaction state; the host only renders it.
@@ -98,6 +115,16 @@ public final class BoardViewport: NSView {
     let cardContainer = WorldView()
 
     private var spaceHeld = false
+    /// The pointer's last position on the board (view
+    /// coordinates), so a tool change from the keyboard
+    /// can refresh the cursor without the pointer moving.
+    private var lastMousePoint: NSPoint?
+    /// The cursor currently set, so the cursor is only
+    /// re-set when it actually changes.
+    private var lastCursor: NSCursor?
+    /// The subscription that refreshes the cursor when
+    /// the tool changes.
+    private var toolCancellable: AnyCancellable?
     private var panStart: (point: NSPoint, camera: Camera)?
 
     /// Called during a card drag with the dragged ids and
@@ -523,7 +550,10 @@ public final class BoardViewport: NSView {
         // AppKit sends those to the first responder, and
         // the board is the only focusable view for now.
         window?.makeFirstResponder(self)
-        updateEraserRing(at: convert(event.locationInWindow, from: nil))
+        let point = convert(event.locationInWindow, from: nil)
+        lastMousePoint = point
+        updateCursor(at: point)
+        updateEraserRing(at: point)
     }
 
     override public func mouseExited(with event: NSEvent) {
@@ -531,7 +561,10 @@ public final class BoardViewport: NSView {
     }
 
     override public func mouseMoved(with event: NSEvent) {
-        updateEraserRing(at: convert(event.locationInWindow, from: nil))
+        let point = convert(event.locationInWindow, from: nil)
+        lastMousePoint = point
+        updateCursor(at: point)
+        updateEraserRing(at: point)
     }
 
     /// The eraser ring: a circle at the cursor, sized to
@@ -647,7 +680,7 @@ public final class BoardViewport: NSView {
         }
         if event.charactersIgnoringModifiers == " " {
             spaceHeld = true
-            window?.invalidateCursorRects(for: self)
+            if let point = lastMousePoint { updateCursor(at: point) }
             return
         }
         if event.charactersIgnoringModifiers == "f" || event.charactersIgnoringModifiers == "F" {
@@ -676,7 +709,7 @@ public final class BoardViewport: NSView {
     override public func keyUp(with event: NSEvent) {
         if event.charactersIgnoringModifiers == " " {
             spaceHeld = false
-            window?.invalidateCursorRects(for: self)
+            if let point = lastMousePoint { updateCursor(at: point) }
             return
         }
         super.keyUp(with: event)
@@ -1098,6 +1131,9 @@ public final class BoardViewport: NSView {
     }
 
     override public func mouseDragged(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        lastMousePoint = point
+        updateCursorForDrag(at: point)
         if let start = panStart {
             let point = convert(event.locationInWindow, from: nil)
             // A grab moves the paper with the pointer: the content
@@ -1242,6 +1278,11 @@ public final class BoardViewport: NSView {
     }
 
     override public func mouseUp(with event: NSEvent) {
+        // The drag is over: once every branch below has
+        // cleared its drag state, the cursor goes back to
+        // whatever the tool and the pointer's position
+        // call for.
+        defer { updateCursor(at: convert(event.locationInWindow, from: nil)) }
         panStart = nil
         // A resize or rotate drag that moved commits as one
         // undo step and one save. A click on a handle that
@@ -1658,12 +1699,81 @@ public final class BoardViewport: NSView {
 
     // MARK: - Cursor
 
-    override public func resetCursorRects() {
-        super.resetCursorRects()
-        if panStart != nil {
-            addCursorRect(bounds, cursor: .closedHand)
-        } else if spaceHeld {
-            addCursorRect(bounds, cursor: .openHand)
+    /// A cursor with nothing in it: the eraser's ring is
+    /// the cursor, so the system pointer must not show
+    /// alongside it. NSCursor.hide() is global and needs
+    /// a matching unhide, so a blank cursor is used
+    /// instead.
+    private static let hiddenCursor: NSCursor = {
+        NSCursor(image: NSImage(size: NSSize(width: 1, height: 1)), hotSpot: .zero)
+    }()
+
+    /// Sets the cursor for the pointer's position, like
+    /// the Electron app: crosshair for drawing, lasso and
+    /// connectors; no system cursor for the eraser (its
+    /// ring is the cursor); a hand for panning and over a
+    /// card; a resize arrow over the resize grip. While a
+    /// note is being edited the text view owns the pointer
+    /// (its I-beam), so the board sets nothing.
+    /// The cursor rects this view used to add for panning
+    /// are gone: a cursor rect overrides NSCursor.set(),
+    /// so no other tool's cursor could ever show.
+    private func updateCursor(at point: NSPoint) {
+        guard editingNoteId == nil else { return }
+        let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
+        let cursor = cursorFor(world: world)
+        if cursor != lastCursor {
+            lastCursor = cursor
+            cursor.set()
+        }
+    }
+
+    private func cursorFor(world: Pt) -> NSCursor {
+        if spaceHeld { return .openHand }
+        guard let tools = toolState else { return .arrow }
+        switch tools.tool {
+        case .draw(let drawTool):
+            return drawTool == .eraser ? Self.hiddenCursor : .crosshair
+        case .shape, .connector:
+            return .crosshair
+        case .select(let mode):
+            if mode == .lasso { return .crosshair }
+            // One card selected: its handles have their own
+            // cursors (the rotate grip above the top centre,
+            // the resize grip at the rotated bottom-right).
+            if selected.count == 1,
+               let item = board.items.first(where: { selected.contains($0.id) }) {
+                if Handles.rotateHit(item: item, at: world, zoom: camera.zoom) { return .openHand }
+                if Handles.cornerHit(board: board, item: item, at: world, zoom: camera.zoom) { return .resizeLeftRight }
+            }
+            if HitTest.hit(board: board, at: world) != nil { return .openHand }
+            return .arrow
+        }
+    }
+
+    /// The cursor for a drag in progress: resize, rotate
+    /// and pan keep their drag cursor whatever is under
+    /// the pointer; a card move keeps the move hand; an
+    /// erase sweep keeps no cursor; any other drag (a
+    /// stroke, a shape, a connector, a lasso loop, a
+    /// marquee) shows the plain arrow, like the Electron
+    /// app.
+    private func updateCursorForDrag(at point: NSPoint) {
+        let cursor: NSCursor
+        if resizeDrag != nil {
+            cursor = .resizeLeftRight
+        } else if rotateDrag != nil || panStart != nil {
+            cursor = .closedHand
+        } else if dragStart != nil {
+            cursor = .openHand
+        } else if eraseActive {
+            cursor = Self.hiddenCursor
+        } else {
+            cursor = .arrow
+        }
+        if cursor != lastCursor {
+            lastCursor = cursor
+            cursor.set()
         }
     }
 }
