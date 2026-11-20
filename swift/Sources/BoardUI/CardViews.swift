@@ -29,7 +29,7 @@ public enum CardViews {
         case .urlCard:
             return UrlCardView()
         case .pdfCard:
-            return PlaceholderCardView()
+            return PdfCardView()
         case .fileCard:
             return FileCardView()
         case .audio:
