@@ -23,14 +23,20 @@ public struct SwiftToolbarView: View {
     private static let buttonSize: CGFloat = 40
     private static let pad: CGFloat = 12
     private static let gap: CGFloat = 10
-    private static let flyoutX: CGFloat = 64
 
     public var body: some View {
-        ZStack(alignment: .topLeading) {
+        // The bar and its flyout side by side: the flyout
+        // sits in the layout (not offset outside the
+        // toolbar's frame), so its buttons and the bar's
+        // buttons are all hit-testable. An offset flyout
+        // hung outside the toolbar's bounds, and while it
+        // was open the bar's family buttons stopped taking
+        // clicks — a tap on Select while the Pen panel was
+        // open did nothing.
+        HStack(alignment: .top, spacing: 8) {
             bar
             if let picker = tools.pickerOpen {
                 flyout(for: picker)
-                    .offset(x: Self.flyoutX, y: 0)
                     // The flyout is the toolbar's side panel:
                     // the normal cursor here, like the bar.
                     // It also raises the shared flag, so the
@@ -43,7 +49,7 @@ public struct SwiftToolbarView: View {
                     }
             }
         }
-        .frame(width: Self.barWidth, height: Self.barHeight, alignment: .topLeading)
+        .frame(height: Self.barHeight, alignment: .topLeading)
         // The normal cursor over the whole bar. The board
         // sets the tool's own cursor (circle, plus,
         // crosshair) by NSCursor.set, which is app-wide and
