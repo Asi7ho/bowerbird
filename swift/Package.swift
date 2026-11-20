@@ -34,6 +34,9 @@ let package = Package(
                 .linkedFramework("AVFoundation"),
                 .linkedFramework("PDFKit"),
                 .linkedFramework("QuickLookUI"),
+                // Dropped PSD/AI previews render through
+                // Quick Look thumbnails.
+                .linkedFramework("QuickLookThumbnailing"),
             ]
         ),
         .executableTarget(name: "Bowerbird", dependencies: ["BowerbirdCore", "BoardUI"]),

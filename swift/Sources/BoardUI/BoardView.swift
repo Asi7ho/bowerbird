@@ -56,6 +56,13 @@ public struct BoardView: NSViewRepresentable {
         viewport.onDragMove = { [weak host] ids, delta in
             host?.moveViews(ids, by: delta)
         }
+        viewport.onFilesDropped = { [weak store] files in
+            guard let store else { return }
+            // The first file lands at the drop point; the
+            // importer cascades the rest from it.
+            guard let first = files.first else { return }
+            BoardDrop.importFiles(files.map { $0.0 }, at: first.1, store: store)
+        }
         return viewport
     }
 
