@@ -114,11 +114,6 @@ export interface BoardState {
   pendingZoomAnchor: Pt | null;
   zoomFrame: number | null;
   zoomSettleTimer: ReturnType<typeof setTimeout> | null;
-  // Content refresh during a long pinch: without this, cards
-  // that scroll into view while zooming only appear after
-  // the gesture ends.
-  lastZoomRefreshZoom: number;
-  lastZoomRefreshTime: number;
   wheelSaveTimer: ReturnType<typeof setTimeout> | null;
   cursorRaf: number;
   pendingCursor: Pt | null;
@@ -158,8 +153,6 @@ export const S: BoardState = {
   pendingZoomAnchor: null,
   zoomFrame: null,
   zoomSettleTimer: null,
-  lastZoomRefreshZoom: 1,
-  lastZoomRefreshTime: 0,
   wheelSaveTimer: null,
   cursorRaf: 0,
   pendingCursor: null,
