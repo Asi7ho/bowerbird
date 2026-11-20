@@ -135,15 +135,25 @@ public class CardView: NSView {
             // border (the Electron app's is 1px at half
             // strength, which read as too shy) and a
             // stronger ring around it.
-            layer.borderWidth = showsBorder ? 2 * z : 0
+            layer.borderWidth = showsBorder ? max(1, 2 * z) : 0
             layer.borderColor = NSColor.systemBlue.withAlphaComponent(0.9).cgColor
             layer.shadowColor = NSColor.systemBlue.cgColor
             layer.shadowOpacity = 0.5
             layer.shadowRadius = 3 * z
             layer.shadowOffset = .zero
         } else {
-            layer.borderWidth = (showsBorder && showsUnselectedBorder) ? 1 * z : 0
-            layer.borderColor = NSColor.separatorColor.cgColor
+            // The Electron app's hairline, exactly:
+            // black at 8% opacity, as a fixed colour, not
+            // a semantic one — NSColor.separatorColor
+            // resolves near-white under Dark Mode, so on a
+            // white card over a white board the border
+            // vanished entirely. And the width never goes
+            // below one screen point: at low zoom 1 * z is
+            // sub-pixel, so the edge disappeared and a card
+            // melted into the board. A 1pt hairline is the
+            // thinnest visible line, not a heavy outline.
+            layer.borderWidth = (showsBorder && showsUnselectedBorder) ? max(1, 1 * z) : 0
+            layer.borderColor = NSColor.black.withAlphaComponent(0.08).cgColor
             if hasShadow {
                 layer.shadowColor = NSColor.black.cgColor
                 layer.shadowOpacity = 0.08
