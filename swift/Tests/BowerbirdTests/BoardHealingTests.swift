@@ -109,6 +109,31 @@ final class BoardHealingTests: XCTestCase {
         XCTAssertNil(board.groups?[9])
     }
 
+    func testSyncGroupLabelsKeepsSingleMemberSourcedGroup() {
+        // A dropped .psd lands as one FileCard in its own
+        // group, linked to its source file: the link must
+        // survive the sync (and the load that runs it),
+        // while a link with no members left is dead.
+        var card = textItem(id: 1, text: "a")
+        card.group = 1
+        let source = ImportSource(path: "assets/art.psd", kind: .psd, size: 1234, mtimeMs: nil)
+        var board = Board(
+            items: [card],
+            camera: Camera(x: 0, y: 0, zoom: 1),
+            nextId: 2,
+            nextGroup: 0,
+            groups: [
+                1: GroupEntry(label: "art.psd", source: source),
+                9: GroupEntry(label: "gone.psd", source: ImportSource(path: "assets/gone.psd", kind: .psd, size: nil, mtimeMs: nil)),
+            ],
+            bg: "#FFFFFF",
+            grid: .dots
+        )
+        syncGroupLabels(&board)
+        XCTAssertEqual(board.groups?[1]?.label, "art.psd")
+        XCTAssertNil(board.groups?[9])
+    }
+
     func testHealCleanBoardUnchanged() {
         var board = Board(
             items: [textItem(id: 1, text: "a"), textItem(id: 2, text: "b")],

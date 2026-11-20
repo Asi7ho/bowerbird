@@ -29,6 +29,13 @@ public func syncGroupLabels(_ board: inout Board) {
     }
     var groups = board.groups ?? [:]
     for key in groups.keys where (counts[key] ?? 0) < 2 {
+        // A live-import group (one with a source) is a
+        // link to its file, not a label: it stays with
+        // one member — a dropped .psd lands as a single
+        // FileCard in its own group, and dropping the
+        // entry would orphan the card from its source.
+        // Only a link with no members left is dead.
+        if groups[key]?.source != nil, (counts[key] ?? 0) == 1 { continue }
         groups.removeValue(forKey: key)
     }
     for key in groups.keys {
