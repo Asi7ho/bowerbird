@@ -94,6 +94,12 @@ public final class BoardViewport: NSView {
         }
     }
 
+    /// The note editor's shared state (a SwiftUI text
+    /// field over the card). The viewport sets it when an
+    /// edit starts and clears it on commit; the overlay in
+    /// ContentView draws the field from it.
+    public weak var editorState: NoteEditorState?
+
     /// The selected item ids. The viewport owns the
     /// interaction state; the host only renders it.
     public private(set) var selected: Set<Int> = [] {
@@ -204,11 +210,6 @@ public final class BoardViewport: NSView {
     /// pieces are new items.
     private var eraseChanged = false
     private var eraseActive = false
-    /// The eraser ring: a circle over the board, following
-    /// the cursor while the eraser tool is active, sized
-    /// to the eraser's radius (12 world pixels).
-    private let eraserOverlay = WorldView()
-    private let eraserLayer = CAShapeLayer()
 
     /// A lasso loop in progress (the select tool's lasso
     /// mode): the world points of the loop so far. The live
@@ -239,19 +240,17 @@ public final class BoardViewport: NSView {
     private var rotateDrag: (id: Int, origRot: Double)?
     private var rotateMoved = false
 
-    /// The note being edited (its id), and the editor view
-    /// over its card. Nil when no note is being edited.
+    /// The note being edited (its id). Nil when no note
+    /// is being edited; the field itself lives in the
+    /// SwiftUI overlay (see editorState).
     private var editingNoteId: Int?
-    private var noteEditor: NoteEditorView?
-    /// The text the note had when editing began, and
-    /// whether the user actually changed it. The editor
-    /// can be ended without the user touching it (a render
-    /// pulling its card out from under it), and an empty
-    /// string then is not the user clearing the note — so
-    /// only an edit the user changed may empty (and so
-    /// delete) a note that had text.
+    /// The text the note had when editing began. The
+    /// editor can be ended without the user touching it (a
+    /// render pulling its card out from under it), and an
+    /// empty string then is not the user clearing the note
+    /// — so only an edit whose text differs from this may
+    /// empty (and so delete) a note that had text.
     private var editingOriginalText: String?
-    private var editingTextChanged = false
 
     /// The note colour bar, shown beside a selected text
     /// note (nil until first shown).
@@ -312,12 +311,6 @@ public final class BoardViewport: NSView {
         addSubview(connectorOverlay)
         connectorLayer.lineCap = .round
         connectorOverlay.layer?.addSublayer(connectorLayer)
-        eraserOverlay.wantsLayer = true
-        eraserOverlay.autoresizingMask = [.width, .height]
-        addSubview(eraserOverlay)
-        eraserLayer.fillColor = NSColor.clear.cgColor
-        eraserLayer.strokeColor = NSColor.labelColor.withAlphaComponent(0.6).cgColor
-        eraserOverlay.layer?.addSublayer(eraserLayer)
         lassoOverlay.wantsLayer = true
         lassoOverlay.autoresizingMask = [.width, .height]
         addSubview(lassoOverlay)
@@ -375,7 +368,6 @@ public final class BoardViewport: NSView {
         strokeOverlay.frame = bounds
         shapeOverlay.frame = bounds
         connectorOverlay.frame = bounds
-        eraserOverlay.frame = bounds
         lassoOverlay.frame = bounds
         handlesOverlay.frame = bounds
         applyCamera()
@@ -428,14 +420,14 @@ public final class BoardViewport: NSView {
     /// a pan or zoom would otherwise leave it behind. The
     /// font follows the zoom, like the card's own text.
     private func repositionEditor() {
-        guard let id = editingNoteId, let editor = noteEditor,
+        guard let id = editingNoteId,
               let item = board.items.first(where: { $0.id == id }),
               case .text(let payload) = item.kind,
               let cardView = cardContainer.subviews.compactMap({ $0 as? TextCardView }).first(where: { $0.currentItem?.id == id })
         else { return }
-        editor.frame = convert(cardView.frame, from: cardContainer)
         let zoom = item.size.w > 0 ? Double(cardView.bounds.width) / item.size.w : 1
-        editor.font = NSFont.systemFont(ofSize: CGFloat(payload.size) * CGFloat(zoom), weight: payload.bold ? .bold : .regular)
+        editorState?.frame = convert(cardView.frame, from: cardContainer)
+        editorState?.fontSize = CGFloat(payload.size) * CGFloat(zoom)
     }
 
     /// The window behind the board is the board's own
@@ -592,37 +584,15 @@ public final class BoardViewport: NSView {
         let point = convert(event.locationInWindow, from: nil)
         lastMousePoint = point
         updateCursor(at: point)
-        updateEraserRing(at: point)
     }
 
     override public func mouseExited(with event: NSEvent) {
-        updateEraserRing(at: nil)
     }
 
     override public func mouseMoved(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         lastMousePoint = point
         updateCursor(at: point)
-        updateEraserRing(at: point)
-    }
-
-    /// The eraser ring: a circle at the cursor, sized to
-    /// the eraser's radius (12 world pixels, so 24 × zoom
-    /// screen pixels across). It shows while the eraser
-    /// tool is active and the pointer is over the board.
-    private func updateEraserRing(at point: NSPoint?) {
-        eraserOverlay.frame = bounds
-        guard let point, toolState?.tool == .draw(.eraser) else {
-            eraserLayer.path = nil
-            return
-        }
-        let r = CGFloat(BoardErase.radius) * camera.zoom
-        let circle = CGPath(ellipseIn: CGRect(x: point.x - r, y: point.y - r, width: r * 2, height: r * 2), transform: nil)
-        CardView.withoutLayerActions {
-            eraserLayer.path = circle
-            eraserLayer.lineWidth = 1
-            eraserLayer.frame = bounds
-        }
     }
 
     /// Erases the ink the eraser touches at this world
@@ -651,29 +621,6 @@ public final class BoardViewport: NSView {
         // switch tools instead of inserting a "v"). The
         // keys are inserted directly into the editor's
         // text, bypassing the key-binding system entirely:
-        // interpretKeyEvents did not insert (and calling
-        // the editor's keyDown recursed until the stack
-        // overflowed and crashed the app). Printable keys
-        // insert at the cursor, Delete removes backwards,
-        // Escape commits; anything else falls through to
-        // the editor's own key handling.
-        if let editor = noteEditor, editingNoteId != nil {
-            if event.keyCode == 53 { // Escape: commit.
-                commitTextEdit()
-                return
-            }
-            if event.keyCode == 51 { // Delete.
-                editor.deleteBackward(nil)
-                return
-            }
-            let mods = event.modifierFlags.intersection([.command, .control, .option])
-            if mods.isEmpty, let chars = event.characters, !chars.isEmpty {
-                editor.insertText(chars, replacementRange: editor.selectedRange())
-                return
-            }
-            editor.interpretKeyEvents([event])
-            return
-        }
         // Undo / redo: Cmd+Z undoes one step, Cmd+Shift+Z
         // redoes it. The store owns the stacks and saves.
         if event.modifierFlags.contains(.command),
@@ -841,7 +788,6 @@ public final class BoardViewport: NSView {
             eraseActive = true
             eraseChanged = false
             _ = eraseAt(world)
-            updateEraserRing(at: point)
             return
         }
         // A shape tool starts a shape drag on press (the
@@ -1008,15 +954,14 @@ public final class BoardViewport: NSView {
     /// no undo step behind.
     private func createTextNoteAt(_ world: Pt) {
         // End any open edit first, before the board
-        // changes: removing the editor commits it (its
-        // viewWillMove ends the edit), and the commit
+        // changes: committing it saves the typed text and
         // re-renders the cards. Doing that while a new
         // note was being added and opened left the editor
         // and the card out of step — a double-click while
-        // editing crashed the app. The refs must still be
-        // set when the view is removed, or the commit is
-        // skipped and the typed text is lost.
-        noteEditor?.removeFromSuperview()
+        // editing crashed the app.
+        if editingNoteId != nil {
+            commitTextEdit()
+        }
         var next = board
         // next_id is the LAST allocated id, not the next
         // free one — taking it as the new id collided with
@@ -1032,84 +977,34 @@ public final class BoardViewport: NSView {
     }
 
     /// Opens the in-place editor over a text card: the
-    /// editor shows the card's text at its size and colour,
-    /// on its background, with the cursor at the end. The
-    /// editor is a subview of the card, so it moves and
-    /// resizes with it; the card's own text layer is hidden
-    /// while editing, so the text does not draw twice.
+    /// SwiftUI field shows the card's text at its size and
+    /// colour, on its background, over the card. The card's
+    /// own text layer is hidden while editing, so the text
+    /// does not draw twice. The field takes keys natively
+    /// (it is SwiftUI, not an NSTextView nested in the
+    /// board's layer-backed views, which never reliably
+    /// took the keyboard).
     private func startTextEdit(id: Int) {
         guard let item = board.items.first(where: { $0.id == id }),
               case .text(let payload) = item.kind else { return }
-        // Remove any editor already open.
-        if let editor = noteEditor {
-            editor.removeFromSuperview()
-            noteEditor = nil
-            editingNoteId = nil
+        // End any editor already open (committing it)
+        // before opening this one.
+        if editingNoteId != nil {
+            commitTextEdit()
         }
         guard let cardView = cardContainer.subviews.compactMap({ $0 as? TextCardView }).first(where: { $0.currentItem?.id == id }) else { return }
-        let editor = NoteEditorView()
-        editor.string = payload.text
-        // Editable, always: the editor is created to be
-        // typed in, and nothing else in the app sets this.
-        editor.isEditable = true
-        // The editor is inside the card, which is
-        // screen-sized, so the font is the text size scaled
-        // by the zoom — the same size the card renders it
-        // at — and the text lands where the card drew it.
         let zoom = item.size.w > 0 ? Double(cardView.bounds.width) / item.size.w : 1
-        editor.font = NSFont.systemFont(ofSize: CGFloat(payload.size) * CGFloat(zoom), weight: payload.bold ? .bold : .regular)
-        editor.textColor = NSColor.fromHex(payload.color) ?? .labelColor
-        editor.backgroundColor = NSColor.fromHex(payload.bg ?? "#FFFFFF") ?? .white
-        // The editor is a direct subview of the viewport,
-        // over the card — not a subview of the card. Nested
-        // three deep in layer-backed views, the text view
-        // never reliably took the keyboard: keystrokes
-        // went nowhere, and the note looked open but could
-        // not be typed in. Over the card, at the card's
-        // screen frame, it takes keys like any text field.
-        // It follows the card while panning or zooming
-        // (repositionEditor, from the camera change).
-        editor.frame = convert(cardView.frame, from: cardContainer)
-        editor.autoresizingMask = []
-        editor.onEndEditing = { [weak self] _ in self?.commitTextEdit() }
-        editor.onTextChanged = { [weak self] in self?.editingTextChanged = true }
         cardView.setEditing(true)
-        addSubview(editor)
-        noteEditor = editor
         editingNoteId = id
         editingOriginalText = payload.text
-        editingTextChanged = false
-        // The editor must be the first responder, or the
-        // keystrokes go to the viewport (which ignores
-        // plain letters) and the note cannot be typed in —
-        // the card looks open but nothing can be written.
-        // The window can refuse the request while the
-        // mouse event is still being dispatched, so a
-        // refusal is retried once the event has finished,
-        // while this is still the open editor.
-        if window?.makeFirstResponder(editor) != true {
-            DispatchQueue.main.async { [weak editor, weak self] in
-                guard let editor, self?.noteEditor === editor else { return }
-                _ = self?.window?.makeFirstResponder(editor)
-            }
-        }
-        // Re-assert on the next runloop as well: a
-        // tracking-area re-entry or a SwiftUI update can
-        // pull focus back to the viewport after the editor
-        // opened, and the note then looks open but takes
-        // no keystrokes. Only while this is still the open
-        // editor and it is not already first responder.
-        DispatchQueue.main.async { [weak editor, weak self] in
-            guard let editor, let self, self.noteEditor === editor else { return }
-            if self.window?.firstResponder !== editor {
-                _ = self.window?.makeFirstResponder(editor)
-            }
-        }
-        // Cursor at the end of the text. NSRange counts
-        // UTF-16 units, not characters — an emoji is one
-        // character but two units — so the range is built
-        // from the UTF-16 count.
-        editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
+        editorState?.text = payload.text
+        editorState?.frame = convert(cardView.frame, from: cardContainer)
+        editorState?.fontSize = CGFloat(payload.size) * CGFloat(zoom)
+        editorState?.isBold = payload.bold
+        editorState?.textColorHex = payload.color
+        editorState?.backgroundHex = payload.bg ?? "#FFFFFF"
+        editorState?.onCommit = { [weak self] text in self?.commitTextEdit(with: text) }
+        editorState?.isEditing = true
     }
 
     /// Commits the open editor: the text is saved (with
@@ -1117,36 +1012,33 @@ public final class BoardViewport: NSView {
     /// the note is removed when the user emptied it — a
     /// note that had text and was never touched keeps its
     /// text when the edit ends empty (the editor was ended
-    /// by something other than the user). The editor is
-    /// removed and the card's text layer shown again,
-    /// either way.
+    /// by something other than the user). The card's text
+    /// layer is shown again, either way.
     private func commitTextEdit() {
-        guard let id = editingNoteId, let editor = noteEditor else { return }
-        let text = editor.string
-        // The text the note had when editing began, and
-        // whether the user changed it: an edit that ends
-        // empty without a single change did not come from
-        // the user — the editor was ended by something
-        // else (a render pulling its card away) — so a
-        // note that had text keeps it. Only an edit the
-        // user actually changed may empty (and so delete)
-        // a note, and a note that started empty is removed
-        // either way.
+        commitTextEdit(with: editorState?.text ?? "")
+    }
+
+    /// The commit itself, given the final text: the overlay
+    /// calls it on Escape or focus loss, and the viewport
+    /// calls it when another edit starts or the board
+    /// changes under the open editor.
+    private func commitTextEdit(with text: String) {
+        guard let id = editingNoteId else { return }
+        // Whether the user changed the text: an edit that
+        // ends empty without a single change did not come
+        // from the user, so a note that had text keeps it.
+        // Only an edit the user actually changed may empty
+        // (and so delete) a note, and a note that started
+        // empty is removed either way.
         let originalText = editingOriginalText ?? ""
-        let userEmptiedIt = editingTextChanged
-        // Clear the editor references BEFORE removing the
-        // view: removing it fires viewWillMove(toWindow:
-        // nil), which ends the edit and calls this commit
-        // again — with the references already cleared, the
-        // re-entrant call returns at once instead of
-        // committing twice and removing the view while it
-        // is already being removed (which crashed the app
-        // on a double-clicked text card).
-        noteEditor = nil
+        let userEmptiedIt = text != originalText
+        // Clear the editing state first: the overlay hides,
+        // and a re-entrant commit (from the state change)
+        // returns at once instead of committing twice.
         editingNoteId = nil
         editingOriginalText = nil
-        editingTextChanged = false
-        editor.removeFromSuperview()
+        editorState?.isEditing = false
+        editorState?.onCommit = nil
         if let cardView = cardContainer.subviews.compactMap({ $0 as? TextCardView }).first(where: { $0.currentItem?.id == id }) {
             cardView.setEditing(false)
         }
@@ -1383,7 +1275,6 @@ public final class BoardViewport: NSView {
             let point = convert(event.locationInWindow, from: nil)
             let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
             _ = eraseAt(world)
-            updateEraserRing(at: point)
             return
         }
         // A shape drag: the current corner follows the
@@ -1870,25 +1761,42 @@ public final class BoardViewport: NSView {
 
     // MARK: - Cursor
 
-    /// A cursor with nothing in it: the eraser's ring is
-    /// the cursor, so the system pointer must not show
-    /// alongside it. NSCursor.hide() is global and needs
-    /// a matching unhide, so a blank cursor is used
-    /// instead.
-    private static let hiddenCursor: NSCursor = {
-        NSCursor(image: NSImage(size: NSSize(width: 1, height: 1)), hotSpot: .zero)
-    }()
+    /// A circle cursor: an outline circle of the given
+    /// screen radius, centred on the hotspot. The drawing
+    /// tools show the stroke's own size at the pointer, so
+    /// the user sees exactly how wide the mark will be.
+    /// Cached by radius (a new image per mouse move would
+    /// churn); the zoom changes the radius, so the cache
+    /// keys on the rounded screen radius.
+    private static var circleCursors: [Int: NSCursor] = [:]
+    private static func circleCursor(radius: CGFloat) -> NSCursor {
+        let key = Int((radius * 2).rounded())
+        if let cached = circleCursors[key] { return cached }
+        let r = max(1, radius)
+        let diameter = r * 2
+        let pad: CGFloat = 2
+        let size = NSSize(width: diameter + pad * 2, height: diameter + pad * 2)
+        let image = NSImage(size: size)
+        image.lockFocus()
+        NSColor.black.setStroke()
+        let path = NSBezierPath(ovalIn: NSRect(x: pad, y: pad, width: diameter, height: diameter))
+        path.lineWidth = 1
+        path.stroke()
+        image.unlockFocus()
+        let cursor = NSCursor(image: image, hotSpot: NSPoint(x: size.width / 2, y: size.height / 2))
+        circleCursors[key] = cursor
+        return cursor
+    }
 
-    /// Sets the cursor for the pointer's position, like
-    /// the Electron app: crosshair for drawing, lasso and
-    /// connectors; no system cursor for the eraser (its
-    /// ring is the cursor); a hand for panning and over a
-    /// card; a resize arrow over the resize grip. While a
-    /// note is being edited the text view owns the pointer
-    /// (its I-beam), so the board sets nothing.
-    /// The cursor rects this view used to add for panning
-    /// are gone: a cursor rect overrides NSCursor.set(),
-    /// so no other tool's cursor could ever show.
+    /// Sets the cursor for the pointer's position: the
+    /// normal arrow for select, a crosshair for lasso, a
+    /// circle the width of the stroke for pen, pencil,
+    /// highlighter and eraser, and a plus for geometry
+    /// and the arrow (connector). A hand for panning and
+    /// over a card, a resize arrow over the resize grip.
+    /// While a note is being edited the text view owns the
+    /// pointer (its I-beam), so the board sets nothing
+    /// over the note itself.
     private func updateCursor(at point: NSPoint) {
         // While a note is being edited, the editor shows
         // its own text cursor over the note — but only
@@ -1897,7 +1805,7 @@ public final class BoardViewport: NSView {
         // entirely while any edit is open froze the cursor
         // at an arrow for the whole board, and a stuck
         // edit froze it for good.
-        if let editor = noteEditor, editingNoteId != nil, editor.frame.contains(point) {
+        if editingNoteId != nil, let frame = editorState?.frame, frame.contains(point) {
             return
         }
         let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
@@ -1913,8 +1821,19 @@ public final class BoardViewport: NSView {
         guard let tools = toolState else { return .arrow }
         switch tools.tool {
         case .draw(let drawTool):
-            return drawTool == .eraser ? Self.hiddenCursor : .crosshair
+            // A circle the width of the stroke: the pen,
+            // pencil and highlighter draw at their width,
+            // the eraser clears at its radius.
+            let worldRadius: Double
+            switch drawTool {
+            case .pen: worldRadius = 1.5
+            case .pencil: worldRadius = 1
+            case .highlighter: worldRadius = 6
+            case .eraser: worldRadius = BoardErase.radius
+            }
+            return Self.circleCursor(radius: CGFloat(worldRadius * camera.zoom))
         case .shape, .connector:
+            // Geometry and the arrow: a plus.
             return .crosshair
         case .select(let mode):
             if mode == .lasso { return .crosshair }
@@ -1947,7 +1866,7 @@ public final class BoardViewport: NSView {
         } else if dragStart != nil {
             cursor = .openHand
         } else if eraseActive {
-            cursor = Self.hiddenCursor
+            cursor = Self.circleCursor(radius: CGFloat(BoardErase.radius * camera.zoom))
         } else {
             cursor = .arrow
         }
