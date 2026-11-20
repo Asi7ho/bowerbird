@@ -128,7 +128,8 @@ export function renderSvgOnly(): void {
   S.previewWorldEl.innerHTML = "";
   // Fresh board: a drag may have moved items since the last
   // render, and the SVG layer must follow the live board.
-  renderConnectors(S.api.board.get());
+  // The live read: renderConnectors only reads it.
+  renderConnectors(S.api.board.getLive());
 }
 
 // The pencil's graphite texture, defined once in the
@@ -256,7 +257,15 @@ export function render(): void {
   // plugin activation) finds nothing to draw; init() renders
   // once the elements exist. Skip, do not throw.
   if (!S.boardEl) return;
-  const board = S.api.board.get();
+  // The live board, not a copy: render only reads it —
+  // positions, kinds, groups — and the card DOM is built
+  // by renderCardAt, which reads the live board itself.
+  // Cloning the whole board (a stroke's point array
+  // included) on every render was the per-frame cost.
+  // The cached board is this same live object; the drag
+  // handlers read membership from it and positions from
+  // getItemLive, so nothing holds a stale snapshot.
+  const board = S.api.board.getLive();
   S.cachedBoard = board;
   S.boardEl.style.background = board.bg;
   // A playing (or paused mid-way) video used to restart from 0 on
@@ -403,8 +412,9 @@ export function updateResizeHandle(): void {
     return;
   }
   // The board, fresh: the selected item's position is what
-  // the handle follows, and it moves during a drag.
-  const it = S.api.board.getItem(selected[0]);
+  // the handle follows, and it moves during a drag. The
+  // live item: this only reads it (position, rotation).
+  const it = S.api.board.getItemLive(selected[0]);
   if (!it || "Connector" in it.kind) {
     el.style.display = "none";
     if (rotEl) rotEl.style.display = "none";

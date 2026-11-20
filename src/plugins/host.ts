@@ -237,6 +237,21 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
         const it = host!.getBoard().items.find((i) => i.id === id);
         return it ? (JSON.parse(JSON.stringify(it)) as Item) : undefined;
       },
+      // Live reads, for the app's own UI only. The UI's
+      // hot paths (render, drags) read the board every
+      // frame; cloning it — or a stroke's point array — on
+      // every frame is the cost. A plugin gets an error
+      // here and must use get / getItem, which return a
+      // copy. The returned board and item are live and
+      // must never be mutated.
+      getLive: () => {
+        requireTrusted("read the live board");
+        return host!.getBoard();
+      },
+      getItemLive: (id: number) => {
+        requireTrusted("read a live board item");
+        return host!.getBoard().items.find((i) => i.id === id);
+      },
       // Render a board item exactly as the board renders it, at
       // position 0,0 and with no selection or editing state, so a
       // plugin can show the same card in a panel or view. A plugin

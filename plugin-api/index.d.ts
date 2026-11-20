@@ -572,6 +572,19 @@ export interface PluginContext {
     get: () => Board;
     getItems: () => Item[];
     getItem: (id: number) => Item | undefined;
+    // Live reads, for the app's own UI only: the board and
+    // the item as they stand, with no copy. A plugin that
+    // calls these gets an error — a plugin must use get /
+    // getItem, which return a copy it can hold and change
+    // without touching the live board. The UI uses these
+    // in its hot paths (render, drags), where cloning the
+    // whole board — or a stroke's point array — on every
+    // frame is the cost. The returned board and item must
+    // never be mutated: writes go through moveItems,
+    // resizeItem, setItemRotation and the other board
+    // methods, which keep undo and saving in sync.
+    getLive: () => Board;
+    getItemLive: (id: number) => Item | undefined;
     renderCard: (id: number) => string | null;
     // Render a board item exactly as the board renders it,
     // at its real position and with its selection and
