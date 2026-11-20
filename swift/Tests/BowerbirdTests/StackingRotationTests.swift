@@ -27,11 +27,13 @@ final class StackingRotationTests: XCTestCase {
         // The stacking pass re-adds the card above the rest.
         container.addSubview(view, positioned: .above, relativeTo: nil)
         let after = view.layer?.transform
-        XCTAssertNotNil(before)
-        XCTAssertNotNil(after)
-        XCTAssertEqual(after?.m11, before?.m11, accuracy: 0.001)
-        XCTAssertEqual(after?.m12, before?.m12, accuracy: 0.001)
-        XCTAssertEqual(after?.m21, before?.m21, accuracy: 0.001)
-        XCTAssertEqual(after?.m22, before?.m22, accuracy: 0.001)
+        guard let before, let after else {
+            XCTFail("transform missing")
+            return
+        }
+        XCTAssertEqual(after.m11, before.m11, accuracy: 0.001)
+        XCTAssertEqual(after.m12, before.m12, accuracy: 0.001)
+        XCTAssertEqual(after.m21, before.m21, accuracy: 0.001)
+        XCTAssertEqual(after.m22, before.m22, accuracy: 0.001)
     }
 }
