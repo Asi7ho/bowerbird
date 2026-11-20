@@ -186,7 +186,7 @@ public final class TextCardView: CardView {
 /// ellipse and polygons are a shape layer). An outline shape
 /// is stroked, not filled.
 public final class ShapeCardView: CardView {
-    private let shapeLayer = CAShapeLayer()
+    let shapeLayer = CAShapeLayer()
 
     override public init() {
         super.init()
@@ -232,19 +232,19 @@ public final class ShapeCardView: CardView {
 
     override public func layout() {
         super.layout()
-        rebuildContent()
+        rebuildContent(size: bounds.size)
     }
 
-    /// The path is built for the current bounds; rebuild
-    /// it when the view is laid out (its frame is set by
-    /// the host after the view is created). The layer
-    /// moves instantly (no implicit animation). A filled
-    /// rect has no path (the card is the fill).
-    override public func rebuildContent() {
+    /// The path is built for the given size; rebuild it
+    /// when the view is laid out (its frame is set by the
+    /// host after the view is created). The layer moves
+    /// instantly (no implicit animation). A filled rect
+    /// has no path (the card is the fill).
+    override public func rebuildContent(size: CGSize) {
         if let item = currentItem, case .shape(let shape) = item.kind,
            !(shape.shape == .rect && shape.outline != true) {
             CardView.withoutLayerActions {
-                updateShapeLayer()
+                updateShapeLayer(size: size)
             }
         }
     }
@@ -255,16 +255,17 @@ public final class ShapeCardView: CardView {
     /// comes from ShapePath. An outline shape is a 2px
     /// stroke in the fill colour with no fill; a filled
     /// shape is solid.
-    private func updateShapeLayer() {
+    private func updateShapeLayer(size: CGSize) {
         guard let item = currentItem, case .shape(let shape) = item.kind else { return }
         let fill = NSColor.fromHex(shape.fill) ?? .labelColor
-        let zoom = bounds.width / max(item.size.w, 1)
+        let zoom = size.width / max(item.size.w, 1)
+        let rect = CGRect(origin: .zero, size: size)
         if shape.shape == .rect {
             shapeLayer.path = CGPath(
-                roundedRect: bounds, cornerWidth: 12 * zoom, cornerHeight: 12 * zoom, transform: nil
+                roundedRect: rect, cornerWidth: 12 * zoom, cornerHeight: 12 * zoom, transform: nil
             )
         } else {
-            shapeLayer.path = ShapePath.path(for: shape.shape, in: bounds)
+            shapeLayer.path = ShapePath.path(for: shape.shape, in: rect)
         }
         // Flip the path about the card's height: the
         // shape's fractions are y-down (world coordinates)
@@ -276,10 +277,10 @@ public final class ShapeCardView: CardView {
         // invisible for them, but it is applied to every
         // shape for the same reason.
         if let path = shapeLayer.path {
-            var flip = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: bounds.height)
+            var flip = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: size.height)
             shapeLayer.path = path.copy(using: &flip)
         }
-        shapeLayer.frame = bounds
+        shapeLayer.frame = CGRect(origin: .zero, size: size)
         if shape.outline == true {
             shapeLayer.fillColor = NSColor.clear.cgColor
             shapeLayer.strokeColor = fill.cgColor
@@ -305,7 +306,7 @@ public final class ShapeCardView: CardView {
 /// stroke renders as a plain stroke for now — the graphite
 /// texture lands with the drawing tools in M3.
 public final class StrokeCardView: CardView {
-    private let shapeLayer = CAShapeLayer()
+    let shapeLayer = CAShapeLayer()
 
     override public init() {
         super.init()
@@ -336,10 +337,10 @@ public final class StrokeCardView: CardView {
 
     override public func layout() {
         super.layout()
-        rebuildContent()
+        rebuildContent(size: bounds.size)
     }
 
-    override public func rebuildContent() {
+    override public func rebuildContent(size: CGSize) {
         guard let item = currentItem, case .stroke(let stroke) = item.kind else { return }
         // The path is in world units (the points are
         // absolute, rebased by their bbox min); the card is
@@ -351,8 +352,8 @@ public final class StrokeCardView: CardView {
         // offset at any zoom other than 1. The layer moves
         // instantly (no implicit animation).
         CardView.withoutLayerActions {
-            let zoomX = item.size.w > 0 ? bounds.width / CGFloat(item.size.w) : 1
-            let zoomY = item.size.h > 0 ? bounds.height / CGFloat(item.size.h) : 1
+            let zoomX = item.size.w > 0 ? size.width / CGFloat(item.size.w) : 1
+            let zoomY = item.size.h > 0 ? size.height / CGFloat(item.size.h) : 1
             if let path = StrokePath.path(for: stroke.points) {
                 // The card is y-up (a plain NSView) while
                 // the stroke's points are y-down (world
@@ -364,13 +365,13 @@ public final class StrokeCardView: CardView {
                 // the right way round. Flip it about the
                 // card's height, so the stroke lands as
                 // drawn.
-                var transform = CGAffineTransform(a: zoomX, b: 0, c: 0, d: -zoomY, tx: 0, ty: bounds.height)
+                var transform = CGAffineTransform(a: zoomX, b: 0, c: 0, d: -zoomY, tx: 0, ty: size.height)
                 shapeLayer.path = path.copy(using: &transform)
             } else {
                 shapeLayer.path = nil
             }
             shapeLayer.lineWidth = CGFloat(stroke.width) * zoomX
-            shapeLayer.frame = bounds
+            shapeLayer.frame = CGRect(origin: .zero, size: size)
         }
     }
 
