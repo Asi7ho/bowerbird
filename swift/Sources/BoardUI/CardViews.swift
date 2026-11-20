@@ -202,6 +202,26 @@ public final class TextCardView: CardView {
         // sure it sticks once the scroll view exists.
         if let hosting = editorHostingView {
             TextCardView.makeScrollbarsOverlay(in: hosting)
+            // And keep the editor scrolled to the top. As
+            // lines are added the editor scrolls to keep
+            // the cursor in view, and that scroll stayed
+            // put even once the card had grown to fit the
+            // text — so the top lines disappeared little by
+            // little. The card grows to fit, so there is
+            // nothing to scroll to; the top stays in view.
+            TextCardView.scrollEditorToTop(in: hosting)
+        }
+    }
+
+    /// Scrolls the editor's text view back to the top, so
+    /// the first lines are visible.
+    private static func scrollEditorToTop(in view: NSView) {
+        if let textView = view as? NSTextView {
+            textView.scrollToBeginningOfDocument(nil)
+            return
+        }
+        for subview in view.subviews {
+            scrollEditorToTop(in: subview)
         }
     }
 
