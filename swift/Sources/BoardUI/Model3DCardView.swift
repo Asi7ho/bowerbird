@@ -1,6 +1,5 @@
 import AppKit
 import BowerbirdCore
-import ModelIO
 import SceneKit
 
 /// A 3D model card, rendered natively with SceneKit. Quick
@@ -79,34 +78,20 @@ public final class Model3DCardView: CardView {
 
     /// Loads a 3D scene from a file, by extension. glTF
     /// binary goes through the app's own glTF reader (its
-    /// textures are not loaded, base colour only);
-    /// Collada, SceneKit and USDZ scenes load natively;
-    /// Wavefront, FBX and STL go through ModelIO. A file
-    /// no loader understands returns nil, so the card
-    /// keeps its tile.
+    /// textures are not loaded, base colour only); every
+    /// other format goes through SceneKit's own loader,
+    /// which reads Collada, SceneKit, USDZ and Wavefront
+    /// files, and FBX and STL where the system provides
+    /// them. A file no loader understands returns nil, so
+    /// the card keeps its tile.
     private static func loadScene(from url: URL) -> SCNScene? {
         switch url.pathExtension.lowercased() {
         case "glb", "gltf":
             guard let data = try? Data(contentsOf: url),
                   let doc = GLTFDocument.parse(data: data) else { return nil }
             return GLTFSceneKit.scene(from: doc)
-        case "dae", "scn", "usdz":
+        case "dae", "scn", "usdz", "obj", "fbx", "stl":
             return try? SCNScene(url: url, options: nil)
-        case "obj", "fbx", "stl":
-            let asset = MDLAsset(url: url)
-            guard asset.count > 0 else { return nil }
-            let scene = SCNScene()
-            // The asset's meshes, with their transforms:
-            // ModelIO reads the geometry, SceneKit draws
-            // it. (SCNNode(mdlObject:) is not in this SDK,
-            // so each mesh is wrapped by hand.)
-            for object in asset.childObjects(of: MDLMesh.self) {
-                guard let mesh = object as? MDLMesh else { continue }
-                let node = SCNNode(geometry: SCNGeometry(mdlMesh: mesh))
-                node.transform = SCNMatrix4FromMat4(mesh.transform.matrix)
-                scene.rootNode.addChildNode(node)
-            }
-            return scene
         default:
             return nil
         }
