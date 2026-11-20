@@ -61,4 +61,32 @@ final class HitTestTests: XCTestCase {
         XCTAssertEqual(HitTest.hit(board: b, at: Pt(x: 200, y: 170))?.id, 6)
         XCTAssertNil(HitTest.hit(board: b, at: Pt(x: 105, y: 105)))
     }
+
+    func testOutlineRectHitOnlyOnItsEdge() {
+        // An outline rect is only selectable on its edge:
+        // its centre and a point well inside do not hit,
+        // a point on the edge (and one within the 4px
+        // tolerance just inside it) does.
+        let b = Board(
+            items: [Item(id: 7, pos: Pt(x: 100, y: 100), size: Size(w: 200, h: 100), group: nil, kind: .shape(ShapePayload(shape: .rect, fill: "#2A9D8F", outline: true)), rotation: nil)],
+            camera: Camera(x: 0, y: 0, zoom: 1),
+            nextId: 8, nextGroup: 1, groups: nil, bg: "#FFFFFF", grid: .dots
+        )
+        XCTAssertNil(HitTest.hit(board: b, at: Pt(x: 200, y: 150)))
+        XCTAssertNil(HitTest.hit(board: b, at: Pt(x: 200, y: 110)))
+        XCTAssertEqual(HitTest.hit(board: b, at: Pt(x: 200, y: 100))?.id, 7)
+        XCTAssertEqual(HitTest.hit(board: b, at: Pt(x: 200, y: 103))?.id, 7)
+    }
+
+    func testOutlineEllipseHitOnlyOnItsEdge() {
+        // An outline ellipse: its centre does not hit, a
+        // point on its top edge does.
+        let b = Board(
+            items: [Item(id: 8, pos: Pt(x: 100, y: 100), size: Size(w: 200, h: 100), group: nil, kind: .shape(ShapePayload(shape: .ellipse, fill: "#2A9D8F", outline: true)), rotation: nil)],
+            camera: Camera(x: 0, y: 0, zoom: 1),
+            nextId: 9, nextGroup: 1, groups: nil, bg: "#FFFFFF", grid: .dots
+        )
+        XCTAssertNil(HitTest.hit(board: b, at: Pt(x: 200, y: 150)))
+        XCTAssertEqual(HitTest.hit(board: b, at: Pt(x: 200, y: 100))?.id, 8)
+    }
 }
