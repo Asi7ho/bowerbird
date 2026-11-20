@@ -13,18 +13,15 @@ import BowerbirdCore
 public struct BoardView: NSViewRepresentable {
     @ObservedObject public var store: BoardStore
     @ObservedObject public var tools: ToolState
-    @ObservedObject public var editingState: NoteEditingState
 
-    public init(store: BoardStore, tools: ToolState, editingState: NoteEditingState) {
+    public init(store: BoardStore, tools: ToolState) {
         self.store = store
         self.tools = tools
-        self.editingState = editingState
     }
 
     public func makeNSView(context: Context) -> BoardViewport {
         let viewport = BoardViewport(board: store.board)
         viewport.toolState = tools
-        viewport.editingState = editingState
         // The toolbar is SwiftUI, over the board in
         // ContentView — not an AppKit subview of the
         // viewport. The AppKit bar never reliably received
