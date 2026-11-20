@@ -162,14 +162,15 @@ public final class BoardViewport: NSView {
     private let connectorOverlay = WorldView()
     private let connectorLayer = CAShapeLayer()
 
-    /// An erase sweep in progress: the ids erased so far.
-    /// The viewport's board is mutated live (the strokes
-    /// disappear as the eraser touches them, like the
-    /// Electron app), and the sweep is committed as one
-    /// undo step on mouseup. The ids are tracked so the
-    /// commit re-applies them even if the board was
-    /// refreshed mid-sweep.
-    private var eraseIds: Set<Int> = []
+    /// An erase sweep in progress: whether any ink has
+    /// gone so far. The viewport's board is mutated live
+    /// (the strokes split as the eraser touches them,
+    /// like the Electron app), and the sweep is committed
+    /// as one undo step on mouseup. The board already
+    /// holds the split result, so the commit adopts it
+    /// directly — there are no ids to re-apply, the split
+    /// pieces are new items.
+    private var eraseChanged = false
     private var eraseActive = false
     /// The eraser ring: a circle over the board, following
     /// the cursor while the eraser tool is active, sized
@@ -552,18 +553,17 @@ public final class BoardViewport: NSView {
         }
     }
 
-    /// Erases the strokes the eraser touches at this world
-    /// point, live: the ids join the sweep's set and the
-    /// board loses them at once (the host re-renders, so
-    /// they disappear as the eraser touches them). The
+    /// Erases the ink the eraser touches at this world
+    /// point, live: the stroke splits where the eraser
+    /// passes (only the part under it goes), the board
+    /// loses that ink at once (the host re-renders, so
+    /// the split shows as the eraser moves), and the
     /// sweep is committed as one undo step on mouseup.
-    /// Returns true when at least one stroke went.
+    /// Returns true when at least one stroke changed.
     @discardableResult
     private func eraseAt(_ world: Pt) -> Bool {
-        let ids = BoardErase.strokesWithin(board: board, at: world)
-        guard !ids.isEmpty else { return false }
-        eraseIds.formUnion(ids)
-        board.items.removeAll { eraseIds.contains($0.id) }
+        guard BoardErase.erase(&board, at: world) else { return false }
+        eraseChanged = true
         return true
     }
 
@@ -726,7 +726,7 @@ public final class BoardViewport: NSView {
             let point = convert(event.locationInWindow, from: nil)
             let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
             eraseActive = true
-            eraseIds = []
+            eraseChanged = false
             _ = eraseAt(world)
             updateEraserRing(at: point)
             return
@@ -1263,19 +1263,16 @@ public final class BoardViewport: NSView {
             updateStrokePreview()
             return
         }
-        // An erase sweep that erased anything commits as
-        // one undo step and one save. A sweep that erased
-        // nothing leaves no step behind. The ids are
-        // re-applied to the current board, so the commit
-        // holds even if the board was refreshed mid-sweep.
+        // An erase sweep that erased anything commits the
+        // live board as one undo step and one save — it
+        // already holds the split pieces. A sweep that
+        // erased nothing leaves no step behind.
         if eraseActive {
-            if !eraseIds.isEmpty {
-                var next = board
-                next.items.removeAll { eraseIds.contains($0.id) }
-                onBoardMutate?(next)
+            if eraseChanged {
+                onBoardMutate?(board)
             }
             eraseActive = false
-            eraseIds = []
+            eraseChanged = false
             return
         }
         // A shape drag commits as one item (one undo step,
