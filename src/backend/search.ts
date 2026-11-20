@@ -667,6 +667,16 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
   }
 
   let searchGeneration = 0;
+  // The last query updateSearch ran, and the board version
+  // it ran against. render() calls updateSearch on every
+  // render — a pan or a zoom — and re-running the MiniSearch
+  // query and rebuilding the results on each one is pure
+  // waste when neither the query nor the board changed.
+  // When both match, the matches are already computed; the
+  // card DOM may have been rebuilt, so just re-apply the
+  // match classes to the cards now in the DOM.
+  let lastQuery = "";
+  let lastBoardVersion = -1;
   function applySearchMatches(countEl: HTMLElement): void {
     if (searchIndex >= searchMatches.length) searchIndex = -1;
     const matchSet = new Set(searchMatches);
@@ -695,6 +705,14 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
     const raw = input.value;
     const query = normaliseSearch(raw);
     clearEl.style.visibility = query === "" ? "hidden" : "visible";
+    // Same query, same board: the matches are already
+    // computed. A render rebuilt the card DOM, so re-apply
+    // the classes to the cards now in it and stop — no
+    // re-query, no results rebuild.
+    if (query !== "" && query === lastQuery && ctx.getBoardSearchVersion() === lastBoardVersion) {
+      applySearchMatches(countEl);
+      return;
+    }
     if (query === "") {
       const hadMatches = searchMatches.length > 0;
       searchMatches = [];
@@ -702,6 +720,8 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
       searchIndex = -1;
       closeSearchResults();
       countEl.textContent = "";
+      lastQuery = "";
+      lastBoardVersion = ctx.getBoardSearchVersion();
       if (!hadMatches) return;
       for (const child of Array.from(ctx.getCardsEl().children)) {
         (child as HTMLElement).classList.remove("search-match", "search-dim");
@@ -740,6 +760,8 @@ export function createBoardSearch(ctx: SearchContext): BoardSearch {
       const d = byId.get(r.id)!;
       return { id: r.id, title: d.title, typeLabel: d.typeLabel, excerptHtml: i < 30 ? excerptFor(d, r.terms) : d.title, isContext: false };
     });
+    lastQuery = query;
+    lastBoardVersion = ctx.getBoardSearchVersion();
     if (searchIndex >= searchMatches.length) searchIndex = searchMatches.length > 0 ? 0 : -1;
     searchResultsOpen = searchMatches.length > 0;
     renderSearchResults();

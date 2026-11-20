@@ -504,17 +504,27 @@ export function updateSelectionInner(): void {
   // here, so a plain click shows the outline without a
   // full render. (A live-import group's frame is invisible
   // until selected — its .selected class is the outline.)
-  const board = S.cachedBoard ?? S.api.board.get();
+  const board = S.cachedBoard ?? S.api.board.getLive();
+  // Which groups have a selected member, computed once:
+  // scanning the whole board per group element (three
+  // lists) is O(groups × items) on every selection change,
+  // and selected.includes per item made it worse. One pass
+  // here, then a set lookup per group.
+  const selectedIds = new Set(selected);
+  const selectedGroups = new Set<number>();
+  for (const it of board.items) {
+    if (it.group !== null && selectedIds.has(it.id)) selectedGroups.add(it.group);
+  }
   for (const child of Array.from(S.groupsEl.children)) {
     const el = child as HTMLElement;
     const g = Number(el.dataset.group);
-    el.classList.toggle("selected", board.items.some((it) => it.group === g && selected.includes(it.id)));
+    el.classList.toggle("selected", selectedGroups.has(g));
   }
   if (S.groupFramesEl) {
     for (const child of Array.from(S.groupFramesEl.children)) {
       const el = child as HTMLElement;
       const g = Number(el.dataset.group);
-      el.classList.toggle("selected", board.items.some((it) => it.group === g && selected.includes(it.id)));
+      el.classList.toggle("selected", selectedGroups.has(g));
     }
   }
   // The overlay mirrors the frames and labels above the
@@ -526,7 +536,7 @@ export function updateSelectionInner(): void {
     for (const child of Array.from(S.selectedGroupsEl.children)) {
       const el = child as HTMLElement;
       const g = Number(el.dataset.group);
-      el.classList.toggle("selected", board.items.some((it) => it.group === g && selected.includes(it.id)));
+      el.classList.toggle("selected", selectedGroups.has(g));
     }
   }
   // Selection changes without a full render (a plain click) still
