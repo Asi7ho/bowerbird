@@ -1280,7 +1280,6 @@ public final class BoardViewport: NSView {
             return
         }
         guard marqueeStart != nil else { return }
-        let point = convert(event.locationInWindow, from: nil)
         marqueeCurrent = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
         updateMarqueeOverlay()
     }
