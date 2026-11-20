@@ -3,7 +3,12 @@
 // rotates; there is no zoom — the wheel pans/zooms the board.
 
 import * as THREE from "three";
+import { ColladaLoader } from "three/addons/loaders/ColladaLoader.js";
+import { FBXLoader } from "three/addons/loaders/FBXLoader.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+import { STLLoader } from "three/addons/loaders/STLLoader.js";
+import { USDZLoader } from "three/addons/loaders/USDZLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import type { Item } from "./model";
 
@@ -21,6 +26,22 @@ interface ViewState {
   distance: number;
 }
 
+// The 3D formats a card can load, by file extension.
+// .gltf is deliberately out: its geometry lives in a
+// separate .bin that would not be embedded with it, so
+// it would land as a broken card. The rest are
+// self-contained — an .obj without its .mtl still shows
+// its geometry, a .dae without its textures still shows
+// its shape — so they load, just with default materials.
+export const MODEL3D_EXTENSIONS = new Set(["glb", "obj", "fbx", "stl", "usdz", "dae"]);
+
+// The extension of a model URL or stored path, lowercased.
+export function model3DExtension(path: string): string {
+  const base = path.split("/").pop() ?? "";
+  const dot = base.lastIndexOf(".");
+  return dot >= 0 ? base.slice(dot + 1).toLowerCase() : "";
+}
+
 // The view a model opens with: straight on, slightly
 // above the horizon, far enough that the whole model
 // fills the card.
@@ -36,7 +57,12 @@ const viewState = new Map<number, ViewState>();
 // cache so a retry fetches again.
 const modelCache = new Map<string, Promise<THREE.Group>>();
 
-const loader = new GLTFLoader();
+const gltfLoader = new GLTFLoader();
+const objLoader = new OBJLoader();
+const fbxLoader = new FBXLoader();
+const stlLoader = new STLLoader();
+const usdzLoader = new USDZLoader();
+const colladaLoader = new ColladaLoader();
 const IDLE_MS = 3000;
 const AUTO_ROTATE = 0.005;
 
@@ -300,13 +326,45 @@ class Model3DView {
 function loadModel(url: string): Promise<THREE.Group> {
   let p = modelCache.get(url);
   if (!p) {
-    p = loader.loadAsync(url).then((gltf) => gltf.scene);
+    p = loadModelForExt(url);
     modelCache.set(url, p);
     p.catch(() => {
       modelCache.delete(url);
     });
   }
   return p;
+}
+
+// Pick the loader by extension. Every loader returns a
+// Group except STL, which returns raw geometry — wrap it
+// in a mesh with a neutral material so it renders and
+// frames like the rest.
+function loadModelForExt(url: string): Promise<THREE.Group> {
+  switch (model3DExtension(url)) {
+    case "obj":
+      return objLoader.loadAsync(url);
+    case "fbx":
+      return fbxLoader.loadAsync(url);
+    case "stl":
+      return stlLoader.loadAsync(url).then((geometry) => {
+        const mesh = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ color: 0xcccccc }));
+        const group = new THREE.Group();
+        group.add(mesh);
+        return group;
+      });
+    case "usdz":
+      return usdzLoader.loadAsync(url);
+    case "dae":
+      // ColladaLoader hands back a Scene, not a Group —
+      // wrap it so the caller always gets a Group.
+      return colladaLoader.loadAsync(url).then((collada) => {
+        const group = new THREE.Group();
+        group.add(collada.scene);
+        return group;
+      });
+    default:
+      return gltfLoader.loadAsync(url).then((gltf) => gltf.scene);
+  }
 }
 
 // ---------------------------------------------------------------- shared renderer

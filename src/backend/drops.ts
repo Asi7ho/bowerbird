@@ -5,6 +5,7 @@ import { api } from "./api";
 import { isPdfCompatible, renderAiPreview } from "./ai-import";
 import type { ImportedItem } from "./import-types";
 import { base64ToBytes, fileCardSize, findSourceGroup, groupBBox, translateImportedToAnchor } from "./live-import";
+import { MODEL3D_EXTENSIONS } from "./model3d";
 import { boardGet, domainOf, estimateTextHeight, normaliseHex, type Board, type Item, type Kind, type Pt, type Size } from "./model";
 import { ensureVideoPoster } from "./poster";
 import { parsePsd, renderPsdPreview } from "./psd-import";
@@ -64,10 +65,11 @@ export function createDrops(ctx: DropsContext): Drops {
     if (e === "pdf") return "pdf";
     if (["mp3", "wav", "flac", "ogg", "m4a"].includes(e)) return "audio";
     if (["mp4", "mov", "webm", "mkv", "avi", "m4v"].includes(e)) return "video";
-    // GLB only: a .gltf references external buffers and
-    // textures that would not be embedded with it, so it
-    // stays unknown rather than landing as a broken card.
-    if (e === "glb") return "model3d";
+    // 3D models: glb, obj, fbx, stl, usdz and dae. A .gltf
+    // references external buffers and textures that would
+    // not be embedded with it, so it stays unknown rather
+    // than landing as a broken card.
+    if (MODEL3D_EXTENSIONS.has(e)) return "model3d";
     if (["txt", "md"].includes(e)) return "text";
     if (["url", "webloc"].includes(e)) return "shortcut";
     return "unknown";
