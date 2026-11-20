@@ -22,7 +22,7 @@ import { syncModel3DViews } from "../backend/model3d";
 // line pattern whose size and offset follow the camera. Panning
 // then costs two style properties, not rebuilding hundreds of
 // circles on every frame.
-export function applyGrid(): void {
+function applyGrid(): void {
   const cam = S.api.view.getCamera();
   const b = S.cachedBoard;
   const bg = b?.bg ?? "#FFFFFF";
@@ -70,7 +70,7 @@ export function applyCamera(): void {
 // in and out while panning. Everything else is culled: for a board
 // with thousands of items, render() only builds DOM for what is on
 // screen, instead of rebuilding every card on every mousemove.
-export function visibleRect(): { x0: number; y0: number; x1: number; y1: number } {
+function visibleRect(): { x0: number; y0: number; x1: number; y1: number } {
   const cam = S.api.view.getCamera();
   const m = 200;
   return {
@@ -79,7 +79,7 @@ export function visibleRect(): { x0: number; y0: number; x1: number; y1: number 
     y1: cam.y + boardSize().y / cam.zoom + m,
   };
 }
-export function isVisibleItem(item: Item, v: { x0: number; y0: number; x1: number; y1: number }): boolean {
+function isVisibleItem(item: Item, v: { x0: number; y0: number; x1: number; y1: number }): boolean {
   const [p, s] = S.api.geometry.itemBounds(item);
   return p.x < v.x1 && p.x + s.w > v.x0 && p.y < v.y1 && p.y + s.h > v.y0;
 }
@@ -95,7 +95,7 @@ export function isVisibleItem(item: Item, v: { x0: number; y0: number; x1: numbe
 // cached board (see cachedBoard): items do not change
 // while panning or zooming, only the camera does, so the
 // cache is fresh wherever this runs.
-export function visibleKey(): number {
+function visibleKey(): number {
   const b = S.cachedBoard;
   if (!b) return 0;
   const v = visibleRect();
@@ -162,7 +162,7 @@ function ensurePencilFilter(): void {
 // here, because the stroke cards reference it by id
 // (url(#pencil-texture)) and this runs before the card
 // loop on every render.
-export function renderConnectors(board: Board): void {
+function renderConnectors(board: Board): void {
   ensurePencilFilter();
   const items = board.items;
   const selected = S.api.board.getSelected();
@@ -191,7 +191,7 @@ export function renderConnectors(board: Board): void {
   // rebuild every card.
 }
 
-export function renderGroupFrames(board: Board): void {
+function renderGroupFrames(board: Board): void {
   if (!S.groupsEl || !S.groupFramesEl || !S.selectedGroupsEl) return;
   const selected = S.api.board.getSelected();
   const v = visibleRect();
@@ -482,7 +482,7 @@ export function updateResizeHandle(): void {
 // removes and re-inserts it, which cancels the pending click in
 // Chromium. Stacking is therefore done with z-index, which changes
 // paint order without touching the node at all.
-export function updateSelectionInner(): void {
+function updateSelectionInner(): void {
   const selected = S.api.board.getSelected();
   for (const child of Array.from(S.cardsEl.children)) {
     const el = child as HTMLElement;
@@ -575,7 +575,7 @@ const KIND_SELECTION_LABELS: Record<string, string> = {
   Stroke: "Stroke selected",
   Connector: "Connector selected",
 };
-export function announceSelection(): void {
+function announceSelection(): void {
   const announcer = document.getElementById("sr-announcer");
   if (!announcer) return;
   const selected = S.api.board.getSelected();

@@ -81,7 +81,7 @@ export function getCardHtml(item: Item): string | null {
 // PdfCard, FileCard, Audio, Video, Shape). Strokes and connectors are
 // not cards — they are drawn on the canvas, not rendered
 // as card HTML — so they have no builtin renderer.
-export function builtinKindName(item: Item): string | null {
+function builtinKindName(item: Item): string | null {
   if (isPluginCard(item)) return null;
   if ("Text" in item.kind) return "Text";
   if ("Image" in item.kind) return "Image";

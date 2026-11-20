@@ -188,7 +188,7 @@ function parseOpacity(raw: string | undefined): number {
 export type Matrix = [number, number, number, number, number, number];
 const IDENTITY: Matrix = [1, 0, 0, 1, 0, 0];
 
-export function multiplyMatrix(m1: Matrix, m2: Matrix): Matrix {
+function multiplyMatrix(m1: Matrix, m2: Matrix): Matrix {
   const [a1, b1, c1, d1, e1, f1] = m1;
   const [a2, b2, c2, d2, e2, f2] = m2;
   return [

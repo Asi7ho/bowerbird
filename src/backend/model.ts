@@ -127,7 +127,7 @@ export function itemBounds(board: Board, item: Item): [Pt, Size] {
 // Shared by fitCamera and the group-centring sites (main's
 // onJumpTo, and the board plugin's own copy that reads
 // through api.geometry.itemBounds).
-export function itemsBounds(board: Board, items: Item[]): { x: number; y: number; w: number; h: number } | null {
+function itemsBounds(board: Board, items: Item[]): { x: number; y: number; w: number; h: number } | null {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   for (const it of items) {
     const [p, s] = itemBounds(board, it);
