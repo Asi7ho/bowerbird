@@ -4,9 +4,10 @@ import SwiftUI
 /// The floating toolbar, the Electron app's left bar: a
 /// vertical column of icon buttons, white and translucent,
 /// 16px corners. The select, draw and shape buttons open a
-/// flyout with that family's tools; a flyout disappears
-/// once a tool is picked. The pen colour swatches sit
-/// below the draw button while it is active.
+/// flyout with that family's tools; tapping the same button
+/// again closes its flyout. Picking a tool closes the
+/// flyout. The pen colour is a button showing the current
+/// colour, opening the palette flyout.
 public struct ToolbarView: View {
     @ObservedObject public var tools: ToolState
 
@@ -17,13 +18,13 @@ public struct ToolbarView: View {
     public var body: some View {
         VStack(spacing: 10) {
             toolButton(icon: selectIcon, label: "Select", active: isSelect) {
-                tools.selectShortcut()
+                toggleFamily(.select) { tools.selectShortcut() }
             }
             toolButton(icon: drawIcon, label: "Draw", active: isDraw) {
-                tools.drawShortcut()
+                toggleFamily(.draw) { tools.drawShortcut() }
             }
             toolButton(icon: shapeIcon, label: "Shape", active: isShape) {
-                tools.shapeShortcut()
+                toggleFamily(.shape) { tools.shapeShortcut() }
             }
             toolButton(icon: "arrow.up.right", label: "Connector", active: isConnector) {
                 tools.activate(.connector)
@@ -34,7 +35,7 @@ public struct ToolbarView: View {
             // flyout — like the pen, select and geometry
             // buttons open theirs.
             Button {
-                tools.pickerOpen = .color
+                tools.pickerOpen = tools.pickerOpen == .color ? nil : .color
             } label: {
                 Circle()
                     .fill(Color(nsColor: NSColor.fromHex(tools.penColor) ?? .black))
@@ -52,17 +53,16 @@ public struct ToolbarView: View {
         // The background consumes clicks on the bar's empty
         // area so they do not fall through to the board
         // (which would close the flyout and clear the
-        // selection). The gesture lives on the background
-        // shape, behind the buttons — not on the container,
-        // where it competed with the buttons' taps and made
-        // tool selection take several clicks, at random.
-        // A tap on a button hits the button first; only a
-        // tap on the empty background reaches this shape.
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(.ultraThinMaterial)
-                .onTapGesture {}
-        )
+        // selection). There is no TapGesture anywhere in
+        // this toolbar: a gesture on a container competes
+        // with the buttons' taps in SwiftUI's arbitration
+        // and steals some of them at random — that was the
+        // "several clicks to select a tool" bug, twice.
+        // The background is a no-op Button behind the
+        // buttons instead: a tap on a button hits the
+        // button first, and only a tap on the empty
+        // background reaches this button.
+        .background(barBackground())
         .overlay(
             RoundedRectangle(cornerRadius: 16)
                 .stroke(Color.black.opacity(0.08), lineWidth: 1)
@@ -144,6 +144,33 @@ public struct ToolbarView: View {
         .accessibilityLabel(label)
     }
 
+    /// The bar and flyout background: a no-op Button
+    /// behind the buttons, claiming taps on the empty
+    /// area so they never fall through to the board.
+    /// (See the bar above for why this is a Button and
+    /// not a TapGesture.)
+    private func barBackground() -> some View {
+        Button(action: {}) {
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+        }
+        .buttonStyle(.plain)
+        .accessibilityHidden(true)
+    }
+
+    /// A family button tap: if that family's flyout is
+    /// already open, close it; otherwise select the
+    /// family's last-used tool and open the flyout. A
+    /// repeat tap used to be a visible no-op, which read
+    /// as "the click didn't work".
+    private func toggleFamily(_ picker: Picker, activate: () -> Void) {
+        if tools.pickerOpen == picker {
+            tools.pickerOpen = nil
+        } else {
+            activate()
+        }
+    }
+
     @ViewBuilder
     private func flyout(for picker: Picker) -> some View {
         if picker == .color {
@@ -166,15 +193,7 @@ public struct ToolbarView: View {
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 8)
-        // The background consumes clicks on the flyout's
-        // empty area (see the bar above): the gesture is on
-        // the background shape, behind the buttons, so it
-        // never competes with a button's tap.
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(.ultraThinMaterial)
-                .onTapGesture {}
-        )
+        .background(barBackground())
         .overlay(
             RoundedRectangle(cornerRadius: 16)
                 .stroke(Color.black.opacity(0.08), lineWidth: 1)
@@ -222,15 +241,7 @@ public struct ToolbarView: View {
         .padding(.vertical, 12)
         .padding(.horizontal, 8)
         .frame(width: 56)
-        // The background consumes clicks on the flyout's
-        // empty area (see the bar above): the gesture is on
-        // the background shape, behind the buttons, so it
-        // never competes with a button's tap.
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(.ultraThinMaterial)
-                .onTapGesture {}
-        )
+        .background(barBackground())
         .overlay(
             RoundedRectangle(cornerRadius: 16)
                 .stroke(Color.black.opacity(0.08), lineWidth: 1)
@@ -286,15 +297,7 @@ public struct ToolbarView: View {
         .padding(.vertical, 12)
         .padding(.horizontal, 8)
         .frame(width: 56)
-        // The background consumes clicks on the flyout's
-        // empty area (see the bar above): the gesture is on
-        // the background shape, behind the buttons, so it
-        // never competes with a button's tap.
-        .background(
-            RoundedRectangle(cornerRadius: 16)
-                .fill(.ultraThinMaterial)
-                .onTapGesture {}
-        )
+        .background(barBackground())
         .overlay(
             RoundedRectangle(cornerRadius: 16)
                 .stroke(Color.black.opacity(0.08), lineWidth: 1)
