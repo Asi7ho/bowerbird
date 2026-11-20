@@ -478,28 +478,26 @@ public final class PlaceholderCardView: CardView {
     }
 }
 
-/// A file card (a .psd or .ai): the importer's preview
-/// image, when the board carries one, instead of the grey
-/// placeholder tile. The preview is a local PNG the
-/// importer rendered, so it loads like an image card; a
-/// file with no preview yet falls back to the file name
-/// and format, the way the placeholder did.
+/// A file card (a .psd or .ai), like the Electron app's:
+/// the artwork preview on top, the file name and size
+/// below it — not an image card, where the artwork fills
+/// the whole card. Without a preview (a file whose
+/// artwork could not be rendered) the top is a tile in
+/// the format's colour, like the PDF's red tile: blue
+/// PSD, orange AI.
 public final class FileCardView: CardView {
     private let imageView = NSImageView()
+    private let tileLayer = CALayer()
+    private let tileTextLayer = CATextLayer()
     private let titleLayer = CATextLayer()
     private let subtitleLayer = CATextLayer()
 
     override public init() {
         super.init()
         imageView.imageScaling = .scaleProportionallyUpOrDown
-        imageView.translatesAutoresizingMaskIntoConstraints = false
+        imageView.wantsLayer = true
+        imageView.layer?.masksToBounds = true
         addSubview(imageView)
-        NSLayoutConstraint.activate([
-            imageView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            imageView.topAnchor.constraint(equalTo: topAnchor),
-            imageView.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
         // Explicit colours, not the semantic label colours
         // (see PlaceholderCardView: a CATextLayer's
         // foreground is a fixed CGColor, and the semantic
@@ -508,7 +506,13 @@ public final class FileCardView: CardView {
         subtitleLayer.foregroundColor = NSColor(srgbRed: 0.42, green: 0.42, blue: 0.44, alpha: 1).cgColor
         titleLayer.truncationMode = .end
         subtitleLayer.truncationMode = .end
-        for textLayer in [titleLayer, subtitleLayer] {
+        tileTextLayer.alignmentMode = .center
+        tileTextLayer.truncationMode = .end
+        // The tile background goes in first, so the format
+        // label draws on top of it (sublayers added later
+        // sit above the earlier ones).
+        layer?.addSublayer(tileLayer)
+        for textLayer in [titleLayer, subtitleLayer, tileTextLayer] {
             textLayer.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
             layer?.addSublayer(textLayer)
         }
@@ -518,28 +522,35 @@ public final class FileCardView: CardView {
         super.configure(item: item)
         guard case .fileCard(let file) = item.kind else { return }
         titleLayer.string = URL(fileURLWithPath: file.path).lastPathComponent
-        subtitleLayer.string = file.format.rawValue.uppercased()
+        subtitleLayer.string = "\(Int((Double(file.sizeBytes) / 1024).rounded())) KB · \(file.format.rawValue.uppercased())"
+        // The format's colour: PSD blue, AI orange (the
+        // Electron app's FileCard tints).
+        let tintHex = file.format == .psd ? "#2E86AB" : "#FF6B35"
+        let tint = NSColor.fromHex(tintHex) ?? .labelColor
+        tileTextLayer.string = file.format.rawValue.uppercased()
+        tileTextLayer.foregroundColor = tint.cgColor
+        tileLayer.backgroundColor = Self.tinted(tint, amount: 0.88).cgColor
         imageView.image = file.preview.flatMap { NSImage(contentsOfFile: $0) }
-        // With a preview the artwork is the card and the
-        // text is hidden; without one, the name and format
-        // read like the placeholder tile.
+        // With a preview the artwork is the tile and the
+        // text is the name and size below it; without one,
+        // the format tile takes the artwork's place.
         let hasPreview = imageView.image != nil
-        titleLayer.isHidden = hasPreview
-        subtitleLayer.isHidden = hasPreview
-        layer?.backgroundColor = hasPreview
-            ? NSColor.white.cgColor
-            : NSColor.systemGray.withAlphaComponent(0.08).cgColor
+        tileLayer.isHidden = hasPreview
+        tileTextLayer.isHidden = hasPreview
+        imageView.isHidden = !hasPreview
+        layer?.backgroundColor = NSColor.white.cgColor
         needsLayout = true
     }
 
     override public func layout() {
         super.layout()
-        // Without a preview, the title and subtitle sit
-        // like the placeholder tile (12px in, title at the
-        // top, subtitle 4px below, sizes scaled by the
-        // zoom). With a preview, the image fills the card
-        // and the text is hidden.
-        guard let item = currentItem, case .fileCard = item.kind, imageView.image == nil else { return }
+        // Media-card chrome: 12px padding, 10px tile
+        // radius, title 14px, subtitle 12px — all in
+        // world units, scaled by the zoom. The card is
+        // y-up, so the top is at bounds.height: the
+        // preview (or the format tile) sits at the top,
+        // the title and subtitle below it.
+        guard let item = currentItem, case .fileCard = item.kind else { return }
         CardView.withoutLayerActions {
             let zoom = item.size.w > 0 ? bounds.width / CGFloat(item.size.w) : 1
             let pad = 12 * zoom
@@ -548,9 +559,33 @@ public final class FileCardView: CardView {
             titleLayer.fontSize = 14 * zoom
             subtitleLayer.font = NSFont.systemFont(ofSize: 12 * zoom)
             subtitleLayer.fontSize = 12 * zoom
-            titleLayer.frame = CGRect(x: pad, y: bounds.height - pad - 18 * zoom, width: width, height: 18 * zoom)
-            subtitleLayer.frame = CGRect(x: pad, y: bounds.height - pad - 18 * zoom - 4 * zoom - 16 * zoom, width: width, height: 16 * zoom)
+            let titleH: CGFloat = 18 * zoom
+            let subH: CGFloat = 16 * zoom
+            let gap: CGFloat = 4 * zoom
+            let textH = titleH + gap + subH
+            let mediaH = bounds.height - pad * 2 - textH - gap
+            let mediaRect = CGRect(x: pad, y: bounds.height - pad - mediaH, width: width, height: max(mediaH, 0))
+            imageView.frame = mediaRect
+            imageView.layer?.cornerRadius = 10 * zoom
+            tileLayer.frame = mediaRect
+            tileLayer.cornerRadius = 10 * zoom
+            tileTextLayer.font = NSFont.systemFont(ofSize: 13 * zoom, weight: .semibold)
+            tileTextLayer.fontSize = 13 * zoom
+            tileTextLayer.frame = CGRect(x: mediaRect.minX, y: mediaRect.minY + (mediaRect.height - 18 * zoom) / 2, width: mediaRect.width, height: 18 * zoom)
+            titleLayer.frame = CGRect(x: pad, y: bounds.height - pad - mediaH - gap - titleH, width: width, height: titleH)
+            subtitleLayer.frame = CGRect(x: pad, y: bounds.height - pad - mediaH - gap - titleH - gap - subH, width: width, height: subH)
         }
+    }
+
+    /// A colour lightened towards white by `amount` (the
+    /// Electron app's `tint`: 0.88 is nearly white, the
+    /// format's colour showing through).
+    private static func tinted(_ color: NSColor, amount: Double) -> NSColor {
+        let rgb = color.usingColorSpace(.sRGB) ?? color
+        var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+        rgb.getRed(&r, green: &g, blue: &b, alpha: &a)
+        let m = CGFloat(amount)
+        return NSColor(srgbRed: r + (1 - r) * m, green: g + (1 - g) * m, blue: b + (1 - b) * m, alpha: 1)
     }
 
     @available(*, unavailable)
