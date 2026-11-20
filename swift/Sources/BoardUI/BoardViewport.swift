@@ -894,6 +894,16 @@ public final class BoardViewport: NSView {
     /// empty — so an empty note leaves no board change and
     /// no undo step behind.
     private func createTextNoteAt(_ world: Pt) {
+        // End any open edit first, before the board
+        // changes: removing the editor commits it (its
+        // viewWillMove ends the edit), and the commit
+        // re-renders the cards. Doing that while a new
+        // note was being added and opened left the editor
+        // and the card out of step — a double-click while
+        // editing crashed the app. The refs must still be
+        // set when the view is removed, or the commit is
+        // skipped and the typed text is lost.
+        noteEditor?.removeFromSuperview()
         var next = board
         let id = next.nextId
         next.nextId += 1
@@ -937,8 +947,11 @@ public final class BoardViewport: NSView {
         noteEditor = editor
         editingNoteId = id
         window?.makeFirstResponder(editor)
-        // Cursor at the end of the text.
-        editor.setSelectedRange(NSRange(location: editor.string.count, length: 0))
+        // Cursor at the end of the text. NSRange counts
+        // UTF-16 units, not characters — an emoji is one
+        // character but two units — so the range is built
+        // from the UTF-16 count.
+        editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
     }
 
     /// Commits the open editor: the text is saved (with
