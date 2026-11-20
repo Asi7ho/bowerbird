@@ -702,7 +702,15 @@ public final class BoardViewport: NSView {
             camera = CameraMath.zoomCamera(camera, around: centre, factor: 0.8)
             return
         }
-        if event.keyCode == 53 { // Escape: deselect.
+        if event.keyCode == 53 { // Escape: end an open edit
+            // first (saving its text), otherwise just
+            // deselect. An edit left open by Escape never
+            // reached the store, so undo had nothing to undo
+            // for it.
+            if editingNoteId != nil {
+                commitTextEdit()
+                return
+            }
             selected = []
             return
         }
@@ -720,6 +728,19 @@ public final class BoardViewport: NSView {
 
     override public func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
+        // A click anywhere on the board ends an open edit
+        // first, saving its text (one undo step). The
+        // editor's own focus change does not reliably fire
+        // when the keyboard moves to an AppKit view, so a
+        // click away could leave the text in the editor and
+        // never reach the store — and then undo had nothing
+        // to undo for it. Committing here does not disturb
+        // a click inside the editor itself: the editor is
+        // a subview and takes that click, so this never runs
+        // for it.
+        if editingNoteId != nil {
+            commitTextEdit()
+        }
         // A click on the board closes the toolbar flyout
         // (flyouts are transient: they disappear once the
         // user clicks anywhere else).
