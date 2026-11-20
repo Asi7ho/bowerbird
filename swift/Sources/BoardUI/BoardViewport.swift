@@ -20,6 +20,15 @@ public final class BoardViewport: NSView {
     /// the grid and tells the host to re-cull.
     public var camera: Camera {
         didSet {
+            // Keep the board's camera in step with the live
+            // camera: a board commit carries the board, and a
+            // stale board camera would reset the store's
+            // camera (and then the viewport's, via
+            // updateNSView) to before the pan — the board
+            // jumping back on every move, resize or new card.
+            if board.camera != camera {
+                board.camera = camera
+            }
             applyCamera()
             onCameraChanged?(camera)
         }
@@ -27,6 +36,16 @@ public final class BoardViewport: NSView {
 
     public var board: Board {
         didSet {
+            // A camera-only change (the camera didSet syncing
+            // the board's camera above) must not re-render
+            // the cards: the camera move already repositioned
+            // them through applyCamera, and a full render on
+            // every pan step would reconfigure every card.
+            // The snapshot excludes the camera, so equal
+            // snapshots mean only the camera changed.
+            if BoardSnapshot(board: board) == BoardSnapshot(board: oldValue) {
+                return
+            }
             gridView.grid = board.grid
             gridView.backgroundHex = board.bg
             updateWindowBackground()
