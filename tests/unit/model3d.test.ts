@@ -10,13 +10,10 @@ describe("initialViewState", () => {
     expect(v.elevation).toBe(0.35);
   });
 
-  it("scales the distance with the model", () => {
+  it("scales the distance with the model, inside the framing clamp", () => {
     expect(initialViewState(1).distance).toBe(2.4);
     expect(initialViewState(2).distance).toBe(4.8);
     expect(initialViewState(0.5).distance).toBe(1.2);
-  });
-
-  it("stays inside the framing clamp for any model", () => {
     // The load clamp is [radius * 1.1, radius * 6]; the
     // opening distance (radius * 2.4) sits inside it, so
     // the model always opens framed.

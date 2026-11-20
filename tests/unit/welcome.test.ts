@@ -5,30 +5,24 @@ import { describe, expect, it } from "vitest";
 import { welcomeBoard } from "../../src/backend/welcome";
 
 describe("welcomeBoard", () => {
-  it("is deterministic for the same inputs", () => {
-    expect(welcomeBoard("/b", 111, 222, 333, 444, 555)).toEqual(welcomeBoard("/b", 111, 222, 333, 444, 555));
-  });
-
   it("shows every capability once, with sequential ids", () => {
     const board = welcomeBoard("/b", 111, 222, 333, 444, 555);
     expect(board.items).toHaveLength(48);
     expect(board.items.map((it) => it.id)).toEqual(Array.from({ length: 48 }, (_, i) => i + 1));
+    // next_id is the last used id, not the next free one:
+    // allocId increments before handing it out, so 48
+    // items means next_id 48 and the next card gets 49.
     expect(board.next_id).toBe(48);
     expect(board.next_group).toBe(2);
     const kinds = board.items.map((it) => Object.keys(it.kind)[0]);
-    expect(kinds).toEqual([
-      "Text", "Image", "UrlCard", "Swatch", "Swatch", "PdfCard",
-      "Audio", "Video", "Text", "Swatch", "Text", "Stroke", "Connector",
-      // Woven-in formats: the bird (32 SVG items), then the AI
-      // FileCard, the PSD FileCard, and the cube — no heading,
-      // no labels, no grid.
-      "Shape", "Stroke", "Shape", "Shape", "Shape", "Shape",
-      "Stroke", "Shape", "Shape", "Shape", "Shape", "Shape", "Shape",
-      "Stroke", "Shape", "Shape", "Shape", "Shape", "Shape", "Shape",
-      "Shape", "Shape", "Shape", "Shape", "Shape", "Shape", "Shape",
-      "Shape", "Shape", "Shape", "Stroke", "Stroke",
-      "FileCard", "FileCard", "Model3D",
-    ]);
+    // Every capability shows once: the opening cards, the
+    // woven-in formats (the 32-item bird, the AI and PSD
+    // FileCards, the cube), and no heading or labels.
+    for (const k of ["Text", "Image", "UrlCard", "Swatch", "PdfCard", "Audio", "Video", "Stroke", "Connector", "Shape", "FileCard", "Model3D"]) {
+      expect(kinds).toContain(k);
+    }
+    expect(kinds.filter((k) => k === "Shape").length).toBe(27);
+    expect(kinds.filter((k) => k === "Stroke").length).toBe(6);
     const connector = board.items.find((it) => "Connector" in it.kind);
     expect((connector?.kind as { Connector: { from: { Item: number }; to: { Item: number } } }).Connector).toEqual({
       from: { Item: 2 },

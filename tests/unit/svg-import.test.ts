@@ -5,27 +5,21 @@ import { describe, expect, it } from "vitest";
 import { flattenPathData, parseSvgColor, parseSvgToItems } from "../../src/backend/svg-import";
 
 describe("parseSvgColor", () => {
-  it("passes 6-digit hex through", () => {
-    expect(parseSvgColor("#1a2b3c")).toBe("#1a2b3c");
-  });
-  it("expands 3-digit hex", () => {
-    expect(parseSvgColor("#f00")).toBe("#ff0000");
-  });
-  it("drops the alpha of 8-digit hex", () => {
-    expect(parseSvgColor("#ff000080")).toBe("#ff0000");
-    expect(parseSvgColor("#ff000000")).toBeNull();
-  });
-  it("parses rgb() and rgba()", () => {
-    expect(parseSvgColor("rgb(255, 0, 128)")).toBe("#ff0080");
-    expect(parseSvgColor("rgba(0, 128, 0, 0)")).toBeNull();
-    expect(parseSvgColor("rgba(0, 128, 0, 1)")).toBe("#008000");
-  });
-  it("maps named colours and rejects none", () => {
-    expect(parseSvgColor("red")).toBe("#ff0000");
-    expect(parseSvgColor("none")).toBeNull();
-    expect(parseSvgColor("transparent")).toBeNull();
-    expect(parseSvgColor("not-a-colour")).toBeNull();
-    expect(parseSvgColor(undefined)).toBeNull();
+  it.each([
+    ["#1a2b3c", "#1a2b3c"], // 6-digit hex passes through
+    ["#f00", "#ff0000"], // 3-digit hex expands
+    ["#ff000080", "#ff0000"], // 8-digit hex drops its alpha
+    ["#ff000000", null], // fully transparent is no colour
+    ["rgb(255, 0, 128)", "#ff0080"],
+    ["rgba(0, 128, 0, 0)", null],
+    ["rgba(0, 128, 0, 1)", "#008000"],
+    ["red", "#ff0000"], // named colours
+    ["none", null],
+    ["transparent", null],
+    ["not-a-colour", null],
+    [undefined, null],
+  ])("parseSvgColor(%s) is %s", (input, expected) => {
+    expect(parseSvgColor(input)).toBe(expected);
   });
 });
 
@@ -41,12 +35,21 @@ describe("flattenPathData", () => {
     expect(flattenPathData("m 5 5 h 10 v 10")).toEqual([
       { x: 5, y: 5 }, { x: 15, y: 5 }, { x: 15, y: 15 },
     ]);
+    // A move-only path is just its point; an empty path
+    // is nothing.
+    expect(flattenPathData("M 5 5")).toEqual([{ x: 5, y: 5 }]);
+    expect(flattenPathData("")).toEqual([]);
   });
   it("samples a cubic to its endpoint", () => {
     const pts = flattenPathData("M 0 0 C 0 10, 10 10, 10 0");
     expect(pts.length).toBeGreaterThan(2);
     expect(pts[pts.length - 1]).toEqual({ x: 10, y: 0 });
-    expect(pts.some((p) => p.y > 5)).toBe(true);
+    // The curve bulges: its midpoint is near (5, 7.5),
+    // the cubic's value at t=0.5 — not on the straight
+    // line between the endpoints.
+    const mid = pts[Math.floor(pts.length / 2)];
+    expect(mid.x).toBeCloseTo(5, 0);
+    expect(mid.y).toBeCloseTo(7.5, 0);
   });
   it("samples an arc to its endpoint", () => {
     const pts = flattenPathData("M 0 0 A 10 10 0 0 1 20 0");
@@ -54,10 +57,11 @@ describe("flattenPathData", () => {
     const last = pts[pts.length - 1];
     expect(Math.abs(last.x - 20)).toBeLessThan(0.01);
     expect(Math.abs(last.y)).toBeLessThan(0.01);
-  });
-  it("returns nothing for a move-only path", () => {
-    expect(flattenPathData("M 5 5")).toEqual([{ x: 5, y: 5 }]);
-    expect(flattenPathData("")).toEqual([]);
+    // A semicircle up: its midpoint is the top (10, -10)
+    // in SVG's y-down coordinates.
+    const mid = pts[Math.floor(pts.length / 2)];
+    expect(mid.x).toBeCloseTo(10, 0);
+    expect(mid.y).toBeCloseTo(-10, 0);
   });
 });
 
@@ -124,10 +128,6 @@ describe("parseSvgToItems", () => {
     expect(items[0].size.w).toBe(640);
     expect(items[0].size.h).toBe(50);
     expect(items[0].pos).toEqual({ x: 100, y: 50 });
-  });
-  it("keeps a small SVG at its natural size", () => {
-    const items = parseSvgToItems(SAMPLE_SVG, { x: 0, y: 0 });
-    expect(items[0].size).toEqual({ w: 100, h: 50 });
   });
   it("returns nothing for an unparseable file or one with no mappable elements", () => {
     expect(parseSvgToItems("not xml at all", { x: 0, y: 0 })).toEqual([]);

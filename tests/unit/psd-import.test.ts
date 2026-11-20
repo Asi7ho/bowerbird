@@ -33,9 +33,7 @@ describe("parsePsd (fixture)", () => {
     expect(red.imageData?.width).toBe(80);
     expect(red.imageData?.height).toBe(60);
     expect(red.imageData?.data[0]).toBe(255);
-  });
-  it("reads the fixture's merged composite", () => {
-    const parsed = parsePsd(fixtureBytes());
+    // The merged composite is the whole file's size.
     expect(parsed.imageData?.width).toBe(200);
     expect(parsed.imageData?.height).toBe(120);
   });

@@ -102,12 +102,20 @@ describe("createUndoStore", () => {
   });
 
   it("a refused save retries on the next save instead of skipping", async () => {
+    const bridge = (window as unknown as { bowerbird: { recoveryWriteSync: ReturnType<typeof vi.fn>; recoveryClear: ReturnType<typeof vi.fn> } }).bowerbird;
     saveBoard.mockResolvedValueOnce(false);
+    board.items.push(textItem(1, "hello"));
+    board.next_id = 2;
     store.save();
     expect(saveBoard).toHaveBeenCalledTimes(1);
+    // The journal is written synchronously before the save.
+    expect(bridge.recoveryWriteSync).toHaveBeenCalledTimes(1);
     // The refusal lands asynchronously; wait for it.
     await new Promise((r) => setTimeout(r, 0));
     expect(ctx.toast).toHaveBeenCalledWith("Save failed: save was refused");
+    // The journal is kept when the save is refused: the
+    // edit survives in the journal for the next launch.
+    expect(bridge.recoveryClear).not.toHaveBeenCalled();
     // Nothing changed since, but the seen keys were cleared,
     // so this save must attempt the write again.
     store.save();
@@ -135,17 +143,6 @@ describe("createUndoStore", () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(bridge.recoveryClear).toHaveBeenCalledTimes(1);
     expect(bridge.recoveryClear).toHaveBeenCalledWith(JSON.stringify(board));
-  });
-
-  it("keeps the journal when the save is refused", async () => {
-    const bridge = (window as unknown as { bowerbird: { recoveryWriteSync: ReturnType<typeof vi.fn>; recoveryClear: ReturnType<typeof vi.fn> } }).bowerbird;
-    saveBoard.mockResolvedValueOnce(false);
-    board.items.push(textItem(1, "hello"));
-    board.next_id = 2;
-    store.save();
-    expect(bridge.recoveryWriteSync).toHaveBeenCalledTimes(1);
-    await new Promise((r) => setTimeout(r, 0));
-    expect(bridge.recoveryClear).not.toHaveBeenCalled();
   });
 
   it("saveSync writes a board that changed since the last save", () => {

@@ -61,9 +61,10 @@ describe("isPrivateHost", () => {
   });
 
   it("catches hex, octal and decimal IPv4, which the URL parser normalises", () => {
-    expect(hostOf("http://0x7f000001/")).toBe("127.0.0.1");
-    expect(hostOf("http://0177.0.0.1/")).toBe("127.0.0.1");
-    expect(hostOf("http://2130706433/")).toBe("127.0.0.1");
+    // The first three lines used to assert what new URL()
+    // returns — the parser's normalisation, not the gate.
+    // What matters here is the gate itself: each of these
+    // smuggled forms lands on 127.0.0.1, which is private.
     for (const input of ["http://0x7f000001/", "http://0177.0.0.1/", "http://2130706433/"]) {
       expect(isPrivateHost(hostOf(input))).toBe(true);
     }

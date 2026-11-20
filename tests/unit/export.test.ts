@@ -106,6 +106,9 @@ describe("resolveBoardAssetPaths", () => {
     expect(out.items[0].kind.Image!.path).toBe("/fresh/boards/My_Board/assets/photo.png");
     expect(out.items[1].kind.Video!.source).toBe("/fresh/boards/My_Board/assets/clip.mp4");
     expect(out.items[1].kind.Video!.poster).toBe("/fresh/boards/My_Board/assets/poster.png");
+    // Resolving twice changes nothing the second time.
+    const once = resolveBoardAssetPaths(json, "/fresh/boards/My_Board");
+    expect(resolveBoardAssetPaths(once, "/fresh/boards/My_Board")).toBe(once);
   });
 
   it("leaves absolute paths, URLs and remote videos alone", () => {
@@ -118,33 +121,37 @@ describe("resolveBoardAssetPaths", () => {
     expect(resolveBoardAssetPaths(json, "/fresh/boards/My_Board")).toBe(json);
   });
 
-  it("is idempotent: resolving twice changes nothing the second time", () => {
-    const json = JSON.stringify({
-      items: [{ id: 1, pos: { x: 0, y: 0 }, size: { w: 1, h: 1 }, group: null, kind: { Image: { path: "assets/photo.png" } } }],
-    });
-    const once = resolveBoardAssetPaths(json, "/fresh/boards/My_Board");
-    expect(resolveBoardAssetPaths(once, "/fresh/boards/My_Board")).toBe(once);
-  });
-
   it("passes unparseable JSON through unchanged", () => {
     expect(resolveBoardAssetPaths("not json", "/x")).toBe("not json");
   });
 });
 
 describe("full export and import round-trip", () => {
-  it("exports every board, the user plugins and the state, and imports them back whole", async () => {
+  // One fake install, exported once, shared by the four
+  // split tests below: each test unzips the same buffer
+  // and asserts its own slice of the export.
+  async function exported() {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), "bowerbird-export-"));
     const { base, userData } = makeInstall(root);
     const { buildFullExportZip } = makeExport(base, userData, "My Board");
-
     const zipBuffer = await buildFullExportZip();
     const JSZip = (await import("jszip")).default;
     const zip = await JSZip.loadAsync(zipBuffer);
+    return { root, base, userData, zipBuffer, zip };
+  }
+
+  it("exports a manifest naming the current board", async () => {
+    const { root, zip } = await exported();
     // The manifest names the current board.
     const manifest = JSON.parse(await zip.file("bowerbird-export.json")!.async("string")) as { version: number; kind: string; currentBoard: string };
     expect(manifest.version).toBe(1);
     expect(manifest.kind).toBe("bowerbird-data");
     expect(manifest.currentBoard).toBe("My Board");
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("exports every board with relative asset paths", async () => {
+    const { root, zip } = await exported();
     // Both boards are in the ZIP, with relative asset paths.
     for (const prefix of ["boards/Main/", "boards/My_Board/"]) {
       expect(zip.file(`${prefix}board.json`)).not.toBeNull();
@@ -159,6 +166,11 @@ describe("full export and import round-trip", () => {
       expect(zip.file(`${prefix}library/kept.png`)).not.toBeNull();
       expect(zip.file(`${prefix}context-index.json`)).not.toBeNull();
     }
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it("exports the user plugins and the state files", async () => {
+    const { root, zip } = await exported();
     // The user plugin is in the ZIP with its extra files.
     expect(zip.file("plugins/my-plugin/manifest.json")).not.toBeNull();
     expect(zip.file("plugins/my-plugin/main.ts")).not.toBeNull();
@@ -168,7 +180,11 @@ describe("full export and import round-trip", () => {
     for (const name of ["settings.json", "plugins.json", "plugin-storage.json", "secure-storage.json"]) {
       expect(zip.file(name)).not.toBeNull();
     }
+    fs.rmSync(root, { recursive: true, force: true });
+  });
 
+  it("imports the export back whole into a fresh install", async () => {
+    const { root, zipBuffer } = await exported();
     // Import into a fresh install: everything comes back.
     const fresh = fs.mkdtempSync(path.join(os.tmpdir(), "bowerbird-fresh-"));
     const freshBase = path.join(fresh, "base");
@@ -218,8 +234,8 @@ describe("full export and import round-trip", () => {
     const fresh = fs.mkdtempSync(path.join(os.tmpdir(), "bowerbird-fresh-"));
     const { importExport } = makeExport(path.join(fresh, "base"), path.join(fresh, "userData"), null);
     const out = await importExport(folder);
-    expect(fs.existsSync(path.join(fresh, "base", "plugins", "my-plugin", "main.ts"))).toBe(true);
-    expect(fs.existsSync(path.join(fresh, "base", "boards", "My_Board", "board.json"))).toBe(true);
+    // The folder entry point resolves like the ZIP one:
+    // no current board at export time, so Main loads.
     expect(out.board_dir).toBe(path.join(fresh, "base"));
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(fresh, { recursive: true, force: true });

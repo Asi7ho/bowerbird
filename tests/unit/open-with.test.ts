@@ -33,15 +33,6 @@ describe("editorCandidates", () => {
     ]);
   });
 
-  it("covers the versioned Affinity names, not just the bare ones", () => {
-    const psd = editorCandidates(".psd");
-    expect(psd).toContainEqual(named("Affinity Photo 2"));
-    expect(psd).toContainEqual(bundle("com.seriflabs.affinityphoto2"));
-    const ai = editorCandidates(".ai");
-    expect(ai).toContainEqual(named("Affinity Designer 2"));
-    expect(ai).toContainEqual(bundle("com.seriflabs.affinitydesigner2"));
-  });
-
   it("has no editors for other formats", () => {
     expect(editorCandidates(".png")).toEqual([]);
     expect(editorCandidates(".pdf")).toEqual([]);

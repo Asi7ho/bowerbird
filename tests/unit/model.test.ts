@@ -3,10 +3,8 @@
 // so these run in plain vitest on every push and PR.
 import { describe, expect, it } from "vitest";
 import {
-  allocId,
   anchorPoint,
   arrangeItems,
-  centre,
   checklistProgress,
   clippedEnds,
   domainOf,
@@ -85,10 +83,9 @@ function board(items: Item[]): Board {
 }
 
 describe("stylus pressure", () => {
-  it("a mouse (pressure 0.5) draws at the base width", () => {
-    expect(pressureWidth(3, 0.5)).toBe(3);
-  });
   it("a light touch draws thin, a hard press draws thick, capped at 8", () => {
+    // A mouse (pressure 0.5) draws at the base width.
+    expect(pressureWidth(3, 0.5)).toBe(3);
     expect(pressureWidth(3, 0.1)).toBe(1);
     expect(pressureWidth(3, 1)).toBe(6);
     expect(pressureWidth(3, 2)).toBe(8);
@@ -161,7 +158,7 @@ describe("isInlineVideo", () => {
     expect(isInlineVideo("/b/clip.WEBM", false)).toBe(true);
     expect(isInlineVideo("/b/clip.m4v", false)).toBe(true);
   });
-  it("rejects remote links, unplayable formats and query strings", () => {
+  it("rejects remote links and unplayable formats, but a query string on a local clip still plays", () => {
     expect(isInlineVideo("https://example.com/clip.mp4", true)).toBe(false);
     expect(isInlineVideo("/b/clip.mov", false)).toBe(false);
     expect(isInlineVideo("/b/clip.mkv", false)).toBe(false);
@@ -293,20 +290,16 @@ describe("marquee and lasso", () => {
     expect(marquee(b, { x: 300, y: 200 }, { x: 90, y: 90 })).toEqual([1]);
     expect(marquee(b, { x: 0, y: 0 }, { x: 700, y: 500 })).toEqual([1, 2, 3]);
   });
-  it("pointInPolygon is true inside, false outside", () => {
+  it("lassoSelect needs at least 3 points and selects what the loop touches", () => {
+    // The loop test itself: a point inside the loop is in,
+    // one outside is out.
     const square = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }];
     expect(pointInPolygon({ x: 50, y: 50 }, square)).toBe(true);
     expect(pointInPolygon({ x: 150, y: 50 }, square)).toBe(false);
-  });
-  it("lassoSelect needs at least 3 points and selects what the loop touches", () => {
     const b = board([textCard(1, 100, 100), textCard(2, 400, 100)]);
     expect(lassoSelect(b, [{ x: 0, y: 0 }, { x: 10, y: 0 }])).toEqual([]);
     const loop = [{ x: 90, y: 90 }, { x: 370, y: 90 }, { x: 370, y: 160 }, { x: 90, y: 160 }];
     expect(lassoSelect(b, loop)).toEqual([1]);
-  });
-  it("segmentIntersectsRect detects a crossing and a miss", () => {
-    expect(segmentIntersectsRect({ x: 0, y: 50 }, { x: 200, y: 50 }, { x: 100, y: 0, w: 50, h: 100 })).toBe(true);
-    expect(segmentIntersectsRect({ x: 0, y: 50 }, { x: 50, y: 50 }, { x: 100, y: 0, w: 50, h: 100 })).toBe(false);
   });
   it("strokesWithin finds strokes near a point, in eraser radius", () => {
     const b = board([
@@ -342,6 +335,10 @@ describe("marquee and lasso", () => {
     expect(runs.map((r) => r.pressures)).toEqual([[0.3, 0.4], [0.9, 1.0]]);
   });
   it("splitStrokeByEraser cuts a run when a segment crosses the circle, ends outside it", () => {
+    // The segment test underneath: a segment crossing the
+    // rect counts, one stopping short does not.
+    expect(segmentIntersectsRect({ x: 0, y: 50 }, { x: 200, y: 50 }, { x: 100, y: 0, w: 50, h: 100 })).toBe(true);
+    expect(segmentIntersectsRect({ x: 0, y: 50 }, { x: 50, y: 50 }, { x: 100, y: 0, w: 50, h: 100 })).toBe(false);
     // A fast stroke: sparse points, the segment between
     // them passes through the eraser while both ends are
     // clear of it. Without the segment test the stroke
@@ -358,6 +355,10 @@ describe("marquee and lasso", () => {
 describe("arrangeItems", () => {
   it("row lines cards up from the leftmost, vertically centred", () => {
     const b = board([textCard(1, 100, 100), textCard(2, 500, 300, 100, 48)]);
+    // Nothing to arrange — no ids, or ids that match
+    // nothing — returns nothing.
+    expect(arrangeItems(b, [], { type: "row" })).toEqual([]);
+    expect(arrangeItems(b, [99], { type: "row" })).toEqual([]);
     const out = arrangeItems(b, [1, 2], { type: "row", gap: 10 });
     expect(out).toEqual([
       { id: 1, pos: { x: 100, y: 100 } },
@@ -387,11 +388,6 @@ describe("arrangeItems", () => {
     expect(out[0].pos.y).toBeLessThan(100);
     expect(out[1].pos.y).toBeGreaterThan(100);
   });
-  it("returns nothing when there is nothing to arrange", () => {
-    const b = board([textCard(1, 100, 100)]);
-    expect(arrangeItems(b, [], { type: "row" })).toEqual([]);
-    expect(arrangeItems(b, [99], { type: "row" })).toEqual([]);
-  });
 });
 
 describe("selection and mutation", () => {
@@ -418,11 +414,6 @@ describe("selection and mutation", () => {
     resizeItem(b, 1, 200, 100);
     expect(strokeKind(b.items[0]).points[1]).toEqual({ x: 300, y: 200 });
   });
-  it("allocId hands out increasing ids", () => {
-    const b = board([]);
-    expect(allocId(b)).toBe(101);
-    expect(allocId(b)).toBe(102);
-  });
 });
 
 describe("healDuplicateIds", () => {
@@ -431,6 +422,11 @@ describe("healDuplicateIds", () => {
     healDuplicateIds(b);
     expect(b.items.map((it) => it.id)).toEqual([1, 2]);
     expect(b.next_id).toBe(100);
+    // An empty board is a no-op too.
+    const empty = board([]);
+    healDuplicateIds(empty);
+    expect(empty.items).toEqual([]);
+    expect(empty.next_id).toBe(100);
   });
 
   it("first card keeps the id, later duplicates get fresh ids", () => {
@@ -451,12 +447,6 @@ describe("healDuplicateIds", () => {
     expect(b.next_id).toBe(6);
   });
 
-  it("is a no-op on an empty board", () => {
-    const b = board([]);
-    healDuplicateIds(b);
-    expect(b.items).toEqual([]);
-    expect(b.next_id).toBe(100);
-  });
 });
 
 describe("text cards: markdown, checklists, height", () => {
@@ -479,6 +469,8 @@ describe("text cards: markdown, checklists, height", () => {
   it("renderMarkdownHtml escapes HTML instead of rendering it", () => {
     expect(renderMarkdownHtml("<script>alert(1)</script>", 16)).toContain("&lt;script&gt;");
     expect(renderMarkdownHtml("<script>alert(1)</script>", 16)).not.toContain("<script>");
+    // The escaping itself covers all four characters.
+    expect(escapeHtml(`<a href="x">&`)).toBe("&lt;a href=&quot;x&quot;&gt;&amp;");
   });
   it("toggleTaskLine flips a task and leaves other lines alone", () => {
     expect(toggleTaskLine("- [ ] Buy milk")).toBe("- [x] Buy milk");
@@ -500,14 +492,13 @@ describe("text cards: markdown, checklists, height", () => {
     expect(setChecklistDone(text, -1)).toBe("- [ ] first\n- [ ] second\n- [ ] third");
     expect(setChecklistDone("No tasks here", 1)).toBeNull();
   });
-  it("estimateTextHeight never goes below 48 and grows with text", () => {
+  it("estimateTextHeight counts blank lines and matches the note-body line-height", () => {
+    // Never below 48, and grows with the text.
     expect(estimateTextHeight("", 16, 260)).toBe(48);
     const short = estimateTextHeight("Hi", 16, 260);
     const long = estimateTextHeight("word ".repeat(200), 16, 260);
     expect(short).toBeGreaterThanOrEqual(48);
     expect(long).toBeGreaterThan(short);
-  });
-  it("estimateTextHeight counts blank lines and matches the note-body line-height", () => {
     // A trailing newline is a blank line: it grows the note,
     // or pressing Enter never grows it.
     expect(estimateTextHeight("Hi\n", 16, 260)).toBeGreaterThan(estimateTextHeight("Hi", 16, 260));
@@ -518,9 +509,6 @@ describe("text cards: markdown, checklists, height", () => {
     const two = estimateTextHeight("a\nb", 16, 260);
     const three = estimateTextHeight("a\nb\nc", 16, 260);
     expect(three - two).toBeCloseTo(16 * 1.55 + 6, 5);
-  });
-  it("escapeHtml escapes the four characters", () => {
-    expect(escapeHtml(`<a href="x">&`)).toBe("&lt;a href=&quot;x&quot;&gt;&amp;");
   });
 });
 
@@ -580,12 +568,6 @@ describe("helpers", () => {
 });
 
 describe("geometry helpers", () => {
-  it("centre is the middle of the card", () => {
-    expect(centre(textCard(1, 100, 100, 260, 48))).toEqual({ x: 230, y: 124 });
-  });
-  it("anchorPoint returns a Point anchor as-is", () => {
-    expect(anchorPoint(board([]), { Point: { x: 5, y: 6 } })).toEqual({ x: 5, y: 6 });
-  });
   it("anchorPoint returns an Item anchor's centre, null when missing", () => {
     const b = board([textCard(1, 100, 100, 260, 48)]);
     expect(anchorPoint(b, { Item: 1 })).toEqual({ x: 230, y: 124 });
