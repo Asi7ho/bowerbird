@@ -96,8 +96,15 @@ public final class Model3DCardView: CardView {
             let asset = MDLAsset(url: url)
             guard asset.count > 0 else { return nil }
             let scene = SCNScene()
-            for object in asset.childObjects(of: MDLObject.self) {
-                scene.rootNode.addChildNode(SCNNode(mdlObject: object))
+            // The asset's meshes, with their transforms:
+            // ModelIO reads the geometry, SceneKit draws
+            // it. (SCNNode(mdlObject:) is not in this SDK,
+            // so each mesh is wrapped by hand.)
+            for object in asset.childObjects(of: MDLMesh.self) {
+                guard let mesh = object as? MDLMesh else { continue }
+                let node = SCNNode(geometry: SCNGeometry(mdlMesh: mesh))
+                node.transform = SCNMatrix4FromMat4(mesh.transform.matrix)
+                scene.rootNode.addChildNode(node)
             }
             return scene
         default:
