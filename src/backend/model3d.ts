@@ -1,8 +1,10 @@
 // model3d.ts — the 3D model viewer for Model3D cards.
 //
 // A Model3D card holds one GLB file (embedded in the board's
-// assets). Drag rotates it, wheel zooms, and it turns slowly
-// on its own after a few seconds idle.
+// assets). Drag rotates it, and it turns slowly on its own
+// after a few seconds idle. There is no zoom: the model
+// fills the card at its opening distance, and the wheel
+// over the card pans or zooms the board, as over any card.
 //
 // One WebGL context serves every model on the board. A
 // per-card renderer caps out at ~16 visible models
@@ -14,12 +16,12 @@
 //
 // The copy is the whole point: the model lives inside its
 // card. A card dragged over a 3D card covers the cube, the
-// way it covers any card; the card's own chrome (the fit
-// button, the title) paints above the model, the way it
-// paints above any card; the rounded tile clips the model,
-// the way it clips any card. A shared layer above the cards
-// could do none of that — the cube floated over every card
-// it overlapped, including the fit button on its own card.
+// way it covers any card; the card's own chrome (the title)
+// paints above the model, the way it paints above any card;
+// the rounded tile clips the model, the way it clips any
+// card. A shared layer above the cards could do none of
+// that — the cube floated over every card it overlapped,
+// including the title on its own card.
 //
 // The shared canvas is offscreen (never in the DOM), so a
 // render() that rebuilds #cards never touches it — there is
@@ -53,8 +55,7 @@ interface ViewState {
 
 // The view a model opens with: straight on, slightly
 // above the horizon, far enough that the whole model
-// fills the card. The opening load and the fit button
-// both use it, so a fitted model looks like a fresh one.
+// fills the card.
 export function initialViewState(modelRadius: number): ViewState {
   return { azimuth: 0, elevation: 0.35, distance: modelRadius * 2.4 };
 }
@@ -193,7 +194,6 @@ class Model3DView {
     canvas.width = Math.max(1, Math.round(canvas.clientWidth * dpr));
     canvas.height = Math.max(1, Math.round(canvas.clientHeight * dpr));
     canvas.addEventListener("pointerdown", this.onPointerDown);
-    canvas.addEventListener("wheel", this.onWheel, { passive: false });
   }
 
   // Copy this frame's pixels from the shared layer into the
@@ -204,7 +204,7 @@ class Model3DView {
   // previous frame would show through where the model
   // moved. The card's grey tile is the canvas's own
   // background, so transparent pixels stay grey — and the
-  // card's chrome (the fit button) paints above the copy,
+  // card's chrome (the title) paints above the copy,
   // because it is above the canvas in the card.
   blit(layer: HTMLCanvasElement, rect: { x: number; y: number; w: number; h: number }, dpr: number): void {
     if (!this.ctx || !this.canvas) return;
@@ -263,33 +263,6 @@ class Model3DView {
     this.canvas.removeEventListener("pointercancel", this.onPointerUp);
   };
 
-  private onWheel = (e: WheelEvent): void => {
-    // Zoom the model, not the board.
-    e.stopPropagation();
-    e.preventDefault();
-    this.distance = THREE.MathUtils.clamp(
-      this.distance * Math.exp(e.deltaY * 0.001),
-      this.modelRadius * 1.1,
-      this.modelRadius * 6,
-    );
-    this.lastInteract = performance.now();
-  };
-
-  // Back to the opening view: straight on, slightly above,
-  // the whole model in frame. The shared loop draws the
-  // next frame, so there is nothing to kick — and the
-  // angle is saved on dispose, like any view, so a fitted
-  // model stays fitted when it leaves and re-enters the
-  // viewport. lastInteract restarts the idle clock, so the
-  // model holds still for a few seconds after a fit.
-  fit(): void {
-    const init = initialViewState(this.modelRadius);
-    this.azimuth = init.azimuth;
-    this.elevation = init.elevation;
-    this.distance = init.distance;
-    this.lastInteract = performance.now();
-  }
-
   // The placeholder's screen rect, in CSS pixels relative
   // to the shared canvas. Null when the card is gone or
   // has no size (not visible).
@@ -334,7 +307,6 @@ class Model3DView {
     this.disposed = true;
     if (this.canvas) {
       this.canvas.removeEventListener("pointerdown", this.onPointerDown);
-      this.canvas.removeEventListener("wheel", this.onWheel);
       this.canvas.removeEventListener("pointermove", this.onPointerMove);
       this.canvas.removeEventListener("pointerup", this.onPointerUp);
       this.canvas.removeEventListener("pointercancel", this.onPointerUp);
@@ -485,14 +457,6 @@ function loop(): void {
 
 function kickLoop(): void {
   if (raf === 0 && views.size > 0) raf = requestAnimationFrame(loop);
-}
-
-// Re-frame one card's model to fill its tile (the fit
-// button on the card). A missing view — the card is
-// off-screen or gone — is a no-op; mounting restores the
-// saved angle, so the fit is not lost.
-export function fitModel3DView(cardId: number): void {
-  views.get(cardId)?.fit();
 }
 
 // Mount views for the Model3D cards currently in the DOM

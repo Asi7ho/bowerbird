@@ -20,7 +20,6 @@ import {
   isInlineVideo, pressureWidth, rectFromPoints, smoothStrokePath, smoothStrokePressures, smoothStrokeSamples, splitStrokeByEraser, strokeMaxWidth, strokePressuresVary,
   zoomCamera,
 } from "../backend/model";
-import { fitModel3DView } from "../backend/model3d";
 import { measureNoteCardHeight } from "./text-measure";
 
 // The fallback icon for a creation action that offers
@@ -670,7 +669,6 @@ S.cardsEl.addEventListener("click", (e: MouseEvent) => {
     if (isInlineVideo(v.source, v.remote)) S.api.media.playVideo(id);
     else openExternal(v.source);
   }
-  if (action === "fit-model3d" && "Model3D" in it.kind) fitModel3DView(id);
 });
 
 S.cardsEl.addEventListener("input", (e: Event) => {
