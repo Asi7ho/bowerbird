@@ -1430,7 +1430,9 @@ public final class BoardViewport: NSView {
             if outline {
                 shapeLayer.fillColor = NSColor.clear.cgColor
                 shapeLayer.strokeColor = fill
-                shapeLayer.lineWidth = 2 * camera.zoom
+                // 4px, like the committed outline (the
+                // Electron app's shapeOutlineSvg).
+                shapeLayer.lineWidth = 4 * camera.zoom
                 shapeLayer.opacity = 1
             } else {
                 shapeLayer.fillColor = fill

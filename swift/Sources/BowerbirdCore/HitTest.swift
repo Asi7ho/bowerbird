@@ -50,7 +50,14 @@ public enum HitTest {
     private static func hitsShape(_ shape: ShapePayload, item: Item, at world: Pt) -> Bool {
         let rect = WorldRect(x: item.pos.x, y: item.pos.y, w: item.size.w, h: item.size.h)
         if shape.outline == true {
-            return distanceToShapeEdge(shape.shape, rect: rect, world) <= 4
+            // The outline stroke is 4px wide (the
+            // Electron app's shapeOutlineSvg), and the
+            // grab tolerance matches its convention (half
+            // the width + 6, floored at 8), so the edge is
+            // as easy to grab as a pen stroke — and the
+            // interior, more than 8px from the edge, never
+            // selects it.
+            return distanceToShapeEdge(shape.shape, rect: rect, world) <= 8
         }
         switch shape.shape {
         case .rect:

@@ -233,7 +233,10 @@ public final class ShapeCardView: CardView {
         if shape.outline == true {
             shapeLayer.fillColor = NSColor.clear.cgColor
             shapeLayer.strokeColor = fill.cgColor
-            shapeLayer.lineWidth = 2 * zoom
+            // The Electron app's outline stroke is 4px wide
+            // (shapeOutlineSvg), not 2px — a 2px line was
+            // hard to see and hard to grab.
+            shapeLayer.lineWidth = 4 * zoom
         } else {
             shapeLayer.fillColor = fill.cgColor
             shapeLayer.strokeColor = NSColor.clear.cgColor
