@@ -1,38 +1,7 @@
-// Bowerbird Plugin API v1 — renderer side (see PLUGIN_API.md).
-//
-// A plugin is a folder with a manifest.json and a main.js
-// module. A plugin may be multiple files: main.js is loaded
-// as an ES module over the plugin: scheme, so its relative
-// imports resolve against its own folder, exactly like a
-// first-party plugin. The main process discovers plugins and
-// serves their files through IPC and the plugin: scheme; this
-// module loads them, builds the per-plugin API object, and owns
-// the registries for cards, tools, panels, views and commands. The core (src/main.ts) owns the board
-// state and the DOM; it passes a Host with closures over that state
-// into initPlugins, and calls back into this module at the points
-// where a plugin can contribute (card rendering, tool clicks,
-// double-clicks, card actions, search text, toolbar state, render).
-//
-// Trust model, stated honestly: a locally installed plugin runs in
-// the renderer with this API object. It does not get Node or the
-// filesystem directly — every privileged call goes through the
-// preload bridge — but it does run in the same renderer as the
-// core, so installing a plugin is trusting its code, like an
-// Obsidian or VS Code extension. Within that, plugins are
-// isolated from each other: the host enforces caller identity at
-// the PluginContext boundary, so a plugin can only trigger its
-// own commands, shortcuts and card actions, can never emit a
-// core event, and can never replace a core delegation (the board
-// controller, the settings UI, the shell elements). The app's own
-// UI (src/ui/) is trusted and dispatches on the user's behalf.
-// The API is the supported contract; reaching past it into core
-// DOM is unsupported and may break. A future version may sandbox
-// panels and views harder; v1 does not pretend otherwise.
+// Plugin API v1, renderer side. Loads plugins, builds each
+// one's API object, and owns the registries for cards, tools,
+// panels, views and commands.
 
-// The public plugin API types live in the bowerbird-plugin-api
-// package (plugin-api/) so plugins import them by name without
-// reaching into the core. This module re-exports them, so existing
-// core imports from "./plugins/host" keep working.
 import type { Anchor, ArrangeOptions, Board, BoardController, Camera, Item, Kind, PluginBridge, PluginBuiltinCardDef, PluginCardDecoratorDef, PluginCardDef, PluginCommandDef, PluginContext, PluginCreateActionDef, PluginHost, PluginManifest, PluginOverlayDef, PluginPanelDef, PluginSettingsSectionDef, PluginShortcutDef, PluginToolDef, PluginViewDef, Pt, SettingsUI, ShellElements, Size } from "bowerbird-plugin-api";
 export type { Anchor, ArrangeOptions, Board, BoardController, Camera, Item, Kind, PluginBridge, PluginBuiltinCardDef, PluginCardDecoratorDef, PluginCardDef, PluginCommandDef, PluginContext, PluginCreateActionDef, PluginHost, PluginManifest, PluginOverlayDef, PluginPanelDef, PluginSettingsSectionDef, PluginShortcutDef, PluginToolDef, PluginViewDef, Pt, SettingsUI, ShellElements, Size };
 import { anchorPoint, arrangeItems, AUDIO_H, AUDIO_TRANSCRIPT_HIDDEN_H, AUDIO_TRANSCRIPT_SHOWN_H, boardGet, centre, checklistProgress, clippedEnds, domainOf, elide, escapeHtml, fitCamera, itemBounds, itemRotation, parseHex, rectCrossing, rectFromPoints, renderMarkdownHtml, rotatePoint, segmentIntersectsRect, select, setChecklistDone, tileColorFor, tint, toggleTaskLine } from "../backend/model";

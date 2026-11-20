@@ -1,29 +1,8 @@
-// The board view is a first-party plugin (core-board):
-// it builds the board DOM — the canvas, grid, SVG layer,
-// cards layer, plugin view, overlays, view switcher,
-// resize/rotate handles and toast — and it owns the render
-// loop and the input loop (pan, zoom, drag, resize/rotate,
-// text edit). It uses only the public API, plus the pure
-// board-model functions in src/backend/model.ts (geometry over the
-// board data it reads through the API). The core never owns
-// board DOM and renders nothing itself.
-//
-// The board plugin keeps no live board reference: the core
-// owns the board, and the plugin reads it through
-// api.board.get() (a copy, for rendering) and mutates it
-// through the API's live-drag methods (which change the
-// live board without saving, so a drag saves once at drag
-// end). The camera, tool, pen colour and selection are
-// core state, read and written through api.view, api.ui,
-// api.pen and api.board. Text editing state (editingId)
-// lives here, because the board view owns text editing;
-// the core clears it through the board controller below
-// (undo, board switch, reset).
-//
-// The 3D viewer (src/backend/model3d.ts) is a renderer-side
-// helper like the model geometry above: one shared WebGL
-// renderer draws every visible model into its card's screen
-// rect, and the board syncs viewers after each render.
+// core-board: builds the board DOM and owns the render and
+// input loops. Uses only the public API plus pure model
+// functions. The core owns the board; the plugin reads it
+// through the API.
+
 import type { PluginContext, PluginManifest } from "../plugins/host";
 import { S } from "./board-state";
 import { render, updateSelection } from "./board-render";

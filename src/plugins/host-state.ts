@@ -1,16 +1,5 @@
 // The plugin host's registries and shared state.
-//
-// host.ts was 1,919 lines: the registries (cards, tools,
-// panels, views, commands, ...) are module-level Maps that
-// every part of the host reads, so they live here as the
-// single source of truth. They are const Maps mutated through
-// their methods, never reassigned, so importing them is
-// exactly the same as declaring them in host.ts. The shell
-// element bag and the LoadedPlugin record live here too.
-// The per-plugin API object is still built in host.ts
-// (createContext); the panel dock, views and card registry
-// each have their own module (host-panels, host-views,
-// host-cards) and import these registries from here.
+
 import type { Item, PluginBuiltinCardDef, PluginCardDecoratorDef, PluginCardDef, PluginCommandDef, PluginContext, PluginCreateActionDef, PluginManifest, PluginOverlayDef, PluginPanelDef, PluginSettingsSectionDef, PluginShortcutDef, PluginToolDef, PluginViewDef, ShellElements } from "bowerbird-plugin-api";
 
 export interface LoadedPlugin {

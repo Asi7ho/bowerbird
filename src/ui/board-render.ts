@@ -1,9 +1,7 @@
-// The board's render loop: the grid, the camera transform, the
-// SVG connectors, the group frames, the card HTML, the
-// selection and resize/rotate handles, and the drag previews.
-// Rendering reads the board through S.api and the cached board;
-// it never calls an input function (the dependency runs
-// board-state <- board-render <- board-input <- board.ts).
+// The board's render loop: grid, camera, connectors, group
+// frames, card HTML, selection and handles. Reads through
+// S.api; never calls an input function.
+
 import {
   S,
   ACCENT,

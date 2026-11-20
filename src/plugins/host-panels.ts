@@ -1,16 +1,6 @@
-// The plugin panel dock: tabs, the resizable dock, the
-// active panel, and panel registration.
-//
-// The dock state (active panel, visibility, width, tab
-// elements, tab-drag state) lives here, with the functions
-// that own it. It needs three things the host owns — the
-// PluginHost (panel order, re-render), the PluginBridge
-// (persisting width/visibility) and the pluginsReady flag —
-// and it reads them through the deps bound by initPlugins.
-// The deps are getter closures over host.ts's lets, so this
-// module always sees the live values without owning them,
-// and before initPlugins binds them the functions no-op
-// exactly as they did when host was null.
+// The plugin panel dock: tabs, the resizable dock, and the
+// panels toggle.
+
 import type { PluginBridge, PluginHost, PluginPanelDef } from "bowerbird-plugin-api";
 import { panels, shell } from "./host-state";
 

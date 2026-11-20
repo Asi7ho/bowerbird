@@ -1,15 +1,5 @@
-// The plugin views: the board/plugin view switcher, the
-// active view, and view registration.
-//
-// The active view and the view-switcher DOM live here, with
-// the functions that own them. setActiveView needs the host
-// (the live board, re-render) and the plugin event bus
-// ("view"), and it reads them through the deps bound by
-// initPlugins — getter closures over host.ts's host let and
-// emitPluginEvent, so this module always sees the live
-// values without owning them, and before initPlugins binds
-// them the functions no-op exactly as they did when host
-// was null.
+// The plugin views: the board/plugin view switcher.
+
 import type { PluginHost, PluginViewDef } from "bowerbird-plugin-api";
 import { shell, views } from "./host-state";
 

@@ -1,19 +1,6 @@
-// The plugin card registry: plugin card renderers, the
-// built-in card kinds, card search text, card actions and
-// double-clicks, plugin tools and plugin commands.
-//
-// These functions only need the registries (host-state), the
-// model helpers, and the host for toasts on a failed card
-// action/command — the host comes via the deps bound by
-// initPlugins, a getter closure over host.ts's host let, so
-// this module always sees the live value without owning it,
-// and before initPlugins binds it the toast calls no-op
-// exactly as they did when host was null.
-//
-// domId and isPluginCard live here too: domId builds the
-// element ids for plugin-registered tools (syncPluginToolButtons
-// reads them), and isPluginCard is the card-kind guard every
-// function below uses. host.ts imports both back.
+// The plugin card registry: renderers, the built-in card kinds,
+// and the card search text.
+
 import type { Item, PluginBuiltinCardDef, PluginCardDef, PluginCommandDef, PluginHost, PluginToolDef } from "bowerbird-plugin-api";
 import { escapeHtml } from "../backend/model";
 import { builtinCards, cards, commands, loaded, tools } from "./host-state";

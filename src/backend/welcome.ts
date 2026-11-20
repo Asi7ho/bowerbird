@@ -1,11 +1,4 @@
-// Welcome board: the first board a new user sees. It lives in
-// its own file, not in src/main.ts, because it is content, not
-// app logic: the layout, wording and welcome assets, with no
-// interaction state, no DOM and no plugin wiring. It
-// takes the board folder as a parameter, instead of
-// reading the core's boardDir global, so it is a pure
-// function of (boardDir, pdfSize, videoSize, modelSize, psdSize, aiSize) — same
-// inputs, same board, every time.
+// Welcome board: the first board a new user sees.
 
 import type { Board, Item } from "./model";
 import { estimateTextHeight } from "./model";

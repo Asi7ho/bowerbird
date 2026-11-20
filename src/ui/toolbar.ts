@@ -1,20 +1,7 @@
-// core-toolbar — the toolbar, as a first-party plugin.
-// The core is headless: it owns the board model, persistence,
-// the plugin host and the API, and it renders no UI of its
-// own. This plugin builds the toolbar (tools, pen palette,
-// shape picker, note colours, zoom, delete, settings) and
-// wires it through the PluginContext only. The tool
-// behaviour itself (what a drag does with the active tool)
-// still lives in the core's input loop, which moves with
-// core-board; this plugin owns the buttons and the flyouts,
-// and activates tools through `api.ui.setTool`.
-//
-// The toolbar's state is the tool, the selection, the pen
-// colour and the selected notes' background. It follows
-// those through the plugin events ("tool", "selection",
-// "pen") and refreshes its DOM only when the state key
-// changes, so a render on every mousemove does not rebuild
-// the toolbar for nothing.
+// core-toolbar: the toolbar (tools, pen palette, shape picker,
+// note colours, zoom, delete, settings) as a first-party plugin,
+// wired through the PluginContext only.
+
 import type { PluginContext, PluginManifest } from "../plugins/host";
 import { placeNoteBar } from "./overlay-placement";
 

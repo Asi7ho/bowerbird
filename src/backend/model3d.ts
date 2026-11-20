@@ -1,39 +1,7 @@
-// model3d.ts — the 3D model viewer for Model3D cards.
-//
-// A Model3D card holds one GLB file (embedded in the board's
-// assets). Drag rotates it, and it turns slowly on its own
-// after a few seconds idle. There is no zoom: the model
-// fills the card at its opening distance, and the wheel
-// over the card pans or zooms the board, as over any card.
-//
-// One WebGL context serves every model on the board. A
-// per-card renderer caps out at ~16 visible models
-// (Chromium's context limit) — the 17th gets a lost context
-// and renders blank. So there is one renderer and one
-// offscreen canvas; each visible model is drawn into its
-// card's screen rect with a scissor, and the pixels are
-// then copied into the card's own canvas.
-//
-// The copy is the whole point: the model lives inside its
-// card. A card dragged over a 3D card covers the cube, the
-// way it covers any card; the card's own chrome (the title)
-// paints above the model, the way it paints above any card;
-// the rounded tile clips the model, the way it clips any
-// card. A shared layer above the cards could do none of
-// that — the cube floated over every card it overlapped,
-// including the title on its own card.
-//
-// The shared canvas is offscreen (never in the DOM), so a
-// render() that rebuilds #cards never touches it — there is
-// nothing to detach or restore. A view is mounted when its
-// card is rendered and dropped when the card leaves the
-// viewport. The loaded model is cached by URL and the view
-// angle is kept per card, so coming back is fast and the
-// angle is where the user left it.
-//
-// GLB only: a .gltf references external buffers and textures
-// that would not be embedded with it, so drops only accept
-// .glb (see drops.ts).
+// 3D model viewer for Model3D cards. One WebGL context serves
+// every model (Chromium caps per-card contexts at ~16). Drag
+// rotates; there is no zoom — the wheel pans/zooms the board.
+
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";

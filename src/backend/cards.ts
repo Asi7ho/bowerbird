@@ -1,13 +1,6 @@
 // Cards: the HTML for one board card, plus the shape metadata
-// the toolbar flyout and the pen preview use. The core renders
-// no card itself: card HTML comes from the plugin that
-// registered a renderer for the kind (core-cards for the
-// built-in kinds, a user plugin for its own kinds). This
-// module is the thin wrapper that applies the card chrome
-// and dispatches to the right renderer. Board JSON is
-// untrusted input here: every value that lands in an
-// attribute or as text is coerced or escaped in cardHtml,
-// never trusted from the board.
+// the toolbar, search and drag previews share.
+
 import type { Media } from "./media";
 import {
   itemRotation, shapePolygon, type Item, type ShapeKind, checklistProgress,

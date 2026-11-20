@@ -1,14 +1,8 @@
-// Live imports: a dropped .svg, .psd or .ai keeps its source
-// file in the board's assets, and the app re-imports it when
-// that file changes on disk. The imported cards live in one
-// group, linked to the source by the group's record (see
-// GroupEntry.source). These are the pure pieces: finding the
-// group for a source path, and translating a fresh import so
-// it lands where the group currently is — the group keeps its
-// place on the board, the cards inside it are rebuilt from
-// the file. A stroke's points are absolute world coords (see
-// the imported-strokes fix), so translating a stroke moves
-// its points, not just its bbox.
+// Live imports: a dropped .svg/.psd/.ai keeps its source in the
+// board's assets and is re-imported when the file changes.
+// Pure pieces: finding the group for a source, and translating
+// a fresh import onto the group's current place.
+
 import type { Board, Item, Pt } from "bowerbird-plugin-api";
 import type { ImportedItem } from "./import-types";
 

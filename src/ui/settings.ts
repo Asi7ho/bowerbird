@@ -1,17 +1,5 @@
 // core-settings: the Settings window as a first-party plugin.
-//
-// The settings window used to be core code (src/settings.ts plus
-// static HTML in index.html). It is now a plugin, built on the
-// public PluginContext only — the same API any third-party plugin
-// uses. It builds its own DOM, registers itself as the settings
-// UI (so the core can open/close it without knowing which plugin
-// provides it), and hands the plugin system the container its
-// plugin settings sections render into.
-//
-// It is a first-party plugin: an ES module bundled with the app,
-// loaded with activateFirstPartyPlugin, under a manifest that
-// declares the same permissions a user plugin would. It has no
-// back door into the core. See ARCHITECTURE.md.
+
 import type { PluginContext, PluginManifest } from "../plugins/host";
 
 export const manifest: PluginManifest = {

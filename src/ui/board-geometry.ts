@@ -1,17 +1,5 @@
-// Pure board geometry helpers, extracted from the board
-// plugin (src/ui/board.ts).
-//
-// These take everything they need as arguments — an item,
-// a camera, an item-bounds function — instead of closing
-// over the board plugin's module state (api, the DOM, the
-// drag/editing state). The two functions that need the live
-// board take it as a parameter: itemBounds is
-// api.geometry.itemBounds (model.itemBounds needs the board
-// object, which the plugin only gets as a deep copy), and
-// isFrame is the plugin's isFrameCard. The centre/rotation
-// helpers are model.centre / model.rotatePoint /
-// model.itemRotation directly: api.geometry exposes exactly
-// those functions, so the results are identical.
+// Pure board geometry helpers.
+
 import type { Camera } from "bowerbird-plugin-api";
 import { centre, itemRotation, rotatePoint, smoothStrokePath } from "../backend/model";
 import type { Item, Pt, Size } from "../backend/model";
