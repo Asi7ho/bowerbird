@@ -946,8 +946,13 @@ public final class BoardViewport: NSView {
         // skipped and the typed text is lost.
         noteEditor?.removeFromSuperview()
         var next = board
-        let id = next.nextId
-        next.nextId += 1
+        // next_id is the LAST allocated id, not the next
+        // free one — taking it as the new id collided with
+        // the welcome cube (id 48), so the note took the
+        // cube's card and its editor never opened: a
+        // double-click on empty space did nothing. A fresh
+        // id comes from allocId, which bumps first.
+        let id = allocId(&next)
         let text = TextPayload(text: "", bold: false, size: 16, color: "#1A1A1A", bg: nil)
         next.items.append(Item(id: id, pos: world, size: Size(w: 260, h: 48), group: nil, kind: .text(text), rotation: nil))
         board = next
