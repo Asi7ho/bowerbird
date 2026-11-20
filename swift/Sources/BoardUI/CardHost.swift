@@ -172,6 +172,22 @@ public final class CardHost {
             if view.superview == nil {
                 container.addSubview(view)
             }
+            // The layer's bounds are set from the size
+            // just placed, before the turn. The bird's parts
+            // sat in the wrong places on load (the debug
+            // file showed the frames right, the screenshots
+            // showed the leaves shifted): the turn is about
+            // the centre of the layer's bounds, and for a
+            // fresh card not yet in the window those bounds
+            // had not caught up with the new frame -- so the
+            // turn was about the wrong point and the part
+            // landed shifted. Setting the bounds here makes
+            // the centre right from the first draw.
+            let cardSize = CGSize(
+                width: item.size.w * camera.zoom,
+                height: item.size.h * camera.zoom
+            )
+            view.layer?.bounds = CGRect(origin: .zero, size: cardSize)
             // The rotation is set AFTER the card is in the
             // container, not before. The screenshots showed
             // the bird's turned parts (leaves, tail, belly)
@@ -204,10 +220,7 @@ public final class CardHost {
             // built from a bounds that had not caught up
             // with the new frame yet. The frame just set is
             // the truth; `bounds` is not read.
-            view.rebuildContent(size: CGSize(
-                width: item.size.w * camera.zoom,
-                height: item.size.h * camera.zoom
-            ))
+            view.rebuildContent(size: cardSize)
             shown[item.id] = view
         }
         // Stacking: unselected in board order, then selected
