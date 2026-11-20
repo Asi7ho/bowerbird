@@ -24,16 +24,26 @@ public struct NoteEditorContent: View {
     var isBold: Bool
     var textColorHex: String
     var backgroundHex: String
+    /// The padding, in screen points: the card's 14 world
+    /// points scaled by the zoom, like the card's own text
+    /// layer (its inset is 14 times the zoom). A fixed 14
+    /// ate the card when dezoomed — at the user's zoom the
+    /// card is only 25 points tall, so 14 top and bottom
+    /// left no room at all for the text, and typing in a
+    /// new note showed only a white box until the edit was
+    /// left and the card's own layer drew the text.
+    var padding: CGFloat
     var onCommit: (String) -> Void
     @FocusState private var focused: Bool
     @State private var wasFocused = false
 
-    public init(model: NoteEditorModel, fontSize: CGFloat, isBold: Bool, textColorHex: String, backgroundHex: String, onCommit: @escaping (String) -> Void) {
+    public init(model: NoteEditorModel, fontSize: CGFloat, isBold: Bool, textColorHex: String, backgroundHex: String, padding: CGFloat, onCommit: @escaping (String) -> Void) {
         self.model = model
         self.fontSize = fontSize
         self.isBold = isBold
         self.textColorHex = textColorHex
         self.backgroundHex = backgroundHex
+        self.padding = padding
         self.onCommit = onCommit
     }
 
@@ -43,7 +53,7 @@ public struct NoteEditorContent: View {
             .foregroundColor(Color(hex: textColorHex) ?? Color.black)
             .scrollContentBackground(.hidden)
             .background(Color(hex: backgroundHex) ?? Color.white)
-            .padding(14)
+            .padding(padding)
             .focused($focused)
             .onAppear { focused = true }
             .onExitCommand { onCommit(model.text) }

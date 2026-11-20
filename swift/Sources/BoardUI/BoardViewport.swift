@@ -1000,12 +1000,18 @@ public final class BoardViewport: NSView {
         let zoom = item.size.w > 0 ? Double(cardView.bounds.width) / item.size.w : 1
         editingNoteId = id
         editingOriginalText = payload.text
+        // The padding is the card's 14 world points scaled
+        // by the zoom, like the font size and the card's
+        // own text layer. A fixed 14 left no room for the
+        // text when dezoomed, so a new note showed only a
+        // white box while typing.
         cardView.startEditing(
             text: payload.text,
             fontSize: CGFloat(payload.size) * CGFloat(zoom),
             isBold: payload.bold,
             textColorHex: payload.color,
             backgroundHex: payload.bg ?? "#FFFFFF",
+            padding: 14 * CGFloat(zoom),
             onCommit: { [weak self] text in self?.commitTextEdit(with: text) }
         )
     }
