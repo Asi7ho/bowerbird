@@ -394,6 +394,12 @@ public final class ToolbarNSView: NSView {
         default:
             break
         }
+        // Refresh at once, on the click: the flyout opens
+        // now, not on the next runloop turn via the state
+        // sink. A click that only changes state and waits
+        // for the sink to catch up reads as "nothing
+        // happened".
+        refresh()
     }
 
     private func toggleFamily(_ picker: Picker, activate: () -> Void) {
@@ -436,5 +442,9 @@ public final class ToolbarNSView: NSView {
             }
         }
         tools.pickerOpen = nil
+        // Refresh at once, on the pick, like barClicked:
+        // the flyout closes now, not on the next runloop
+        // turn via the state sink.
+        refresh()
     }
 }
