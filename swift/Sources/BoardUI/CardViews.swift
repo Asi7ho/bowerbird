@@ -129,6 +129,27 @@ public final class TextCardView: CardView {
         addSubview(hosting)
         editorHostingView = hosting
         setEditing(true)
+        // The editor's scrollbar, thin and overlay-style:
+        // the default scroller is wide and always visible,
+        // which crowded the narrow note. The scroll view is
+        // built by SwiftUI after the hosting view is laid
+        // out, so this runs on the next pass.
+        DispatchQueue.main.async { [weak hosting] in
+            guard let hosting else { return }
+            TextCardView.makeScrollbarsOverlay(in: hosting)
+        }
+    }
+
+    /// Walks a view tree and puts every scroll view's
+    /// scrollers in overlay style (thin, fading out when
+    /// idle) instead of the wide always-visible one.
+    private static func makeScrollbarsOverlay(in view: NSView) {
+        if let scrollView = view as? NSScrollView {
+            scrollView.scrollerStyle = .overlay
+        }
+        for subview in view.subviews {
+            makeScrollbarsOverlay(in: subview)
+        }
     }
 
     /// Closes the editor in the card, if one is open.
