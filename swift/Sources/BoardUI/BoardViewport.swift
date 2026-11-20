@@ -1730,7 +1730,7 @@ public final class BoardViewport: NSView {
         guard editingNoteId == nil else { return }
         let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
         let cursor = cursorFor(world: world)
-        if cursor != lastCursor {
+        if cursor !== lastCursor {
             lastCursor = cursor
             cursor.set()
         }
@@ -1779,7 +1779,7 @@ public final class BoardViewport: NSView {
         } else {
             cursor = .arrow
         }
-        if cursor != lastCursor {
+        if cursor !== lastCursor {
             lastCursor = cursor
             cursor.set()
         }

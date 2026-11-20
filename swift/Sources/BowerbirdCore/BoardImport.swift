@@ -149,7 +149,7 @@ public enum BoardImport {
                 return true
             }
         }
-        let path = lower.split(separator: "?")[0].split(separator: "#")[0]
+        let path = lower.split(separator: "?", omittingEmptySubsequences: false)[0].split(separator: "#", omittingEmptySubsequences: false)[0]
         return ["mp4", "mov", "webm", "mkv", "avi", "m4v"].contains(where: { path.hasSuffix(".\($0)") })
     }
 
