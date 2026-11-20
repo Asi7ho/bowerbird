@@ -499,12 +499,12 @@ async function main() {
       assert.equal(Math.round(frame.box.y), 124);
       assert.equal(Math.round(frame.box.width), 808);
       assert.equal(Math.round(frame.box.height), 581);
-      assert.equal(await page.locator(".group-label").first().textContent(), "Section 1");
+      assert.equal(await page.locator(".group-label").first().textContent(), "Group 1");
       const grouped = await waitFor("group label on disk", () => {
         const b = readBoard();
         const note = b.items.find((it) => "Text" in it.kind);
         const ci = b.items.find((it) => "Plugin" in it.kind && it.group === 1);
-        return b.groups?.[1]?.label === "Section 1" && note?.group === 1 && ci ? b : null;
+        return b.groups?.[1]?.label === "Group 1" && note?.group === 1 && ci ? b : null;
       });
       assert.equal(grouped.items.filter((it) => it.group === 1).length, 2);
       // Rename by double-clicking the label: the chip sits

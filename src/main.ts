@@ -594,7 +594,7 @@ async function init(): Promise<void> {
       it.size.h = measureNoteCardHeight(text, it.kind.Text.size, it.size.w);
       return true;
     },
-    // Rename a group's section label. One save, one undo
+    // Rename a group's label. One save, one undo
     // step. False when the group has fewer than two members
     // or the label is empty after trimming.
     setGroupLabel: (group: number, label: string) => {
@@ -632,7 +632,7 @@ async function init(): Promise<void> {
       const g = C.board.next_group;
       for (const it of C.board.items) if (ids.includes(it.id)) it.group = g;
       C.board.groups = C.board.groups ?? {};
-      C.board.groups[g] = { label: `Section ${g}` };
+      C.board.groups[g] = { label: `Group ${g}` };
       C.undoStore.save(); boardRender();
       return g;
     },

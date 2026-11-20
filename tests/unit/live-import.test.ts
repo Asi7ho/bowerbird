@@ -28,7 +28,7 @@ describe("base64ToBytes", () => {
 describe("findSourceGroup", () => {
   it("finds the group linked to a source path", () => {
     const board = boardWithGroups({
-      1: { label: "Section 1" },
+      1: { label: "Group 1" },
       2: { label: "sample.svg", source: { path: "/b/assets/sample.svg", kind: "svg" } },
     });
     expect(findSourceGroup(board, "/b/assets/sample.svg")).toBe(2);
