@@ -23,8 +23,9 @@ final class CardHostLoadTests: XCTestCase {
     }
 
     /// A rotated card that appears only after the
-    /// container grows to its real size keeps its size
-    /// and centre on that first visible render.
+    /// container grows to its real size lands correctly —
+    /// and its shape is drawn for the real bounds on that
+    /// same render, not only after a later layout pass.
     func testCardAppearingAfterResizeLandsCorrectly() {
         let container = NSView(frame: .zero)
         let camera = Camera(x: 0, y: 0, zoom: 1)
@@ -46,5 +47,17 @@ final class CardHostLoadTests: XCTestCase {
         XCTAssertEqual(view.bounds.height, 24, accuracy: 0.001)
         XCTAssertEqual(view.frame.midX, 1315, accuracy: 0.001)
         XCTAssertEqual(view.frame.midY, 212, accuracy: 0.001)
+        // The shape itself is drawn for the real bounds:
+        // the path's box fills the card, so the ellipse
+        // sits where the card sits.
+        let shapeLayer = view.layer?.sublayers?.compactMap { $0 as? CAShapeLayer }.first
+        XCTAssertNotNil(shapeLayer)
+        if let path = shapeLayer?.path {
+            let box = path.boundingBox
+            XCTAssertEqual(box.width, 30, accuracy: 0.5)
+            XCTAssertEqual(box.height, 24, accuracy: 0.5)
+        } else {
+            XCTFail("shape layer has no path after render")
+        }
     }
 }
