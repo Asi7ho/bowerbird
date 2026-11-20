@@ -149,6 +149,19 @@ public final class CardHost {
             if reconfigure || !alreadyShown {
                 view.configure(item: item)
             }
+            // Reset the rotation before setting the frame:
+            // a frame is the bounding box of the rotated
+            // rect, so setting it while a rotation is still
+            // applied computes the wrong bounds — a recycled
+            // view that carried a different rotation from
+            // its last item landed in the wrong place, and
+            // only a later layout, with the right rotation
+            // already in place, put it right. That is why
+            // the bird's rotated parts sat wrong on load
+            // and snapped into place once something moved
+            // them. The frame is always set unrotated; the
+            // rotation is applied after, about the centre.
+            view.layer?.transform = CATransform3DIdentity
             view.frame = CGRect(
                 x: (item.pos.x - camera.x) * camera.zoom,
                 y: (item.pos.y - camera.y) * camera.zoom,
@@ -165,8 +178,6 @@ public final class CardHost {
                 // world coordinates) no longer sat on its
                 // corners.
                 view.layer?.transform = CATransform3DMakeRotation(-CGFloat(rotation) * .pi / 180, 0, 0, 1)
-            } else {
-                view.layer?.transform = CATransform3DIdentity
             }
             view.isSelected = selected.contains(item.id)
             if view.superview == nil {
