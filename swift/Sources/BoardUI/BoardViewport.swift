@@ -1015,6 +1015,9 @@ public final class BoardViewport: NSView {
         guard let cardView = cardContainer.subviews.compactMap({ $0 as? TextCardView }).first(where: { $0.currentItem?.id == id }) else { return }
         let editor = NoteEditorView()
         editor.string = payload.text
+        // Editable, always: the editor is created to be
+        // typed in, and nothing else in the app sets this.
+        editor.isEditable = true
         // The editor is inside the card, which is
         // screen-sized, so the font is the text size scaled
         // by the zoom — the same size the card renders it
@@ -1033,7 +1036,20 @@ public final class BoardViewport: NSView {
         editingNoteId = id
         editingOriginalText = payload.text
         editingTextChanged = false
-        window?.makeFirstResponder(editor)
+        // The editor must be the first responder, or the
+        // keystrokes go to the viewport (which ignores
+        // plain letters) and the note cannot be typed in —
+        // the card looks open but nothing can be written.
+        // The window can refuse the request while the
+        // mouse event is still being dispatched, so a
+        // refusal is retried once the event has finished,
+        // while this is still the open editor.
+        if window?.makeFirstResponder(editor) == false {
+            DispatchQueue.main.async { [weak editor, weak self] in
+                guard let editor, self?.noteEditor === editor else { return }
+                _ = self?.window?.makeFirstResponder(editor)
+            }
+        }
         // Cursor at the end of the text. NSRange counts
         // UTF-16 units, not characters — an emoji is one
         // character but two units — so the range is built
