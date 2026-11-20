@@ -243,6 +243,15 @@ public final class BoardViewport: NSView {
     /// over its card. Nil when no note is being edited.
     private var editingNoteId: Int?
     private var noteEditor: NoteEditorView?
+    /// The text the note had when editing began, and
+    /// whether the user actually changed it. The editor
+    /// can be ended without the user touching it (a render
+    /// pulling its card out from under it), and an empty
+    /// string then is not the user clearing the note — so
+    /// only an edit the user changed may empty (and so
+    /// delete) a note that had text.
+    private var editingOriginalText: String?
+    private var editingTextChanged = false
 
     /// The note colour bar, shown beside a selected text
     /// note (nil until first shown).
@@ -988,10 +997,13 @@ public final class BoardViewport: NSView {
         editor.frame = cardView.bounds
         editor.autoresizingMask = [.width, .height]
         editor.onEndEditing = { [weak self] _ in self?.commitTextEdit() }
+        editor.onTextChanged = { [weak self] in self?.editingTextChanged = true }
         cardView.setEditing(true)
         cardView.addSubview(editor)
         noteEditor = editor
         editingNoteId = id
+        editingOriginalText = payload.text
+        editingTextChanged = false
         window?.makeFirstResponder(editor)
         // Cursor at the end of the text. NSRange counts
         // UTF-16 units, not characters — an emoji is one
@@ -1002,12 +1014,26 @@ public final class BoardViewport: NSView {
 
     /// Commits the open editor: the text is saved (with
     /// the card's height re-measured) as one undo step, or
-    /// the note is removed when the text is empty or only
-    /// whitespace. The editor is removed and the card's
-    /// text layer shown again, either way.
+    /// the note is removed when the user emptied it — a
+    /// note that had text and was never touched keeps its
+    /// text when the edit ends empty (the editor was ended
+    /// by something other than the user). The editor is
+    /// removed and the card's text layer shown again,
+    /// either way.
     private func commitTextEdit() {
         guard let id = editingNoteId, let editor = noteEditor else { return }
         let text = editor.string
+        // The text the note had when editing began, and
+        // whether the user changed it: an edit that ends
+        // empty without a single change did not come from
+        // the user — the editor was ended by something
+        // else (a render pulling its card away) — so a
+        // note that had text keeps it. Only an edit the
+        // user actually changed may empty (and so delete)
+        // a note, and a note that started empty is removed
+        // either way.
+        let originalText = editingOriginalText ?? ""
+        let userEmptiedIt = editingTextChanged
         // Clear the editor references BEFORE removing the
         // view: removing it fires viewWillMove(toWindow:
         // nil), which ends the edit and calls this commit
@@ -1018,6 +1044,8 @@ public final class BoardViewport: NSView {
         // on a double-clicked text card).
         noteEditor = nil
         editingNoteId = nil
+        editingOriginalText = nil
+        editingTextChanged = false
         editor.removeFromSuperview()
         if let cardView = cardContainer.subviews.compactMap({ $0 as? TextCardView }).first(where: { $0.currentItem?.id == id }) {
             cardView.setEditing(false)
@@ -1025,6 +1053,13 @@ public final class BoardViewport: NSView {
         var next = board
         guard let index = next.items.firstIndex(where: { $0.id == id }) else { return }
         if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if !originalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !userEmptiedIt {
+                // The note had text and the user never
+                // touched it: the empty edit is spurious,
+                // so the note is left exactly as it was —
+                // no board change, no undo step.
+                return
+            }
             // An empty note is not a note: remove it. For a
             // new note (never saved) this leaves no board
             // change and no undo step; for an existing note

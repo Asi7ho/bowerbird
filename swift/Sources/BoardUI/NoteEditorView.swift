@@ -10,6 +10,13 @@ import AppKit
 public final class NoteEditorView: NSTextView {
     /// Called once, with the text, when editing ends.
     public var onEndEditing: ((String) -> Void)?
+    /// Called whenever the user actually changes the text
+    /// (a keystroke, a paste, a delete) — not when the
+    /// editor is only opened or closed. The viewport uses
+    /// it to tell a note the user emptied from one the
+    /// editor never showed: an edit that ends empty
+    /// without a single change did not come from the user.
+    public var onTextChanged: (() -> Void)?
 
     private var didEnd = false
 
@@ -78,5 +85,9 @@ public final class NoteEditorView: NSTextView {
 extension NoteEditorView: NSTextViewDelegate {
     public func textDidEndEditing(_ notification: Notification) {
         endEditingOnce()
+    }
+
+    public func textDidChange(_ notification: Notification) {
+        onTextChanged?()
     }
 }
