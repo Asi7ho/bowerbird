@@ -91,11 +91,15 @@ public final class Model3DCardView: CardView {
                   let doc = GLTFDocument.parse(data: data) else { return nil }
             return GLTFSceneKit.scene(from: doc)
         case "dae", "scn", "usdz":
-            return SCNScene(url: url, options: nil)
+            return try? SCNScene(url: url, options: nil)
         case "obj", "fbx", "stl":
             let asset = MDLAsset(url: url)
             guard asset.count > 0 else { return nil }
-            return SCNScene(mdlAsset: asset)
+            let scene = SCNScene()
+            for object in asset.childObjects(of: MDLObject.self) {
+                scene.rootNode.addChildNode(SCNNode(mdlObject: object))
+            }
+            return scene
         default:
             return nil
         }
