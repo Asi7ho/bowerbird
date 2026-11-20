@@ -1825,6 +1825,15 @@ public final class BoardViewport: NSView {
     /// pointer (its I-beam), so the board sets nothing
     /// over the note itself.
     private func updateCursor(at point: NSPoint) {
+        // Over the toolbar or its side panel the cursor is
+        // the normal arrow, not the tool's. The board's
+        // tracking area covers the bar's place, so its mouse
+        // move reaches here even over the bar — without
+        // this check it would set the tool cursor right back.
+        if toolState?.isHoveringToolbar == true {
+            NSCursor.arrow.set()
+            return
+        }
         // While a note is being edited, the editor shows
         // its own text cursor over the note — but only
         // over the note. Off the note, the board cursor
@@ -1886,10 +1895,12 @@ public final class BoardViewport: NSView {
     /// The cursor for a drag in progress: resize, rotate
     /// and pan keep their drag cursor whatever is under
     /// the pointer; a card move keeps the move hand; an
-    /// erase sweep keeps no cursor; any other drag (a
+    /// erase sweep keeps its circle. Any other drag (a
     /// stroke, a shape, a connector, a lasso loop, a
-    /// marquee) shows the plain arrow, like the Electron
-    /// app.
+    /// marquee) keeps the tool's own cursor — it must not
+    /// drop back to the plain arrow the moment the user
+    /// presses down to draw, or the circle/plus vanishes
+    /// on every stroke.
     private func updateCursorForDrag(at point: NSPoint) {
         let cursor: NSCursor
         if resizeDrag != nil {
@@ -1901,7 +1912,8 @@ public final class BoardViewport: NSView {
         } else if eraseActive {
             cursor = Self.circleCursor(radius: CGFloat(BoardErase.radius * camera.zoom))
         } else {
-            cursor = .arrow
+            let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
+            cursor = cursorFor(world: world)
         }
         // Always set it (see updateCursor): the pointer can
         // be reset by anything it crosses, so skipping the

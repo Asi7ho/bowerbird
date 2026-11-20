@@ -33,7 +33,12 @@ public struct SwiftToolbarView: View {
                     .offset(x: Self.flyoutX, y: 0)
                     // The flyout is the toolbar's side panel:
                     // the normal cursor here, like the bar.
+                    // It also raises the shared flag, so the
+                    // board's mouse move (whose tracking area
+                    // covers the bar's place) does not set the
+                    // tool cursor right back over it.
                     .onHover { hovering in
+                        tools.isHoveringToolbar = hovering
                         if hovering { NSCursor.arrow.set() }
                     }
             }
@@ -46,9 +51,11 @@ public struct SwiftToolbarView: View {
         // bar must show the normal cursor, and the tool
         // cursor only on the board. (SwiftUI has no .cursor
         // modifier in this SDK, so the bar sets the arrow
-        // on hover; moving back onto the board lets the
-        // viewport's mouse move set the tool cursor again.)
+        // on hover and raises the shared flag; moving back
+        // onto the board lets the viewport's mouse move set
+        // the tool cursor again.)
         .onHover { hovering in
+            tools.isHoveringToolbar = hovering
             if hovering { NSCursor.arrow.set() }
         }
     }
