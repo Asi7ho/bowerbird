@@ -35,7 +35,7 @@ public enum CardViews {
         case .audio:
             return PlaceholderCardView()
         case .video:
-            return PlaceholderCardView()
+            return VideoCardView()
         case .model3D:
             return PlaceholderCardView()
         case .plugin:
