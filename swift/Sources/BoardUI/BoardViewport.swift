@@ -32,6 +32,11 @@ public final class BoardViewport: NSView {
             }
             applyCamera()
             onCameraChanged?(camera)
+            // A zoom change resizes the circle cursor, so
+            // the cursor rects are stale — rebuild them.
+            if oldValue.zoom != camera.zoom {
+                invalidateCursorRects()
+            }
         }
     }
 
@@ -89,6 +94,10 @@ public final class BoardViewport: NSView {
                 DispatchQueue.main.async { [weak self] in
                     guard let self, let point = self.lastMousePoint else { return }
                     self.updateCursor(at: point)
+                    // The tool or the open panel changed, so
+                    // the cursor rects (cursor and toolbar
+                    // edge) are stale — rebuild them.
+                    self.invalidateCursorRects()
                 }
             }
         }
@@ -606,12 +615,6 @@ public final class BoardViewport: NSView {
             } else {
                 onUndo?()
             }
-            // The undo/redo rebuilds the cards, which drops
-            // the cursor to the arrow — put the tool's
-            // cursor back a moment later, after AppKit has
-            // finished, or it stays the arrow until the
-            // pointer moves.
-            reassertCursorSoon()
             return
         }
         // Delete: remove the selection (one undo step, one
@@ -1352,14 +1355,10 @@ public final class BoardViewport: NSView {
         // The drag is over: once every branch below has
         // cleared its drag state, the cursor goes back to
         // whatever the tool and the pointer's position
-        // call for. It is also put back a moment later:
-        // AppKit drops it to the arrow when the button
-        // comes up, after this set, so it would stay the
-        // arrow until the pointer moves.
-        defer {
-            updateCursor(at: convert(event.locationInWindow, from: nil))
-            reassertCursorSoon()
-        }
+        // call for. (The cursor rect holds the tool's
+        // cursor over the board, so no delayed put-back
+        // is needed — that showed as a jump.)
+        defer { updateCursor(at: convert(event.locationInWindow, from: nil)) }
         panStart = nil
         // A resize or rotate drag that moved commits as one
         // undo step and one save. A click on a handle that
@@ -1867,23 +1866,76 @@ public final class BoardViewport: NSView {
     /// drop the cursor back to the arrow, and the tool's
     /// own cursor must be put back. The place decides
     /// toolbar-vs-board, as in updateCursor.
+    /// The tool's cursor, held by a cursor rect over the
+    /// board, so it cannot drop to the arrow when a drag
+    /// ends or the cards are rebuilt. A rect is the
+    /// AppKit-native way to hold a cursor: AppKit shows
+    /// the rect's cursor whenever the pointer is over it,
+    /// across mouse-up and view changes — setting the
+    /// cursor by hand is overwritten after the fact, and
+    /// putting it back a moment later shows as a jump
+    /// (arrow, then the tool's cursor). Only for tools
+    /// whose cursor does not depend on the pointer's
+    /// place (the circle, the plus, the crosshair).
+    /// Select mode keeps its arrow and its handle cursors
+    /// through the usual mouse-move path.
+    override public func resetCursorRects() {
+        super.resetCursorRects()
+        guard let tools = toolState else { return }
+        let cursor: NSCursor
+        switch tools.tool {
+        case .draw(let drawTool):
+            let worldRadius: Double
+            switch drawTool {
+            case .pen: worldRadius = 1.5
+            case .pencil: worldRadius = 1
+            case .highlighter: worldRadius = 6
+            case .eraser: worldRadius = BoardErase.radius
+            }
+            cursor = Self.circleCursor(radius: CGFloat(worldRadius * camera.zoom))
+        case .shape, .connector:
+            cursor = .crosshair
+        case .select(let mode):
+            if mode == .lasso {
+                cursor = .crosshair
+            } else {
+                return
+            }
+        }
+        // The board area: the viewport minus the toolbar.
+        // The toolbar (bar and side panel) gets no rect,
+        // so it falls back to the arrow.
+        let w = bounds.width
+        let h = bounds.height
+        let barBottom = h / 2 - 132
+        let barTop = h / 2 + 132
+        let rightEdge: CGFloat
+        if let picker = tools.pickerOpen {
+            let panelWidth: CGFloat = picker == .shape ? 114 : 56
+            rightEdge = 76 + panelWidth
+        } else {
+            rightEdge = 68
+        }
+        // Right of the toolbar: the main board.
+        addCursorRect(NSRect(x: rightEdge, y: 0, width: w - rightEdge, height: h), cursor: cursor)
+        // Left of the bar.
+        addCursorRect(NSRect(x: 0, y: 0, width: 12, height: h), cursor: cursor)
+        // Above and below the bar (the panel sits inside
+        // the bar's height, top-aligned, so it is covered).
+        addCursorRect(NSRect(x: 12, y: 0, width: rightEdge - 12, height: barBottom), cursor: cursor)
+        addCursorRect(NSRect(x: 12, y: barTop, width: rightEdge - 12, height: h - barTop), cursor: cursor)
+    }
+
+    /// Rebuild the cursor rects (the tool, the zoom or the
+    /// open panel changed, so the rect's cursor or the
+    /// toolbar's edge is stale).
+    private func invalidateCursorRects() {
+        window?.invalidateCursorRects(for: self)
+    }
+
     public func refreshCursor() {
         guard let point = lastMousePoint else { return }
         updateCursor(at: point)
-    }
-
-    /// Put the tool's cursor back a moment after a drag
-    /// ends or an undo lands. Setting it at once is not
-    /// enough: AppKit drops the cursor back to the arrow
-    /// when the button comes up (and when the cards are
-    /// rebuilt), after the board has already set the
-    /// tool's cursor — so it stays the arrow until the
-    /// pointer moves. Setting it again on a later turn,
-    /// after AppKit has finished, is what makes it stick.
-    private func reassertCursorSoon() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
-            self?.refreshCursor()
-        }
     }
 
     private func updateCursor(at point: NSPoint) {
