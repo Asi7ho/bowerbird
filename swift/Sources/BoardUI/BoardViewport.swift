@@ -1383,7 +1383,16 @@ public final class BoardViewport: NSView {
         }
         guard let start = marqueeStart else { return }
         let end = marqueeCurrent ?? start
-        selected = Set(MarqueeSelection.select(board: board, from: start, to: end))
+        // A click is not a marquee: mouseDown already
+        // settled the selection by geometry (hitTest), and
+        // a zero-area marquee would re-select by box — the
+        // empty inside of an outline shape would select
+        // the shape after hitTest correctly returned
+        // nothing. Only a real drag (moved at least 3
+        // world pixels) marquee-selects.
+        if abs(end.x - start.x) >= 3 || abs(end.y - start.y) >= 3 {
+            selected = Set(MarqueeSelection.select(board: board, from: start, to: end))
+        }
         marqueeStart = nil
         marqueeCurrent = nil
         updateMarqueeOverlay()
