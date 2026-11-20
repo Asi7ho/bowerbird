@@ -40,12 +40,12 @@ import { cardDecorators, cards, commands, CORE_EVENTS, createActions, listeners,
 import { applySavedPanelSettings, bindPanelDeps, deactivateMissingActivePanel, deactivatePanelIfActive, ensureResizeHandle, isPanelActive as isPanelActiveKey, registerPanel, setActivePanel, updatePanelDock, wirePanelsToggle } from "./host-panels";
 import { bindViewDeps, getActiveView, refreshActiveView, registerView, renderViewSwitcher, setActiveView } from "./host-views";
 import { bindCardDeps, domId, getCardRenderer, handlePluginCardAction, handlePluginCardDoubleClick, isPluginCard, listPluginCommands, getPluginTool, registerBuiltinCard, runPluginCommand, syncPluginToolButtons } from "./host-cards";
-// getBuiltinCardHtml, getCardHtml, getCardRenderer,
-// getPluginCardSearchText and builtinKindName moved to
-// host-cards with the card registry; re-exported here so
-// existing imports from this module (src/backend/cards.ts,
+// getBuiltinCardHtml, getCardHtml, getCardRenderer and
+// getPluginCardSearchText moved to host-cards with the
+// card registry; re-exported here so existing imports
+// from this module (src/backend/cards.ts,
 // src/backend/search.ts, src/main.ts) keep working.
-export { builtinKindName, getBuiltinCardHtml, getCardHtml, getCardRenderer, getPluginCardSearchText } from "./host-cards";
+export { getBuiltinCardHtml, getCardHtml, getCardRenderer, getPluginCardSearchText } from "./host-cards";
 // getCardDecorations moved to host-state with the cardDecorators
 // registry; re-exported here so existing imports from this
 // module (src/backend/cards.ts) keep working.

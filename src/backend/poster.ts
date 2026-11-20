@@ -16,7 +16,7 @@ import { posterNameFor, posterTime } from "./model";
 // the canvas and toBlob throws — which is why the search
 // indexer captures no video frames. app-file is registered
 // corsEnabled, so the anonymous load succeeds.
-export async function captureVideoPoster(source: string): Promise<{ blob: Blob; duration: number } | null> {
+async function captureVideoPoster(source: string): Promise<{ blob: Blob; duration: number } | null> {
   try {
     const video = document.createElement("video");
     video.crossOrigin = "anonymous";

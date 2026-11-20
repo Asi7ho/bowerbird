@@ -145,7 +145,7 @@ function ensureTabsBar(): void {
   wirePanelsToggle();
 }
 
-export function visiblePanels(): Array<[string, PluginPanelDef & { pluginId: string; el: HTMLElement; body: HTMLElement; tab: HTMLElement; hidden: boolean }]> {
+function visiblePanels(): Array<[string, PluginPanelDef & { pluginId: string; el: HTMLElement; body: HTMLElement; tab: HTMLElement; hidden: boolean }]> {
   return Array.from(panels.entries()).filter(([, p]) => !p.hidden);
 }
 
@@ -188,7 +188,7 @@ export function setActivePanel(key: string): void {
   if (deps?.isPluginsReady() && prev !== key) deps?.getHost()?.render();
 }
 
-export function setDockVisible(visible: boolean): void {
+function setDockVisible(visible: boolean): void {
   // Same as setActivePanel: closing the dock leaves no
   // panel open, so panel-dependent board content hides,
   // and opening it shows it again.

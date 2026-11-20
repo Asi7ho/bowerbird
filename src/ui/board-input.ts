@@ -28,23 +28,23 @@ const MIC_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" str
 
 // ---------------------------------------------------------------- helpers
 
-export function zoomAt(screen: Pt, factor: number): void {
+function zoomAt(screen: Pt, factor: number): void {
   S.api.view.setCameraSilent(zoomCamera(S.api.view.getCamera(), screen, factor));
 }
-export function zoomCentre(factor: number): void {
+function zoomCentre(factor: number): void {
   const s = boardSize();
   zoomAt({ x: s.x / 2, y: s.y / 2 }, factor);
 }
 // F: zoom to fit — every item on screen at once. A no-op on
 // an empty board. Like the 0 reset, this only moves the view;
 // it does not save.
-export function zoomToFit(): void {
+function zoomToFit(): void {
   const bs = boardSize();
   const cam = S.api.geometry.fitCamera({ w: bs.x, h: bs.y });
   if (cam) S.api.view.setCamera(cam);
 }
 
-export function ensureEraserRing(): HTMLDivElement {
+function ensureEraserRing(): HTMLDivElement {
   if (!S.eraserRing) {
     S.eraserRing = document.createElement("div");
     S.eraserRing.id = "eraser-ring";
@@ -52,7 +52,7 @@ export function ensureEraserRing(): HTMLDivElement {
   }
   return S.eraserRing;
 }
-export function updateEraserRing(clientX: number, clientY: number, show: boolean): void {
+function updateEraserRing(clientX: number, clientY: number, show: boolean): void {
   const ring = ensureEraserRing();
   if (!show) { ring.style.display = "none"; return; }
   const d = ERASER_RADIUS * 2 * S.api.view.getCamera().zoom;
@@ -71,7 +71,7 @@ export function updateEraserRing(clientX: number, clientY: number, show: boolean
 // the new pieces are added silent, like the removed
 // stroke was, and the board re-renders so the split
 // pieces (cards now, not SVG paths) show at once.
-export function eraseAt(world: Pt): boolean {
+function eraseAt(world: Pt): boolean {
   const ids = S.api.board.strokesNear(world, ERASER_RADIUS);
   if (ids.length === 0) return false;
   let changed = false;
@@ -98,7 +98,7 @@ export function eraseAt(world: Pt): boolean {
 
 // ---------------------------------------------------------------- editing
 
-export function createTextNoteAt(world: Pt): void {
+function createTextNoteAt(world: Pt): void {
   const id = S.api.board.addItemSilent({ Text: { text: "", bold: false, size: 16, color: "#1A1A1A" } }, world, { w: 260, h: 48 });
   // No save here: the commit saves the typed text, or
   // removes the note if it is empty, so an empty note
@@ -106,7 +106,7 @@ export function createTextNoteAt(world: Pt): void {
   startTextEdit(id, true);
 }
 
-export function startTextEdit(id: number, isNew = false): void {
+function startTextEdit(id: number, isNew = false): void {
   const item = S.api.board.getItem(id);
   if (!item || !("Text" in item.kind)) return;
   // Render first, then mark the note as editing: render() skips
@@ -243,7 +243,7 @@ export function startTextEdit(id: number, isNew = false): void {
 // commits, Escape cancels, and only the first of
 // commit/cancel runs. Shared by group-label and
 // voice-note renames.
-export function wireRenameInput(input: HTMLInputElement, onCommit: () => void): void {
+function wireRenameInput(input: HTMLInputElement, onCommit: () => void): void {
   input.focus();
   input.select();
   let done = false;
@@ -258,7 +258,7 @@ export function wireRenameInput(input: HTMLInputElement, onCommit: () => void): 
   input.addEventListener("blur", commit);
 }
 
-export function startGroupRename(group: number): void {
+function startGroupRename(group: number): void {
   const board = S.api.board.get();
   const label = board.groups?.[group]?.label ?? `Group ${group}`;
   const chip = S.groupsEl.querySelector(`.group-label[data-group="${group}"]`) as HTMLElement | null;
@@ -280,7 +280,7 @@ export function startGroupRename(group: number): void {
 // clicks), so a click on the name reaches the board as a
 // #cards target — the DOM target cannot say which part of
 // the card was clicked. The title's screen rect can.
-export function audioTitleHit(id: number, clientX: number, clientY: number): boolean {
+function audioTitleHit(id: number, clientX: number, clientY: number): boolean {
   const titleEl = S.cardsEl.querySelector(`.card[data-id="${id}"] .col .title`) as HTMLElement | null;
   if (!titleEl) return false;
   const r = titleEl.getBoundingClientRect();
@@ -292,7 +292,7 @@ export function audioTitleHit(id: number, clientX: number, clientY: number): boo
 // leaving the field commits (one undo step), Escape
 // cancels. An empty name clears the title, so the card
 // falls back to the file's name.
-export function startAudioRename(id: number): void {
+function startAudioRename(id: number): void {
   const it = S.api.board.getItem(id);
   if (!it || !("Audio" in it.kind)) return;
   const current = (it.kind.Audio.title?.trim() ?? "") || (it.kind.Audio.path.split("/").pop() ?? it.kind.Audio.path);
@@ -393,7 +393,7 @@ export function deleteSelected(): boolean {
   return true;
 }
 
-export function cornerHit(id: number, world: Pt): boolean {
+function cornerHit(id: number, world: Pt): boolean {
   const cam = S.api.view.getCamera();
   const it = S.api.board.getItem(id);
   if (!it || "Connector" in it.kind) return false;
@@ -402,7 +402,7 @@ export function cornerHit(id: number, world: Pt): boolean {
   const tol = 16 / cam.zoom;
   return Math.hypot(world.x - corner.x, world.y - corner.y) <= tol;
 }
-export function rotateHit(id: number, world: Pt): boolean {
+function rotateHit(id: number, world: Pt): boolean {
   const cam = S.api.view.getCamera();
   const it = S.api.board.getItem(id);
   if (!it || !isRotatable(it, isFrameCard)) return false;
@@ -410,7 +410,7 @@ export function rotateHit(id: number, world: Pt): boolean {
   const tol = 18 / cam.zoom;
   return Math.hypot(world.x - h.x, world.y - h.y) <= tol;
 }
-export function rotateSelected(delta: number): boolean {
+function rotateSelected(delta: number): boolean {
   const selected = S.api.board.getSelected();
   let changed = false;
   for (const id of selected) {
@@ -432,7 +432,7 @@ export function rotateSelected(delta: number): boolean {
 // the cycle wraps. Pen strokes and connectors are skipped: they
 // are drawings and lines, not elements to find. A grouped item
 // selects its whole group and centres on the group's bounds.
-export function navigateElements(dir: 1 | -1): void {
+function navigateElements(dir: 1 | -1): void {
   const board = S.api.board.get();
   const navigable = board.items.filter((it) => !("Stroke" in it.kind) && !("Connector" in it.kind));
   if (navigable.length === 0) return;
@@ -688,7 +688,7 @@ export function isShapeTool(t: string): boolean {
   return S.api.shapes.list().some((s) => s.kind === t);
 }
 
-export function openExternal(target: string): void {
+function openExternal(target: string): void {
   S.api.files.openExternal(target).catch((e) => S.api.ui.toast(`Could not open ${target}: ${String(e)}`));
 }
 
@@ -700,7 +700,7 @@ export function openExternal(target: string): void {
 // needs its own removal. A preview drawn over the cards (the shape
 // preview) lives in the preview layer above #cards instead of the
 // world layer below it, so the cards cannot cover it mid-drag.
-export function dragPreview(id: string, tag: string, toPreview = false): SVGElement {
+function dragPreview(id: string, tag: string, toPreview = false): SVGElement {
   const layer = toPreview ? S.previewWorldEl : S.worldEl;
   let el = layer.querySelector(`#${id}`) as SVGElement | null;
   if (!el) {
@@ -717,7 +717,7 @@ export function dragPreview(id: string, tag: string, toPreview = false): SVGElem
 // tool's base width: the pencil draws thinner than the pen,
 // the highlighter much wider. A marker (highlighter) draws
 // translucent, like the stored stroke.
-export function updateLiveStroke(points: Pt[], pressures: number[], width: number, marker: boolean, pencil = false): void {
+function updateLiveStroke(points: Pt[], pressures: number[], width: number, marker: boolean, pencil = false): void {
   const el = dragPreview("live-stroke", "g");
   while (el.firstChild) el.removeChild(el.firstChild);
   // A pencil stroke shows its graphite texture while it
@@ -753,14 +753,14 @@ export function updateLiveStroke(points: Pt[], pressures: number[], width: numbe
 // The lasso loop, drawn live while dragging. The path is
 // closed (the Z joins the last point back to the first),
 // so the fill shows the region the loop will select.
-export function updateLassoPreview(points: Pt[]): void {
+function updateLassoPreview(points: Pt[]): void {
   const el = dragPreview("lasso-preview", "path");
   el.setAttribute("d", points.map((pt, i) => `${i === 0 ? "M" : "L"}${pt.x},${pt.y}`).join(" ") + " Z");
   el.setAttribute("fill", "rgba(0,122,255,0.08)");
   el.setAttribute("stroke", ACCENT);
   el.setAttribute("stroke-width", "1");
 }
-export function updateDraggedCards(ids: number[]): void {
+function updateDraggedCards(ids: number[]): void {
   // Cards are world-space now, so moving one is a style change on
   // its own node — no markdown, no image re-parse, no rebuild.
   // Element lookups come from the render-built cardEls map, not
@@ -818,7 +818,7 @@ export function updateDraggedCards(ids: number[]): void {
 // separate element in #groups now, so it moves too — it
 // sits at the frame's top-left plus the same offset it
 // had as the frame's child.
-export function updateDraggedGroupFrames(ids: number[]): void {
+function updateDraggedGroupFrames(ids: number[]): void {
   if (!S.groupsEl || !S.groupFramesEl) return;
   const groups = new Set<number>();
   for (const id of ids) {

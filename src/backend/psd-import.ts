@@ -48,7 +48,7 @@ export async function renderPsdPreview(psd: Psd): Promise<{ png: Uint8Array; wid
 // `document`. 16-bit channels are scaled down (÷257) and
 // 32-bit float channels (0–1) up (×255), so a 16/32-bit PSD
 // lands with its colours intact.
-export async function imageDataToPngBytes(pixels: PixelData): Promise<Uint8Array> {
+async function imageDataToPngBytes(pixels: PixelData): Promise<Uint8Array> {
   const canvas = document.createElement("canvas");
   canvas.width = pixels.width;
   canvas.height = pixels.height;

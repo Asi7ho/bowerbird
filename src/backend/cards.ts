@@ -44,7 +44,7 @@ export const SHAPES: { kind: ShapeKind; label: string; key: string; svg: string 
   { kind: "arrow", label: "Block arrow", key: "", svg: '<path d="M3 10 H15 V5 L21 12 L15 19 V14 H3 Z" />' },
 ];
 
-export function shapeMeta(kind: ShapeKind): { label: string; key: string; svg: string } {
+function shapeMeta(kind: ShapeKind): { label: string; key: string; svg: string } {
   return SHAPES.find((s) => s.kind === kind) ?? SHAPES[0];
 }
 
