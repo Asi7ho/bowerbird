@@ -24,6 +24,12 @@ public struct BoardView: NSViewRepresentable {
         viewport.toolState = tools
         let host = CardHost(container: viewport.cardContainer, board: store.board, camera: store.board.camera)
         context.coordinator.host = host
+        // The board the viewport last committed to the
+        // store, so updateNSView can tell a viewport that
+        // is running ahead (a silent add, a live drag)
+        // from one that is in step with the store.
+        let coordinator = context.coordinator
+        coordinator.lastCommitted = store.board
         viewport.onCameraChanged = { [weak host, weak store] camera in
             host?.camera = camera
             // The camera is part of the board: keep the
@@ -43,7 +49,8 @@ public struct BoardView: NSViewRepresentable {
         viewport.onViewportResized = { [weak host] in
             host?.render()
         }
-        viewport.onBoardMutate = { [weak store] board in
+        viewport.onBoardMutate = { [weak store, weak coordinator] board in
+            coordinator?.lastCommitted = board
             store?.update { $0 = board }
             store?.save()
         }
@@ -68,12 +75,27 @@ public struct BoardView: NSViewRepresentable {
 
     public func updateNSView(_ viewport: BoardViewport, context: Context) {
         // Only the content (items, ids, groups, background,
-        // grid) is pushed as a new board: a camera-only
-        // change must not re-render the cards (the host's
-        // reposition handles the camera alone, and a full
-        // render on every pan would reconfigure every card).
+        // grid) is pushed as a new board — and only when
+        // the viewport has nothing uncommitted. A silent
+        // add (a new note waiting for its first text) or a
+        // live drag (a resize mutating the board until
+        // pointerup) runs ahead of the store, and pushing
+        // the store's older board over it would undo the
+        // edit in progress: a double-clicked note vanishing
+        // before its editor opened. The coordinator
+        // remembers the last board the viewport committed;
+        // while the viewport matches it, the store is the
+        // source of truth (an undo, a restore, a poster
+        // fill landing), and a camera-only change must not
+        // re-render the cards (the host's reposition
+        // handles the camera alone, and a full render on
+        // every pan would reconfigure every card).
         // The camera is pushed on its own when it differs.
-        if BoardSnapshot(board: store.board) != BoardSnapshot(board: viewport.board) {
+        let hasUncommitted = context.coordinator.lastCommitted.map {
+            BoardSnapshot(board: viewport.board) != BoardSnapshot(board: $0)
+        } ?? false
+        if !hasUncommitted,
+           BoardSnapshot(board: store.board) != BoardSnapshot(board: viewport.board) {
             viewport.board = store.board
         }
         if viewport.camera != store.board.camera {
@@ -87,5 +109,11 @@ public struct BoardView: NSViewRepresentable {
 
     public final class Coordinator {
         var host: CardHost?
+        /// The board the viewport last committed to the
+        /// store (through onBoardMutate). The viewport's
+        /// board can run ahead of it — a silent add, a
+        /// live drag — and updateNSView must not push the
+        /// store's older board over an edit in progress.
+        var lastCommitted: Board?
     }
 }
