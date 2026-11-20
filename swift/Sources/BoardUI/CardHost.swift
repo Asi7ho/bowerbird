@@ -168,20 +168,30 @@ public final class CardHost {
                 width: item.size.w * camera.zoom,
                 height: item.size.h * camera.zoom
             )
+            view.isSelected = selected.contains(item.id)
+            if view.superview == nil {
+                container.addSubview(view)
+            }
+            // The rotation is set AFTER the card is in the
+            // container, not before. The screenshots showed
+            // the bird's turned parts (leaves, tail, belly)
+            // sitting unturned on load and snapping to their
+            // turn after a click: the turn was set while the
+            // card was not yet in the window, so it did not
+            // stick, and only a later pass -- when the card
+            // was already in the window -- put it in place.
+            // Setting it here, once the card is placed, it
+            // holds from the first draw.
             if let rotation = item.rotation {
                 // Negated: a rotation is clockwise-positive
                 // in the board (the DOM, y-down), while the
                 // card's layer is y-up, where a positive
-                // angle turns counterclockwise on screen —
+                // angle turns counterclockwise on screen --
                 // an un-negated rotation turned a card the
                 // wrong way, and its handles (computed in
                 // world coordinates) no longer sat on its
                 // corners.
                 view.layer?.transform = CATransform3DMakeRotation(-CGFloat(rotation) * .pi / 180, 0, 0, 1)
-            }
-            view.isSelected = selected.contains(item.id)
-            if view.superview == nil {
-                container.addSubview(view)
             }
             // Draw the card now, from its new frame: the
             // shape and stroke paths are built from the
