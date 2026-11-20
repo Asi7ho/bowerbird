@@ -104,10 +104,24 @@ public struct SwiftToolbarView: View {
         .shadow(color: Color.black.opacity(0.15), radius: 12, x: 0, y: 4)
     }
 
+    /// A tap on any toolbar control means the pointer is
+    /// over the toolbar, so the cursor is the normal arrow
+    /// — not the tool's. This forces it at the tap: the
+    /// board refreshes the cursor a turn after a tool
+    /// changes, and without this it sets the tool's cursor
+    /// (circle, plus, crosshair) the moment a tool is
+    /// picked, even though the pointer never left the bar.
+    /// The tool's cursor only appears once the pointer is
+    /// back on the board.
+    private func tappedToolbar() {
+        tools.isHoveringToolbar = true
+        NSCursor.arrow.set()
+    }
+
     /// One family button: a 40pt SF Symbol, with a quiet
     /// fill while its family is the active tool.
     private func familyButton(icon: String, active: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        Button(action: { tappedToolbar(); action() }) {
             Image(systemName: icon)
                 .font(.system(size: 18))
                 .foregroundColor(.primary)
@@ -121,6 +135,7 @@ public struct SwiftToolbarView: View {
     /// colour, active while the colour flyout is open.
     private var colourButton: some View {
         Button(action: {
+            tappedToolbar()
             if tools.pickerOpen == .color {
                 tools.pickerOpen = nil
             } else {
@@ -177,6 +192,7 @@ public struct SwiftToolbarView: View {
         VStack(spacing: Self.gap) {
             ForEach(options, id: \.label) { option in
                 Button(action: {
+                    tappedToolbar()
                     option.pick()
                     tools.pickerOpen = nil
                 }) {
@@ -227,6 +243,7 @@ public struct SwiftToolbarView: View {
 
     private func shapeButton(shape: ShapeKind, filled: Bool) -> some View {
         Button(action: {
+            tappedToolbar()
             tools.shapeOutline = !filled
             tools.activate(.shape(shape))
             tools.pickerOpen = nil
@@ -245,6 +262,7 @@ public struct SwiftToolbarView: View {
         VStack(spacing: Self.gap) {
             ForEach(ToolState.palette, id: \.self) { hex in
                 Button(action: {
+                    tappedToolbar()
                     tools.penColor = hex
                     tools.pickerOpen = nil
                 }) {
