@@ -1838,6 +1838,14 @@ public final class BoardViewport: NSView {
             strokeLayer.strokeColor = (NSColor.fromHex(toolState?.penColor ?? "#1A1A1A") ?? .labelColor).cgColor
             strokeLayer.opacity = style.marker ? 0.45 : 1
             strokeLayer.frame = bounds
+            // The pencil's graphite texture, live, so the
+            // stroke does not change character when it is
+            // committed.
+            if style.pencil, let filter = PencilTexture.displacementFilter(scale: 2.5 * camera.zoom) {
+                strokeLayer.filters = [filter]
+            } else {
+                strokeLayer.filters = nil
+            }
         }
     }
 

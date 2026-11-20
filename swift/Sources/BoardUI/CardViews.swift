@@ -463,6 +463,15 @@ public final class StrokeCardView: CardView {
             }
             shapeLayer.lineWidth = CGFloat(stroke.width) * zoomX
             shapeLayer.frame = CGRect(origin: .zero, size: size)
+            // A pencil stroke gets the graphite texture
+            // (a displacement driven by tiled noise, the
+            // Electron app's turbulence filter); pen and
+            // highlighter draw clean.
+            if stroke.pencil == true, let filter = PencilTexture.displacementFilter(scale: 2.5 * zoomX) {
+                shapeLayer.filters = [filter]
+            } else {
+                shapeLayer.filters = nil
+            }
         }
     }
 
