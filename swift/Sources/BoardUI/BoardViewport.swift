@@ -655,6 +655,20 @@ public final class BoardViewport: NSView {
     // MARK: - Space+drag pan (a grab, not a scroll)
 
     override public func keyDown(with event: NSEvent) {
+        // While a note is being edited, every key goes to
+        // the editor — even when the editor is not the
+        // first responder. The window can refuse the
+        // first-responder change when the editor opens,
+        // and the viewport would otherwise swallow the
+        // keystroke as a tool shortcut (typing "v" would
+        // switch tools instead of inserting a "v"). The
+        // editor handles text, Delete, arrows and Escape
+        // itself; this only runs when the viewport, not
+        // the editor, is first responder.
+        if let editor = noteEditor, editingNoteId != nil {
+            editor.keyDown(with: event)
+            return
+        }
         // Undo / redo: Cmd+Z undoes one step, Cmd+Shift+Z
         // redoes it. The store owns the stacks and saves.
         if event.modifierFlags.contains(.command),
@@ -777,6 +791,18 @@ public final class BoardViewport: NSView {
     }
 
     override public func mouseDown(with event: NSEvent) {
+        // The toolbar first: a click on a toolbar or flyout
+        // button is handled by the toolbar, not the board.
+        // This runs before anything else (in particular
+        // before pickerOpen is cleared below), so a click
+        // on an open flyout's button is still checked
+        // while that flyout is open.
+        if let toolbarView {
+            let point = convert(event.locationInWindow, from: nil)
+            if toolbarView.handleClick(at: convert(point, to: toolbarView)) {
+                return
+            }
+        }
         window?.makeFirstResponder(self)
         // A click on the board closes the toolbar flyout
         // (flyouts are transient: they disappear once the

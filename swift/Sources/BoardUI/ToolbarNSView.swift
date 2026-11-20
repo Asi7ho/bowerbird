@@ -126,6 +126,35 @@ public final class ToolbarNSView: NSView {
         return verticalPad * 2 + rows * buttonSize + (rows - 1) * gap
     }
 
+    /// Handles a click geometrically, in the toolbar's own
+    /// coordinates, without relying on NSView hit testing:
+    /// returns true when the click hit a bar button or a
+    /// button in the open flyout, and fires that button's
+    /// action. The viewport calls this from its mouseDown
+    /// (the one click path that is known to work), because
+    /// hit testing does not reliably deliver clicks to
+    /// these borderless image-only buttons on a real Mac —
+    /// the button's own hitTest misses, and the toolbar's
+    /// override is not always reached.
+    public func handleClick(at point: NSPoint) -> Bool {
+        if let picker = tools.pickerOpen, let flyout = flyouts[picker], !flyout.isHidden {
+            for button in flyoutButtons where button.isDescendant(of: flyout) {
+                guard let superview = button.superview else { continue }
+                if button.frame.contains(convert(point, to: superview)) {
+                    button.performClick(nil)
+                    return true
+                }
+            }
+        }
+        for (button, _) in barButtons {
+            if button.frame.contains(point) {
+                button.performClick(nil)
+                return true
+            }
+        }
+        return false
+    }
+
     /// A click on a flyout button sticks out of the bar's
     /// bounds, so the default hit test — which only looks
     /// inside the bar — would miss it and the click would
