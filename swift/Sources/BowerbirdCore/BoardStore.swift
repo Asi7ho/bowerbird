@@ -107,6 +107,15 @@ public final class BoardStore: ObservableObject {
         }
     }
 
+    /// Apply a mutation without an undo step, for
+    /// background fills (a PSD preview, a video poster, a
+    /// link preview): the card was already the user's
+    /// change, and the fill arriving later must not become
+    /// its own undo step. The caller saves.
+    public func updateWithoutUndo(_ mutate: (inout Board) -> Void) {
+        mutate(&board)
+    }
+
     /// Undo one step: restore the top undo snapshot and
     /// save. False when there is nothing to undo.
     @discardableResult

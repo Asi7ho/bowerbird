@@ -133,6 +133,11 @@ public final class BoardViewport: NSView {
     /// change) while the drag is live. The commit goes
     /// through onBoardMutate on mouseUp.
     public var onDragMove: ((Set<Int>, Pt) -> Void)?
+    /// Called when files are dropped on the board, with
+    /// each file's URL and the world point it was dropped
+    /// at (the drop point; later files cascade from it).
+    /// The app embeds and lands them.
+    public var onFilesDropped: (([(URL, Pt)]) -> Void)?
 
     /// A card drag in progress: the world point where the
     /// drag started, the ids being dragged (the selection
@@ -340,6 +345,9 @@ public final class BoardViewport: NSView {
         rotateGripLayer.shadowOffset = CGSize(width: 0, height: 1)
         handlesOverlay.layer?.addSublayer(rotateGripLayer)
         applyCamera()
+        // Files dropped from the Finder land as cards (see
+        // BoardDrop): the view is the drop target.
+        registerForDraggedTypes([.fileURL])
     }
 
     @available(*, unavailable)
@@ -1775,6 +1783,38 @@ public final class BoardViewport: NSView {
             lastCursor = cursor
             cursor.set()
         }
+    }
+
+    // MARK: - Drag and drop
+
+    /// The files on the pasteboard, when the drag carries
+    /// any. A drag from the Finder offers file URLs;
+    /// anything else (a text selection, an image dragged
+    /// from a browser) is not a file drop.
+    private func droppedURLs(from sender: NSDraggingInfo) -> [URL] {
+        guard let objects = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] else {
+            return []
+        }
+        return objects.filter { $0.isFileURL }
+    }
+
+    override public func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        if droppedURLs(from: sender).contains(where: BoardImport.supports(url:)) { return .copy }
+        return []
+    }
+
+    override public func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        if droppedURLs(from: sender).contains(where: BoardImport.supports(url:)) { return .copy }
+        return []
+    }
+
+    override public func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let urls = droppedURLs(from: sender).filter { BoardImport.supports(url: $0) }
+        guard !urls.isEmpty else { return false }
+        let point = convert(sender.draggingLocation, from: nil)
+        let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
+        onFilesDropped?(urls.map { ($0, world) })
+        return true
     }
 }
 
