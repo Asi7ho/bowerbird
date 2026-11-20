@@ -285,14 +285,31 @@ public final class BoardViewport: NSView {
         handlesOverlay.wantsLayer = true
         handlesOverlay.autoresizingMask = [.width, .height]
         addSubview(handlesOverlay)
+        // The Electron app's handles (styles.css): a 14px
+        // white square with a solid grey (#8e8e93) border
+        // and a soft shadow — the 10px square with a
+        // 0.4-alpha border was nearly invisible on a white
+        // card over a white board.
         resizeHandleLayer.fillColor = NSColor.white.cgColor
-        resizeHandleLayer.strokeColor = NSColor.labelColor.withAlphaComponent(0.4).cgColor
+        resizeHandleLayer.strokeColor = (NSColor.fromHex("#8E8E93") ?? .systemGray).cgColor
+        resizeHandleLayer.shadowColor = NSColor.black.cgColor
+        resizeHandleLayer.shadowOpacity = 0.2
+        resizeHandleLayer.shadowRadius = 3
+        resizeHandleLayer.shadowOffset = CGSize(width: 0, height: 1)
         handlesOverlay.layer?.addSublayer(resizeHandleLayer)
-        rotateStemLayer.strokeColor = NSColor.labelColor.withAlphaComponent(0.4).cgColor
+        // The rotate grip is an 18px white circle with a
+        // 1.5px accent-blue border and the same shadow,
+        // joined to the card by a blue stem (the Electron
+        // app's #rotate-handle).
+        rotateStemLayer.strokeColor = NSColor.systemBlue.cgColor
         rotateStemLayer.fillColor = NSColor.clear.cgColor
         handlesOverlay.layer?.addSublayer(rotateStemLayer)
         rotateGripLayer.fillColor = NSColor.white.cgColor
-        rotateGripLayer.strokeColor = NSColor.labelColor.withAlphaComponent(0.4).cgColor
+        rotateGripLayer.strokeColor = NSColor.systemBlue.cgColor
+        rotateGripLayer.shadowColor = NSColor.black.cgColor
+        rotateGripLayer.shadowOpacity = 0.2
+        rotateGripLayer.shadowRadius = 3
+        rotateGripLayer.shadowOffset = CGSize(width: 0, height: 1)
         handlesOverlay.layer?.addSublayer(rotateGripLayer)
         applyCamera()
     }
@@ -1477,7 +1494,8 @@ public final class BoardViewport: NSView {
             rotateGripLayer.path = nil
             return
         }
-        let size: CGFloat = 10
+        let resizeSize: CGFloat = 14
+        let rotateSize: CGFloat = 18
         CardView.withoutLayerActions {
             // Resize: a white square with a grey border, at
             // the bottom-right corner (rotated with the
@@ -1487,8 +1505,8 @@ public final class BoardViewport: NSView {
                 let sy = CGFloat((corner.y - camera.y) * camera.zoom)
                 if sx >= 0, sy >= 0, sx <= bounds.width, sy <= bounds.height {
                     resizeHandleLayer.path = CGPath(
-                        roundedRect: CGRect(x: sx - size / 2, y: sy - size / 2, width: size, height: size),
-                        cornerWidth: 2, cornerHeight: 2, transform: nil
+                        roundedRect: CGRect(x: sx - resizeSize / 2, y: sy - resizeSize / 2, width: resizeSize, height: resizeSize),
+                        cornerWidth: 3, cornerHeight: 3, transform: nil
                     )
                     resizeHandleLayer.lineWidth = 1
                 } else {
@@ -1517,12 +1535,12 @@ public final class BoardViewport: NSView {
                     stem.move(to: CGPoint(x: hx, y: hy))
                     stem.addLine(to: CGPoint(x: tx, y: ty))
                     rotateStemLayer.path = stem
-                    rotateStemLayer.lineWidth = 1
+                    rotateStemLayer.lineWidth = 1.5
                     rotateGripLayer.path = CGPath(
-                        ellipseIn: CGRect(x: hx - size / 2, y: hy - size / 2, width: size, height: size),
+                        ellipseIn: CGRect(x: hx - rotateSize / 2, y: hy - rotateSize / 2, width: rotateSize, height: rotateSize),
                         transform: nil
                     )
-                    rotateGripLayer.lineWidth = 1
+                    rotateGripLayer.lineWidth = 1.5
                 } else {
                     rotateStemLayer.path = nil
                     rotateGripLayer.path = nil
