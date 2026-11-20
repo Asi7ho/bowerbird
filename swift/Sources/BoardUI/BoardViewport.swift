@@ -206,10 +206,6 @@ public final class BoardViewport: NSView {
     private var rotateDrag: (id: Int, origRot: Double)?
     private var rotateMoved = false
 
-    /// The last mouse press (time and screen point), for
-    /// double-click detection: two presses within 500 ms
-    /// and 5 screen pixels are a double-click.
-    private var lastMouseDown: (time: Date, point: NSPoint)?
     /// The note being edited (its id), and the editor view
     /// over its card. Nil when no note is being edited.
     private var editingNoteId: Int?
@@ -675,11 +671,13 @@ public final class BoardViewport: NSView {
         // (flyouts are transient: they disappear once the
         // user clicks anywhere else).
         toolState?.pickerOpen = nil
-        // Track the press for double-click detection (two
-        // presses within 500 ms and 5 screen pixels).
-        let pressPoint = convert(event.locationInWindow, from: nil)
-        let doubleClick = isDoubleClick(pressPoint)
-        lastMouseDown = (Date(), pressPoint)
+        // A double-click is the system's: NSEvent carries
+        // the click count, which follows the user's
+        // double-click speed in System Settings. The manual
+        // 500 ms / 5 px rule missed real double-clicks that
+        // were slightly slower or moved a little further,
+        // so a double-click on empty space did nothing.
+        let doubleClick = event.clickCount == 2
         if spaceHeld {
             panStart = (convert(event.locationInWindow, from: nil), camera)
             return
@@ -872,16 +870,6 @@ public final class BoardViewport: NSView {
 
     // MARK: - Text notes
 
-    /// Whether this press is a double-click: within 500 ms
-    /// and 5 screen pixels of the last press (the Electron
-    /// app's double-click rule — pointer events carry no
-    /// click count, so it is tracked by time and distance).
-    private func isDoubleClick(_ point: NSPoint) -> Bool {
-        guard let last = lastMouseDown else { return false }
-        return Date().timeIntervalSince(last.time) < 0.5
-            && hypot(point.x - last.point.x, point.y - last.point.y) < 5
-    }
-
     /// Creates a text note at this world point and opens
     /// it for editing: a silent add (260×48, empty, size
     /// 16, ink colour), with no save yet. The commit saves
@@ -944,9 +932,17 @@ public final class BoardViewport: NSView {
     private func commitTextEdit() {
         guard let id = editingNoteId, let editor = noteEditor else { return }
         let text = editor.string
-        editor.removeFromSuperview()
+        // Clear the editor references BEFORE removing the
+        // view: removing it fires viewWillMove(toWindow:
+        // nil), which ends the edit and calls this commit
+        // again — with the references already cleared, the
+        // re-entrant call returns at once instead of
+        // committing twice and removing the view while it
+        // is already being removed (which crashed the app
+        // on a double-clicked text card).
         noteEditor = nil
         editingNoteId = nil
+        editor.removeFromSuperview()
         if let cardView = cardContainer.subviews.compactMap({ $0 as? TextCardView }).first(where: { $0.currentItem?.id == id }) {
             cardView.setEditing(false)
         }
