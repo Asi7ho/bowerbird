@@ -215,9 +215,17 @@ public final class ShapeCardView: CardView {
             shapeLayer.path = nil
         } else {
             layer?.backgroundColor = NSColor.clear.cgColor
-            CardView.withoutLayerActions {
-                updateShapeLayer()
-            }
+            // The path is built in layout(), from the
+            // bounds — not here. Building it here used the
+            // bounds the view still had (zero for a fresh
+            // view, the last item's size for a recycled
+            // one), so the shape first drew from stale
+            // bounds and only snapped right when a later
+            // layout rebuilt it. That is why the bird's
+            // parts sat wrong on load and a click put them
+            // right. Clear the old path so a recycled view
+            // never shows the last item's shape meanwhile.
+            shapeLayer.path = nil
         }
         needsLayout = true
     }
