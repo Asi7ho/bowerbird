@@ -771,7 +771,10 @@ export function updateDraggedCards(ids: number[]): void {
   // last render had its decorations removed) falls back to a
   // live query, so the drag never moves a detached node.
   for (const id of ids) {
-    const it = S.api.board.getItem(id);
+    // The live item: a drag only reads it (position and
+    // size), and cloning a stroke's point array on every
+    // pointermove was the per-move cost.
+    const it = S.api.board.getItemLive(id);
     if (!it) continue;
     const cached = S.cardEls.get(id);
     const el = cached?.card.isConnected
@@ -840,7 +843,9 @@ export function updateDraggedGroupFrames(ids: number[]): void {
     if (memberIds.length < 2 && !source.groups?.[g]?.source) continue;
     const members: Item[] = [];
     for (const id of memberIds) {
-      const it = S.api.board.getItem(id);
+      // The live item: positions are read here and the
+      // drag already moved them, so this must be live.
+      const it = S.api.board.getItemLive(id);
       if (it) members.push(it);
     }
     const b = groupBounds(members, S.api.geometry.itemBounds);
@@ -1015,7 +1020,9 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
       el.setAttribute("stroke-linejoin", "round");
     }
   } else if (S.drag.kind === "rotate") {
-    const it = S.api.board.getItem(S.drag.id);
+    // The live item: this only reads it (centre, size),
+    // and a rotate drag reads it on every pointermove.
+    const it = S.api.board.getItemLive(S.drag.id);
     if (it) {
       const rot = rotateAngleFor(world, it, e.shiftKey);
       if (Math.abs(rot - S.drag.origRot) > 1) S.drag.moved = true;
