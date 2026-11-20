@@ -183,15 +183,12 @@ public final class CardHost {
             // Setting it here, once the card is placed, it
             // holds from the first draw.
             if let rotation = item.rotation {
-                // Negated: a rotation is clockwise-positive
-                // in the board (the DOM, y-down), while the
-                // card's layer is y-up, where a positive
-                // angle turns counterclockwise on screen --
-                // an un-negated rotation turned a card the
-                // wrong way, and its handles (computed in
-                // world coordinates) no longer sat on its
-                // corners.
-                view.layer?.transform = CATransform3DMakeRotation(-CGFloat(rotation) * .pi / 180, 0, 0, 1)
+                // Not negated: the card sits in the flipped
+                // container, and that flip already turns the
+                // layer's turn around -- negating it as well
+                // turned the bird's parts the wrong way on
+                // load. The board's turn is used as it stands.
+                view.layer?.transform = CATransform3DMakeRotation(CGFloat(rotation) * .pi / 180, 0, 0, 1)
             }
             // Draw the card now, from its new frame: the
             // shape and stroke paths are built from the

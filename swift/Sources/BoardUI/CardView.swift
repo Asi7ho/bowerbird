@@ -120,7 +120,14 @@ public class CardView: NSView {
         // out in the window: setting it here it holds from
         // the first draw, whatever happened to it before.
         if let rotation = currentItem?.rotation {
-            layer?.transform = CATransform3DMakeRotation(-CGFloat(rotation) * .pi / 180, 0, 0, 1)
+            // Not negated: the card sits in the flipped
+            // container, and that flip already turns the
+            // layer's turn around -- negating it as well
+            // turned the bird's parts the wrong way on load
+            // (they sat unturned, then snapped to their turn
+            // after an action). The board's turn is used as
+            // it stands.
+            layer?.transform = CATransform3DMakeRotation(CGFloat(rotation) * .pi / 180, 0, 0, 1)
         } else {
             layer?.transform = CATransform3DIdentity
         }
