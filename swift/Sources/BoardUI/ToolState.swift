@@ -26,13 +26,6 @@ public final class ToolState: ObservableObject {
     @Published public var tool: Tool = .select(.select)
     @Published public var penColor: String = "#1A1A1A"
     @Published public var pickerOpen: Picker?
-    /// Whether the pointer is over the toolbar or its side
-    /// panel. The toolbar sets it on hover; the board reads
-    /// it so the tool cursor does not stay in force over
-    /// the bar (the board's tracking area covers the bar's
-    /// place, so its mouse move would otherwise set the
-    /// tool cursor right back over the toolbar).
-    @Published public var isHoveringToolbar = false
     /// Whether the next shape drawn is an outline (just
     /// the border, no fill) or filled. The geometry flyout
     /// switches it; the shape drawing reads it.

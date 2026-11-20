@@ -1824,13 +1824,35 @@ public final class BoardViewport: NSView {
     /// While a note is being edited the text view owns the
     /// pointer (its I-beam), so the board sets nothing
     /// over the note itself.
+    /// Whether a point (in the viewport's own coordinates)
+    /// is over the toolbar or its side panel. The toolbar
+    /// sits at the left, centred vertically: the bar is 56
+    /// wide and 264 tall, starting 12pt in from the left
+    /// edge, and the panel sits 8pt to its right,
+    /// top-aligned with the bar. The board decides this
+    /// from the pointer's place, not from a hover flag —
+    /// a flag set when a toolbar button is tapped can stick
+    /// (the hover-off never arrives), and then every
+    /// cursor refresh after a stroke, a shape or an undo
+    /// wrongly shows the arrow on the board.
+    private func isOverToolbar(at point: NSPoint) -> Bool {
+        let top = bounds.height / 2 + 132
+        let bottom = bounds.height / 2 - 132
+        guard point.y >= bottom, point.y <= top else { return false }
+        // The bar itself.
+        if point.x >= 12, point.x <= 68 { return true }
+        // The side panel, when one is open. The shape panel
+        // is two columns wide (114); the others are one
+        // column (56).
+        guard let picker = toolState?.pickerOpen else { return false }
+        let panelWidth: CGFloat = picker == .shape ? 114 : 56
+        return point.x >= 76 && point.x <= 76 + panelWidth
+    }
+
     private func updateCursor(at point: NSPoint) {
         // Over the toolbar or its side panel the cursor is
-        // the normal arrow, not the tool's. The board's
-        // tracking area covers the bar's place, so its mouse
-        // move reaches here even over the bar — without
-        // this check it would set the tool cursor right back.
-        if toolState?.isHoveringToolbar == true {
+        // the normal arrow, not the tool's.
+        if isOverToolbar(at: point) {
             NSCursor.arrow.set()
             return
         }
