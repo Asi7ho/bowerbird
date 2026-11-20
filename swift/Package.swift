@@ -29,11 +29,14 @@ let package = Package(
                 // The native media views: video and audio
                 // play through AVFoundation/AVKit, PDFs
                 // through PDFKit, 3D models through
-                // QuickLook.
+                // SceneKit (from the core's own glTF
+                // reader — Quick Look does not preview
+                // .glb, and neither RealityKit nor ModelIO
+                // reads it).
                 .linkedFramework("AVKit"),
                 .linkedFramework("AVFoundation"),
                 .linkedFramework("PDFKit"),
-                .linkedFramework("QuickLookUI"),
+                .linkedFramework("SceneKit"),
                 // Dropped PSD/AI previews render through
                 // Quick Look thumbnails.
                 .linkedFramework("QuickLookThumbnailing"),

@@ -1,35 +1,39 @@
 import AppKit
 import BowerbirdCore
-import QuickLookUI
+import SceneKit
 
-/// A 3D model card, shown through the system's Quick
-/// Look preview. Apple has no native glTF (.glb/.gltf)
-/// loader — neither RealityKit nor ModelIO reads it — so
-/// a third-party loader would be the only other route,
-/// and Quick Look is what the system itself uses to
-/// preview these files (Finder, Mail). If Quick Look
-/// does not render the welcome cube on the user's Mac,
-/// that is the decision to make: a third-party GLTF
-/// loader, or keep Quick Look. A missing file shows its
-/// name with "File missing".
+/// A 3D model card, rendered natively with SceneKit from
+/// the app's own glTF reader. Quick Look was the first
+/// attempt — it is what the system uses to preview these
+/// files — but it does not render .glb on the user's Mac,
+/// so the welcome cube and every dropped model showed an
+/// empty card. SceneKit reads no glTF either, so the
+/// geometry comes from GLTFDocument (core) and is built
+/// into a scene here. A file the reader cannot parse
+/// keeps its file tile (title and size), never a blank
+/// card. The view renders on demand (no loop at rest)
+/// and the user can orbit the model (camera control).
 public final class Model3DCardView: CardView {
-    /// Quick Look's preview view. The styled initializer
-    /// is failable — it returns nil when Quick Look cannot
-    /// start, which does not happen on a Mac — so the one
-    /// unwrap is here, at creation, and the property is a
-    /// plain view everywhere else.
-    private let previewView = QLPreviewView(frame: .zero, style: .normal)!
+    private let sceneView = SCNView()
     private let titleLayer = CATextLayer()
     private let subtitleLayer = CATextLayer()
     /// The file this view is showing, so a reconfigure
-    /// for the same card does not reload the preview.
+    /// for the same card does not reload the model.
     private var currentPath: String?
+    /// Whether the model loaded: a file that exists but
+    /// will not parse shows its tile with a note, not a
+    /// blank preview.
+    private var modelLoaded = false
 
     override public init() {
         super.init()
-        previewView.wantsLayer = true
-        previewView.layer?.masksToBounds = true
-        addSubview(previewView)
+        sceneView.wantsLayer = true
+        sceneView.layer?.masksToBounds = true
+        sceneView.allowsCameraControl = true
+        sceneView.autoenablesDefaultLighting = true
+        sceneView.rendersContinuously = false
+        sceneView.backgroundColor = .white
+        addSubview(sceneView)
         titleLayer.foregroundColor = NSColor(srgbRed: 0.11, green: 0.11, blue: 0.12, alpha: 1).cgColor
         subtitleLayer.foregroundColor = NSColor(srgbRed: 0.42, green: 0.42, blue: 0.44, alpha: 1).cgColor
         titleLayer.truncationMode = .end
@@ -46,12 +50,28 @@ public final class Model3DCardView: CardView {
         titleLayer.string = URL(fileURLWithPath: model.path).lastPathComponent
         let kb = Int((Double(model.sizeBytes) / 1024).rounded())
         let exists = FileManager.default.fileExists(atPath: model.path)
-        subtitleLayer.string = exists ? "\(kb) KB" : "File missing"
         if model.path != currentPath {
             currentPath = model.path
-            previewView.previewItem = exists ? URL(fileURLWithPath: model.path) as QLPreviewItem : nil
+            modelLoaded = false
+            sceneView.scene = nil
+            sceneView.pointOfView = nil
+            if exists,
+               let data = try? Data(contentsOf: URL(fileURLWithPath: model.path)),
+               let doc = GLTFDocument.parse(data: data) {
+                let scene = GLTFSceneKit.scene(from: doc)
+                sceneView.scene = scene
+                sceneView.pointOfView = scene.rootNode.childNodes.first(where: { $0.camera != nil })
+                modelLoaded = true
+            }
         }
-        previewView.isHidden = !exists
+        if !exists {
+            subtitleLayer.string = "File missing"
+        } else if !modelLoaded {
+            subtitleLayer.string = "\(kb) KB · Could not load"
+        } else {
+            subtitleLayer.string = "\(kb) KB"
+        }
+        sceneView.isHidden = !exists || !modelLoaded
         layer?.backgroundColor = NSColor.white.cgColor
         needsLayout = true
     }
@@ -78,8 +98,8 @@ public final class Model3DCardView: CardView {
             let gap: CGFloat = 4 * zoom
             let textH = titleH + gap + subH
             let mediaH = bounds.height - pad * 2 - textH - gap
-            previewView.frame = CGRect(x: pad, y: bounds.height - pad - mediaH, width: width, height: max(mediaH, 0))
-            previewView.layer?.cornerRadius = 10 * zoom
+            sceneView.frame = CGRect(x: pad, y: bounds.height - pad - mediaH, width: width, height: max(mediaH, 0))
+            sceneView.layer?.cornerRadius = 10 * zoom
             titleLayer.frame = CGRect(x: pad, y: bounds.height - pad - mediaH - gap - titleH, width: width, height: titleH)
             subtitleLayer.frame = CGRect(x: pad, y: bounds.height - pad - mediaH - gap - titleH - gap - subH, width: width, height: subH)
         }
