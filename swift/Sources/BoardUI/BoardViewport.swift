@@ -1042,8 +1042,24 @@ public final class BoardViewport: NSView {
     private func growNewNote(id: Int, text: String) {
         guard editingNoteId == id, editingOriginalText?.isEmpty == true else { return }
         guard let index = board.items.firstIndex(where: { $0.id == id }),
-              case .text(let payload) = board.items[index].kind else { return }
-        let height = TextMeasure.noteHeight(text: text, fontSize: payload.size, width: board.items[index].size.w, bold: payload.bold)
+              case .text(let payload) = board.items[index].kind,
+              let cardView = cardContainer.subviews.compactMap({ $0 as? TextCardView }).first(where: { $0.currentItem?.id == id }) else { return }
+        // The editor's own text height is the truth: the
+        // analytical measure came up short and the bottom
+        // line was cut once there were many lines. The
+        // editor height is in screen points; the card is in
+        // world units, so divide by the zoom, then add the
+        // card's padding. The analytical measure is only
+        // the fallback, when the editor has not laid out
+        // yet.
+        let zoom = camera.zoom
+        let textHeight: Double
+        if let editorHeight = cardView.editorTextHeight() {
+            textHeight = Double(editorHeight) / zoom
+        } else {
+            textHeight = TextMeasure.height(text: text, fontSize: payload.size, width: board.items[index].size.w, bold: payload.bold)
+        }
+        let height = max(48, textHeight + 28)
         guard height != board.items[index].size.h else { return }
         var next = board
         next.items[index].size.h = height
@@ -1125,13 +1141,9 @@ public final class BoardViewport: NSView {
         guard case .text(var payload) = next.items[index].kind else { return }
         payload.text = text
         next.items[index].kind = .text(payload)
-        // Only a new note is re-measured: an existing note
-        // keeps the size it had, even when its text
-        // changes. (A new note already grew live while it
-        // was typed; this is the final fit.)
-        if originalText.isEmpty {
-            next.items[index].size.h = TextMeasure.noteHeight(text: text, fontSize: payload.size, width: next.items[index].size.w, bold: payload.bold)
-        }
+        // The height is left alone: a new note already grew
+        // live to the editor's height while it was typed,
+        // and an existing note keeps the size it had.
         board = next
         onBoardMutate?(next)
         window?.makeFirstResponder(self)

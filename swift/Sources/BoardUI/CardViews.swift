@@ -165,6 +165,32 @@ public final class TextCardView: CardView {
         editorModel?.text
     }
 
+    /// The height of the text in the open editor, in screen
+    /// points, from the text view's own layout — the exact
+    /// height the text needs. Measuring analytically came up
+    /// short (the editor wraps at a narrower width than
+    /// the measurement allowed for), so the bottom line was
+    /// cut once there were many lines. The layout is forced
+    /// first, so the height is for the text as it stands.
+    public func editorTextHeight() -> CGFloat? {
+        guard let hosting = editorHostingView else { return nil }
+        return TextCardView.editorTextHeight(in: hosting)
+    }
+
+    private static func editorTextHeight(in view: NSView) -> CGFloat? {
+        if let textView = view as? NSTextView {
+            guard let container = textView.textContainer,
+                  let layout = textView.layoutManager else { return nil }
+            layout.ensureLayout(for: container)
+            let used = layout.usedRect(for: container).height
+            return used + textView.textContainerInset.top + textView.textContainerInset.bottom
+        }
+        for subview in view.subviews {
+            if let height = editorTextHeight(in: subview) { return height }
+        }
+        return nil
+    }
+
     override public func layout() {
         super.layout()
         // 14px padding on every side, in world units — the
