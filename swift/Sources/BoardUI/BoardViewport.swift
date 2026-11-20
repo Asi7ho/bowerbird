@@ -420,6 +420,22 @@ public final class BoardViewport: NSView {
         updateLassoPreview()
         updateHandles()
         updateNoteColourBar()
+        repositionEditor()
+    }
+
+    /// Keeps the open note editor over its card while the
+    /// camera moves: the editor is a viewport subview, so
+    /// a pan or zoom would otherwise leave it behind. The
+    /// font follows the zoom, like the card's own text.
+    private func repositionEditor() {
+        guard let id = editingNoteId, let editor = noteEditor,
+              let item = board.items.first(where: { $0.id == id }),
+              case .text(let payload) = item.kind,
+              let cardView = cardContainer.subviews.compactMap({ $0 as? TextCardView }).first(where: { $0.currentItem?.id == id })
+        else { return }
+        editor.frame = convert(cardView.frame, from: cardContainer)
+        let zoom = item.size.w > 0 ? Double(cardView.bounds.width) / item.size.w : 1
+        editor.font = NSFont.systemFont(ofSize: CGFloat(payload.size) * CGFloat(zoom), weight: payload.bold ? .bold : .regular)
     }
 
     /// The window behind the board is the board's own
@@ -1044,12 +1060,21 @@ public final class BoardViewport: NSView {
         editor.font = NSFont.systemFont(ofSize: CGFloat(payload.size) * CGFloat(zoom), weight: payload.bold ? .bold : .regular)
         editor.textColor = NSColor.fromHex(payload.color) ?? .labelColor
         editor.backgroundColor = NSColor.fromHex(payload.bg ?? "#FFFFFF") ?? .white
-        editor.frame = cardView.bounds
-        editor.autoresizingMask = [.width, .height]
+        // The editor is a direct subview of the viewport,
+        // over the card — not a subview of the card. Nested
+        // three deep in layer-backed views, the text view
+        // never reliably took the keyboard: keystrokes
+        // went nowhere, and the note looked open but could
+        // not be typed in. Over the card, at the card's
+        // screen frame, it takes keys like any text field.
+        // It follows the card while panning or zooming
+        // (repositionEditor, from the camera change).
+        editor.frame = convert(cardView.frame, from: cardContainer)
+        editor.autoresizingMask = []
         editor.onEndEditing = { [weak self] _ in self?.commitTextEdit() }
         editor.onTextChanged = { [weak self] in self?.editingTextChanged = true }
         cardView.setEditing(true)
-        cardView.addSubview(editor)
+        addSubview(editor)
         noteEditor = editor
         editingNoteId = id
         editingOriginalText = payload.text
@@ -1865,7 +1890,16 @@ public final class BoardViewport: NSView {
     /// are gone: a cursor rect overrides NSCursor.set(),
     /// so no other tool's cursor could ever show.
     private func updateCursor(at point: NSPoint) {
-        guard editingNoteId == nil else { return }
+        // While a note is being edited, the editor shows
+        // its own text cursor over the note — but only
+        // over the note. Off the note, the board cursor
+        // still follows the tool: skipping the update
+        // entirely while any edit is open froze the cursor
+        // at an arrow for the whole board, and a stuck
+        // edit froze it for good.
+        if let editor = noteEditor, editingNoteId != nil, editor.frame.contains(point) {
+            return
+        }
         let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
         let cursor = cursorFor(world: world)
         if cursor !== lastCursor {
