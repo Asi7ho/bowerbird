@@ -49,23 +49,25 @@ public struct ToolbarView: View {
         .padding(.vertical, 12)
         .padding(.horizontal, 8)
         .frame(width: 56)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        // The background consumes clicks on the bar's empty
+        // area so they do not fall through to the board
+        // (which would close the flyout and clear the
+        // selection). The gesture lives on the background
+        // shape, behind the buttons — not on the container,
+        // where it competed with the buttons' taps and made
+        // tool selection take several clicks, at random.
+        // A tap on a button hits the button first; only a
+        // tap on the empty background reaches this shape.
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+                .onTapGesture {}
+        )
         .overlay(
             RoundedRectangle(cornerRadius: 16)
                 .stroke(Color.black.opacity(0.08), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
-        // The bar consumes its own background clicks (so
-        // they do not fall through to the board, which
-        // would close the flyout and clear the selection).
-        // This is applied to the bar only, BEFORE the
-        // flyout overlay: a content shape here would
-        // otherwise shrink the hit area to the bar's own
-        // rectangle and the flyout's buttons — offset to
-        // the bar's right — would fall through to the
-        // board instead of selecting their tool.
-        .contentShape(Rectangle())
-        .onTapGesture {}
         // The flyout is an overlay, not a sibling: it sits
         // beside the bar without taking part in its layout,
         // so opening or closing it never moves the bar —
@@ -164,16 +166,20 @@ public struct ToolbarView: View {
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 8)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        // The background consumes clicks on the flyout's
+        // empty area (see the bar above): the gesture is on
+        // the background shape, behind the buttons, so it
+        // never competes with a button's tap.
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+                .onTapGesture {}
+        )
         .overlay(
             RoundedRectangle(cornerRadius: 16)
                 .stroke(Color.black.opacity(0.08), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
-        // Like the bar, the flyout consumes clicks on its
-        // own background so they do not reach the board.
-        .contentShape(Rectangle())
-        .onTapGesture {}
     }
 
     private func shapeColumn(filled: Bool) -> some View {
@@ -216,16 +222,20 @@ public struct ToolbarView: View {
         .padding(.vertical, 12)
         .padding(.horizontal, 8)
         .frame(width: 56)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        // The background consumes clicks on the flyout's
+        // empty area (see the bar above): the gesture is on
+        // the background shape, behind the buttons, so it
+        // never competes with a button's tap.
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+                .onTapGesture {}
+        )
         .overlay(
             RoundedRectangle(cornerRadius: 16)
                 .stroke(Color.black.opacity(0.08), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
-        // Like the bar, the flyout consumes clicks on its
-        // own background so they do not reach the board.
-        .contentShape(Rectangle())
-        .onTapGesture {}
     }
 
     /// The icon flyout: the select and draw families, as
@@ -276,16 +286,20 @@ public struct ToolbarView: View {
         .padding(.vertical, 12)
         .padding(.horizontal, 8)
         .frame(width: 56)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
+        // The background consumes clicks on the flyout's
+        // empty area (see the bar above): the gesture is on
+        // the background shape, behind the buttons, so it
+        // never competes with a button's tap.
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(.ultraThinMaterial)
+                .onTapGesture {}
+        )
         .overlay(
             RoundedRectangle(cornerRadius: 16)
                 .stroke(Color.black.opacity(0.08), lineWidth: 1)
         )
         .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: 4)
-        // Like the bar, the flyout consumes clicks on its
-        // own background so they do not reach the board.
-        .contentShape(Rectangle())
-        .onTapGesture {}
     }
 
     private func shapeIcon(for shape: ShapeKind, filled: Bool = false) -> String {
