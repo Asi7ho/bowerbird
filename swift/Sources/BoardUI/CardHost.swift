@@ -185,12 +185,20 @@ public final class CardHost {
             }
             // Lay the card out at once, with its new frame:
             // the shape and stroke paths are built in
-            // layout() from the bounds, and AppKit's own
+            // layout() from the bounds, and the system's own
             // layout pass runs later — so on load the bird's
             // parts first drew from their old (or zero)
             // bounds and only snapped into place when the
             // deferred pass ran a moment later. Laying out
             // here makes the first frame already right.
+            // Force it: setting the frame can itself run a
+            // layout with the bounds as they were a moment
+            // ago, which consumes the layout flag and leaves
+            // the stale path in place until something else
+            // moves the card. Marking it again makes the
+            // layout below rebuild the path from the new
+            // bounds, every time.
+            view.needsLayout = true
             view.layoutSubtreeIfNeeded()
             shown[item.id] = view
         }
