@@ -94,12 +94,6 @@ public final class BoardViewport: NSView {
         }
     }
 
-    /// The note editor's shared state (a SwiftUI text
-    /// field over the card). The viewport sets it when an
-    /// edit starts and clears it on commit; the overlay in
-    /// ContentView draws the field from it.
-    public weak var editorState: NoteEditorState?
-
     /// The selected item ids. The viewport owns the
     /// interaction state; the host only renders it.
     public private(set) var selected: Set<Int> = [] {
@@ -125,9 +119,6 @@ public final class BoardViewport: NSView {
     /// coordinates), so a tool change from the keyboard
     /// can refresh the cursor without the pointer moving.
     private var lastMousePoint: NSPoint?
-    /// The cursor currently set, so the cursor is only
-    /// re-set when it actually changes.
-    private var lastCursor: NSCursor?
     /// The subscription that refreshes the cursor when
     /// the tool changes.
     private var toolCancellable: AnyCancellable?
@@ -241,8 +232,8 @@ public final class BoardViewport: NSView {
     private var rotateMoved = false
 
     /// The note being edited (its id). Nil when no note
-    /// is being edited; the field itself lives in the
-    /// SwiftUI overlay (see editorState).
+    /// is being edited; the editor itself lives in the
+    /// card (see TextCardView.startEditing).
     private var editingNoteId: Int?
     /// The text the note had when editing began. The
     /// editor can be ended without the user touching it (a
@@ -412,23 +403,8 @@ public final class BoardViewport: NSView {
         updateLassoPreview()
         updateHandles()
         updateNoteColourBar()
-        repositionEditor()
     }
 
-    /// Keeps the open note editor over its card while the
-    /// camera moves: the editor is a viewport subview, so
-    /// a pan or zoom would otherwise leave it behind. The
-    /// font follows the zoom, like the card's own text.
-    private func repositionEditor() {
-        guard let id = editingNoteId,
-              let item = board.items.first(where: { $0.id == id }),
-              case .text(let payload) = item.kind,
-              let cardView = cardContainer.subviews.compactMap({ $0 as? TextCardView }).first(where: { $0.currentItem?.id == id })
-        else { return }
-        let zoom = item.size.w > 0 ? Double(cardView.bounds.width) / item.size.w : 1
-        editorState?.frame = convert(cardView.frame, from: cardContainer)
-        editorState?.fontSize = CGFloat(payload.size) * CGFloat(zoom)
-    }
 
     /// The window behind the board is the board's own
     /// background colour, so the title bar strip and the
@@ -976,14 +952,12 @@ public final class BoardViewport: NSView {
         startTextEdit(id: id)
     }
 
-    /// Opens the in-place editor over a text card: the
-    /// SwiftUI field shows the card's text at its size and
-    /// colour, on its background, over the card. The card's
-    /// own text layer is hidden while editing, so the text
-    /// does not draw twice. The field takes keys natively
-    /// (it is SwiftUI, not an NSTextView nested in the
-    /// board's layer-backed views, which never reliably
-    /// took the keyboard).
+    /// Opens the in-place editor in a text card: the
+    /// editor fills the card itself, in the note's size and
+    /// colours, so it is always exactly on the card. The
+    /// card's own text layer is hidden while editing, so
+    /// the text does not draw twice. Return is a newline;
+    /// Escape or clicking away commits.
     private func startTextEdit(id: Int) {
         guard let item = board.items.first(where: { $0.id == id }),
               case .text(let payload) = item.kind else { return }
@@ -994,17 +968,16 @@ public final class BoardViewport: NSView {
         }
         guard let cardView = cardContainer.subviews.compactMap({ $0 as? TextCardView }).first(where: { $0.currentItem?.id == id }) else { return }
         let zoom = item.size.w > 0 ? Double(cardView.bounds.width) / item.size.w : 1
-        cardView.setEditing(true)
         editingNoteId = id
         editingOriginalText = payload.text
-        editorState?.text = payload.text
-        editorState?.frame = convert(cardView.frame, from: cardContainer)
-        editorState?.fontSize = CGFloat(payload.size) * CGFloat(zoom)
-        editorState?.isBold = payload.bold
-        editorState?.textColorHex = payload.color
-        editorState?.backgroundHex = payload.bg ?? "#FFFFFF"
-        editorState?.onCommit = { [weak self] text in self?.commitTextEdit(with: text) }
-        editorState?.isEditing = true
+        cardView.startEditing(
+            text: payload.text,
+            fontSize: CGFloat(payload.size) * CGFloat(zoom),
+            isBold: payload.bold,
+            textColorHex: payload.color,
+            backgroundHex: payload.bg ?? "#FFFFFF",
+            onCommit: { [weak self] text in self?.commitTextEdit(with: text) }
+        )
     }
 
     /// Commits the open editor: the text is saved (with
@@ -1015,7 +988,10 @@ public final class BoardViewport: NSView {
     /// by something other than the user). The card's text
     /// layer is shown again, either way.
     private func commitTextEdit() {
-        commitTextEdit(with: editorState?.text ?? "")
+        guard let id = editingNoteId,
+              let cardView = cardContainer.subviews.compactMap({ $0 as? TextCardView }).first(where: { $0.currentItem?.id == id })
+        else { return }
+        commitTextEdit(with: cardView.editingText ?? "")
     }
 
     /// The commit itself, given the final text: the overlay
@@ -1038,22 +1014,18 @@ public final class BoardViewport: NSView {
         if text == originalText {
             editingNoteId = nil
             editingOriginalText = nil
-            editorState?.isEditing = false
-            editorState?.onCommit = nil
             if let cardView = cardContainer.subviews.compactMap({ $0 as? TextCardView }).first(where: { $0.currentItem?.id == id }) {
-                cardView.setEditing(false)
+                cardView.endEditing()
             }
             return
         }
-        // Clear the editing state first: the overlay hides,
-        // and a re-entrant commit (from the state change)
-        // returns at once instead of committing twice.
+        // Clear the editing state first, and close the
+        // editor in the card: a re-entrant commit returns
+        // at once instead of committing twice.
         editingNoteId = nil
         editingOriginalText = nil
-        editorState?.isEditing = false
-        editorState?.onCommit = nil
         if let cardView = cardContainer.subviews.compactMap({ $0 as? TextCardView }).first(where: { $0.currentItem?.id == id }) {
-            cardView.setEditing(false)
+            cardView.endEditing()
         }
         var next = board
         guard let index = next.items.firstIndex(where: { $0.id == id }) else { return }
@@ -1813,15 +1785,19 @@ public final class BoardViewport: NSView {
         // entirely while any edit is open froze the cursor
         // at an arrow for the whole board, and a stuck
         // edit froze it for good.
-        if editingNoteId != nil, let frame = editorState?.frame, frame.contains(point) {
+        if let id = editingNoteId,
+           let cardView = cardContainer.subviews.compactMap({ $0 as? TextCardView }).first(where: { $0.currentItem?.id == id }),
+           convert(cardView.frame, from: cardContainer).contains(point) {
             return
         }
         let world = CameraMath.screenToWorld(Pt(x: Double(point.x), y: Double(point.y)), camera: camera)
         let cursor = cursorFor(world: world)
-        if cursor !== lastCursor {
-            lastCursor = cursor
-            cursor.set()
-        }
+        // Always set it: the pointer can be reset to the
+        // arrow by anything it crosses (the toolbar is
+        // SwiftUI and shows an arrow), and skipping the set
+        // when the cursor object is unchanged left the
+        // arrow in place after moving back onto the board.
+        cursor.set()
     }
 
     private func cursorFor(world: Pt) -> NSCursor {
@@ -1880,10 +1856,11 @@ public final class BoardViewport: NSView {
         } else {
             cursor = .arrow
         }
-        if cursor !== lastCursor {
-            lastCursor = cursor
-            cursor.set()
-        }
+        // Always set it (see updateCursor): the pointer can
+        // be reset by anything it crosses, so skipping the
+        // set when the object is unchanged leaves a stale
+        // cursor in place.
+        cursor.set()
     }
 
     // MARK: - Drag and drop
