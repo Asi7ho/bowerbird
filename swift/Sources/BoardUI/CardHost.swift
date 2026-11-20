@@ -183,23 +183,21 @@ public final class CardHost {
             if view.superview == nil {
                 container.addSubview(view)
             }
-            // Lay the card out at once, with its new frame:
-            // the shape and stroke paths are built in
-            // layout() from the bounds, and the system's own
-            // layout pass runs later — so on load the bird's
-            // parts first drew from their old (or zero)
-            // bounds and only snapped into place when the
-            // deferred pass ran a moment later. Laying out
-            // here makes the first frame already right.
-            // Force it: setting the frame can itself run a
-            // layout with the bounds as they were a moment
-            // ago, which consumes the layout flag and leaves
-            // the stale path in place until something else
-            // moves the card. Marking it again makes the
-            // layout below rebuild the path from the new
-            // bounds, every time.
-            view.needsLayout = true
-            view.layoutSubtreeIfNeeded()
+            // Draw the card now, from its new frame: the
+            // shape and stroke paths are built in layout()
+            // from the bounds, and the system's own layout
+            // pass runs on its own time -- so on load the
+            // bird's parts first drew from their old (or
+            // zero) bounds and only snapped into place when
+            // a later pass (a click) rebuilt them. There
+            // should be no redraw at all: the first draw
+            // must already be right. So the layout is run
+            // here, at once, with the new bounds -- not left
+            // to the system's pass. (layoutSubtreeIfNeeded
+            // can be deferred while the window itself is
+            // being laid out, which is why the parts sat
+            // wrong until an action forced a fresh pass.)
+            view.layout()
             shown[item.id] = view
         }
         // Stacking: unselected in board order, then selected
