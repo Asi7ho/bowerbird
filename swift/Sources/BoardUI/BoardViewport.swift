@@ -662,11 +662,15 @@ public final class BoardViewport: NSView {
         // and the viewport would otherwise swallow the
         // keystroke as a tool shortcut (typing "v" would
         // switch tools instead of inserting a "v"). The
-        // editor handles text, Delete, arrows and Escape
-        // itself; this only runs when the viewport, not
-        // the editor, is first responder.
+        // keys are delivered through interpretKeyEvents,
+        // not keyDown: the editor forwards unhandled keys
+        // to its next responder (this viewport), so
+        // calling keyDown here recursed until the stack
+        // overflowed and crashed the app. interpretKeyEvents
+        // processes the key inside the editor and never
+        // forwards, so it cannot loop.
         if let editor = noteEditor, editingNoteId != nil {
-            editor.keyDown(with: event)
+            editor.interpretKeyEvents([event])
             return
         }
         // Undo / redo: Cmd+Z undoes one step, Cmd+Shift+Z

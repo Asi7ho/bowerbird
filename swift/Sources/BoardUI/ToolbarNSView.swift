@@ -155,6 +155,18 @@ public final class ToolbarNSView: NSView {
         return false
     }
 
+    /// The toolbar itself takes the click when hit testing
+    /// lands on it instead of a button (the button's own
+    /// hitTest misses on a real Mac, so the bar swallows
+    /// the click and the viewport never sees it). Dispatch
+    /// it geometrically to the button underneath, if any;
+    /// a click on the bar's background does nothing, and
+    /// is not passed on to the board.
+    override public func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        _ = handleClick(at: point)
+    }
+
     /// A click on a flyout button sticks out of the bar's
     /// bounds, so the default hit test — which only looks
     /// inside the bar — would miss it and the click would
