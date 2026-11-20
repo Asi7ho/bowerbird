@@ -1138,6 +1138,13 @@ public final class BoardViewport: NSView {
             if dragDelta.x != 0 || dragDelta.y != 0 {
                 dragMoved = true
                 onDragMove?(dragIds, dragDelta)
+                // The handles follow the dragged card: the
+                // drag moves the views, not the board, so
+                // they are positioned from the dragged
+                // positions (like the colour bar below).
+                var dragged = board
+                BoardMove.move(&dragged, ids: dragIds, by: dragDelta)
+                updateHandles(for: dragged)
                 // The colour bar follows the dragged note:
                 // the drag moves the views, not the board,
                 // so the bar is positioned from the note's
@@ -1504,7 +1511,16 @@ public final class BoardViewport: NSView {
     /// world pixels above its top edge centre, with a stem
     /// pointing back at the card. A handle off-screen is
     /// hidden. The grips are 10 screen pixels across.
-    private func updateHandles() {
+    ///
+    /// `draggedBoard` is the board to read the positions
+    /// from when the caller already knows them live: a
+    /// card drag moves the views without touching the
+    /// board, so the handles must follow the dragged
+    /// positions, not the board's stale ones — without it
+    /// they stayed where the card started while the card
+    /// moved away. Without it, the board itself is read.
+    private func updateHandles(for draggedBoard: Board? = nil) {
+        let board = draggedBoard ?? self.board
         handlesOverlay.frame = bounds
         guard selected.count == 1,
               let id = selected.first,
