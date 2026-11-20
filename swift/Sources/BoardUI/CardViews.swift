@@ -33,7 +33,7 @@ public enum CardViews {
         case .fileCard:
             return FileCardView()
         case .audio:
-            return PlaceholderCardView()
+            return AudioCardView()
         case .video:
             return VideoCardView()
         case .model3D:
