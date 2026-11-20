@@ -1031,7 +1031,20 @@ public final class BoardViewport: NSView {
         // (and so delete) a note, and a note that started
         // empty is removed either way.
         let originalText = editingOriginalText ?? ""
-        let userEmptiedIt = text != originalText
+        // The text is untouched: leave the card exactly as
+        // it was — no board change, no undo step, and no
+        // re-measured height, so the card does not resize
+        // just because the edit was opened and closed.
+        if text == originalText {
+            editingNoteId = nil
+            editingOriginalText = nil
+            editorState?.isEditing = false
+            editorState?.onCommit = nil
+            if let cardView = cardContainer.subviews.compactMap({ $0 as? TextCardView }).first(where: { $0.currentItem?.id == id }) {
+                cardView.setEditing(false)
+            }
+            return
+        }
         // Clear the editing state first: the overlay hides,
         // and a re-entrant commit (from the state change)
         // returns at once instead of committing twice.
@@ -1045,17 +1058,12 @@ public final class BoardViewport: NSView {
         var next = board
         guard let index = next.items.firstIndex(where: { $0.id == id }) else { return }
         if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            if !originalText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, !userEmptiedIt {
-                // The note had text and the user never
-                // touched it: the empty edit is spurious,
-                // so the note is left exactly as it was —
-                // no board change, no undo step.
-                return
-            }
-            // An empty note is not a note: remove it. For a
-            // new note (never saved) this leaves no board
-            // change and no undo step; for an existing note
-            // it is one undo step.
+            // The user emptied the note (the text differs
+            // from the original — an unchanged edit returned
+            // above): an empty note is not a note, so remove
+            // it. For a new note (never saved) this leaves
+            // no board change and no undo step; for an
+            // existing note it is one undo step.
             next.items.remove(at: index)
             board = next
             onBoardMutate?(next)
@@ -1064,7 +1072,7 @@ public final class BoardViewport: NSView {
         guard case .text(var payload) = next.items[index].kind else { return }
         payload.text = text
         next.items[index].kind = .text(payload)
-        next.items[index].size.h = TextMeasure.noteHeight(text: text, fontSize: payload.size, width: next.items[index].size.w)
+        next.items[index].size.h = TextMeasure.noteHeight(text: text, fontSize: payload.size, width: next.items[index].size.w, bold: payload.bold)
         board = next
         onBoardMutate?(next)
     }
@@ -1840,12 +1848,14 @@ public final class BoardViewport: NSView {
             // One card selected: its handles have their own
             // cursors (the rotate grip above the top centre,
             // the resize grip at the rotated bottom-right).
+            // Over the card itself the cursor stays the
+            // normal arrow: a hand there read as the cursor
+            // changing whenever the pointer crossed a card.
             if selected.count == 1,
                let item = board.items.first(where: { selected.contains($0.id) }) {
                 if Handles.rotateHit(item: item, at: world, zoom: camera.zoom) { return .openHand }
                 if Handles.cornerHit(board: board, item: item, at: world, zoom: camera.zoom) { return .resizeLeftRight }
             }
-            if HitTest.hit(board: board, at: world) != nil { return .openHand }
             return .arrow
         }
     }

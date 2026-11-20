@@ -7,8 +7,8 @@ import AppKit
 /// card renders with.
 public enum TextMeasure {
     /// The height of the wrapped text, in points.
-    public static func height(text: String, fontSize: Double, width: Double) -> Double {
-        let font = NSFont.systemFont(ofSize: CGFloat(fontSize))
+    public static func height(text: String, fontSize: Double, width: Double, bold: Bool = false) -> Double {
+        let font = NSFont.systemFont(ofSize: CGFloat(fontSize), weight: bold ? .bold : .regular)
         let attr = NSAttributedString(string: text, attributes: [.font: font])
         let rect = attr.boundingRect(
             with: NSSize(width: CGFloat(max(1, width)), height: CGFloat.greatestFiniteMagnitude),
@@ -20,7 +20,7 @@ public enum TextMeasure {
     /// A note card's height for its text: the text height
     /// plus the card's 14px padding top and bottom, at
     /// least 48 (the height of a new, empty note).
-    public static func noteHeight(text: String, fontSize: Double, width: Double) -> Double {
-        max(48, height(text: text, fontSize: fontSize, width: width - 28) + 28)
+    public static func noteHeight(text: String, fontSize: Double, width: Double, bold: Bool = false) -> Double {
+        max(48, height(text: text, fontSize: fontSize, width: width - 28, bold: bold) + 28)
     }
 }
