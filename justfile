@@ -34,6 +34,9 @@ app:
     mkdir -p Bowerbird.app/Contents/MacOS
     cp swift/.build/debug/Bowerbird Bowerbird.app/Contents/MacOS/Bowerbird
     cp Info.plist Bowerbird.app/Contents/Info.plist
+    @echo "built $(git rev-parse --short HEAD)"
+    -pkill -x Bowerbird 2>/dev/null || true
+    sleep 1
     open Bowerbird.app
 
 # Verify like CI does: build, then test.
