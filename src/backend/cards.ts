@@ -10,7 +10,7 @@
 // never trusted from the board.
 import type { Media } from "./media";
 import {
-  itemRotation, SHAPE_POLYGONS, shapePolygon, type Item, type ShapeKind, checklistProgress,
+  itemRotation, shapePolygon, type Item, type ShapeKind, checklistProgress,
 } from "./model";
 import { getBuiltinCardHtml, getCardDecorations, getCardHtml, getCardRenderer } from "../plugins/host";
 
@@ -24,8 +24,6 @@ export interface CardRenderer {
   cardHtml(item: Item, plain?: boolean): string;
   shapeMeta(kind: ShapeKind): { label: string; key: string; svg: string };
   shapeLabel(kind: ShapeKind): string;
-  isShapeTool(t: string): t is ShapeKind;
-  shapeClipPath(kind: ShapeKind): string | null;
   shapePreviewPoints(kind: ShapeKind, x0: number, y0: number, w: number, h: number): string;
 }
 
@@ -51,19 +49,6 @@ export function shapeMeta(kind: ShapeKind): { label: string; key: string; svg: s
 }
 
 export function shapeLabel(kind: ShapeKind): string { return shapeMeta(kind).label; }
-export function isShapeTool(t: string): t is ShapeKind {
-  return SHAPES.some((s) => s.kind === t);
-}
-// clip-path polygons, in % of the shape's box. The arrow
-// points right; rotate it (handle or [ ]) to point
-// anywhere else, like any other shape. The fractions come
-// from model.ts, the single source of truth for a shape's
-// geometry, so the rendered shape and its hit area agree.
-export function shapeClipPath(kind: ShapeKind): string | null {
-  const fractions = SHAPE_POLYGONS[kind as keyof typeof SHAPE_POLYGONS];
-  if (!fractions) return null;
-  return `polygon(${fractions.map(([fx, fy]) => `${fx * 100}% ${fy * 100}%`).join(", ")})`;
-}
 // Drag-preview polygon points, in board coords for a
 // box from (x0, y0) sized w x h. Same geometry as the
 // clip-paths above, so the preview is the shape drawn.
@@ -148,5 +133,5 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
     // kinds, so this only fires when it is missing.)
     return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner" style="padding:12px"><div class="title" style="font-size:14px">Card</div><div class="sub" style="font-size:12px">No plugin provides this card kind.</div></div></div>` + decorations(x, y, ww, hh);
   }
-  return { cardHtml, shapeMeta, shapeLabel, isShapeTool, shapeClipPath, shapePreviewPoints };
+  return { cardHtml, shapeMeta, shapeLabel, shapePreviewPoints };
 }
