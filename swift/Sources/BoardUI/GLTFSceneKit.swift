@@ -145,15 +145,16 @@ public enum GLTFSceneKit {
     /// A simd matrix as a SceneKit matrix: SCNMatrix4's
     /// members are rows (m11..m14 is the first row),
     /// simd's columns are columns, so the two transpose.
-    /// (SCNMatrix4's members are Float, like simd's, so
-    /// no conversion is needed here; SCNVector3's are
-    /// CGFloat, so the geometry code converts there.)
+    /// (SCNMatrix4's members are CGFloat, simd's are
+    /// Float, so the values convert here; SCNVector3's
+    /// are CGFloat too, so the geometry code converts
+    /// there.)
     private static func scnMatrix(_ t: simd_float4x4) -> SCNMatrix4 {
         SCNMatrix4(
-            m11: t.columns.0.x, m12: t.columns.1.x, m13: t.columns.2.x, m14: t.columns.3.x,
-            m21: t.columns.0.y, m22: t.columns.1.y, m23: t.columns.2.y, m24: t.columns.3.y,
-            m31: t.columns.0.z, m32: t.columns.1.z, m33: t.columns.2.z, m34: t.columns.3.z,
-            m41: t.columns.0.w, m42: t.columns.1.w, m43: t.columns.2.w, m44: t.columns.3.w
+            m11: CGFloat(t.columns.0.x), m12: CGFloat(t.columns.1.x), m13: CGFloat(t.columns.2.x), m14: CGFloat(t.columns.3.x),
+            m21: CGFloat(t.columns.0.y), m22: CGFloat(t.columns.1.y), m23: CGFloat(t.columns.2.y), m24: CGFloat(t.columns.3.y),
+            m31: CGFloat(t.columns.0.z), m32: CGFloat(t.columns.1.z), m33: CGFloat(t.columns.2.z), m34: CGFloat(t.columns.3.z),
+            m41: CGFloat(t.columns.0.w), m42: CGFloat(t.columns.1.w), m43: CGFloat(t.columns.2.w), m44: CGFloat(t.columns.3.w)
         )
     }
 
