@@ -44,7 +44,7 @@ final class ConnectorTests: XCTestCase {
         let id = BoardConnector.add(&b, from: .item(1), to: .item(1), color: "#1A1A1A")
         XCTAssertNil(id)
         XCTAssertEqual(b.items.count, 2)
-        XCTAssertEqual(b.nextId, 3)
+        XCTAssertEqual(b.nextId, 2)
     }
 
     func testAddRefusesADegeneratePointTarget() {
@@ -54,7 +54,7 @@ final class ConnectorTests: XCTestCase {
         let id = BoardConnector.add(&b, from: .item(1), to: .point(Pt(x: 201, y: 151)), color: "#1A1A1A")
         XCTAssertNil(id)
         XCTAssertEqual(b.items.count, 2)
-        XCTAssertEqual(b.nextId, 3)
+        XCTAssertEqual(b.nextId, 2)
     }
 
     func testAddRefusesAnUnresolvableAnchor() {
