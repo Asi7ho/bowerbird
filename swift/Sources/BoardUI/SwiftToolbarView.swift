@@ -30,9 +30,19 @@ public struct SwiftToolbarView: View {
             if let picker = tools.pickerOpen {
                 flyout(for: picker)
                     .offset(x: Self.flyoutX, y: 0)
+                    // The flyout is the toolbar's side panel:
+                    // the normal cursor here, like the bar.
+                    .cursor(.arrow)
             }
         }
         .frame(width: Self.barWidth, height: Self.barHeight, alignment: .topLeading)
+        // The normal cursor over the whole bar. The board
+        // sets the tool's own cursor (circle, plus,
+        // crosshair) by NSCursor.set, which is app-wide and
+        // would otherwise stay in force over the bar — the
+        // bar must show the normal cursor, and the tool
+        // cursor only on the board.
+        .cursor(.arrow)
     }
 
     /// The bar: five family buttons in a material pill.
