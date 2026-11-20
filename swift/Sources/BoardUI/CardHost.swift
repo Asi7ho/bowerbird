@@ -183,6 +183,15 @@ public final class CardHost {
             if view.superview == nil {
                 container.addSubview(view)
             }
+            // Lay the card out at once, with its new frame:
+            // the shape and stroke paths are built in
+            // layout() from the bounds, and AppKit's own
+            // layout pass runs later — so on load the bird's
+            // parts first drew from their old (or zero)
+            // bounds and only snapped into place when the
+            // deferred pass ran a moment later. Laying out
+            // here makes the first frame already right.
+            view.layoutSubtreeIfNeeded()
             shown[item.id] = view
         }
         // Stacking: unselected in board order, then selected
