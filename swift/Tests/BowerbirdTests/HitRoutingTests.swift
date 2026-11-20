@@ -126,7 +126,9 @@ final class HitRoutingTests: XCTestCase {
             XCTFail("no play button")
             return
         }
-        XCTAssertTrue(card.hitTest(CGPoint(x: playButton.frame.midX, y: playButton.frame.midY)) === playButton)
+        XCTAssertFalse(playButton.frame.isEmpty, "play button has no frame")
+        let buttonHit = card.hitTest(CGPoint(x: playButton.frame.midX, y: playButton.frame.midY))
+        XCTAssertTrue(buttonHit === playButton, "hitTest returned \(String(describing: buttonHit)) instead of the play button")
         XCTAssertNil(card.hitTest(CGPoint(x: 150, y: 10)))
     }
 
