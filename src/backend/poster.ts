@@ -1,11 +1,8 @@
 // Video posters: one representative frame per video, saved as
-// a JPEG next to the video in the board folder, so a video card
-// can show a still image and only load the video itself when
-// the user presses play. The capture runs in the renderer (it
-// needs a <video> and a canvas); the file is stored through
-// the same embedFileBytes bridge as dropped files. A poster is
-// a bonus, never a blocker: every step returns null on
-// failure and the caller keeps a placeholder instead.
+// a JPEG next to it, so a video card shows a still until
+// played. A poster is a bonus, never a blocker — every step
+// returns null on failure.
+
 import { api } from "./api";
 import { posterNameFor, posterTime } from "./model";
 

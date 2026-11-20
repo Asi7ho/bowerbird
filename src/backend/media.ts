@@ -1,11 +1,7 @@
-// Media: PDF documents and rendering, audio probing and playback.
-// Everything here is async work keyed by board path or card id, with
-// board-switch guards so a result that lands after a switch never
-// writes into the new board's card with the same id. The module owns
-// its caches (parsed PDFs, extracted text, durations, data-URL
-// fallbacks); the core clears them on board load via
-// clearBoardCaches(), and reads durations / failure state through
-// the maps below.
+// Media: PDF documents/rendering, audio probing and playback.
+// Async work keyed by board path or card id, with board-switch
+// guards so a late result never writes into the new board.
+
 import { api } from "./api";
 import { boardGet, type Board } from "./model";
 

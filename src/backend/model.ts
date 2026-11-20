@@ -1,13 +1,7 @@
-// Board model: types, geometry and markdown, ported from the GPUI
-// board so existing board.json files load unchanged. The JSON shape is
-// serde's externally-tagged enum: a text note is
-// {"Text": {"text": "...", "bold": false, "size": 16, "color": "#1A1A1A"}}
-// and a connector endpoint is {"Item": 3} or {"Point": {"x": 1, "y": 2}}.
+// Board model: types, geometry and hit-testing, ported from the
+// GPUI board so existing board.json files load unchanged.
+// Markdown lives in markdown.ts.
 
-// The board model types live in the bowerbird-plugin-api package
-// (plugin-api/) so plugins import them by name without reaching
-// into the core. This module re-exports them, so existing core
-// imports from "./model" keep working.
 import type { Anchor, ArrangeOptions, Block, Board, Camera, GroupEntry, ImportSource, Item, Kind, Pt, Segment, ShapeKind, Size } from "bowerbird-plugin-api";
 export type { Anchor, ArrangeOptions, Block, Board, Camera, GroupEntry, ImportSource, Item, Kind, Pt, Segment, ShapeKind, Size };
 

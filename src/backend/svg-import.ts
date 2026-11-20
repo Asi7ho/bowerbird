@@ -1,18 +1,7 @@
-// SVG import: parse an .svg file into board cards.
-//
-// Pure module — no DOM, no canvas — so it is unit-testable
-// in Node. The XML is tokenised by hand: SVG files from
-// Illustrator, Figma and Inkscape are well-formed XML, and a
-// dependency for this would be heavier than the parser.
-//
-// What lands: rect/circle/ellipse become Shape cards,
-// line/polyline/polygon/path become Stroke cards (curves are
-// flattened to points), text becomes Text cards, and <image>
-// elements with a data: URI become Image cards. <use>,
-// gradients, masks, filters and clipping are not reproduced
-// — an element that only exists through them is skipped —
-// and an SVG that yields no cards falls back to a single
-// Image card of the whole file (see drops.ts).
+// SVG import: parse an .svg file into board cards. Pure (no
+// DOM/canvas), so unit-testable in Node. Hand-tokenised XML —
+// a dependency would be heavier than the parser.
+
 import type { Kind, Pt, ShapeKind } from "bowerbird-plugin-api";
 import { estimateTextHeight } from "./model";
 import type { ImportedItem } from "./import-types";

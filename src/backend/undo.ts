@@ -1,15 +1,8 @@
 // Undo and saving: snapshots, not operations. Every save()
-// compares the board content with the last saved content, and
-// if it changed, the previous content becomes one undo step.
-// That covers every mutation without hunting for it: core
-// drags, text commits, drops, plugin actions, Settings canvas
-// changes and delete-all all save, so all are undoable.
-// The module also owns the change detection that makes a
-// no-op save free: one serialisation of the items, shared by
-// the undo key, the undo snapshot and the change check, and
-// no disk write, no search re-index and no board event when
-// neither content nor camera changed. A failed write clears
-// the seen keys so the next save retries instead of skipping.
+// compares content with the last saved content; a change makes
+// the previous content one undo step. That covers every
+// mutation without hunting for it.
+
 import { api } from "./api";
 import { boardGet, type Board, type GroupEntry, type Item } from "./model";
 import { emitPluginEvent } from "../plugins/host";

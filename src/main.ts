@@ -1,3 +1,8 @@
+// Boot: load the board, build the shell, start the plugin host.
+// The boot module's mutable state is gathered into one object
+// (C) so the board operations in boards.ts can take it as an
+// argument.
+
 import { api } from "./backend/api";
 import {
   type BootContext,

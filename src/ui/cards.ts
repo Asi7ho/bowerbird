@@ -1,29 +1,8 @@
-// core-cards — the built-in card kinds, as a first-party
-// plugin. The core is headless: it owns the board model,
-// persistence, the plugin host and the API, and it renders
-// no card itself. This plugin provides the eleven built-in
-// kinds (Text, Shape, Image, UrlCard, PdfCard, FileCard,
-// Swatch, Audio, Video, Model3D, Stroke) through the same
-// `cards.registerBuiltin`
-// any plugin uses. It is the reference implementation for
-// a card plugin: a plugin that replaces a built-in kind is
-// built the same way, registering the same kind name.
-//
-// Everything here goes through the PluginContext only —
-// `api.board` for selection, `api.media` for PDF and audio
-// state, `api.files` for file URLs, `api.text` and
-// `api.geometry` for the pure helpers. Board JSON is
-// untrusted input: every value that lands in an attribute
-// or as text is coerced or escaped here, exactly as the
-// core's renderer did, never trusted from the board.
-// Numbers are forced through Number() (a string like
-// `0" onmouseover="…` becomes NaN, then the fallback,
-// instead of breaking out of the style attribute),
-// colours must match a strict hex pattern, and names,
-// domains and titles are escaped before they are
-// interpolated. Markdown text is already escaped by
-// renderMarkdownHtml; image/video sources go through
-// fileUrl(), which encodes each path segment.
+// core-cards: the eleven built-in card kinds, as a first-party
+// plugin. The core renders no card itself; this plugin provides
+// the kinds through the same `cards.registerBuiltin` any
+// plugin uses.
+
 import type { PluginContext, PluginManifest } from "../plugins/host";
 import { isInlineVideo, pressureWidth, smoothStrokePressures, smoothStrokeSamples, strokeMaxWidth, strokePressuresVary, type Item } from "../backend/model";
 import { strokePath } from "./board-geometry";

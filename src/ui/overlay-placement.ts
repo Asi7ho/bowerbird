@@ -1,11 +1,5 @@
-// Pure geometry for placing floating overlays — the note
-// colour bar, the resize handle, the rotate handle — so they
-// never paint over the toolbar. No DOM, no app state, so this
-// is unit-testable; the two call sites (the toolbar plugin
-// and board-render) share it instead of each inlining their
-// own overlap test. All rects are in the same coordinate
-// system (the caller converts the toolbar's viewport rect
-// into board coordinates when the overlay is board-placed).
+// Pure geometry for placing floating overlays (the note colour
+// bar) beside a card.
 
 export type OverlayRect = { x: number; y: number; w: number; h: number };
 

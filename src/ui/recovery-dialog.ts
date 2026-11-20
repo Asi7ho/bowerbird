@@ -1,10 +1,6 @@
-// The crash-recovery offer: a modal sheet shown once at launch
-// when the journal holds edits board.json does not. The user
-// chooses explicitly — Restore brings the journalled board
-// back (the current board is backed up first, so the choice
-// is reversible), Discard drops the journal. There is no
-// Escape or backdrop dismissal: discarding unsaved work by
-// accident is the failure this dialog exists to prevent.
+// The crash-recovery offer: a modal shown once at launch when
+// a recovery journal exists.
+
 export function showRecoveryOffer(opts: {
   savedAt: number;
   onRestore: () => Promise<void>;

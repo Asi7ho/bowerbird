@@ -1,16 +1,7 @@
-// PSD import: parse a .psd file and render its merged
-// composite as the preview for a FileCard. The composite
-// is what Photoshop shows — all visible layers, including
-// text, flattened — so the card shows the artwork, and the
-// file itself is kept and live-synced. The layers are no
-// longer exploded into cards: a .psd is edited in
-// Photoshop, which is where double-clicking the card opens
-// it.
-//
-// Parsing is pure (ag-psd with useImageData, so no canvas
-// is needed to read a file); turning pixels into PNG bytes
-// needs a canvas, so that step lives in imageDataToPngBytes
-// and only runs in the renderer.
+// PSD import: parse a .psd and render its merged composite as
+// a FileCard preview. The file is kept and live-synced; a .psd
+// is edited in Photoshop, not here.
+
 import { initializeCanvas, readPsd, type PixelData, type Psd } from "ag-psd";
 
 // Node has no canvas: ag-psd only needs createImageData on

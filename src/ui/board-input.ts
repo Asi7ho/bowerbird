@@ -1,10 +1,7 @@
-// The board's input loop: the zoom and eraser helpers, text and
-// group editing, the tools (select/pen/connector/eraser/shape,
-// group/ungroup/delete/rotate/navigate), and the pointer and
-// keyboard listeners that drive pan, drag, resize/rotate,
-// stroke, lasso, marquee and connector drags. Input calls the
-// render functions in board-render and reads S from board-state;
-// it is the last module board.ts itself wires up.
+// The board's input loop: zoom/eraser helpers, text and group
+// editing, tools, and the pointer/keyboard listeners. Reads S
+// from board-state; calls the render functions in board-render.
+
 import {
   S,
   ACCENT, ERASER_RADIUS,

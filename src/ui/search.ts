@@ -1,17 +1,5 @@
-// The board search box is a first-party plugin
-// (core-search): it builds the search input, the match
-// count, the clear button and the results dropdown into
-// the search box container the core-titlebar plugin
-// provides, and hands those elements to the search engine
-// through api.search.setElements. The engine owns the
-// matching, the dimming and the results; this plugin owns
-// the box. It uses only the public API.
-//
-// The box is fixed at 360×34 in every state (the search
-// bar's size is locked: the input, count and clear button
-// are laid out inside it, and the results dropdown is
-// absolutely positioned below it, so it never changes the
-// box's size).
+// core-search: the search box as a first-party plugin.
+
 import type { PluginContext, PluginManifest } from "../plugins/host";
 
 export const manifest: PluginManifest = {

@@ -1,7 +1,7 @@
-// The board's mutable state and the small helpers both the
-// render loop and the input loop need. The render and input
-// modules import S (and these helpers) from here; board.ts
-// itself only wires up activate/deactivate.
+// The board's mutable state, gathered into one object (S) so
+// the input, render and plugin modules share one source of
+// truth.
+
 import type { PluginContext } from "../plugins/host";
 import {
   Anchor, Board, Item, Pt, ShapeKind,

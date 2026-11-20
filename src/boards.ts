@@ -1,12 +1,7 @@
-// Board operations: loading a board from JSON, switching between
-// boards, restoring a backup, resetting to the welcome board, and
-// the background indexing and poster backfill that run after a
-// load. Each operation takes the boot context (BootContext) as its
-// first argument; the context carries the board, the board
-// directory, the five instances, and the toast callback. The
-// pure helpers (syncGroupLabels, isFrameCard, healBoardItem) take
-// only what they need. main.ts owns the context object and passes
-// it in; this module owns nothing at load time.
+// Board operations: load, switch, restore, reset, and the
+// background indexing/poster backfill after a load. Each takes
+// the boot context; this module owns nothing at load time.
+
 import { api } from "./backend/api";
 import { type Media } from "./backend/media";
 import { type BoardSearch } from "./backend/search";

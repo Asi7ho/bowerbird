@@ -1,14 +1,9 @@
-// Illustrator import: a modern .ai file saved with PDF
-// compatibility IS a PDF — the artwork lives in an embedded
-// PDF stream — so the app renders its first page as the
-// preview for a FileCard, and the file itself is kept and
-// live-synced. It never lands as a PDF preview card, and
-// its vector content is no longer extracted into editable
-// cards: a .ai is edited in Illustrator, which is where
-// double-clicking the card opens it. An .ai file saved
-// without PDF compatibility is PostScript, which the app
-// cannot read: that is reported as unsupported, never
-// silently dropped (see drops.ts).
+// Illustrator import: a modern .ai saved with PDF compatibility
+// IS a PDF, so the app renders its first page as a FileCard
+// preview. Without PDF compatibility it is PostScript, which
+// the app cannot read — reported as unsupported, never
+// silently dropped.
+
 export function isPdfCompatible(bytes: Uint8Array): boolean {
   // A PDF header is "%PDF-" followed by the version.
   return (

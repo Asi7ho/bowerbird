@@ -1,11 +1,6 @@
 // Drops and pastes: files dropped from the OS or pasted from
-// the clipboard, links dragged from a browser, links pasted
-// from the clipboard, and the
-// background fill of link previews for cards that never got
-// one. Dropped files are embedded as board-owned copies in
-// the board folder (see the main process), so deleting the
-// original cannot break the card. Preview fills are background
-// work, not user changes: they save without an undo step.
+// the clipboard, turned into board cards.
+
 import { api } from "./api";
 import { isPdfCompatible, renderAiPreview } from "./ai-import";
 import type { ImportedItem } from "./import-types";

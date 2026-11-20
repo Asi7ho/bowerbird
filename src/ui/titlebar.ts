@@ -1,28 +1,7 @@
-// The title bar is a first-party plugin (core-titlebar):
-// it builds the frameless window's title bar — window
-// controls, app name, undo/redo, and the panels toggle —
-// plus the empty search box the core-search plugin mounts
-// into. It uses only the public API: window controls via
-// api.window, undo/redo via api.board, the platform via
-// api.app, and the panels toggle + search box through the
-// shell (registerShellElements / setSearchBoxEl), the same
-// way the toolbar plugin provides the tools segment.
-//
-// The DOM uses the same ids and classes as the old static
-// title bar, so src/ui/styles.css applies unchanged, and the
-// window controls are drawn the way the OS the app is
-// running on draws them — macOS traffic lights on the
-// left, Windows caption buttons on the right, GNOME-style
-// round buttons on the right on Linux (see the per-platform
-// CSS). The platform comes from the preload bridge, with
-// a user-agent fallback, and the group is moved to the
-// right-hand actions only on non-macOS platforms; on macOS
-// it stays at the far left. Close quits the app (commit,
-// save, then quit, which destroys the peek window too),
-// minimise minimises, full screen toggles full screen on
-// macOS, maximise toggles maximise on Windows/Linux. The
-// buttons opt out of the title bar's drag region in CSS,
-// so a click acts instead of moving the window.
+// core-titlebar: the frameless window's title bar (controls,
+// app name, undo/redo, panels toggle, search box). Uses only
+// the public API.
+
 import type { PluginContext, PluginManifest } from "../plugins/host";
 
 export const manifest: PluginManifest = {
