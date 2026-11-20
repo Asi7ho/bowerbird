@@ -133,8 +133,26 @@ public final class ToolbarNSView: NSView {
     /// checked first, then the bar itself.
     override public func hitTest(_ point: NSPoint) -> NSView? {
         if let picker = tools.pickerOpen, let flyout = flyouts[picker], !flyout.isHidden {
+            // The flyout buttons are borderless image-only
+            // NSButtons whose own hitTest misses (the same
+            // quirk as the media play buttons: a button
+            // whose frame is set in layout returns nil even
+            // for its own centre), so check their frames
+            // directly, in each button's own superview.
+            for button in flyoutButtons where button.isDescendant(of: flyout) {
+                guard let superview = button.superview else { continue }
+                if button.frame.contains(convert(point, to: superview)) { return button }
+            }
             let converted = convert(point, to: flyout)
             if let hit = flyout.hitTest(converted) { return hit }
+        }
+        // The bar buttons are the same kind of button, so
+        // check their frames directly too — otherwise a
+        // click on a tool falls through to the toolbar
+        // itself, the button's action never fires, and no
+        // flyout opens.
+        for (button, _) in barButtons {
+            if button.frame.contains(point) { return button }
         }
         return super.hitTest(point)
     }

@@ -595,7 +595,13 @@ public final class BoardViewport: NSView {
         // and the keyboard work without a click first —
         // AppKit sends those to the first responder, and
         // the board is the only focusable view for now.
-        window?.makeFirstResponder(self)
+        // But not while an edit is open: taking focus here
+        // would pull the keyboard away from the editor the
+        // moment the pointer re-enters the board, and the
+        // note would look open but take no keystrokes.
+        if editingNoteId == nil {
+            window?.makeFirstResponder(self)
+        }
         let point = convert(event.locationInWindow, from: nil)
         lastMousePoint = point
         updateCursor(at: point)
@@ -1053,10 +1059,22 @@ public final class BoardViewport: NSView {
         // mouse event is still being dispatched, so a
         // refusal is retried once the event has finished,
         // while this is still the open editor.
-        if window?.makeFirstResponder(editor) == false {
+        if window?.makeFirstResponder(editor) != true {
             DispatchQueue.main.async { [weak editor, weak self] in
                 guard let editor, self?.noteEditor === editor else { return }
                 _ = self?.window?.makeFirstResponder(editor)
+            }
+        }
+        // Re-assert on the next runloop as well: a
+        // tracking-area re-entry or a SwiftUI update can
+        // pull focus back to the viewport after the editor
+        // opened, and the note then looks open but takes
+        // no keystrokes. Only while this is still the open
+        // editor and it is not already first responder.
+        DispatchQueue.main.async { [weak editor, weak self] in
+            guard let editor, let self, self.noteEditor === editor else { return }
+            if self.window?.firstResponder !== editor {
+                _ = self.window?.makeFirstResponder(editor)
             }
         }
         // Cursor at the end of the text. NSRange counts
