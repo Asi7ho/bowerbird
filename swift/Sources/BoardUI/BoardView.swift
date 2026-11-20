@@ -114,6 +114,12 @@ public struct BoardView: NSViewRepresentable {
         if viewport.camera != store.board.camera {
             viewport.camera = store.board.camera
         }
+        // Re-assert the cursor after the push: rebuilding
+        // the cards (a stroke landing, an undo, a redo)
+        // can drop it back to the arrow, and the tool's
+        // own cursor must be put back while the pointer is
+        // on the board.
+        viewport.refreshCursor()
     }
 
     public func makeCoordinator() -> Coordinator {

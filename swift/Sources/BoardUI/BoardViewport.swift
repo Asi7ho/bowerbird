@@ -1849,6 +1849,17 @@ public final class BoardViewport: NSView {
         return point.x >= 76 && point.x <= 76 + panelWidth
     }
 
+    /// Re-assert the cursor at the pointer's last place.
+    /// The board calls this after a re-render (an undo, a
+    /// redo, a stroke landing): rebuilding the cards can
+    /// drop the cursor back to the arrow, and the tool's
+    /// own cursor must be put back. The place decides
+    /// toolbar-vs-board, as in updateCursor.
+    public func refreshCursor() {
+        guard let point = lastMousePoint else { return }
+        updateCursor(at: point)
+    }
+
     private func updateCursor(at point: NSPoint) {
         // Over the toolbar or its side panel the cursor is
         // the normal arrow, not the tool's.
