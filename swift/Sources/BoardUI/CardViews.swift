@@ -216,6 +216,19 @@ public final class ShapeCardView: CardView {
         } else {
             shapeLayer.path = ShapePath.path(for: shape.shape, in: bounds)
         }
+        // Flip the path about the card's height: the
+        // shape's fractions are y-down (world coordinates)
+        // and the card is y-up, so an unflipped triangle,
+        // star or arrow drew mirrored — the inverse of
+        // what was drawn, while the live preview (in the
+        // flipped overlay) showed it the right way round.
+        // Rects and ellipses are symmetric, so the flip is
+        // invisible for them, but it is applied to every
+        // shape for the same reason.
+        if let path = shapeLayer.path {
+            var flip = CGAffineTransform(a: 1, b: 0, c: 0, d: -1, tx: 0, ty: bounds.height)
+            shapeLayer.path = path.copy(using: &flip)
+        }
         shapeLayer.frame = bounds
         if shape.outline == true {
             shapeLayer.fillColor = NSColor.clear.cgColor
@@ -284,7 +297,17 @@ public final class StrokeCardView: CardView {
             let zoomX = item.size.w > 0 ? bounds.width / CGFloat(item.size.w) : 1
             let zoomY = item.size.h > 0 ? bounds.height / CGFloat(item.size.h) : 1
             if let path = StrokePath.path(for: stroke.points) {
-                var transform = CGAffineTransform(scaleX: zoomX, y: zoomY)
+                // The card is y-up (a plain NSView) while
+                // the stroke's points are y-down (world
+                // coordinates): a path copied straight
+                // across draws mirrored top-to-bottom, so
+                // the committed stroke was the inverse of
+                // what was drawn — while the live preview,
+                // drawn in the flipped overlay, showed it
+                // the right way round. Flip it about the
+                // card's height, so the stroke lands as
+                // drawn.
+                var transform = CGAffineTransform(a: zoomX, b: 0, c: 0, d: -zoomY, tx: 0, ty: bounds.height)
                 shapeLayer.path = path.copy(using: &transform)
             } else {
                 shapeLayer.path = nil

@@ -156,7 +156,15 @@ public final class CardHost {
                 height: item.size.h * camera.zoom
             )
             if let rotation = item.rotation {
-                view.layer?.transform = CATransform3DMakeRotation(CGFloat(rotation) * .pi / 180, 0, 0, 1)
+                // Negated: a rotation is clockwise-positive
+                // in the board (the DOM, y-down), while the
+                // card's layer is y-up, where a positive
+                // angle turns counterclockwise on screen —
+                // an un-negated rotation turned a card the
+                // wrong way, and its handles (computed in
+                // world coordinates) no longer sat on its
+                // corners.
+                view.layer?.transform = CATransform3DMakeRotation(-CGFloat(rotation) * .pi / 180, 0, 0, 1)
             } else {
                 view.layer?.transform = CATransform3DIdentity
             }
