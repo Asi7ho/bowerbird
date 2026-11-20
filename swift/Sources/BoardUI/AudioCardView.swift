@@ -179,6 +179,12 @@ public final class AudioCardView: CardView {
     /// selected and dragged.
     override public func hitTest(_ point: NSPoint) -> NSView? {
         if player != nil, seekHitRect.contains(point) { return self }
+        // NSButton's own hitTest returns nil for a borderless
+        // image-only button whose frame is set in layout (its
+        // own centre misses, even visible and enabled), so
+        // check the frame directly; otherwise the play button
+        // is unclickable.
+        if !playButton.isHidden, playButton.frame.contains(point) { return playButton }
         return super.hitTest(point)
     }
 

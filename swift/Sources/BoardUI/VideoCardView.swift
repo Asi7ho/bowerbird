@@ -77,6 +77,17 @@ public final class VideoCardView: CardView {
         needsLayout = true
     }
 
+    /// The play button is a borderless image-only button
+    /// whose frame is set in layout, and NSButton's own
+    /// hitTest returns nil for such a button (its own
+    /// centre misses, even visible and enabled) — the
+    /// same quirk as the audio card's play button. Check
+    /// the frame directly so the button stays clickable.
+    override public func hitTest(_ point: NSPoint) -> NSView? {
+        if !playButton.isHidden, playButton.frame.contains(point) { return playButton }
+        return super.hitTest(point)
+    }
+
     @objc private func playTapped() {
         guard playerView == nil,
               let source = currentSource, !currentRemote else { return }
