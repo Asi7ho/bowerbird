@@ -112,6 +112,18 @@ public class CardView: NSView {
         // Re-apply the chrome when the frame changes: the
         // border, radius and shadow scale with the zoom.
         updateChrome()
+        // Re-apply the turn, too. The host sets it when the
+        // card is placed, but on load it did not stick --
+        // the bird's turned parts sat unturned until an
+        // action set them right. The turn is part of the
+        // card, so it belongs here, where the card is laid
+        // out in the window: setting it here it holds from
+        // the first draw, whatever happened to it before.
+        if let rotation = currentItem?.rotation {
+            layer?.transform = CATransform3DMakeRotation(-CGFloat(rotation) * .pi / 180, 0, 0, 1)
+        } else {
+            layer?.transform = CATransform3DIdentity
+        }
     }
 
     /// A card is a container for its content, not a click
