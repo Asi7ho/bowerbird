@@ -26,6 +26,14 @@ let package = Package(
                 .linkedFramework("Metal"),
                 .linkedFramework("MetalKit"),
                 .linkedFramework("QuartzCore"),
+                // The native media views: video and audio
+                // play through AVFoundation/AVKit, PDFs
+                // through PDFKit, 3D models through
+                // QuickLook.
+                .linkedFramework("AVKit"),
+                .linkedFramework("AVFoundation"),
+                .linkedFramework("PDFKit"),
+                .linkedFramework("QuickLookUI"),
             ]
         ),
         .executableTarget(name: "Bowerbird", dependencies: ["BowerbirdCore", "BoardUI"]),
