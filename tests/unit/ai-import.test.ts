@@ -14,9 +14,11 @@ describe("isPdfCompatible", () => {
   it("rejects a PostScript .ai file saved without PDF compatibility", () => {
     expect(isPdfCompatible(new Uint8Array(readFileSync(LEGACY_AI)))).toBe(false);
   });
-  it("rejects empty and garbage input", () => {
-    expect(isPdfCompatible(new Uint8Array(0))).toBe(false);
-    expect(isPdfCompatible(new TextEncoder().encode("%PDF"))).toBe(false);
-    expect(isPdfCompatible(new TextEncoder().encode("%PDX-1.4"))).toBe(false);
+  it.each([
+    [new Uint8Array(0), "empty input"],
+    [new TextEncoder().encode("%PDF"), "a bare %PDF prefix"],
+    [new TextEncoder().encode("%PDX-1.4"), "a near-miss prefix"],
+  ])("rejects %s", (input) => {
+    expect(isPdfCompatible(input)).toBe(false);
   });
 });

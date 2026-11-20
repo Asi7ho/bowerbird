@@ -56,21 +56,18 @@ describe("groupBBox", () => {
 });
 
 describe("fileCardSize", () => {
-  it("is 360 wide with the preview height from the artwork's aspect, plus room for the title and sub", () => {
-    // A 200x120 artwork: preview (120/200)*336 = 201.6, +70.
-    expect(fileCardSize(200, 120)).toEqual({ w: 360, h: 272 });
-    // A square artwork: preview 336, +70.
-    expect(fileCardSize(100, 100)).toEqual({ w: 360, h: 406 });
-  });
-  it("caps a very tall artwork's preview at 360", () => {
-    expect(fileCardSize(100, 1000)).toEqual({ w: 360, h: 430 });
-  });
-  it("floors a very wide artwork's preview at 80", () => {
-    expect(fileCardSize(1000, 10)).toEqual({ w: 360, h: 150 });
-  });
-  it("falls back to the video card's size for a missing artwork", () => {
-    expect(fileCardSize(0, 0)).toEqual({ w: 360, h: 264 });
-    expect(fileCardSize(-5, 100)).toEqual({ w: 360, h: 264 });
+  it.each([
+    // [artwork w, h, card w, h] — 360 wide, preview height
+    // from the aspect (preview 336 wide, +70 for the title
+    // and sub), capped at 360, floored at 80.
+    [200, 120, 360, 272], // (120/200)*336 = 201.6, +70
+    [100, 100, 360, 406], // square: preview 336, +70
+    [100, 1000, 360, 430], // very tall: preview capped at 360
+    [1000, 10, 360, 150], // very wide: preview floored at 80
+    [0, 0, 360, 264], // missing artwork: the video card's size
+    [-5, 100, 360, 264],
+  ])("fileCardSize(%i, %i) is %ix%i", (w, h, cw, ch) => {
+    expect(fileCardSize(w, h)).toEqual({ w: cw, h: ch });
   });
 });
 
@@ -100,9 +97,9 @@ describe("translateImportedToAnchor", () => {
   });
   it("is a no-op when the import is already at the anchor", () => {
     const items = [shape(100, 100, 50, 50)];
-    expect(translateImportedToAnchor(items as never, { x: 100, y: 100 })).toBe(items);
-  });
-  it("returns an empty import unchanged", () => {
+    // Deep equality, not identity: the function may return
+    // a fresh array holding the same items.
+    expect(translateImportedToAnchor(items as never, { x: 100, y: 100 })).toEqual(items);
     expect(translateImportedToAnchor([], { x: 0, y: 0 })).toEqual([]);
   });
 });

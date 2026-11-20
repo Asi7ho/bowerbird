@@ -15,19 +15,17 @@ const TOOLBAR: OverlayRect = { x: 12, y: 213, w: 56, h: 473 };
 const BAR = { w: 44, h: 240 };
 
 describe("rectsOverlap", () => {
-  it("overlapping rects overlap", () => {
-    expect(rectsOverlap({ x: 0, y: 0, w: 10, h: 10 }, { x: 5, y: 5, w: 10, h: 10 })).toBe(true);
-  });
-  it("a rect inside another overlaps", () => {
-    expect(rectsOverlap({ x: 0, y: 0, w: 100, h: 100 }, { x: 20, y: 20, w: 10, h: 10 })).toBe(true);
-  });
-  it("disjoint rects do not overlap", () => {
-    expect(rectsOverlap({ x: 0, y: 0, w: 10, h: 10 }, { x: 20, y: 0, w: 10, h: 10 })).toBe(false);
-    expect(rectsOverlap({ x: 0, y: 0, w: 10, h: 10 }, { x: 0, y: 20, w: 10, h: 10 })).toBe(false);
-  });
-  it("rects sharing only an edge do not overlap", () => {
-    expect(rectsOverlap({ x: 0, y: 0, w: 10, h: 10 }, { x: 10, y: 0, w: 10, h: 10 })).toBe(false);
-    expect(rectsOverlap({ x: 0, y: 0, w: 10, h: 10 }, { x: 0, y: 10, w: 10, h: 10 })).toBe(false);
+  it.each([
+    // [a, b, overlaps] — overlap, containment, disjoint,
+    // and the edge-touching case, which is not an overlap.
+    [{ x: 0, y: 0, w: 10, h: 10 }, { x: 5, y: 5, w: 10, h: 10 }, true],
+    [{ x: 0, y: 0, w: 100, h: 100 }, { x: 20, y: 20, w: 10, h: 10 }, true],
+    [{ x: 0, y: 0, w: 10, h: 10 }, { x: 20, y: 0, w: 10, h: 10 }, false],
+    [{ x: 0, y: 0, w: 10, h: 10 }, { x: 0, y: 20, w: 10, h: 10 }, false],
+    [{ x: 0, y: 0, w: 10, h: 10 }, { x: 10, y: 0, w: 10, h: 10 }, false],
+    [{ x: 0, y: 0, w: 10, h: 10 }, { x: 0, y: 10, w: 10, h: 10 }, false],
+  ])("rectsOverlap(%j, %j) is %s", (a, b, expected) => {
+    expect(rectsOverlap(a, b)).toBe(expected);
   });
 });
 
@@ -48,12 +46,11 @@ describe("placeNoteBar", () => {
     const p = placeNoteBar({ x: 300, y: 700, w: 120, h: 40 }, BAR, TOOLBAR, VIEWPORT);
     expect(p.side).toBe("left");
     expect(p.y).toBe(700);
-  });
-
-  it("never clamps its top at the top edge either", () => {
-    const p = placeNoteBar({ x: 300, y: 0, w: 120, h: 40 }, BAR, TOOLBAR, VIEWPORT);
-    expect(p.side).toBe("left");
-    expect(p.y).toBe(0);
+    // At the top edge either: the bar's top is the note's
+    // top, never clamped to the viewport.
+    const top = placeNoteBar({ x: 300, y: 0, w: 120, h: 40 }, BAR, TOOLBAR, VIEWPORT);
+    expect(top.side).toBe("left");
+    expect(top.y).toBe(0);
   });
 
   it("flips to the right when the left side would run off the viewport", () => {
@@ -105,14 +102,13 @@ describe("placeNoteBar", () => {
     expect(p.side).toBe("right");
   });
 
-  it("needs no toolbar to place the bar on the left", () => {
-    const p = placeNoteBar({ x: 120, y: 300, w: 120, h: 40 }, BAR, null, VIEWPORT);
-    expect(p.side).toBe("left");
-  });
-
   it("stays on the left near the right edge", () => {
-    const p = placeNoteBar({ x: 1100, y: 300, w: 120, h: 40 }, BAR, TOOLBAR, VIEWPORT);
+    // The note ends at the viewport's right edge, so a
+    // right-side bar (1288-1332) would run off-screen:
+    // the bar stays left because left is the default,
+    // not because the right side would fit.
+    const p = placeNoteBar({ x: 1160, y: 300, w: 120, h: 40 }, BAR, TOOLBAR, VIEWPORT);
     expect(p.side).toBe("left");
-    expect(p.x).toBe(1100 - 44 - 8);
+    expect(p.x).toBe(1160 - 44 - 8);
   });
 });

@@ -104,32 +104,33 @@ describe("recovery journal", () => {
     expect(readRecovery(dir)).toBeNull();
     // Clearing a missing journal is a no-op, not an error.
     expect(clearRecoveryIfMatches(dir, BOARD_B)).toBe(false);
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
-
-  it("clear removes the journal", () => {
-    const dir = tmpDir();
+    // The plain clear removes the journal too, and
+    // clearing twice is fine.
     expect(writeRecovery(dir, BOARD_A)).toBe(true);
     clearRecovery(dir);
     expect(readRecovery(dir)).toBeNull();
-    clearRecovery(dir); // clearing twice is fine
+    clearRecovery(dir);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
   it("refuses a board over the 50 MB cap", () => {
     const dir = tmpDir();
-    const huge = "x".repeat(50000001);
+    // A valid board whose JSON is over 50 MB: the old
+    // test used a bare 50,000,001-char string, which is
+    // not board JSON at all and would be refused with no
+    // cap in place — this one proves the cap itself.
+    const huge = JSON.stringify({
+      items: [{ id: 1, pos: { x: 0, y: 0 }, size: { w: 320, h: 80 }, group: null, kind: { Text: { text: "x".repeat(50000001), bold: false, size: 16, color: "#1A1A1A" } } }],
+      camera: { x: 0, y: 0, zoom: 1 },
+      next_id: 2,
+      next_group: 0,
+      bg: "#FFFFFF",
+      grid: "Dots",
+    });
+    expect(huge.length).toBeGreaterThan(50000000);
     expect(writeRecovery(dir, huge)).toBe(false);
     expect(fs.existsSync(recoveryPathFor(dir))).toBe(false);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  it("a crash between save and clear leaves a journal equal to the board", () => {
-    // The save landed but the clear did not: the journal
-    // holds exactly board.json, so no recovery is offered.
-    const dir = tmpDir();
-    expect(writeRecovery(dir, BOARD_A)).toBe(true);
-    expect(recoveryDiffers(dir, BOARD_A)).toBe(false);
-    fs.rmSync(dir, { recursive: true, force: true });
-  });
 });

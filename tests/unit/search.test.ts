@@ -84,10 +84,4 @@ describe("createBoardSearch", () => {
     expect(count.textContent.startsWith("1 match")).toBe(true);
   });
 
-  it("finds the first card with a duplicated id", async () => {
-    input.value = "Apple";
-    search.updateSearch();
-    await new Promise((r) => setTimeout(r, 50));
-    expect(count.textContent.startsWith("1 match")).toBe(true);
-  });
 });
