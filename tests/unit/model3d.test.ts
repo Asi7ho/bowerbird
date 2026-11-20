@@ -1,5 +1,5 @@
 // Unit tests for the 3D viewer framing (src/backend/model3d.ts):
-// the view a model opens with, which the fit button restores.
+// the view a model opens with.
 import { describe, expect, it } from "vitest";
 import { initialViewState } from "../../src/backend/model3d";
 
@@ -16,10 +16,10 @@ describe("initialViewState", () => {
     expect(initialViewState(0.5).distance).toBe(1.2);
   });
 
-  it("stays inside the wheel-zoom clamp for any model", () => {
-    // The wheel clamp is [radius * 1.1, radius * 6]; the
-    // opening distance (radius * 2.4) sits inside it, so a
-    // fitted model can still be zoomed either way.
+  it("stays inside the framing clamp for any model", () => {
+    // The load clamp is [radius * 1.1, radius * 6]; the
+    // opening distance (radius * 2.4) sits inside it, so
+    // the model always opens framed.
     for (const r of [0.01, 0.5, 1, 10, 100]) {
       const d = initialViewState(r).distance;
       expect(d).toBeGreaterThanOrEqual(r * 1.1);
