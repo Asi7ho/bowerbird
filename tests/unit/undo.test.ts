@@ -91,6 +91,57 @@ describe("createUndoStore", () => {
     expect(store.canRedo()).toBe(false);
   });
 
+  it("undoes two changes and redoes them back to the same state", () => {
+    store.save();
+    board.items.push(textItem(1, "one"));
+    board.next_id = 2;
+    store.save();
+    board.items.push(textItem(2, "two"));
+    board.next_id = 3;
+    store.save();
+    expect(board.items).toHaveLength(2);
+    expect(store.undo()).toBe(true);
+    expect(board.items).toHaveLength(1);
+    expect(store.undo()).toBe(true);
+    expect(board.items).toHaveLength(0);
+    expect(store.canUndo()).toBe(false);
+    expect(store.redo()).toBe(true);
+    expect(board.items).toHaveLength(1);
+    expect((board.items[0].kind as { Text: { text: string } }).Text.text).toBe("one");
+    expect(store.redo()).toBe(true);
+    expect(board.items).toHaveLength(2);
+    expect((board.items[1].kind as { Text: { text: string } }).Text.text).toBe("two");
+    expect(store.canRedo()).toBe(false);
+  });
+
+  it("a new save after an undo clears the redo stack", () => {
+    store.save();
+    board.items.push(textItem(1, "one"));
+    board.next_id = 2;
+    store.save();
+    board.items.push(textItem(2, "two"));
+    board.next_id = 3;
+    store.save();
+    expect(store.undo()).toBe(true);
+    expect(store.canRedo()).toBe(true);
+    // A fresh change instead of a redo: the undone "two"
+    // is gone for good, as in every editor.
+    board.items.push(textItem(2, "three"));
+    store.save();
+    expect(store.canRedo()).toBe(false);
+    expect(store.redo()).toBe(false);
+    expect(board.items.map((it) => (it.kind as { Text: { text: string } }).Text.text)).toEqual(["one", "three"]);
+  });
+
+  it("undo and redo return false on empty stacks", () => {
+    store.save();
+    expect(store.canUndo()).toBe(false);
+    expect(store.canRedo()).toBe(false);
+    expect(store.undo()).toBe(false);
+    expect(store.redo()).toBe(false);
+    expect(board.items).toHaveLength(0);
+  });
+
   it("a no-op save writes nothing and creates no undo step", () => {
     store.save();
     expect(saveBoard).toHaveBeenCalledTimes(1);

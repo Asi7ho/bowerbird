@@ -6,6 +6,7 @@ import {
   anchorPoint,
   arrangeItems,
   checklistProgress,
+  clampZoom,
   clippedEnds,
   domainOf,
   escapeHtml,
@@ -29,7 +30,10 @@ import {
   pressureWidth,
   rectCrossing,
   renderMarkdownHtml,
+  screenToWorld,
   resizeItem,
+  worldToScreen,
+  zoomCamera,
   rotatePoint,
   segmentIntersectsRect,
   select,
@@ -539,6 +543,46 @@ describe("fitCamera", () => {
     const cam = fitCamera(b, { w: 1280, h: 802 });
     expect(cam).not.toBeNull();
     expect(cam!.zoom).toBeCloseTo((802 - 96) / 2000, 6);
+  });
+});
+
+describe("camera math", () => {
+  it("clampZoom keeps the zoom inside 0.01 to 8", () => {
+    expect(clampZoom(1.5)).toBe(1.5);
+    expect(clampZoom(0)).toBe(0.01);
+    expect(clampZoom(-3)).toBe(0.01);
+    expect(clampZoom(100)).toBe(8);
+  });
+  it("screenToWorld and worldToScreen round-trip", () => {
+    const cam = { x: 100, y: -50, zoom: 2 };
+    const world = { x: 340, y: 120 };
+    const screen = worldToScreen(world, cam);
+    expect(screen).toEqual({ x: 480, y: 340 });
+    expect(screenToWorld(screen, cam)).toEqual(world);
+    // The other direction: screen -> world -> screen.
+    const s2 = { x: 480, y: 340 };
+    expect(worldToScreen(screenToWorld(s2, cam), cam)).toEqual(s2);
+  });
+  it("zoomCamera keeps the zoomed point under the cursor", () => {
+    const cam = { x: 100, y: -50, zoom: 1 };
+    const cursor = { x: 640, y: 400 };
+    const before = screenToWorld(cursor, cam);
+    const zoomed = zoomCamera(cam, cursor, 2);
+    expect(zoomed.zoom).toBe(2);
+    const after = screenToWorld(cursor, zoomed);
+    expect(after.x).toBeCloseTo(before.x, 9);
+    expect(after.y).toBeCloseTo(before.y, 9);
+    // Zooming out moves the camera the other way, but the
+    // anchor still holds.
+    const out = zoomCamera(cam, cursor, 0.5);
+    expect(out.zoom).toBe(0.5);
+    const afterOut = screenToWorld(cursor, out);
+    expect(afterOut.x).toBeCloseTo(before.x, 9);
+    expect(afterOut.y).toBeCloseTo(before.y, 9);
+  });
+  it("zoomCamera clamps at the zoom limits", () => {
+    expect(zoomCamera({ x: 0, y: 0, zoom: 4 }, { x: 100, y: 100 }, 10).zoom).toBe(8);
+    expect(zoomCamera({ x: 0, y: 0, zoom: 1 }, { x: 100, y: 100 }, 0.001).zoom).toBe(0.01);
   });
 });
 

@@ -383,6 +383,14 @@ async function main() {
       await waitFor("empty board after undo", () => readBoard().items.length === 0);
     });
 
+    await check("redo restores the undone stroke", async () => {
+      await page.keyboard.press("Control+Shift+z");
+      await waitFor("stroke back after redo", () => {
+        const found = strokes();
+        return found.length === 1 && found[0].kind.Stroke.points.length >= 2 ? found[0] : null;
+      });
+    });
+
     await check("double-click creates a text note and typing saves it", async () => {
       await page.keyboard.press("v");
       await doubleClick(page, 600, 600);
@@ -470,7 +478,7 @@ async function main() {
       await page.locator("text=CI plugin card").first().waitFor({ timeout: READY_TIMEOUT_MS });
     });
 
-    await check("grouping cards frames them as a section", async () => {
+    await check("grouping cards frames them as a group", async () => {
       // The board holds the "Hello CI!" note at world (600, 552),
       // 260x48, and CI plugin cards stacked at (100, 100), 260x96
       // (the plugin adds one per reload). Select the note and
@@ -549,6 +557,51 @@ async function main() {
       });
       assert.equal(readBoard().items.find((it) => "Text" in it.kind).pos.x, 600);
       assert.equal(readBoard().items.find((it) => "Plugin" in it.kind && it.group === 1).pos.x, 100);
+    });
+
+    await check("ungrouping cards removes the frame and the group", async () => {
+      // The group from the check above: the note and the top
+      // CI card, labelled "Reading". Select the group, then
+      // ungroup it with Ctrl+U (the app's ungroup shortcut).
+      await page.mouse.click(730, 624);
+      await waitFor("group selected", async () => {
+        const n = await page.evaluate(() => document.querySelectorAll("#cards .card.selected").length);
+        return n === 2 ? true : null;
+      });
+      await page.keyboard.press("Control+u");
+      await waitFor("frame gone after ungroup", async () => (await page.$(".group-frame")) === null);
+      assert.equal(await page.locator(".group-label").count(), 0);
+      await waitFor("group gone from disk", () => {
+        const b = readBoard();
+        return (!b.groups || Object.keys(b.groups).length === 0) && b.items.every((it) => it.group === null);
+      });
+      // It survives a reload: the members stay ungrouped
+      // and no frame comes back.
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
+      await waitFor("still ungrouped after reload", () => {
+        const b = readBoard();
+        return (!b.groups || Object.keys(b.groups).length === 0) && b.items.every((it) => it.group === null);
+      });
+      assert.equal(await page.$(".group-frame"), null);
+    });
+
+    await check("Delete removes the selected card and undo brings it back", async () => {
+      // The note is ungrouped now, so a plain click selects
+      // it alone.
+      await page.mouse.click(730, 624);
+      await waitFor("note selected", async () => {
+        const n = await page.evaluate(() => document.querySelectorAll("#cards .card.selected").length);
+        return n === 1 ? true : null;
+      });
+      await page.keyboard.press("Delete");
+      await waitFor("note gone from disk", () => !textCards().some((it) => it.kind.Text.text === "Hello CI!"));
+      assert.equal(await page.locator("#cards .card", { hasText: "Hello CI!" }).count(), 0);
+      // Undo brings it back, with its text.
+      await page.keyboard.press("Control+z");
+      await waitFor("note back after undo", () =>
+        textCards().some((it) => it.kind.Text.text === "Hello CI!"),
+      );
     });
 
     await check("pasting an image from the clipboard adds an image card", async () => {
