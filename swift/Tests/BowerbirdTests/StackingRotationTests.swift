@@ -12,7 +12,12 @@ import BowerbirdCore
 /// unturned until a later pass sets it again.
 final class StackingRotationTests: XCTestCase {
     func testReAddKeepsRotation() {
+        // The container is in a real window, as on load:
+        // a bare view that is not in a window does not
+        // behave the same when its subviews are re-added.
+        let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 1000, height: 1000), styleMask: [.titled], backing: .buffered, defer: false)
         let container = NSView(frame: CGRect(x: 0, y: 0, width: 1000, height: 1000))
+        window.contentView?.addSubview(container)
         let item = Item(
             id: 16, pos: Pt(x: 100, y: 100), size: Size(w: 30, h: 24), group: nil,
             kind: .shape(ShapePayload(shape: .ellipse, fill: "#2A6D09", outline: nil)),
