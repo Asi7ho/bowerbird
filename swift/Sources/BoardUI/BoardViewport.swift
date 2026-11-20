@@ -1833,19 +1833,11 @@ public final class BoardViewport: NSView {
             tx: screenMinX, ty: screenMinY
         )
         CardView.withoutLayerActions {
-            strokeLayer.path = StrokePath.path(for: points)?.copy(using: &transform)
+            strokeLayer.path = StrokePath.path(for: points, pencil: style.pencil, width: style.width)?.copy(using: &transform)
             strokeLayer.lineWidth = CGFloat(style.width) * camera.zoom
             strokeLayer.strokeColor = (NSColor.fromHex(toolState?.penColor ?? "#1A1A1A") ?? .labelColor).cgColor
             strokeLayer.opacity = style.marker ? 0.45 : 1
             strokeLayer.frame = bounds
-            // The pencil's graphite texture, live, so the
-            // stroke does not change character when it is
-            // committed.
-            if style.pencil, let filter = PencilTexture.displacementFilter(scale: 2.5 * camera.zoom) {
-                strokeLayer.filters = [filter]
-            } else {
-                strokeLayer.filters = nil
-            }
         }
     }
 

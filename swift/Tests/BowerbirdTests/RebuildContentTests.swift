@@ -58,4 +58,26 @@ final class RebuildContentTests: XCTestCase {
         XCTAssertEqual(box.width, size.width, accuracy: 0.01)
         XCTAssertEqual(box.height, size.height, accuracy: 0.01)
     }
+
+    func testPencilPathHasGrainAndIsStable() {
+        // The pencil texture is geometry, not a filter:
+        // the path must carry the grain (differ from the
+        // clean path) and be the same on every render, so
+        // it cannot flicker or drift with the zoom.
+        let points = [Pt(x: 0, y: 0), Pt(x: 50, y: 10), Pt(x: 100, y: 0), Pt(x: 150, y: 12)]
+        guard let clean = StrokePath.path(for: points),
+              let pencil = StrokePath.path(for: points, pencil: true, width: 2),
+              let pencilAgain = StrokePath.path(for: points, pencil: true, width: 2) else {
+            XCTFail("no path built")
+            return
+        }
+        // Grain: the pencil path is not the clean path.
+        XCTAssertNotEqual(pencil.boundingBox, clean.boundingBox)
+        // Stable: two renders of the same stroke agree.
+        XCTAssertEqual(pencil.boundingBox, pencilAgain.boundingBox)
+        // Bounded: the grain stays within a fraction of
+        // the stroke width, so the card's pad still holds.
+        XCTAssertLessThan(abs(pencil.boundingBox.width - clean.boundingBox.width), 2.0)
+        XCTAssertLessThan(abs(pencil.boundingBox.height - clean.boundingBox.height), 2.0)
+    }
 }

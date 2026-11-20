@@ -445,7 +445,7 @@ public final class StrokeCardView: CardView {
         CardView.withoutLayerActions {
             let zoomX = item.size.w > 0 ? size.width / CGFloat(item.size.w) : 1
             let zoomY = item.size.h > 0 ? size.height / CGFloat(item.size.h) : 1
-            if let path = StrokePath.path(for: stroke.points) {
+            if let path = StrokePath.path(for: stroke.points, pencil: stroke.pencil == true, width: stroke.width) {
                 // The card is y-up (a plain NSView) while
                 // the stroke's points are y-down (world
                 // coordinates): a path copied straight
@@ -463,15 +463,6 @@ public final class StrokeCardView: CardView {
             }
             shapeLayer.lineWidth = CGFloat(stroke.width) * zoomX
             shapeLayer.frame = CGRect(origin: .zero, size: size)
-            // A pencil stroke gets the graphite texture
-            // (a displacement driven by tiled noise, the
-            // Electron app's turbulence filter); pen and
-            // highlighter draw clean.
-            if stroke.pencil == true, let filter = PencilTexture.displacementFilter(scale: 2.5 * zoomX) {
-                shapeLayer.filters = [filter]
-            } else {
-                shapeLayer.filters = nil
-            }
         }
     }
 
