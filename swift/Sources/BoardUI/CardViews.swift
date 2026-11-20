@@ -183,7 +183,7 @@ public final class TextCardView: CardView {
                   let layout = textView.layoutManager else { return nil }
             layout.ensureLayout(for: container)
             let used = layout.usedRect(for: container).height
-            return used + textView.textContainerInset.top + textView.textContainerInset.bottom
+            return used + 2 * textView.textContainerInset.height
         }
         for subview in view.subviews {
             if let height = editorTextHeight(in: subview) { return height }
