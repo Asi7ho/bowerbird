@@ -1232,14 +1232,15 @@ window.addEventListener("wheel", (e: WheelEvent) => {
     // Cards that come into view appear when the gesture
     // settles (see the timer below), up to 120ms later;
     // the cards already on screen scale smoothly meanwhile.
-    // Sensitivity: 0.003, not 0.0015 — a full trackpad
-    // pinch used to give only ~1.35x and felt slow, and a
-    // mouse-wheel notch almost nothing. deltaMode is
-    // normalised first, so a line-based wheel (deltaY in
-    // lines) and a pixel-based trackpad pinch both land
-    // on the same scale.
+    // Sensitivity: 0.005 — a full trackpad pinch used to
+    // give only ~1.8x at 0.003 and felt slow, so it was
+    // raised from 0.0015 to 0.003 and then to 0.005. A
+    // mouse-wheel notch still moves a sensible step.
+    // deltaMode is normalised first, so a line-based wheel
+    // (deltaY in lines) and a pixel-based trackpad pinch
+    // both land on the same scale.
     const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
-    S.pendingZoomFactor *= Math.exp(-dy * 0.003);
+    S.pendingZoomFactor *= Math.exp(-dy * 0.005);
     S.pendingZoomAnchor = boardPoint(e.clientX, e.clientY);
     if (S.zoomFrame === null) {
       S.zoomFrame = requestAnimationFrame(() => {
