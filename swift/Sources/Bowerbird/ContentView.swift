@@ -38,8 +38,12 @@ public struct ContentView: View {
                     .frame(minWidth: 800, minHeight: 600)
                 // The floating toolbar, vertically centred
                 // on the board's left edge, like the
-                // Electron app's (top 50%, left 12px).
-                ToolbarView(tools: tools)
+                // Electron app's (top 50%, left 12px). The
+                // host is 170×364: the bar (56×264) centred
+                // in it, with room for the flyout that
+                // sticks out to its right and below it.
+                ToolbarHostView(tools: tools)
+                    .frame(width: 170, height: 364)
                     .padding(.leading, 12)
             }
         }
