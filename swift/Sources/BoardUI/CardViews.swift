@@ -568,9 +568,18 @@ public final class FileCardView: CardView {
 /// grey tile. A live web view (WKWebView) is M5; this is
 /// the link's preview, not the page.
 public final class UrlCardView: CardView {
+    /// The fetched link images, by URL, so a card that is
+    /// reconfigured (any board change reconfigures every
+    /// visible card) does not refetch — and the card never
+    /// blanks while it is only being moved.
+    private static var imageCache = NSCache<NSString, NSImage>()
     private let imageView = NSImageView()
     private let titleLayer = CATextLayer()
     private let subtitleLayer = CATextLayer()
+    /// The image URL this view is showing, so a
+    /// reconfigure for the same card keeps its image
+    /// instead of fetching it again.
+    private var currentImageURL: String?
     /// The image URL this view is loading, so a late
     /// response for a recycled view (now showing another
     /// card) never paints the wrong image.
@@ -597,12 +606,27 @@ public final class UrlCardView: CardView {
         guard case .urlCard(let url) = item.kind else { return }
         titleLayer.string = url.title ?? url.url
         subtitleLayer.string = url.description ?? URL(string: url.url)?.host ?? "Link"
+        // The image is cached in memory and kept across
+        // reconfigures: the host reconfigures every visible
+        // card on any board change (a move, a resize, a new
+        // card), and blanking the image and fetching it
+        // again every time made the link card reload on
+        // every movement. A card showing the same image
+        // keeps it; only a new image URL fetches.
+        guard url.image != currentImageURL else { return }
+        currentImageURL = url.image
         loadingImageURL = url.image
+        if let imageURLString = url.image, let cached = Self.imageCache.object(forKey: imageURLString as NSString) {
+            imageView.image = cached
+            needsLayout = true
+            return
+        }
         imageView.image = nil
         layer?.backgroundColor = NSColor.white.cgColor
         if let imageURLString = url.image, let imageURL = URL(string: imageURLString) {
             URLSession.shared.dataTask(with: imageURL) { [weak self] data, _, _ in
                 guard let self, let data, let image = NSImage(data: data) else { return }
+                Self.imageCache.setObject(image, forKey: imageURLString as NSString)
                 DispatchQueue.main.async {
                     // Only paint when this view still shows
                     // the card that asked for this image.
