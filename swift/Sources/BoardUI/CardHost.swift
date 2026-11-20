@@ -149,19 +149,15 @@ public final class CardHost {
             if reconfigure || !alreadyShown {
                 view.configure(item: item)
             }
-            // Reset the rotation before setting the frame:
-            // a frame is the bounding box of the rotated
-            // rect, so setting it while a rotation is still
-            // applied computes the wrong bounds — a recycled
-            // view that carried a different rotation from
-            // its last item landed in the wrong place, and
-            // only a later layout, with the right rotation
-            // already in place, put it right. That is why
-            // the bird's rotated parts sat wrong on load
-            // and snapped into place once something moved
-            // them. The frame is always set unrotated; the
-            // rotation is applied after, about the centre.
-            view.layer?.transform = CATransform3DIdentity
+            // Reset the turn before setting the frame: a frame
+            // set while the view is turned is not the rect the
+            // item describes (AppKit keeps the turn's own
+            // geometry around it), so a recycled view that
+            // carried the last item's rotation could land in
+            // the wrong place. The frame is always set
+            // unrotated; the turn is applied after, about the
+            // card's centre.
+            view.frameCenterRotation = 0
             view.frame = CGRect(
                 x: (item.pos.x - camera.x) * camera.zoom,
                 y: (item.pos.y - camera.y) * camera.zoom,
@@ -172,39 +168,35 @@ public final class CardHost {
             if view.superview == nil {
                 container.addSubview(view)
             }
-            // The layer's bounds are set from the size
-            // just placed, before the turn. The bird's parts
-            // sat in the wrong places on load (the debug
-            // file showed the frames right, the screenshots
-            // showed the leaves shifted): the turn is about
-            // the centre of the layer's bounds, and for a
-            // fresh card not yet in the window those bounds
-            // had not caught up with the new frame -- so the
-            // turn was about the wrong point and the part
-            // landed shifted. Setting the bounds here makes
-            // the centre right from the first draw.
             let cardSize = CGSize(
                 width: item.size.w * camera.zoom,
                 height: item.size.h * camera.zoom
             )
-            view.layer?.bounds = CGRect(origin: .zero, size: cardSize)
-            // The rotation is set AFTER the card is in the
-            // container, not before. The screenshots showed
-            // the bird's turned parts (leaves, tail, belly)
-            // sitting unturned on load and snapping to their
-            // turn after a click: the turn was set while the
-            // card was not yet in the window, so it did not
-            // stick, and only a later pass -- when the card
-            // was already in the window -- put it in place.
-            // Setting it here, once the card is placed, it
-            // holds from the first draw.
+            // The turn is applied after the card is placed, so
+            // the frame above is the item's own rect.
+            //
+            // `frameCenterRotation`, not the layer's
+            // `transform`: AppKit owns a view's layer
+            // geometry, and it resets a transform set
+            // directly on it at the first display pass.
+            // That reset is why the bird's parts sat
+            // unrotated on load and only snapped right when
+            // a click re-applied the turn -- and why the
+            // turn could be lost again later.
+            // `frameCenterRotation` is the view-level
+            // rotation AppKit maintains, and it turns about
+            // the card's centre, which is where a board
+            // item's rotation belongs (the Electron app's
+            // `transform: rotate()`, with its default
+            // `transform-origin: 50% 50%`).
+            //
+            // Not negated: the card sits in the flipped
+            // container, and that flip already turns the
+            // layer's turn around -- negating it as well
+            // turned the bird's parts the wrong way on
+            // load. The board's turn is used as it stands.
             if let rotation = item.rotation {
-                // Not negated: the card sits in the flipped
-                // container, and that flip already turns the
-                // layer's turn around -- negating it as well
-                // turned the bird's parts the wrong way on
-                // load. The board's turn is used as it stands.
-                view.layer?.transform = CATransform3DMakeRotation(CGFloat(rotation) * .pi / 180, 0, 0, 1)
+                view.frameCenterRotation = CGFloat(rotation)
             }
             // Draw the card now, from its new frame: the
             // shape and stroke paths are built from the

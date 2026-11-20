@@ -113,23 +113,25 @@ public class CardView: NSView {
         // border, radius and shadow scale with the zoom.
         updateChrome()
         // Re-apply the turn, too. The host sets it when the
-        // card is placed, but on load it did not stick --
-        // the bird's turned parts sat unturned until an
-        // action set them right. The turn is part of the
-        // card, so it belongs here, where the card is laid
-        // out in the window: setting it here it holds from
-        // the first draw, whatever happened to it before.
+        // card is placed; re-applying it here keeps the card
+        // correct through a layout pass (a resize, a zoom)
+        // without depending on the host's pass.
+        // `frameCenterRotation`, not the layer's `transform`:
+        // a transform set directly on an `NSView`'s layer is
+        // reset by AppKit at the first display pass (the
+        // view's layer geometry belongs to the view), which
+        // is exactly why the parts drew unrotated on load.
+        // `frameCenterRotation` is the view-level rotation
+        // AppKit maintains, about the card's centre.
         if let rotation = currentItem?.rotation {
             // Not negated: the card sits in the flipped
             // container, and that flip already turns the
             // layer's turn around -- negating it as well
-            // turned the bird's parts the wrong way on load
-            // (they sat unturned, then snapped to their turn
-            // after an action). The board's turn is used as
-            // it stands.
-            layer?.transform = CATransform3DMakeRotation(CGFloat(rotation) * .pi / 180, 0, 0, 1)
+            // turned the bird's parts the wrong way on load.
+            // The board's turn is used as it stands.
+            frameCenterRotation = CGFloat(rotation)
         } else {
-            layer?.transform = CATransform3DIdentity
+            frameCenterRotation = 0
         }
     }
 

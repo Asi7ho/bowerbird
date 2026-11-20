@@ -46,8 +46,12 @@ final class CardHostRotationTests: XCTestCase {
         // The bounds are the unrotated screen size.
         XCTAssertEqual(view.bounds.width, 30, accuracy: 0.001)
         XCTAssertEqual(view.bounds.height, 24, accuracy: 0.001)
-        // The centre is the centre of the new item's rect.
-        XCTAssertEqual(view.frame.midX, 515, accuracy: 0.001)
-        XCTAssertEqual(view.frame.midY, 312, accuracy: 0.001)
+        // The drawn rect's centre is the centre of the new
+        // item's rect (`frame` is not reliable for a
+        // rotated view — AppKit keeps its own turned
+        // geometry).
+        let drawn = view.convert(view.bounds, to: container)
+        XCTAssertEqual(drawn.midX, 515, accuracy: 0.001)
+        XCTAssertEqual(drawn.midY, 312, accuracy: 0.001)
     }
 }

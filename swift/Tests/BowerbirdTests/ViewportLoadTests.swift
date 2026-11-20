@@ -46,12 +46,16 @@ final class ViewportLoadTests: XCTestCase {
         XCTAssertEqual(cards.count, 2)
         for view in cards {
             guard let item = view.currentItem else { continue }
-            // The frame's centre is the item's centre, in
-            // screen coordinates (camera 0,0 zoom 1).
+            // The drawn rect's centre is the item's centre,
+            // in screen coordinates (camera 0,0 zoom 1).
+            // The rect is the turned bounding box; `frame`
+            // is not a reliable read for a rotated view
+            // (AppKit keeps its own turned geometry).
+            let drawn = view.convert(view.bounds, to: viewport.cardContainer)
             let cx = item.pos.x + item.size.w / 2
             let cy = item.pos.y + item.size.h / 2
-            XCTAssertEqual(view.frame.midX, cx, accuracy: 0.01, "item \(item.id) midX")
-            XCTAssertEqual(view.frame.midY, cy, accuracy: 0.01, "item \(item.id) midY")
+            XCTAssertEqual(drawn.midX, cx, accuracy: 0.01, "item \(item.id) midX")
+            XCTAssertEqual(drawn.midY, cy, accuracy: 0.01, "item \(item.id) midY")
             XCTAssertEqual(view.bounds.width, item.size.w, accuracy: 0.01, "item \(item.id) width")
             XCTAssertEqual(view.bounds.height, item.size.h, accuracy: 0.01, "item \(item.id) height")
         }

@@ -45,8 +45,13 @@ final class CardHostLoadTests: XCTestCase {
         guard let view = views.first else { return }
         XCTAssertEqual(view.bounds.width, 30, accuracy: 0.001)
         XCTAssertEqual(view.bounds.height, 24, accuracy: 0.001)
-        XCTAssertEqual(view.frame.midX, 1315, accuracy: 0.001)
-        XCTAssertEqual(view.frame.midY, 212, accuracy: 0.001)
+        // The drawn rect (the rotation's bounding box) is
+        // centred on the item; `frame` is not a reliable
+        // read for a rotated view (AppKit keeps its own
+        // geometry for the turn).
+        let drawn = view.convert(view.bounds, to: container)
+        XCTAssertEqual(drawn.midX, 1315, accuracy: 0.001)
+        XCTAssertEqual(drawn.midY, 212, accuracy: 0.001)
         // The shape itself is drawn for the real bounds:
         // the path's box fills the card, so the ellipse
         // sits where the card sits.
