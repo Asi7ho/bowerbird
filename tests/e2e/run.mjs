@@ -1418,6 +1418,66 @@ async function main() {
       assert.ok(same, "the wheel did not zoom the model (pixels unchanged)");
     });
 
+    await check("obj, fbx, stl, usdz and dae models render on cards", async () => {
+      // Each new format lands via an outside board write,
+      // like the GLB test; the canvas must show the cube,
+      // not the flat card background. The fixtures are the
+      // same box as cube.glb. Only the .usdz keeps the blue
+      // material, so the check is shading variation across
+      // the canvas, not a colour.
+      const assetsDir = path.join(tmp, "assets");
+      fs.mkdirSync(assetsDir, { recursive: true });
+      const formats = ["obj", "fbx", "stl", "usdz", "dae"];
+      for (const ext of formats) {
+        fs.copyFileSync(path.join(repoRoot, `tests/e2e/fixtures/cube.${ext}`), path.join(assetsDir, `cube.${ext}`));
+      }
+      const board = readBoard();
+      let id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
+      const ids = [];
+      for (let i = 0; i < formats.length; i++) {
+        const ext = formats[i];
+        board.items.push({ id, pos: { x: 100 + i * 400, y: 850 }, size: { w: 360, h: 300 }, group: null, kind: { Model3D: { path: path.join(assetsDir, `cube.${ext}`), size_bytes: fs.statSync(path.join(assetsDir, `cube.${ext}`)).size } } });
+        ids.push(id);
+        id++;
+      }
+      board.next_id = id;
+      const tmp2 = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp2, JSON.stringify(board));
+      fs.renameSync(tmp2, boardPath);
+      // Fit after the live-follow reload, not before it.
+      await new Promise((r) => setTimeout(r, 1200));
+      await page.keyboard.press("f");
+      await new Promise((r) => setTimeout(r, 500));
+      // Poll until every model's canvas shows shading
+      // variation: a rendered cube has light and dark faces,
+      // the flat card background does not. SwiftShader is
+      // slow, and five models load at once, so allow 30s.
+      let rendered = 0;
+      for (let i = 0; i < 60; i++) {
+        rendered = await page.evaluate((mids) => {
+          let n = 0;
+          for (const mid of mids) {
+            const cv = document.querySelector(`#cards .card[data-id="${mid}"] canvas.model3d`);
+            if (!cv) continue;
+            const x = cv.getContext("2d");
+            if (!x) continue;
+            const seen = new Set();
+            for (const fx of [0.3, 0.5, 0.7]) {
+              for (const fy of [0.3, 0.5, 0.7]) {
+                const d = x.getImageData(Math.floor(cv.width * fx), Math.floor(cv.height * fy), 1, 1).data;
+                seen.add(`${d[0]},${d[1]},${d[2]}`);
+              }
+            }
+            if (seen.size > 1) n++;
+          }
+          return n;
+        }, ids.map(String));
+        if (rendered === ids.length) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      assert.strictEqual(rendered, ids.length, "every new 3D format rendered its cube");
+    });
+
     await check("a card over a 3D card covers the cube", async () => {
       // The model lives in its card's own canvas now, so a
       // card over it must cover it — the way it covers any
@@ -2083,6 +2143,20 @@ async function main() {
         assert.ok(Math.abs(Math.min(...xs) - s.pos.x) < 0.01, "svg stroke points are absolute in x");
         assert.ok(Math.abs(Math.min(...ys) - s.pos.y) < 0.01, "svg stroke points are absolute in y");
       }
+    });
+
+    await check("dropping an OBJ file lands a 3D card", async () => {
+      // The drop gate accepts obj, fbx, stl, usdz and dae
+      // as well as glb; one drop proves the gate, the
+      // render check above proves each format loads.
+      const before = countKind("Model3D");
+      await dropFixture("cube.obj", "model/obj");
+      const b = await waitFor("obj card in board.json", () => {
+        const board = readBoard();
+        return countKind("Model3D") === before + 1 ? board : null;
+      });
+      const card = b.items.filter((it) => "Model3D" in it.kind).at(-1);
+      assert.ok(card.kind.Model3D.path.endsWith("cube.obj"), "the card keeps the dropped file");
     });
 
     await check("editing a linked SVG source re-imports its group in place", async () => {
