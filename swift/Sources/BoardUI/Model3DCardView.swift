@@ -13,7 +13,12 @@ import QuickLookUI
 /// loader, or keep Quick Look. A missing file shows its
 /// name with "File missing".
 public final class Model3DCardView: CardView {
-    private let previewView = QLPreviewView(frame: .zero, style: .normal)
+    /// Quick Look's preview view. The styled initializer
+    /// is failable — it returns nil when Quick Look cannot
+    /// start, which does not happen on a Mac — so the one
+    /// unwrap is here, at creation, and the property is a
+    /// plain view everywhere else.
+    private let previewView = QLPreviewView(frame: .zero, style: .normal)!
     private let titleLayer = CATextLayer()
     private let subtitleLayer = CATextLayer()
     /// The file this view is showing, so a reconfigure
