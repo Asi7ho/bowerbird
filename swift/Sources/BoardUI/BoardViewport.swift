@@ -606,6 +606,12 @@ public final class BoardViewport: NSView {
             } else {
                 onUndo?()
             }
+            // The undo/redo rebuilds the cards, which drops
+            // the cursor to the arrow — put the tool's
+            // cursor back a moment later, after AppKit has
+            // finished, or it stays the arrow until the
+            // pointer moves.
+            reassertCursorSoon()
             return
         }
         // Delete: remove the selection (one undo step, one
@@ -1346,8 +1352,14 @@ public final class BoardViewport: NSView {
         // The drag is over: once every branch below has
         // cleared its drag state, the cursor goes back to
         // whatever the tool and the pointer's position
-        // call for.
-        defer { updateCursor(at: convert(event.locationInWindow, from: nil)) }
+        // call for. It is also put back a moment later:
+        // AppKit drops it to the arrow when the button
+        // comes up, after this set, so it would stay the
+        // arrow until the pointer moves.
+        defer {
+            updateCursor(at: convert(event.locationInWindow, from: nil))
+            reassertCursorSoon()
+        }
         panStart = nil
         // A resize or rotate drag that moved commits as one
         // undo step and one save. A click on a handle that
@@ -1858,6 +1870,20 @@ public final class BoardViewport: NSView {
     public func refreshCursor() {
         guard let point = lastMousePoint else { return }
         updateCursor(at: point)
+    }
+
+    /// Put the tool's cursor back a moment after a drag
+    /// ends or an undo lands. Setting it at once is not
+    /// enough: AppKit drops the cursor back to the arrow
+    /// when the button comes up (and when the cards are
+    /// rebuilt), after the board has already set the
+    /// tool's cursor — so it stays the arrow until the
+    /// pointer moves. Setting it again on a later turn,
+    /// after AppKit has finished, is what makes it stick.
+    private func reassertCursorSoon() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            self?.refreshCursor()
+        }
     }
 
     private func updateCursor(at point: NSPoint) {
