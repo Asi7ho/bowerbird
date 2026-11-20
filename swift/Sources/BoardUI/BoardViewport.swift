@@ -114,6 +114,34 @@ public final class BoardViewport: NSView {
     public let gridView = GridView()
     let cardContainer = WorldView()
 
+    /// The floating toolbar, as a direct subview — not a
+    /// SwiftUI-hosted view. The toolbar was the only
+    /// button surface hosted through SwiftUI, and its
+    /// clicks never landed; every button that works in
+    /// this app (the note colour bar's swatches, the media
+    /// play buttons) is a direct subview of this viewport.
+    /// Positioned in resizeSubviews, 12px from the left
+    /// edge, vertically centred, like the Electron app's.
+    public var toolbarView: ToolbarNSView? {
+        didSet {
+            oldValue?.removeFromSuperview()
+            guard let toolbarView else { return }
+            addSubview(toolbarView)
+            positionToolbar()
+        }
+    }
+
+    /// Puts the toolbar 12px from the left edge,
+    /// vertically centred (the viewport is flipped, so the
+    /// origin is the top edge; clamped to the top when the
+    /// window is shorter than the bar).
+    private func positionToolbar() {
+        guard let toolbarView else { return }
+        let size = ToolbarNSView.barSize
+        let y = max(0, (bounds.height - size.height) / 2)
+        toolbarView.frame = NSRect(x: 12, y: y, width: size.width, height: size.height)
+    }
+
     private var spaceHeld = false
     /// The pointer's last position on the board (view
     /// coordinates), so a tool change from the keyboard
@@ -378,6 +406,7 @@ public final class BoardViewport: NSView {
         eraserOverlay.frame = bounds
         lassoOverlay.frame = bounds
         handlesOverlay.frame = bounds
+        positionToolbar()
         applyCamera()
         onViewportResized?()
     }

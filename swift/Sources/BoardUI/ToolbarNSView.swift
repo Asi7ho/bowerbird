@@ -1,7 +1,6 @@
 import AppKit
 import BowerbirdCore
 import Combine
-import SwiftUI
 
 /// The floating toolbar, as AppKit: a vertical column of
 /// icon buttons, white and translucent, 16px corners — the
@@ -437,52 +436,5 @@ public final class ToolbarNSView: NSView {
             }
         }
         tools.pickerOpen = nil
-    }
-}
-
-/// The toolbar's SwiftUI host: a transparent container
-/// exactly big enough to hold the bar and the flyout that
-/// sticks out of it (the flyout reaches 64px right of the
-/// bar and 50px below it, so the container is 170×364
-/// with the bar centred in it), so the bar sits where it
-/// always did — centred on the board's left edge, 12px in.
-/// Clicks on the container's empty area fall through to
-/// the board: the container only claims a click when it
-/// lands on the bar or the open flyout.
-public struct ToolbarHostView: NSViewRepresentable {
-    @ObservedObject public var tools: ToolState
-
-    public init(tools: ToolState) {
-        self.tools = tools
-    }
-
-    public func makeNSView(context: Context) -> ToolbarContainerView {
-        let container = ToolbarContainerView()
-        let toolbar = ToolbarNSView(tools: tools)
-        container.toolbar = toolbar
-        container.addSubview(toolbar)
-        // The bar centred in the container: the container
-        // is 364 tall, the bar 264, so 50px of flyout
-        // overhang sits below it and none above.
-        toolbar.frame = NSRect(x: 0, y: 50, width: ToolbarNSView.barSize.width, height: ToolbarNSView.barSize.height)
-        return container
-    }
-
-    public func updateNSView(_ container: ToolbarContainerView, context: Context) {
-        // The toolbar observes the tools itself; nothing
-        // to push here.
-    }
-}
-
-/// The container for the AppKit toolbar: transparent, and
-/// click-through everywhere except the bar and the open
-/// flyout, so the board under it stays clickable.
-public final class ToolbarContainerView: NSView {
-    public var toolbar: ToolbarNSView?
-
-    override public func hitTest(_ point: NSPoint) -> NSView? {
-        guard let toolbar else { return nil }
-        let converted = convert(point, to: toolbar)
-        return toolbar.hitTest(converted)
     }
 }

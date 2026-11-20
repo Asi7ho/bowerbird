@@ -4,10 +4,11 @@ import BoardUI
 import BowerbirdCore
 
 /// The board window's content: the board viewport, filling
-/// the window. Toolbars, panels and the palette (M2/M3/M6)
-/// are SwiftUI around it. The store is observed, so a board
-/// change (an edit, an undo, a restore) re-renders the
-/// viewport through BoardView.
+/// the window. The toolbar lives inside the viewport (an
+/// AppKit subview, like the note colour bar), and the title
+/// bar is SwiftUI above it. The store is observed, so a
+/// board change (an edit, an undo, a restore) re-renders
+/// the viewport through BoardView.
 public struct ContentView: View {
     @ObservedObject public var store: BoardStore
     @StateObject private var tools = ToolState()
@@ -33,19 +34,8 @@ public struct ContentView: View {
             TitleBarView(background: NSColor.fromHex(store.board.bg) ?? NSColor.white)
                 .frame(height: 28)
             Divider()
-            ZStack(alignment: .leading) {
-                BoardView(store: store, tools: tools)
-                    .frame(minWidth: 800, minHeight: 600)
-                // The floating toolbar, vertically centred
-                // on the board's left edge, like the
-                // Electron app's (top 50%, left 12px). The
-                // host is 170×364: the bar (56×264) centred
-                // in it, with room for the flyout that
-                // sticks out to its right and below it.
-                ToolbarHostView(tools: tools)
-                    .frame(width: 170, height: 364)
-                    .padding(.leading, 12)
-            }
+            BoardView(store: store, tools: tools)
+                .frame(minWidth: 800, minHeight: 600)
         }
     }
 }
