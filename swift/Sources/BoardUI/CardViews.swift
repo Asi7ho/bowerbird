@@ -245,6 +245,11 @@ public final class StrokeCardView: CardView {
         super.init()
         hasShadow = false
         clipsContent = false
+        // No border when unselected: the card is only the
+        // stroke itself, and a 1px border around it reads
+        // as an empty card. The blue selection border
+        // still shows when the stroke is selected.
+        showsUnselectedBorder = false
         layer?.backgroundColor = NSColor.clear.cgColor
         layer?.addSublayer(shapeLayer)
     }

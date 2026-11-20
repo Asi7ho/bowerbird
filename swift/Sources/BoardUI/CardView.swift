@@ -39,6 +39,16 @@ public class CardView: NSView {
         didSet { updateChrome() }
     }
 
+    /// Whether the card shows its border when it is not
+    /// selected. Stroke cards do not (the Electron app's
+    /// stroke card has no border — only the selection
+    /// ring); a plain 1px border around a stroke reads as
+    /// an empty card. A selected stroke still shows the
+    /// blue border.
+    public var showsUnselectedBorder: Bool = true {
+        didSet { updateChrome() }
+    }
+
     /// Whether the card clips its content (stroke cards do
     /// not — the stroke paints past the edge).
     public var clipsContent: Bool = true {
@@ -109,7 +119,7 @@ public class CardView: NSView {
             layer.shadowRadius = 3 * z
             layer.shadowOffset = .zero
         } else {
-            layer.borderWidth = showsBorder ? 1 * z : 0
+            layer.borderWidth = (showsBorder && showsUnselectedBorder) ? 1 * z : 0
             layer.borderColor = NSColor.separatorColor.cgColor
             if hasShadow {
                 layer.shadowColor = NSColor.black.cgColor
