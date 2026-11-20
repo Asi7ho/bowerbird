@@ -2,7 +2,7 @@
 // as .obj, .stl and .usdz, using three.js exporters. Run once:
 //   node scripts/gen-3d-fixtures.mjs
 // Output lands in tests/e2e/fixtures/.
-import { BoxGeometry, Mesh, MeshStandardMaterial } from "three";
+import { BoxGeometry, Mesh, MeshStandardMaterial, Scene } from "three";
 import { OBJExporter } from "three/addons/exporters/OBJExporter.js";
 import { STLExporter } from "three/addons/exporters/STLExporter.js";
 import { USDZExporter } from "three/addons/exporters/USDZExporter.js";
@@ -20,6 +20,10 @@ const cube = new Mesh(
 
 writeFileSync(join(out, "cube.obj"), new OBJExporter().parse(cube));
 writeFileSync(join(out, "cube.stl"), new STLExporter().parse(cube, { binary: false }));
-const usdz = await new USDZExporter().parseAsync(cube);
+// USDZExporter takes a Scene: a bare Mesh exports an empty
+// scene (no children to walk), so wrap the cube first.
+const scene = new Scene();
+scene.add(cube);
+const usdz = await new USDZExporter().parseAsync(scene);
 writeFileSync(join(out, "cube.usdz"), Buffer.from(usdz));
 console.log("wrote cube.obj, cube.stl, cube.usdz");
