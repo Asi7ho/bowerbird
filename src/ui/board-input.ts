@@ -1226,9 +1226,14 @@ window.addEventListener("wheel", (e: WheelEvent) => {
   e.preventDefault();
   if (e.ctrlKey || e.metaKey) {
     // Pinch / Ctrl+wheel zoom: accumulate, apply once per
-    // frame, rebuild content when the gesture settles and
-    // periodically during a long gesture, so cards that
-    // come into view appear while zooming, not only after.
+    // frame. The zoom itself is only a camera transform —
+    // no content rebuild during the gesture. Rebuilding
+    // the card DOM mid-pinch (the old periodic refresh)
+    // blocked the main thread for ~50ms every ~250ms,
+    // which is the hitch that made the pinch feel hard.
+    // Cards that come into view appear when the gesture
+    // settles (see the timer below), up to 120ms later;
+    // the cards already on screen scale smoothly meanwhile.
     // Sensitivity: 0.003, not 0.0015 — a full trackpad
     // pinch used to give only ~1.35x and felt slow, and a
     // mouse-wheel notch almost nothing. deltaMode is
@@ -1247,22 +1252,11 @@ window.addEventListener("wheel", (e: WheelEvent) => {
         S.pendingZoomFactor = 1;
         S.pendingZoomAnchor = null;
         applyCamera();
-        const now = performance.now();
-        const cam = S.api.view.getCamera();
-        const ratio = cam.zoom / S.lastZoomRefreshZoom;
-        if (now - S.lastZoomRefreshTime > 250 || ratio > 1.25 || ratio < 0.8) {
-          refreshContentIfVisibleChanged();
-          S.lastZoomRefreshZoom = cam.zoom;
-          S.lastZoomRefreshTime = now;
-        }
       });
     }
     if (S.zoomSettleTimer) clearTimeout(S.zoomSettleTimer);
     S.zoomSettleTimer = setTimeout(() => {
       refreshContentIfVisibleChanged();
-      const cam = S.api.view.getCamera();
-      S.lastZoomRefreshZoom = cam.zoom;
-      S.lastZoomRefreshTime = performance.now();
       S.api.board.save();
     }, 120);
     return;
