@@ -198,6 +198,14 @@ public final class CardHost {
             view.rebuildContent()
             shown[item.id] = view
         }
+        // TEMPORARY diagnostic for the bird-on-load bug
+        // (six fixes, all CI-green, none fixed it on the
+        // Mac): after placing the cards, write each bird
+        // part's model place and its view's actual frame to
+        // a file on the Desktop, so the real values on the
+        // Mac can be seen instead of guessed. Removed once
+        // the cause is found.
+        Self.dumpBirdFrames(board: board, shown: shown, camera: camera, containerSize: viewport, reconfigure: reconfigure)
         // Stacking: unselected in board order, then selected
         // in board order, so the selected cards are on top.
         let unselected = ordered.filter { !selected.contains($0.id) }
@@ -209,6 +217,36 @@ public final class CardHost {
         }
         renderConnectors(board: board)
         renderGroupFrames(board: board)
+    }
+
+    /// Write the bird parts' model places and view frames
+    /// to ~/Desktop/bowerbird-bird-debug.txt, one line per
+    /// layout pass. TEMPORARY -- see above.
+    private static func dumpBirdFrames(board: Board, shown: [Int: CardView], camera: Camera, containerSize: Size, reconfigure: Bool) {
+        let desktop = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Desktop/bowerbird-bird-debug.txt")
+        let stamp = ISO8601DateFormatter().string(from: Date())
+        var lines = ["\n== \(stamp) reconfigure=\(reconfigure) camera=(\(camera.x),\(camera.y),\(camera.zoom)) container=(\(containerSize.w)x\(containerSize.h)) =="]
+        for item in board.items where (14...45).contains(item.id) {
+            if let view = shown[item.id] {
+                let f = view.frame
+                let b = view.bounds
+                let rot = item.rotation.map { String($0) } ?? "-"
+                lines.append("id=\(item.id) model pos=(\(item.pos.x),\(item.pos.y)) size=(\(item.size.w)x\(item.size.h)) rot=\(rot) | frame=(\(f.origin.x),\(f.origin.y),\(f.size.width)x\(f.size.height)) bounds=(\(b.size.width)x\(b.size.height)) layerTransform=\(view.layer?.transform ?? CATransform3DIdentity)")
+            } else {
+                lines.append("id=\(item.id) NOT SHOWN model pos=(\(item.pos.x),\(item.pos.y)) size=(\(item.size.w)x\(item.size.h))")
+            }
+        }
+        let data = (lines.joined(separator: "\n") + "\n").data(using: .utf8) ?? Data()
+        if FileManager.default.fileExists(atPath: desktop.path) {
+            if let handle = try? FileHandle(forWritingTo: desktop) {
+                handle.seekToEndOfFile()
+                handle.write(data)
+                try? handle.close()
+            }
+        } else {
+            try? data.write(to: desktop)
+        }
     }
 
     /// Move the given items' views by a world delta, without
