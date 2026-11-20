@@ -667,6 +667,10 @@ public final class BoardViewport: NSView {
             var next = board
             next.items.removeAll { selected.contains($0.id) }
             syncGroupLabels(&next)
+            // Apply the commit to the viewport's own board
+            // before notifying the store (same snap-back as
+            // a drag otherwise: the deleted cards return).
+            board = next
             onBoardMutate?(next)
             selected = []
             return
@@ -682,6 +686,10 @@ public final class BoardViewport: NSView {
             if chars == "g" {
                 var next = board
                 if BoardGroup.group(&next, ids: Array(selected)) != nil {
+                    // Apply the commit to the viewport's own
+                    // board before notifying the store (same
+                    // snap-back as a drag otherwise).
+                    board = next
                     onBoardMutate?(next)
                 }
                 return
@@ -689,6 +697,7 @@ public final class BoardViewport: NSView {
             if chars == "u" {
                 var next = board
                 if BoardGroup.ungroup(&next, ids: Array(selected)) {
+                    board = next
                     onBoardMutate?(next)
                 }
                 return
@@ -1407,6 +1416,13 @@ public final class BoardViewport: NSView {
                     pencil: style.pencil ? true : nil,
                     pressures: strokePressures
                 ) != nil {
+                    // Apply the commit to the viewport's own
+                    // board before notifying the store, or
+                    // the viewport keeps the board without
+                    // the stroke and the next render drops
+                    // it (the store push refuses a viewport
+                    // that looks uncommitted).
+                    board = next
                     onBoardMutate?(next)
                 }
             }
@@ -1444,6 +1460,10 @@ public final class BoardViewport: NSView {
                 fill: toolState?.penColor ?? "#1A1A1A",
                 outline: toolState?.shapeOutline ?? false
             ) != nil {
+                // Apply the commit to the viewport's own
+                // board before notifying the store (same
+                // snap-back as a drag or stroke otherwise).
+                board = next
                 onBoardMutate?(next)
             }
             shapeStart = nil
@@ -1467,6 +1487,10 @@ public final class BoardViewport: NSView {
             }
             var next = board
             if BoardConnector.add(&next, from: from, to: to, color: toolState?.penColor ?? "#1A1A1A") != nil {
+                // Apply the commit to the viewport's own
+                // board before notifying the store (same
+                // snap-back as a drag or stroke otherwise).
+                board = next
                 onBoardMutate?(next)
             }
             connectorFrom = nil
@@ -1506,6 +1530,15 @@ public final class BoardViewport: NSView {
             if dragMoved {
                 var final = board
                 BoardMove.move(&final, ids: dragIds, by: dragDelta)
+                // The viewport owns the board: apply the
+                // commit to it before notifying the store.
+                // Notifying without applying left the
+                // viewport on the old positions, and the
+                // next render snapped the card back — the
+                // store push in updateNSView refuses a
+                // viewport that looks uncommitted, so the
+                // moved board never reached the viewport.
+                board = final
                 onBoardMutate?(final)
             }
             dragStart = nil
