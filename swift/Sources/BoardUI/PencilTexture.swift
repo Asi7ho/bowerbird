@@ -42,8 +42,8 @@ public enum PencilTexture {
     public static func displacementFilter(scale: CGFloat) -> CIFilter? {
         guard let filter = CIFilter(name: "CIDisplacementDistortion") else { return nil }
         let backing = NSScreen.main?.backingScaleFactor ?? 2
-        filter.setValue(noise, forKey: kCIInputDisplacementImageKey)
-        filter.setValue(scale * backing, forKey: kCIInputScaleKey)
+        filter.setValue(noise, forKey: "inputDisplacementImage")
+        filter.setValue(scale * backing, forKey: "inputScale")
         return filter
     }
 }
