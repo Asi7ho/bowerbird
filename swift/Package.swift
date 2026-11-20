@@ -43,6 +43,6 @@ let package = Package(
             ]
         ),
         .executableTarget(name: "Bowerbird", dependencies: ["BowerbirdCore", "BoardUI"]),
-        .testTarget(name: "BowerbirdTests", dependencies: ["BowerbirdCore"], resources: [.copy("Fixtures")]),
+        .testTarget(name: "BowerbirdTests", dependencies: ["BowerbirdCore", "BoardUI"], resources: [.copy("Fixtures")]),
     ]
 )

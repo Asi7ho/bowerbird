@@ -54,6 +54,12 @@ public final class GridView: MTKView, MTKViewDelegate {
         fatalError("GridView is not Interface Builder backed")
     }
 
+    /// The grid is drawn, never clicked: a click on empty
+    /// board must reach the viewport (for selection, the
+    /// marquee, a double-click), not die on the grid view
+    /// underneath everything.
+    override public func hitTest(_ point: NSPoint) -> NSView? { nil }
+
     public func drawGrid() {
         draw()
     }

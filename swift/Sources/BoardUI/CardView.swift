@@ -97,6 +97,29 @@ public class CardView: NSView {
         updateChrome()
     }
 
+    /// A card is a container for its content, not a click
+    /// target: the viewport does the board's hit-testing
+    /// geometrically (it walks the cards), so a click on
+    /// the card itself must reach the viewport — otherwise
+    /// the card could never be selected or dragged. Only
+    /// a real subview takes the click: the text editor, a
+    /// play button, a PDF or 3D view. A passive image view
+    /// is decoration, not a target, so a click on it
+    /// passes through too (an NSImageView swallows a click
+    /// it does nothing with, which made image cards
+    /// unselectable). A card that handles clicks itself —
+    /// the audio card's seek track — says so by
+    /// overriding this.
+    override public func hitTest(_ point: NSPoint) -> NSView? {
+        for subview in subviews.reversed() {
+            if let hit = subview.hitTest(convert(point, to: subview)) {
+                if hit is NSImageView { continue }
+                return hit
+            }
+        }
+        return nil
+    }
+
     private func updateChrome() {
         guard let layer else { return }
         layer.masksToBounds = clipsContent

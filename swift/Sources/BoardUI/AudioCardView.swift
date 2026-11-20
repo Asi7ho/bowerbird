@@ -171,10 +171,20 @@ public final class AudioCardView: CardView {
         }
     }
 
-    /// A click on the seek track starts a seek drag and
-    /// consumes the event; anywhere else the event passes
-    /// up to the viewport, so the card can still be
+    /// The seek track is drawn, not a view, so no subview
+    /// claims a click on it: the card itself takes it.
+    /// Anywhere else the card passes the click through
+    /// like any other card (its play button is a subview
+    /// and takes its own clicks), so it can still be
     /// selected and dragged.
+    override public func hitTest(_ point: NSPoint) -> NSView? {
+        if player != nil, seekHitRect.contains(point) { return self }
+        return super.hitTest(point)
+    }
+
+    /// A click on the seek track starts a seek drag. A
+    /// click anywhere else never reaches here: hitTest
+    /// passes it through to the viewport.
     override public func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
         guard player != nil, seekHitRect.contains(point) else {

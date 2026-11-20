@@ -1891,4 +1891,22 @@ public final class BoardViewport: NSView {
 /// container's bounds are the camera.
 final class WorldView: NSView {
     override var isFlipped: Bool { true }
+
+    /// A drawing surface only: it never takes a click
+    /// itself. The overlays are full-viewport views above
+    /// the cards, so if they answered hit-testing a click
+    /// on a card — or on the text editor inside it, or on
+    /// a toolbar button — would land on the overlay and
+    /// die there (a plain NSView does nothing with a
+    /// mouseDown). The container is the same kind of view,
+    /// so it checks its cards first and passes the click
+    /// through when none of them takes it: the viewport
+    /// does the board's hit-testing geometrically, so a
+    /// click on a card must reach the viewport.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        for subview in subviews.reversed() {
+            if let hit = subview.hitTest(convert(point, to: subview)) { return hit }
+        }
+        return nil
+    }
 }
