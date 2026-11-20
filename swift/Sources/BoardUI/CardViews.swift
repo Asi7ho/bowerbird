@@ -27,11 +27,11 @@ public enum CardViews {
         case .image:
             return ImageCardView()
         case .urlCard:
-            return PlaceholderCardView()
+            return UrlCardView()
         case .pdfCard:
             return PlaceholderCardView()
         case .fileCard:
-            return PlaceholderCardView()
+            return FileCardView()
         case .audio:
             return PlaceholderCardView()
         case .video:
@@ -449,5 +449,185 @@ public final class PlaceholderCardView: CardView {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("PlaceholderCardView is not Interface Builder backed")
+    }
+}
+
+/// A file card (a .psd or .ai): the importer's preview
+/// image, when the board carries one, instead of the grey
+/// placeholder tile. The preview is a local PNG the
+/// importer rendered, so it loads like an image card; a
+/// file with no preview yet falls back to the file name
+/// and format, the way the placeholder did.
+public final class FileCardView: CardView {
+    private let imageView = NSImageView()
+    private let titleLayer = CATextLayer()
+    private let subtitleLayer = CATextLayer()
+
+    override public init() {
+        super.init()
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(imageView)
+        NSLayoutConstraint.activate([
+            imageView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            imageView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            imageView.topAnchor.constraint(equalTo: topAnchor),
+            imageView.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+        // Explicit colours, not the semantic label colours
+        // (see PlaceholderCardView: a CATextLayer's
+        // foreground is a fixed CGColor, and the semantic
+        // colours resolved to white here).
+        titleLayer.foregroundColor = NSColor(srgbRed: 0.11, green: 0.11, blue: 0.12, alpha: 1).cgColor
+        subtitleLayer.foregroundColor = NSColor(srgbRed: 0.42, green: 0.42, blue: 0.44, alpha: 1).cgColor
+        titleLayer.truncationMode = .end
+        subtitleLayer.truncationMode = .end
+        for textLayer in [titleLayer, subtitleLayer] {
+            textLayer.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
+            layer?.addSublayer(textLayer)
+        }
+    }
+
+    override public func configure(item: Item) {
+        super.configure(item: item)
+        guard case .fileCard(let file) = item.kind else { return }
+        titleLayer.string = URL(fileURLWithPath: file.path).lastPathComponent
+        subtitleLayer.string = file.format.rawValue.uppercased()
+        imageView.image = file.preview.flatMap { NSImage(contentsOfFile: $0) }
+        // With a preview the artwork is the card and the
+        // text is hidden; without one, the name and format
+        // read like the placeholder tile.
+        let hasPreview = imageView.image != nil
+        titleLayer.isHidden = hasPreview
+        subtitleLayer.isHidden = hasPreview
+        layer?.backgroundColor = hasPreview
+            ? NSColor.white.cgColor
+            : NSColor.systemGray.withAlphaComponent(0.08).cgColor
+        needsLayout = true
+    }
+
+    override public func layout() {
+        super.layout()
+        // Without a preview, the title and subtitle sit
+        // like the placeholder tile (12px in, title at the
+        // top, subtitle 4px below, sizes scaled by the
+        // zoom). With a preview, the image fills the card
+        // and the text is hidden.
+        guard let item = currentItem, case .fileCard = item.kind, imageView.image == nil else { return }
+        CardView.withoutLayerActions {
+            let zoom = item.size.w > 0 ? bounds.width / CGFloat(item.size.w) : 1
+            let pad = 12 * zoom
+            let width = bounds.width - pad * 2
+            titleLayer.font = NSFont.systemFont(ofSize: 14 * zoom, weight: .semibold)
+            titleLayer.fontSize = 14 * zoom
+            subtitleLayer.font = NSFont.systemFont(ofSize: 12 * zoom)
+            subtitleLayer.fontSize = 12 * zoom
+            titleLayer.frame = CGRect(x: pad, y: bounds.height - pad - 18 * zoom, width: width, height: 18 * zoom)
+            subtitleLayer.frame = CGRect(x: pad, y: bounds.height - pad - 18 * zoom - 4 * zoom - 16 * zoom, width: width, height: 16 * zoom)
+        }
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("FileCardView is not Interface Builder backed")
+    }
+}
+
+/// A web link card: the page's image, title and
+/// description, the Electron app's media-card chrome
+/// (image on top, title and description below). The image
+/// is fetched from its URL and cached in memory; a card
+/// whose image has not loaded yet (or has none) still
+/// shows its title and description, so a link is never a
+/// grey tile. A live web view (WKWebView) is M5; this is
+/// the link's preview, not the page.
+public final class UrlCardView: CardView {
+    private let imageView = NSImageView()
+    private let titleLayer = CATextLayer()
+    private let subtitleLayer = CATextLayer()
+    /// The image URL this view is loading, so a late
+    /// response for a recycled view (now showing another
+    /// card) never paints the wrong image.
+    private var loadingImageURL: String?
+
+    override public init() {
+        super.init()
+        imageView.imageScaling = .scaleProportionallyUpOrDown
+        imageView.wantsLayer = true
+        imageView.layer?.masksToBounds = true
+        addSubview(imageView)
+        titleLayer.foregroundColor = NSColor(srgbRed: 0.11, green: 0.11, blue: 0.12, alpha: 1).cgColor
+        subtitleLayer.foregroundColor = NSColor(srgbRed: 0.42, green: 0.42, blue: 0.44, alpha: 1).cgColor
+        titleLayer.truncationMode = .end
+        subtitleLayer.truncationMode = .end
+        for textLayer in [titleLayer, subtitleLayer] {
+            textLayer.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
+            layer?.addSublayer(textLayer)
+        }
+    }
+
+    override public func configure(item: Item) {
+        super.configure(item: item)
+        guard case .urlCard(let url) = item.kind else { return }
+        titleLayer.string = url.title ?? url.url
+        subtitleLayer.string = url.description ?? URL(string: url.url)?.host ?? "Link"
+        loadingImageURL = url.image
+        imageView.image = nil
+        layer?.backgroundColor = NSColor.white.cgColor
+        if let imageURLString = url.image, let imageURL = URL(string: imageURLString) {
+            URLSession.shared.dataTask(with: imageURL) { [weak self] data, _, _ in
+                guard let self, let data, let image = NSImage(data: data) else { return }
+                DispatchQueue.main.async {
+                    // Only paint when this view still shows
+                    // the card that asked for this image.
+                    guard self.loadingImageURL == imageURLString else { return }
+                    self.imageView.image = image
+                    self.needsLayout = true
+                }
+            }.resume()
+        }
+        needsLayout = true
+    }
+
+    override public func layout() {
+        super.layout()
+        // Media-card chrome: 12px padding, 10px image
+        // radius, title 14px, description 12px — all in
+        // world units, scaled by the zoom. The card is
+        // y-up, so the top is at bounds.height: the image
+        // sits at the top, the title and description below
+        // it. Without an image, the text fills the card
+        // like the placeholder tile.
+        guard let item = currentItem, case .urlCard = item.kind else { return }
+        CardView.withoutLayerActions {
+            let zoom = item.size.w > 0 ? bounds.width / CGFloat(item.size.w) : 1
+            let pad = 12 * zoom
+            let width = bounds.width - pad * 2
+            titleLayer.font = NSFont.systemFont(ofSize: 14 * zoom, weight: .semibold)
+            titleLayer.fontSize = 14 * zoom
+            subtitleLayer.font = NSFont.systemFont(ofSize: 12 * zoom)
+            subtitleLayer.fontSize = 12 * zoom
+            if imageView.image != nil {
+                let titleH: CGFloat = 18 * zoom
+                let subH: CGFloat = 16 * zoom
+                let gap: CGFloat = 4 * zoom
+                let textH = titleH + gap + subH
+                let imageH = bounds.height - pad * 2 - textH - gap
+                imageView.frame = CGRect(x: pad, y: bounds.height - pad - imageH, width: width, height: max(imageH, 0))
+                imageView.layer?.cornerRadius = 10 * zoom
+                imageView.isHidden = false
+                titleLayer.frame = CGRect(x: pad, y: bounds.height - pad - imageH - gap - titleH, width: width, height: titleH)
+                subtitleLayer.frame = CGRect(x: pad, y: bounds.height - pad - imageH - gap - titleH - gap - subH, width: width, height: subH)
+            } else {
+                imageView.isHidden = true
+                titleLayer.frame = CGRect(x: pad, y: bounds.height - pad - 18 * zoom, width: width, height: 18 * zoom)
+                subtitleLayer.frame = CGRect(x: pad, y: bounds.height - pad - 18 * zoom - 4 * zoom - 16 * zoom, width: width, height: 16 * zoom)
+            }
+        }
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("UrlCardView is not Interface Builder backed")
     }
 }
