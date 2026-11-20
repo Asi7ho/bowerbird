@@ -195,6 +195,14 @@ public final class TextCardView: CardView {
                 textLayer.fontSize = CGFloat(text.size) * zoom
             }
         }
+        // Keep the editor's scrollbar thin: the scroll view
+        // is built by SwiftUI after the editor opens, so
+        // the one-shot pass in startEditing can miss it —
+        // re-applying it here (the tree is tiny) makes
+        // sure it sticks once the scroll view exists.
+        if let hosting = editorHostingView {
+            TextCardView.makeScrollbarsOverlay(in: hosting)
+        }
     }
 
     @available(*, unavailable)
