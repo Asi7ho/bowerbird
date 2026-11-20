@@ -53,6 +53,13 @@ public struct ImportSource: Codable, Equatable {
     public var kind: ImportKind
     public var size: Int?
     public var mtimeMs: Double?
+
+    public init(path: String, kind: ImportKind, size: Int?, mtimeMs: Double?) {
+        self.path = path
+        self.kind = kind
+        self.size = size
+        self.mtimeMs = mtimeMs
+    }
 }
 
 /// One entry of Board.groups: the label its frame shows,
@@ -60,6 +67,11 @@ public struct ImportSource: Codable, Equatable {
 public struct GroupEntry: Codable, Equatable {
     public var label: String
     public var source: ImportSource?
+
+    public init(label: String, source: ImportSource?) {
+        self.label = label
+        self.source = source
+    }
 }
 
 /// The board: the on-disk `board.json` shape, exactly as

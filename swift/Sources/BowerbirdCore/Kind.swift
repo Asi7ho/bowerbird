@@ -65,6 +65,10 @@ public struct ShapePayload: Codable, Equatable {
 
 public struct ImagePayload: Codable, Equatable {
     public var path: String
+
+    public init(path: String) {
+        self.path = path
+    }
 }
 
 public struct UrlCardPayload: Codable, Equatable {
@@ -74,11 +78,25 @@ public struct UrlCardPayload: Codable, Equatable {
     public var image: String?
     public var icon: String?
     public var embed: Bool?
+
+    public init(url: String, title: String?, description: String?, image: String?, icon: String?, embed: Bool?) {
+        self.url = url
+        self.title = title
+        self.description = description
+        self.image = image
+        self.icon = icon
+        self.embed = embed
+    }
 }
 
 public struct PdfCardPayload: Codable, Equatable {
     public var path: String
     public var sizeBytes: Int
+
+    public init(path: String, sizeBytes: Int) {
+        self.path = path
+        self.sizeBytes = sizeBytes
+    }
 
     private enum CodingKeys: String, CodingKey {
         case path
@@ -96,6 +114,13 @@ public struct FileCardPayload: Codable, Equatable {
     public var format: FileFormat
     public var preview: String?
 
+    public init(path: String, sizeBytes: Int, format: FileFormat, preview: String?) {
+        self.path = path
+        self.sizeBytes = sizeBytes
+        self.format = format
+        self.preview = preview
+    }
+
     private enum CodingKeys: String, CodingKey {
         case path
         case sizeBytes = "size_bytes"
@@ -106,12 +131,22 @@ public struct FileCardPayload: Codable, Equatable {
 
 public struct SwatchPayload: Codable, Equatable {
     public var hex: String
+
+    public init(hex: String) {
+        self.hex = hex
+    }
 }
 
 public struct AudioPayload: Codable, Equatable {
     public var path: String
     public var title: String?
     public var transcript: String?
+
+    public init(path: String, title: String?, transcript: String?) {
+        self.path = path
+        self.title = title
+        self.transcript = transcript
+    }
 }
 
 public struct VideoPayload: Codable, Equatable {
@@ -120,6 +155,14 @@ public struct VideoPayload: Codable, Equatable {
     public var sizeBytes: Int
     public var poster: String?
     public var duration: Double?
+
+    public init(source: String, remote: Bool, sizeBytes: Int, poster: String?, duration: Double?) {
+        self.source = source
+        self.remote = remote
+        self.sizeBytes = sizeBytes
+        self.poster = poster
+        self.duration = duration
+    }
 
     private enum CodingKeys: String, CodingKey {
         case source
@@ -133,6 +176,11 @@ public struct VideoPayload: Codable, Equatable {
 public struct Model3DPayload: Codable, Equatable {
     public var path: String
     public var sizeBytes: Int
+
+    public init(path: String, sizeBytes: Int) {
+        self.path = path
+        self.sizeBytes = sizeBytes
+    }
 
     private enum CodingKeys: String, CodingKey {
         case path
