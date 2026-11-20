@@ -1,5 +1,4 @@
 import AppKit
-import SwiftUI
 import BowerbirdCore
 
 /// A card view for one board item. The host builds one per
@@ -78,12 +77,6 @@ public enum CardViews {
 /// exactly where its frame is.
 public final class TextCardView: CardView {
     private let textLayer = CATextLayer()
-    /// The editor hosted in the card while it is being
-    /// edited (a SwiftUI text editor filling the card),
-    /// and the text it is editing.
-    private var editorHostingView: NSHostingView<NoteEditorContent>?
-    private var editorModel: NoteEditorModel?
-
     override public init() {
         super.init()
         textLayer.isWrapped = true
@@ -112,37 +105,6 @@ public final class TextCardView: CardView {
         textLayer.isHidden = editing
     }
 
-    /// Opens the editor in the card: a SwiftUI text editor
-    /// filling the card, in the note's size and colours.
-    /// It is hosted in the card itself, so it is always
-    /// exactly on the card. The commit callback receives
-    /// the final text when the user presses Escape or
-    /// clicks away.
-    public func startEditing(text: String, fontSize: CGFloat, isBold: Bool, textColorHex: String, backgroundHex: String, onCommit: @escaping (String) -> Void) {
-        endEditing()
-        let model = NoteEditorModel(text: text)
-        editorModel = model
-        let content = NoteEditorContent(model: model, fontSize: fontSize, isBold: isBold, textColorHex: textColorHex, backgroundHex: backgroundHex, onCommit: onCommit)
-        let hosting = NSHostingView(rootView: content)
-        hosting.frame = bounds
-        hosting.autoresizingMask = [.width, .height]
-        addSubview(hosting)
-        editorHostingView = hosting
-        setEditing(true)
-    }
-
-    /// Closes the editor in the card, if one is open.
-    public func endEditing() {
-        editorHostingView?.removeFromSuperview()
-        editorHostingView = nil
-        editorModel = nil
-        setEditing(false)
-    }
-
-    /// The text in the open editor, if one is open.
-    public var editingText: String? {
-        editorModel?.text
-    }
 
     override public func layout() {
         super.layout()
