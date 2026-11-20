@@ -1488,7 +1488,10 @@ async function main() {
       // elementFromPoint would have called the covering
       // card "on top" even while the cube showed through.
       const board = readBoard();
-      const model = [...board.items].reverse().find((it) => it.kind.Model3D);
+      // The blue GLB cube specifically: later checks add
+      // models in other formats (white by default), and
+      // the baseline below looks for the cube's blue.
+      const model = [...board.items].reverse().find((it) => it.kind.Model3D && it.kind.Model3D.path.endsWith("cube.glb"));
       assert.ok(model, "a 3D card is on the board");
       // Screenshot a clip to pixels: decode it in the page
       // (an Image drawn to a canvas) and sample points.
@@ -2114,14 +2117,14 @@ async function main() {
     // Drop each format the same way a file dragged from Finder
     // arrives (bytes in a DataTransfer, never a path) and prove
     // the right cards land in board.json.
-    const dropFixture = async (file, type) => {
+    const dropFixture = async (file, type, at = [640, 400]) => {
       const b64 = fs.readFileSync(path.join(repoRoot, "tests/e2e/fixtures", file)).toString("base64");
-      await page.evaluate(([b64, file, type]) => {
+      await page.evaluate(([b64, file, type, at]) => {
         const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
         const dt = new DataTransfer();
         dt.items.add(new File([bytes], file, { type }));
-        document.body.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, clientX: 640, clientY: 400, dataTransfer: dt }));
-      }, [b64, file, type]);
+        document.body.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, clientX: at[0], clientY: at[1], dataTransfer: dt }));
+      }, [b64, file, type, at]);
     };
     const countKind = (name) => readBoard().items.filter((it) => name in it.kind).length;
 
@@ -2150,7 +2153,10 @@ async function main() {
       // as well as glb; one drop proves the gate, the
       // render check above proves each format loads.
       const before = countKind("Model3D");
-      await dropFixture("cube.obj", "model/obj");
+      // Away from the centre: the SVG import sits at the
+      // drop point (640, 400), and a card landing on its
+      // red rect would cover it for the re-import check.
+      await dropFixture("cube.obj", "model/obj", [200, 200]);
       const b = await waitFor("obj card in board.json", () => {
         const board = readBoard();
         return countKind("Model3D") === before + 1 ? board : null;
