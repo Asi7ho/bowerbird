@@ -33,7 +33,9 @@ public struct SwiftToolbarView: View {
                     .offset(x: Self.flyoutX, y: 0)
                     // The flyout is the toolbar's side panel:
                     // the normal cursor here, like the bar.
-                    .cursor(.arrow)
+                    .onHover { hovering in
+                        if hovering { NSCursor.arrow.set() }
+                    }
             }
         }
         .frame(width: Self.barWidth, height: Self.barHeight, alignment: .topLeading)
@@ -42,8 +44,13 @@ public struct SwiftToolbarView: View {
         // crosshair) by NSCursor.set, which is app-wide and
         // would otherwise stay in force over the bar — the
         // bar must show the normal cursor, and the tool
-        // cursor only on the board.
-        .cursor(.arrow)
+        // cursor only on the board. (SwiftUI has no .cursor
+        // modifier in this SDK, so the bar sets the arrow
+        // on hover; moving back onto the board lets the
+        // viewport's mouse move set the tool cursor again.)
+        .onHover { hovering in
+            if hovering { NSCursor.arrow.set() }
+        }
     }
 
     /// The bar: five family buttons in a material pill.
