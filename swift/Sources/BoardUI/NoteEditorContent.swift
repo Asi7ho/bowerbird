@@ -19,7 +19,7 @@ public final class NoteEditorModel: ObservableObject {
 /// never landed on the card, so the editor lives in the
 /// card now.
 public struct NoteEditorContent: View {
-    @Binding var text: String
+    @ObservedObject var model: NoteEditorModel
     var fontSize: CGFloat
     var isBold: Bool
     var textColorHex: String
@@ -28,8 +28,8 @@ public struct NoteEditorContent: View {
     @FocusState private var focused: Bool
     @State private var wasFocused = false
 
-    public init(text: Binding<String>, fontSize: CGFloat, isBold: Bool, textColorHex: String, backgroundHex: String, onCommit: @escaping (String) -> Void) {
-        self._text = text
+    public init(model: NoteEditorModel, fontSize: CGFloat, isBold: Bool, textColorHex: String, backgroundHex: String, onCommit: @escaping (String) -> Void) {
+        self.model = model
         self.fontSize = fontSize
         self.isBold = isBold
         self.textColorHex = textColorHex
@@ -38,7 +38,7 @@ public struct NoteEditorContent: View {
     }
 
     public var body: some View {
-        TextEditor(text: $text)
+        TextEditor(text: $model.text)
             .font(.system(size: fontSize, weight: isBold ? .bold : .regular))
             .foregroundColor(Color(hex: textColorHex) ?? Color.black)
             .scrollContentBackground(.hidden)
@@ -46,13 +46,13 @@ public struct NoteEditorContent: View {
             .padding(14)
             .focused($focused)
             .onAppear { focused = true }
-            .onExitCommand { onCommit(text) }
+            .onExitCommand { onCommit(model.text) }
             .onChange(of: focused) { _, newValue in
                 if newValue {
                     wasFocused = true
                 } else if wasFocused {
                     wasFocused = false
-                    onCommit(text)
+                    onCommit(model.text)
                 }
             }
     }

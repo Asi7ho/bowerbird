@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import BowerbirdCore
 
 /// A card view for one board item. The host builds one per
@@ -121,7 +122,7 @@ public final class TextCardView: CardView {
         endEditing()
         let model = NoteEditorModel(text: text)
         editorModel = model
-        let content = NoteEditorContent(text: $model.text, fontSize: fontSize, isBold: isBold, textColorHex: textColorHex, backgroundHex: backgroundHex, onCommit: onCommit)
+        let content = NoteEditorContent(model: model, fontSize: fontSize, isBold: isBold, textColorHex: textColorHex, backgroundHex: backgroundHex, onCommit: onCommit)
         let hosting = NSHostingView(rootView: content)
         hosting.frame = bounds
         hosting.autoresizingMask = [.width, .height]
