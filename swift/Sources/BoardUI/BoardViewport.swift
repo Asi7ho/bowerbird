@@ -114,34 +114,6 @@ public final class BoardViewport: NSView {
     public let gridView = GridView()
     let cardContainer = WorldView()
 
-    /// The floating toolbar, as a direct subview — not a
-    /// SwiftUI-hosted view. The toolbar was the only
-    /// button surface hosted through SwiftUI, and its
-    /// clicks never landed; every button that works in
-    /// this app (the note colour bar's swatches, the media
-    /// play buttons) is a direct subview of this viewport.
-    /// Positioned in resizeSubviews, 12px from the left
-    /// edge, vertically centred, like the Electron app's.
-    public var toolbarView: ToolbarNSView? {
-        didSet {
-            oldValue?.removeFromSuperview()
-            guard let toolbarView else { return }
-            addSubview(toolbarView)
-            positionToolbar()
-        }
-    }
-
-    /// Puts the toolbar 12px from the left edge,
-    /// vertically centred (the viewport is flipped, so the
-    /// origin is the top edge; clamped to the top when the
-    /// window is shorter than the bar).
-    private func positionToolbar() {
-        guard let toolbarView else { return }
-        let size = ToolbarNSView.barSize
-        let y = max(0, (bounds.height - size.height) / 2)
-        toolbarView.frame = NSRect(x: 12, y: y, width: size.width, height: size.height)
-    }
-
     private var spaceHeld = false
     /// The pointer's last position on the board (view
     /// coordinates), so a tool change from the keyboard
@@ -406,7 +378,6 @@ public final class BoardViewport: NSView {
         eraserOverlay.frame = bounds
         lassoOverlay.frame = bounds
         handlesOverlay.frame = bounds
-        positionToolbar()
         applyCamera()
         onViewportResized?()
     }
@@ -662,14 +633,28 @@ public final class BoardViewport: NSView {
         // and the viewport would otherwise swallow the
         // keystroke as a tool shortcut (typing "v" would
         // switch tools instead of inserting a "v"). The
-        // keys are delivered through interpretKeyEvents,
-        // not keyDown: the editor forwards unhandled keys
-        // to its next responder (this viewport), so
-        // calling keyDown here recursed until the stack
-        // overflowed and crashed the app. interpretKeyEvents
-        // processes the key inside the editor and never
-        // forwards, so it cannot loop.
+        // keys are inserted directly into the editor's
+        // text, bypassing the key-binding system entirely:
+        // interpretKeyEvents did not insert (and calling
+        // the editor's keyDown recursed until the stack
+        // overflowed and crashed the app). Printable keys
+        // insert at the cursor, Delete removes backwards,
+        // Escape commits; anything else falls through to
+        // the editor's own key handling.
         if let editor = noteEditor, editingNoteId != nil {
+            if event.keyCode == 53 { // Escape: commit.
+                commitTextEdit()
+                return
+            }
+            if event.keyCode == 51 { // Delete.
+                editor.deleteBackward(nil)
+                return
+            }
+            let mods = event.modifierFlags.intersection([.command, .control, .option])
+            if mods.isEmpty, let chars = event.characters, !chars.isEmpty {
+                editor.insertText(chars, replacementRange: editor.selectedRange())
+                return
+            }
             editor.interpretKeyEvents([event])
             return
         }
@@ -795,18 +780,6 @@ public final class BoardViewport: NSView {
     }
 
     override public func mouseDown(with event: NSEvent) {
-        // The toolbar first: a click on a toolbar or flyout
-        // button is handled by the toolbar, not the board.
-        // This runs before anything else (in particular
-        // before pickerOpen is cleared below), so a click
-        // on an open flyout's button is still checked
-        // while that flyout is open.
-        if let toolbarView {
-            let point = convert(event.locationInWindow, from: nil)
-            if toolbarView.handleClick(at: convert(point, to: toolbarView)) {
-                return
-            }
-        }
         window?.makeFirstResponder(self)
         // A click on the board closes the toolbar flyout
         // (flyouts are transient: they disappear once the

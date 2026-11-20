@@ -75,51 +75,6 @@ final class HitRoutingTests: XCTestCase {
     }
 
     /// The toolbar's buttons take the click, and clicking
-    /// one opens its flyout at once — the flyout is the
-    /// panel holding that family's picks, and it is shown.
-    func testToolbarButtonTakesTheClickAndOpensItsFlyout() {
-        let tools = ToolState()
-        let toolbar = ToolbarNSView(tools: tools)
-        toolbar.frame = CGRect(origin: .zero, size: ToolbarNSView.barSize)
-        toolbar.layout()
-        guard let button = toolbar.subviews.compactMap({ $0 as? NSButton })
-            .first(where: { $0.identifier?.rawValue == "family.select" }) else {
-            XCTFail("no select family button")
-            return
-        }
-        let centre = CGPoint(x: button.frame.midX, y: button.frame.midY)
-        XCTAssertTrue(toolbar.hitTest(centre) === button)
-        button.performClick(nil)
-        XCTAssertEqual(tools.pickerOpen, .select)
-        let flyout = toolbar.subviews.first(where: { view in
-            view.subviews.contains(where: { ($0 as? NSButton)?.identifier?.rawValue == "pick.select.select" })
-        })
-        XCTAssertNotNil(flyout)
-        XCTAssertEqual(flyout?.isHidden, false)
-    }
-
-    /// The toolbar's geometric click path (the viewport's
-    /// mouseDown calls it when hit testing misses): a
-    /// click on a bar button's centre fires that button,
-    /// and a click elsewhere on the bar returns false.
-    func testToolbarHandleClickFiresButtonByFrame() {
-        let tools = ToolState()
-        let toolbar = ToolbarNSView(tools: tools)
-        toolbar.frame = CGRect(origin: .zero, size: ToolbarNSView.barSize)
-        toolbar.layout()
-        guard let button = toolbar.subviews.compactMap({ $0 as? NSButton })
-            .first(where: { $0.identifier?.rawValue == "family.draw" }) else {
-            XCTFail("no draw family button")
-            return
-        }
-        let centre = CGPoint(x: button.frame.midX, y: button.frame.midY)
-        XCTAssertTrue(toolbar.handleClick(at: centre))
-        XCTAssertEqual(tools.pickerOpen, .draw)
-        // A point on the bar but on no button (the gap
-        // between two buttons) is not a toolbar click.
-        XCTAssertFalse(toolbar.handleClick(at: CGPoint(x: 28, y: 5)))
-    }
-
     /// The audio card: the seek track takes the click
     /// (the card itself), the play button takes its own,
     /// and the body passes through so the card can still

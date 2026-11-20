@@ -22,12 +22,10 @@ public struct BoardView: NSViewRepresentable {
     public func makeNSView(context: Context) -> BoardViewport {
         let viewport = BoardViewport(board: store.board)
         viewport.toolState = tools
-        // The toolbar lives in the viewport, not in
-        // SwiftUI: hosted through SwiftUI its clicks never
-        // landed, and every working button in the app is a
-        // direct subview of the viewport (the colour bar,
-        // the media buttons).
-        viewport.toolbarView = ToolbarNSView(tools: tools)
+        // The toolbar is SwiftUI, over the board in
+        // ContentView — not an AppKit subview of the
+        // viewport. The AppKit bar never reliably received
+        // clicks on a real Mac.
         let host = CardHost(container: viewport.cardContainer, board: store.board, camera: store.board.camera)
         context.coordinator.host = host
         // The board the viewport last committed to the

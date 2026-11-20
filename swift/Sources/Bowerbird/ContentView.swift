@@ -34,8 +34,17 @@ public struct ContentView: View {
             TitleBarView(background: NSColor.fromHex(store.board.bg) ?? NSColor.white)
                 .frame(height: 28)
             Divider()
-            BoardView(store: store, tools: tools)
-                .frame(minWidth: 800, minHeight: 600)
+            ZStack(alignment: .leading) {
+                BoardView(store: store, tools: tools)
+                    .frame(minWidth: 800, minHeight: 600)
+                // The toolbar floats over the board's left
+                // edge, vertically centred: a SwiftUI view,
+                // so its buttons take clicks natively. (An
+                // AppKit bar in the viewport never reliably
+                // received clicks on a real Mac.)
+                SwiftToolbarView(tools: tools)
+                    .padding(.leading, 12)
+            }
         }
     }
 }
