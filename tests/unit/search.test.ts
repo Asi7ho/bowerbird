@@ -22,6 +22,7 @@ describe("createBoardSearch", () => {
   let board: Board;
   let input: { value: string; addEventListener: () => void };
   let count: { textContent: string };
+  let results: { style: Record<string, string>; innerHTML: string; addEventListener: () => void; querySelector: () => null };
   let search: import("../../src/backend/search").BoardSearch;
 
   beforeEach(async () => {
@@ -50,6 +51,12 @@ describe("createBoardSearch", () => {
     });
     input = { value: "", addEventListener: () => {} };
     count = { textContent: "" };
+    results = {
+      style: {},
+      innerHTML: "",
+      addEventListener: () => {},
+      querySelector: () => null,
+    };
     const mod = await import("../../src/backend/search");
     search = mod.createBoardSearch({
       getBoard: () => board,
@@ -66,12 +73,7 @@ describe("createBoardSearch", () => {
       input: input as unknown as HTMLInputElement,
       count: count as unknown as HTMLElement,
       clear: { style: {}, addEventListener: () => {} } as unknown as HTMLButtonElement,
-      results: {
-        style: {},
-        innerHTML: "",
-        addEventListener: () => {},
-        querySelector: () => null,
-      } as unknown as HTMLElement,
+      results: results as unknown as HTMLElement,
     });
   });
 
@@ -82,6 +84,18 @@ describe("createBoardSearch", () => {
     // rejection there would surface instead of leaking.
     await new Promise((r) => setTimeout(r, 50));
     expect(count.textContent.startsWith("1 match")).toBe(true);
+  });
+
+  it("shows the first card with a duplicated id, not the last", async () => {
+    // MiniSearch indexes the first card per id ("Apple pie");
+    // the result row must show that card, not the later
+    // "Banana bread" that shares the id.
+    input.value = "Apple";
+    search.updateSearch();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(count.textContent.startsWith("1 match")).toBe(true);
+    expect(results.innerHTML).toContain("Apple pie");
+    expect(results.innerHTML).not.toContain("Banana bread");
   });
 
 });
