@@ -83,6 +83,13 @@ public final class TextCardView: CardView {
     /// and the text it is editing.
     private var editorHostingView: NSHostingView<NoteEditorContent>?
     private var editorModel: NoteEditorModel?
+    /// What the display layer last rendered, so the
+    /// markdown is only re-parsed when the text, size,
+    /// weight or colour actually changes.
+    private var lastRenderedText: String?
+    private var lastRenderedFontSize: CGFloat = 0
+    private var lastRenderedBold = false
+    private var lastRenderedColorHex: String?
 
     override public init() {
         super.init()
@@ -96,11 +103,11 @@ public final class TextCardView: CardView {
     override public func configure(item: Item) {
         super.configure(item: item)
         guard case .text(let text) = item.kind else { return }
-        textLayer.string = text.text
-        textLayer.foregroundColor = (NSColor.fromHex(text.color) ?? .labelColor).cgColor
         layer?.backgroundColor = (text.bg.flatMap { NSColor.fromHex($0) } ?? NSColor.white).cgColor
-        // The font size is set in layout(), once the card
-        // has its screen size (it scales with the zoom).
+        // The display string is built in layout(), once
+        // the card has its screen size (the font scales
+        // with the zoom) — and it is rendered markdown,
+        // not the raw text.
         needsLayout = true
     }
 
@@ -216,9 +223,18 @@ public final class TextCardView: CardView {
             }
             textLayer.frame = bounds.insetBy(dx: 14 * zoom, dy: 14 * zoom)
             if let item = currentItem, case .text(let text) = item.kind {
-                let font = NSFont.systemFont(ofSize: CGFloat(text.size) * zoom, weight: text.bold ? .bold : .regular)
-                textLayer.font = font
-                textLayer.fontSize = CGFloat(text.size) * zoom
+                let fontSize = CGFloat(text.size) * zoom
+                let color = NSColor.fromHex(text.color) ?? .labelColor
+                // Render the markdown at the screen font
+                // size. Re-parse only when something
+                // changed; layout runs on every frame move.
+                if lastRenderedText != text.text || lastRenderedFontSize != fontSize || lastRenderedBold != text.bold || lastRenderedColorHex != text.color {
+                    textLayer.string = MarkdownText.attributedString(for: text.text, fontSize: fontSize, bold: text.bold, color: color)
+                    lastRenderedText = text.text
+                    lastRenderedFontSize = fontSize
+                    lastRenderedBold = text.bold
+                    lastRenderedColorHex = text.color
+                }
             }
         }
         // Keep the editor's scrollbar thin: the scroll view
