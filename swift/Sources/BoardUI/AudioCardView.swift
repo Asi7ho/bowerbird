@@ -13,6 +13,8 @@ import BowerbirdCore
 public final class AudioCardView: CardView {
     private let tileLayer = CALayer()
     private let playButton = NSButton()
+    private let titleLayer = CATextLayer()
+    private let timeLayer = CATextLayer()
     /// The seek track is drawn, not an NSSlider: AppKit
     /// draws a slider's track and knob at a fixed size
     /// whatever its frame, so at low zoom the slider
