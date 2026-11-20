@@ -232,11 +232,15 @@ public final class ShapeCardView: CardView {
 
     override public func layout() {
         super.layout()
-        // The path is built for the current bounds; rebuild
-        // it when the view is laid out (its frame is set by
-        // the host after the view is created). The layer
-        // moves instantly (no implicit animation). A filled
-        // rect has no path (the card is the fill).
+        rebuildContent()
+    }
+
+    /// The path is built for the current bounds; rebuild
+    /// it when the view is laid out (its frame is set by
+    /// the host after the view is created). The layer
+    /// moves instantly (no implicit animation). A filled
+    /// rect has no path (the card is the fill).
+    override public func rebuildContent() {
         if let item = currentItem, case .shape(let shape) = item.kind,
            !(shape.shape == .rect && shape.outline != true) {
             CardView.withoutLayerActions {
@@ -332,6 +336,10 @@ public final class StrokeCardView: CardView {
 
     override public func layout() {
         super.layout()
+        rebuildContent()
+    }
+
+    override public func rebuildContent() {
         guard let item = currentItem, case .stroke(let stroke) = item.kind else { return }
         // The path is in world units (the points are
         // absolute, rebased by their bbox min); the card is

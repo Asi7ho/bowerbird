@@ -184,20 +184,18 @@ public final class CardHost {
                 container.addSubview(view)
             }
             // Draw the card now, from its new frame: the
-            // shape and stroke paths are built in layout()
-            // from the bounds, and the system's own layout
-            // pass runs on its own time -- so on load the
-            // bird's parts first drew from their old (or
-            // zero) bounds and only snapped into place when
-            // a later pass (a click) rebuilt them. There
-            // should be no redraw at all: the first draw
-            // must already be right. So the layout is run
-            // here, at once, with the new bounds -- not left
-            // to the system's pass. (layoutSubtreeIfNeeded
-            // can be deferred while the window itself is
-            // being laid out, which is why the parts sat
-            // wrong until an action forced a fresh pass.)
-            view.layout()
+            // shape and stroke paths are built from the
+            // bounds, and the system's own layout pass runs
+            // on its own time -- so on load the bird's parts
+            // first drew from their old (or zero) bounds and
+            // only snapped into place when a later pass (a
+            // click) rebuilt them. There should be no redraw
+            // at all: the first draw must already be right.
+            // So the path is rebuilt here, at once, with the
+            // new bounds -- not left to the system's pass,
+            // which can be deferred while the window itself
+            // is being laid out.
+            view.rebuildContent()
             shown[item.id] = view
         }
         // Stacking: unselected in board order, then selected

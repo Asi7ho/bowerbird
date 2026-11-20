@@ -21,6 +21,20 @@ public class CardView: NSView {
         currentItem = item
     }
 
+    /// Rebuild the card's drawn content for its current
+    /// bounds, at once. The host calls this right after
+    /// placing the card, so the shape or stroke is drawn
+    /// from the bounds it has now — not left to the
+    /// system's layout pass, which runs on its own time
+    /// and can be deferred while the window itself is
+    /// being laid out. That deferral is why the bird's
+    /// parts first drew from their old bounds on load and
+    /// only snapped right when an action forced a fresh
+    /// pass. Most cards draw nothing of their own (the
+    /// chrome is in layout()); shape and stroke cards
+    /// override this to rebuild their path.
+    open func rebuildContent() {}
+
     /// Whether the card is selected (blue border + ring).
     public var isSelected: Bool = false {
         didSet { updateChrome() }
