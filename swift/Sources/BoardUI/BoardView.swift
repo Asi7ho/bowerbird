@@ -101,6 +101,15 @@ public struct BoardView: NSViewRepresentable {
         if !hasUncommitted,
            BoardSnapshot(board: store.board) != BoardSnapshot(board: viewport.board) {
             viewport.board = store.board
+            // The push IS the new committed state: an undo,
+            // a redo, a restore or a poster fill landed, and
+            // the viewport now matches the store. Without
+            // this, the first undo pushed but left
+            // lastCommitted at the pre-undo board, so the
+            // viewport looked "uncommitted" and every
+            // further undo was refused — undo worked once
+            // and then stopped.
+            context.coordinator.lastCommitted = store.board
         }
         if viewport.camera != store.board.camera {
             viewport.camera = store.board.camera

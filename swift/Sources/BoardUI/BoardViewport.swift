@@ -1007,6 +1007,27 @@ public final class BoardViewport: NSView {
         // (and so delete) a note, and a note that started
         // empty is removed either way.
         let originalText = editingOriginalText ?? ""
+        // A new note left empty: it was never saved, so
+        // removing it is not an undo step — but the commit
+        // still goes through, so the board is in step with
+        // the store and undo is not blocked by the phantom
+        // note left behind. (An unchanged edit used to
+        // return here without removing it, leaving a note
+        // the store never knew about, and every undo after
+        // that was refused as "uncommitted".)
+        if text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, originalText.isEmpty {
+            editingNoteId = nil
+            editingOriginalText = nil
+            if let cardView = cardContainer.subviews.compactMap({ $0 as? TextCardView }).first(where: { $0.currentItem?.id == id }) {
+                cardView.endEditing()
+            }
+            var next = board
+            next.items.removeAll { $0.id == id }
+            board = next
+            onBoardMutate?(next)
+            window?.makeFirstResponder(self)
+            return
+        }
         // The text is untouched: leave the card exactly as
         // it was — no board change, no undo step, and no
         // re-measured height, so the card does not resize
@@ -1017,6 +1038,11 @@ public final class BoardViewport: NSView {
             if let cardView = cardContainer.subviews.compactMap({ $0 as? TextCardView }).first(where: { $0.currentItem?.id == id }) {
                 cardView.endEditing()
             }
+            // Take the keyboard back: the editor is gone,
+            // and shortcuts (undo, delete, tools) only reach
+            // the viewport while it is the first responder.
+            // Without this, Cmd+Z after an edit went nowhere.
+            window?.makeFirstResponder(self)
             return
         }
         // Clear the editing state first, and close the
@@ -1033,12 +1059,11 @@ public final class BoardViewport: NSView {
             // The user emptied the note (the text differs
             // from the original — an unchanged edit returned
             // above): an empty note is not a note, so remove
-            // it. For a new note (never saved) this leaves
-            // no board change and no undo step; for an
-            // existing note it is one undo step.
+            // it. For an existing note it is one undo step.
             next.items.remove(at: index)
             board = next
             onBoardMutate?(next)
+            window?.makeFirstResponder(self)
             return
         }
         guard case .text(var payload) = next.items[index].kind else { return }
@@ -1047,6 +1072,7 @@ public final class BoardViewport: NSView {
         next.items[index].size.h = TextMeasure.noteHeight(text: text, fontSize: payload.size, width: next.items[index].size.w, bold: payload.bold)
         board = next
         onBoardMutate?(next)
+        window?.makeFirstResponder(self)
     }
 
     // MARK: - Note colour bar
