@@ -34,10 +34,13 @@ public struct NoteEditorContent: View {
     /// left and the card's own layer drew the text.
     var padding: CGFloat
     var onCommit: (String) -> Void
+    /// Called live as the text changes, so a new note's
+    /// card can grow with what is typed.
+    var onTextChange: ((String) -> Void)?
     @FocusState private var focused: Bool
     @State private var wasFocused = false
 
-    public init(model: NoteEditorModel, fontSize: CGFloat, isBold: Bool, textColorHex: String, backgroundHex: String, padding: CGFloat, onCommit: @escaping (String) -> Void) {
+    public init(model: NoteEditorModel, fontSize: CGFloat, isBold: Bool, textColorHex: String, backgroundHex: String, padding: CGFloat, onCommit: @escaping (String) -> Void, onTextChange: ((String) -> Void)? = nil) {
         self.model = model
         self.fontSize = fontSize
         self.isBold = isBold
@@ -45,6 +48,7 @@ public struct NoteEditorContent: View {
         self.backgroundHex = backgroundHex
         self.padding = padding
         self.onCommit = onCommit
+        self.onTextChange = onTextChange
     }
 
     public var body: some View {
@@ -64,6 +68,9 @@ public struct NoteEditorContent: View {
                     wasFocused = false
                     onCommit(model.text)
                 }
+            }
+            .onChange(of: model.text) { _, newValue in
+                onTextChange?(newValue)
             }
     }
 }

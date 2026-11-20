@@ -118,11 +118,11 @@ public final class TextCardView: CardView {
     /// exactly on the card. The commit callback receives
     /// the final text when the user presses Escape or
     /// clicks away.
-    public func startEditing(text: String, fontSize: CGFloat, isBold: Bool, textColorHex: String, backgroundHex: String, padding: CGFloat, onCommit: @escaping (String) -> Void) {
+    public func startEditing(text: String, fontSize: CGFloat, isBold: Bool, textColorHex: String, backgroundHex: String, padding: CGFloat, onCommit: @escaping (String) -> Void, onTextChange: ((String) -> Void)? = nil) {
         endEditing()
         let model = NoteEditorModel(text: text)
         editorModel = model
-        let content = NoteEditorContent(model: model, fontSize: fontSize, isBold: isBold, textColorHex: textColorHex, backgroundHex: backgroundHex, padding: padding, onCommit: onCommit)
+        let content = NoteEditorContent(model: model, fontSize: fontSize, isBold: isBold, textColorHex: textColorHex, backgroundHex: backgroundHex, padding: padding, onCommit: onCommit, onTextChange: onTextChange)
         let hosting = NSHostingView(rootView: content)
         hosting.frame = bounds
         hosting.autoresizingMask = [.width, .height]

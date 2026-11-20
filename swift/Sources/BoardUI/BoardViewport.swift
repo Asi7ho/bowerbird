@@ -1012,7 +1012,8 @@ public final class BoardViewport: NSView {
             textColorHex: payload.color,
             backgroundHex: payload.bg ?? "#FFFFFF",
             padding: 14 * CGFloat(zoom),
-            onCommit: { [weak self] text in self?.commitTextEdit(with: text) }
+            onCommit: { [weak self] text in self?.commitTextEdit(with: text) },
+            onTextChange: { [weak self] text in self?.growNewNote(id: id, text: text) }
         )
     }
 
@@ -1028,6 +1029,25 @@ public final class BoardViewport: NSView {
               let cardView = cardContainer.subviews.compactMap({ $0 as? TextCardView }).first(where: { $0.currentItem?.id == id })
         else { return }
         commitTextEdit(with: cardView.editingText ?? "")
+    }
+
+    /// Grows a new note's card live as its text grows:
+    /// the height is re-measured from the typed text, so
+    /// the card fits what is typed. Only a note that
+    /// started empty grows — a note that already had text
+    /// keeps the size it had, even while it is edited.
+    /// The board is updated for display only (no undo
+    /// step, no save); the commit saves the final text
+    /// and height as one step.
+    private func growNewNote(id: Int, text: String) {
+        guard editingNoteId == id, editingOriginalText?.isEmpty == true else { return }
+        guard let index = board.items.firstIndex(where: { $0.id == id }),
+              case .text(let payload) = board.items[index].kind else { return }
+        let height = TextMeasure.noteHeight(text: text, fontSize: payload.size, width: board.items[index].size.w, bold: payload.bold)
+        guard height != board.items[index].size.h else { return }
+        var next = board
+        next.items[index].size.h = height
+        board = next
     }
 
     /// The commit itself, given the final text: the overlay
@@ -1105,7 +1125,13 @@ public final class BoardViewport: NSView {
         guard case .text(var payload) = next.items[index].kind else { return }
         payload.text = text
         next.items[index].kind = .text(payload)
-        next.items[index].size.h = TextMeasure.noteHeight(text: text, fontSize: payload.size, width: next.items[index].size.w, bold: payload.bold)
+        // Only a new note is re-measured: an existing note
+        // keeps the size it had, even when its text
+        // changes. (A new note already grew live while it
+        // was typed; this is the final fit.)
+        if originalText.isEmpty {
+            next.items[index].size.h = TextMeasure.noteHeight(text: text, fontSize: payload.size, width: next.items[index].size.w, bold: payload.bold)
+        }
         board = next
         onBoardMutate?(next)
         window?.makeFirstResponder(self)
