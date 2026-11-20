@@ -224,13 +224,13 @@ export function renderGroupFrames(board: Board): void {
   }
   for (const [g, members] of byGroup) {
     const source = board.groups?.[g]?.source;
-    // A live import is a section even with one card.
+    // A live import is a group even with one card.
     if (members.length < 2 && !source) continue;
     const b = groupBounds(members, S.api.geometry.itemBounds);
     if (!b) continue;
     if (b.x > v.x1 || b.y > v.y1 || b.x + b.w < v.x0 || b.y + b.h < v.y0) continue;
     const isSel = members.some((it) => selected.includes(it.id));
-    const label = board.groups?.[g]?.label ?? `Section ${g}`;
+    const label = board.groups?.[g]?.label ?? `Group ${g}`;
     if (source) {
       // A live import has no label and no frame on the
       // board — its cards sit like any other cards. But the

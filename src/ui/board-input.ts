@@ -232,7 +232,7 @@ export function startTextEdit(id: number, isNew = false): void {
   ta.addEventListener("pointerdown", (e) => e.stopPropagation());
 }
 
-// Rename a group's section label, in place on its frame.
+// Rename a group's label, in place on its frame.
 // Double-clicking the label swaps it for an input; Enter
 // or leaving the field commits (one undo step), Escape
 // cancels. The input is a real input element, so the
@@ -241,7 +241,7 @@ export function startTextEdit(id: number, isNew = false): void {
 // never triggers board shortcuts.
 // Wire a rename input: Enter or leaving the field
 // commits, Escape cancels, and only the first of
-// commit/cancel runs. Shared by section-label and
+// commit/cancel runs. Shared by group-label and
 // voice-note renames.
 export function wireRenameInput(input: HTMLInputElement, onCommit: () => void): void {
   input.focus();
@@ -260,13 +260,13 @@ export function wireRenameInput(input: HTMLInputElement, onCommit: () => void): 
 
 export function startGroupRename(group: number): void {
   const board = S.api.board.get();
-  const label = board.groups?.[group]?.label ?? `Section ${group}`;
+  const label = board.groups?.[group]?.label ?? `Group ${group}`;
   const chip = S.groupsEl.querySelector(`.group-label[data-group="${group}"]`) as HTMLElement | null;
   if (!chip) return;
   const input = document.createElement("input");
   input.className = "group-rename";
   input.value = label;
-  input.setAttribute("aria-label", "Section name");
+  input.setAttribute("aria-label", "Group name");
   input.style.width = `${Math.max(8, label.length + 2)}ch`;
   chip.textContent = "";
   chip.appendChild(input);
@@ -288,7 +288,7 @@ export function audioTitleHit(id: number, clientX: number, clientY: number): boo
 }
 
 // Rename a voice note: double-clicking its name swaps the
-// title for an input, like a section label. Enter or
+// title for an input, like a group label. Enter or
 // leaving the field commits (one undo step), Escape
 // cancels. An empty name clears the title, so the card
 // falls back to the file's name.
@@ -551,7 +551,7 @@ S.boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
     // this handler and steals focus from a textarea created here, so
     // typing would never land in a new or edited note.
     e.preventDefault();
-    // Double-clicking a section label renames the group,
+    // Double-clicking a group label renames the group,
     // instead of creating a note under it (the label sits
     // in the frame's padding, which is empty board space).
     const labelEl = target.closest(".group-label") as HTMLElement | null;
@@ -562,7 +562,7 @@ S.boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
       if (it && "Plugin" in it.kind && S.api.cards.dispatchDoubleClick(it)) return;
       if (it && "Text" in it.kind) { startTextEdit(hit); return; }
       // Double-clicking a voice note's name renames it,
-      // like a section label renames its group. Anywhere
+      // like a group label renames its group. Anywhere
       // else on the card keeps its own behaviour (the tile
       // plays, the seek seeks).
       if (it && "Audio" in it.kind && audioTitleHit(hit, e.clientX, e.clientY)) { startAudioRename(hit); return; }
@@ -809,7 +809,7 @@ export function updateDraggedCards(ids: number[]): void {
   updateDraggedGroupFrames(ids);
 }
 
-// The section frame is a derived div, not part of any card,
+// The group frame is a derived div, not part of any card,
 // so it does not move with the cards it frames: recompute
 // its bounds from the live board (the cards already moved)
 // and move the frame to match, or it stays behind while the

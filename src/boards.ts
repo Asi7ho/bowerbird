@@ -74,12 +74,12 @@ export interface BootContext {
   drops: Drops;
 }
 
-// Groups are sections: each group carries the label its
-// frame shows. Keep the label map in step with membership:
-// a group with fewer than two members is not a section,
-// so its entry goes; a group with members and no entry
-// gets "Section <id>". Called after every mutation that
-// can change membership, and on load for old boards.
+// Each group carries the label its frame shows. Keep the
+// label map in step with membership: a group with fewer
+// than two members is not a group, so its entry goes; a
+// group with members and no entry gets "Group <id>".
+// Called after every mutation that can change membership,
+// and on load for old boards.
 export function syncGroupLabels(b: Board): void {
   const counts = new Map<number, number>();
   for (const it of b.items) {
@@ -91,13 +91,21 @@ export function syncGroupLabels(b: Board): void {
     const n = counts.get(Number(key)) ?? 0;
     // A group with no members at all loses its entry, link
     // or not — the import is gone with its cards. A live
-    // import is a section even with one card, so its entry
+    // import is a group even with one card, so its entry
     // survives below two members while its source does.
     if (n === 0) { delete labels[Number(key)]; continue; }
     if (n < 2 && !labels[Number(key)].source) delete labels[Number(key)];
   }
+  // Rename a default "Section N" label to "Group N": old
+  // boards were labelled "Section". A custom label is left
+  // alone. (The Swift app does the same on load.)
+  for (const key of Object.keys(labels)) {
+    const entry = labels[Number(key)];
+    const m = /^Section (\d+)$/.exec(entry.label);
+    if (m) labels[Number(key)] = { ...entry, label: `Group ${m[1]}` };
+  }
   for (const [g, n] of counts) {
-    if (n >= 2 && !labels[g]) labels[g] = { label: `Section ${g}` };
+    if (n >= 2 && !labels[g]) labels[g] = { label: `Group ${g}` };
   }
   if (Object.keys(labels).length > 0) b.groups = labels; else delete b.groups;
 }
@@ -319,8 +327,8 @@ export async function loadBoardFromJson(ctx: BootContext, json: string, dir: str
   for (const it of parsed.items) {
     healBoardItem(it, ctx.measureNoteCardHeight);
   }
-  // Groups are sections: give every group its label, and
-  // drop labels for groups that no longer have members.
+  // Groups: give every group its label, and drop labels
+  // for groups that no longer have members.
   syncGroupLabels(parsed);
   ctx.board = parsed;
   ctx.boardGeneration++;

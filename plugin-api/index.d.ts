@@ -67,10 +67,9 @@ export interface Board {
   camera: Camera;
   next_id: number;
   next_group: number;
-  // Labels for groups: a group is a section, so each group
-  // carries the label its frame shows. Optional so old
-  // boards load unchanged: a group with no entry gets
-  // "Section <id>" on load.
+  // Labels for groups: each group carries the label its
+  // frame shows. Optional so old boards load unchanged:
+  // a group with no entry gets "Group <id>" on load.
   // A group can also be a live import: the cards came from
   // one source file (.svg, .psd or .ai) kept in the board's
   // assets, and the app re-imports it when that file
