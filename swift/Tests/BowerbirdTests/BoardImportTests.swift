@@ -109,10 +109,10 @@ final class BoardImportTests: XCTestCase {
     }
 
     func testAddTakesTheNextId() {
-        var board = Board(items: [], camera: Camera(x: 0, y: 0, zoom: 1), nextId: 1, nextGroup: 1, groups: nil, bg: "#FFFFFF", grid: .dots)
+        var board = Board(items: [], camera: Camera(x: 0, y: 0, zoom: 1), nextId: 0, nextGroup: 1, groups: nil, bg: "#FFFFFF", grid: .dots)
         let item = BoardImport.add(&board, kind: .swatch(SwatchPayload(hex: "#E63946")), size: Size(w: 120, h: 120), at: Pt(x: 10, y: 20))
         XCTAssertEqual(item.id, 1)
-        XCTAssertEqual(board.nextId, 2)
+        XCTAssertEqual(board.nextId, 1)
         XCTAssertEqual(board.items.count, 1)
         XCTAssertEqual(board.items[0].pos, Pt(x: 10, y: 20))
     }

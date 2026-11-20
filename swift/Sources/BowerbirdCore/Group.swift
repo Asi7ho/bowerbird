@@ -9,8 +9,12 @@
 public enum BoardGroup {
     public static func group(_ board: inout Board, ids: [Int]) -> Int? {
         guard ids.count >= 2 else { return nil }
-        let id = board.nextGroup
+        // next_group is the last allocated group, like
+        // next_id (the Electron app's createGroup bumps
+        // first) — taking it as-is would reuse the last
+        // group's id.
         board.nextGroup += 1
+        let id = board.nextGroup
         for index in board.items.indices where ids.contains(board.items[index].id) {
             board.items[index].group = id
         }

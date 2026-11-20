@@ -10,7 +10,7 @@ final class EraseTests: XCTestCase {
                 Item(id: 3, pos: Pt(x: 100, y: 500), size: Size(w: 200, h: 100), group: nil, kind: .text(TextPayload(text: "Note", bold: false, size: 16, color: "#1A1A1A", bg: nil)), rotation: nil),
             ],
             camera: Camera(x: 0, y: 0, zoom: 1),
-            nextId: 4, nextGroup: 1, groups: nil, bg: "#FFFFFF", grid: .dots
+            nextId: 3, nextGroup: 1, groups: nil, bg: "#FFFFFF", grid: .dots
         )
     }
 
@@ -58,7 +58,7 @@ final class EraseTests: XCTestCase {
                 Item(id: 1, pos: Pt(x: 100, y: 100), size: Size(w: 200, h: 1), group: nil, kind: .stroke(StrokePayload(points: [Pt(x: 100, y: 100), Pt(x: 150, y: 100), Pt(x: 200, y: 100), Pt(x: 250, y: 100), Pt(x: 300, y: 100)], color: "#1A1A1A", width: 3, marker: false, pressures: nil, pencil: nil)), rotation: nil),
             ],
             camera: Camera(x: 0, y: 0, zoom: 1),
-            nextId: 2, nextGroup: 1, groups: nil, bg: "#FFFFFF", grid: .dots
+            nextId: 1, nextGroup: 1, groups: nil, bg: "#FFFFFF", grid: .dots
         )
         XCTAssertTrue(BoardErase.erase(&b, at: Pt(x: 200, y: 100)))
         XCTAssertEqual(b.items.count, 2)
@@ -74,7 +74,7 @@ final class EraseTests: XCTestCase {
                 Item(id: 1, pos: Pt(x: 100, y: 100), size: Size(w: 200, h: 1), group: nil, kind: .stroke(StrokePayload(points: [Pt(x: 100, y: 100), Pt(x: 150, y: 100), Pt(x: 200, y: 100), Pt(x: 250, y: 100), Pt(x: 300, y: 100)], color: "#1A1A1A", width: 3, marker: false, pressures: nil, pencil: nil)), rotation: nil),
             ],
             camera: Camera(x: 0, y: 0, zoom: 1),
-            nextId: 2, nextGroup: 1, groups: nil, bg: "#FFFFFF", grid: .dots
+            nextId: 1, nextGroup: 1, groups: nil, bg: "#FFFFFF", grid: .dots
         )
         XCTAssertTrue(BoardErase.erase(&b, at: Pt(x: 100, y: 100)))
         XCTAssertEqual(b.items.count, 1)

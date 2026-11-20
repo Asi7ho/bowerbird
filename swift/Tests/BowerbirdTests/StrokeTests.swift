@@ -6,7 +6,7 @@ final class StrokeTests: XCTestCase {
         Board(
             items: [],
             camera: Camera(x: 0, y: 0, zoom: 1),
-            nextId: 1, nextGroup: 1, groups: nil, bg: "#FFFFFF", grid: .dots
+            nextId: 0, nextGroup: 1, groups: nil, bg: "#FFFFFF", grid: .dots
         )
     }
 
@@ -18,7 +18,7 @@ final class StrokeTests: XCTestCase {
             color: "#E63946", width: 3, marker: false, pencil: nil, pressures: nil
         )
         XCTAssertEqual(id, 1)
-        XCTAssertEqual(b.nextId, 2)
+        XCTAssertEqual(b.nextId, 1)
         XCTAssertEqual(b.items.count, 1)
         XCTAssertEqual(b.items[0].pos, Pt(x: 100, y: 100))
         XCTAssertEqual(b.items[0].size, Size(w: 200, h: 100))
@@ -76,6 +76,6 @@ final class StrokeTests: XCTestCase {
         )
         XCTAssertNil(id)
         XCTAssertEqual(b.items.count, 0)
-        XCTAssertEqual(b.nextId, 1)
+        XCTAssertEqual(b.nextId, 0)
     }
 }

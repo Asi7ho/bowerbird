@@ -28,8 +28,13 @@ public enum BoardStroke {
             w: max(1, (xs.max() ?? 0) - pos.x),
             h: max(1, (ys.max() ?? 0) - pos.y)
         )
-        let id = board.nextId
-        board.nextId += 1
+        // next_id is the last allocated id (the Electron
+        // app's allocId bumps first), so a fresh id comes
+        // from allocId — taking next_id as-is would hand
+        // out an id already in use on any board the
+        // Electron app wrote (the welcome board's
+        // next_id 48 is the 3D cube's id).
+        let id = allocId(&board)
         let stroke = StrokePayload(
             points: points,
             color: color,

@@ -8,7 +8,7 @@ final class ShapeTests: XCTestCase {
                 Item(id: 1, pos: Pt(x: 100, y: 100), size: Size(w: 200, h: 100), group: nil, kind: .text(TextPayload(text: "Note", bold: false, size: 16, color: "#1A1A1A", bg: nil)), rotation: nil),
             ],
             camera: Camera(x: 0, y: 0, zoom: 1),
-            nextId: 2, nextGroup: 1, groups: nil, bg: "#FFFFFF", grid: .dots
+            nextId: 1, nextGroup: 1, groups: nil, bg: "#FFFFFF", grid: .dots
         )
     }
 
@@ -16,7 +16,7 @@ final class ShapeTests: XCTestCase {
         var b = board()
         let id = BoardShape.add(&b, shape: .ellipse, from: Pt(x: 300, y: 200), to: Pt(x: 100, y: 100), fill: "#E63946", outline: false)
         XCTAssertEqual(id, 2)
-        XCTAssertEqual(b.nextId, 3)
+        XCTAssertEqual(b.nextId, 2)
         XCTAssertEqual(b.items.count, 2)
         XCTAssertEqual(b.items[1].pos, Pt(x: 100, y: 100))
         XCTAssertEqual(b.items[1].size, Size(w: 200, h: 100))
@@ -51,6 +51,6 @@ final class ShapeTests: XCTestCase {
         let short = BoardShape.add(&b, shape: .rect, from: Pt(x: 0, y: 0), to: Pt(x: 50, y: 5), fill: "#1A1A1A", outline: false)
         XCTAssertNil(short)
         XCTAssertEqual(b.items.count, 1)
-        XCTAssertEqual(b.nextId, 2)
+        XCTAssertEqual(b.nextId, 1)
     }
 }

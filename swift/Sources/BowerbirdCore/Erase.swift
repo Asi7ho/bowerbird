@@ -140,8 +140,10 @@ public enum BoardErase {
                     w: max(1, (xs.max() ?? 0) - pos.x),
                     h: max(1, (ys.max() ?? 0) - pos.y)
                 )
-                let newId = board.nextId
-                board.nextId += 1
+                // next_id is the last allocated id — a
+                // fresh id comes from allocId (see
+                // BoardStroke.add).
+                let newId = allocId(&board)
                 let piece = StrokePayload(
                     points: run.points,
                     color: stroke.color,

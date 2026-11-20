@@ -11,7 +11,7 @@ final class GroupTests: XCTestCase {
                 Item(id: 4, pos: Pt(x: 400, y: 300), size: Size(w: 200, h: 100), group: 1, kind: .swatch(SwatchPayload(hex: "#E63946")), rotation: nil),
             ],
             camera: Camera(x: 0, y: 0, zoom: 1),
-            nextId: 5, nextGroup: 2, groups: [1: GroupEntry(label: "Group 1", source: nil)], bg: "#FFFFFF", grid: .dots
+            nextId: 4, nextGroup: 1, groups: [1: GroupEntry(label: "Group 1", source: nil)], bg: "#FFFFFF", grid: .dots
         )
     }
 
@@ -19,7 +19,7 @@ final class GroupTests: XCTestCase {
         var b = board()
         let id = BoardGroup.group(&b, ids: [1, 2])
         XCTAssertEqual(id, 2)
-        XCTAssertEqual(b.nextGroup, 3)
+        XCTAssertEqual(b.nextGroup, 2)
         XCTAssertEqual(b.items[0].group, 2)
         XCTAssertEqual(b.items[1].group, 2)
         XCTAssertEqual(b.groups?[2]?.label, "Group 2")
@@ -29,7 +29,7 @@ final class GroupTests: XCTestCase {
         var b = board()
         XCTAssertNil(BoardGroup.group(&b, ids: [1]))
         XCTAssertEqual(b.items[0].group, nil)
-        XCTAssertEqual(b.nextGroup, 2)
+        XCTAssertEqual(b.nextGroup, 1)
     }
 
     func testUngroupClearsTheWholeGroup() {

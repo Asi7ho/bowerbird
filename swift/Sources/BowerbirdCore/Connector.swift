@@ -32,8 +32,9 @@ public enum BoardConnector {
         if case .item(let fromId) = from, case .item(let toId) = to, fromId == toId { return nil }
         let pos = Pt(x: min(a.x, b.x), y: min(a.y, b.y))
         let size = Size(w: max(1, abs(b.x - a.x)), h: max(1, abs(b.y - a.y)))
-        let id = board.nextId
-        board.nextId += 1
+        // next_id is the last allocated id — a fresh id
+        // comes from allocId (see BoardStroke.add).
+        let id = allocId(&board)
         board.items.append(Item(id: id, pos: pos, size: size, group: nil, kind: .connector(ConnectorPayload(from: from, to: to, color: color)), rotation: nil))
         return id
     }

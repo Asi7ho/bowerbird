@@ -27,8 +27,9 @@ public enum BoardShape {
         let h = abs(to.y - from.y)
         guard w >= minimumSize, h >= minimumSize else { return nil }
         let pos = Pt(x: min(from.x, to.x), y: min(from.y, to.y))
-        let id = board.nextId
-        board.nextId += 1
+        // next_id is the last allocated id — a fresh id
+        // comes from allocId (see BoardStroke.add).
+        let id = allocId(&board)
         let payload = ShapePayload(shape: shape, fill: fill, outline: outline ? true : nil)
         board.items.append(Item(id: id, pos: pos, size: Size(w: w, h: h), group: nil, kind: .shape(payload), rotation: nil))
         return id

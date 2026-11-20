@@ -9,7 +9,7 @@ final class ConnectorTests: XCTestCase {
                 Item(id: 2, pos: Pt(x: 500, y: 100), size: Size(w: 200, h: 100), group: nil, kind: .text(TextPayload(text: "Other", bold: false, size: 16, color: "#1A1A1A", bg: nil)), rotation: nil),
             ],
             camera: Camera(x: 0, y: 0, zoom: 1),
-            nextId: 3, nextGroup: 1, groups: nil, bg: "#FFFFFF", grid: .dots
+            nextId: 2, nextGroup: 1, groups: nil, bg: "#FFFFFF", grid: .dots
         )
     }
 
@@ -17,7 +17,7 @@ final class ConnectorTests: XCTestCase {
         var b = board()
         let id = BoardConnector.add(&b, from: .item(1), to: .item(2), color: "#E63946")
         XCTAssertEqual(id, 3)
-        XCTAssertEqual(b.nextId, 4)
+        XCTAssertEqual(b.nextId, 3)
         XCTAssertEqual(b.items.count, 3)
         guard case .connector(let payload) = b.items[2].kind else { return XCTFail("item is not a connector") }
         XCTAssertEqual(payload.from, .item(1))

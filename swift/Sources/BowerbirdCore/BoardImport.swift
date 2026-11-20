@@ -192,8 +192,9 @@ public enum BoardImport {
         at point: Pt,
         group: Int? = nil
     ) -> Item {
-        let id = board.nextId
-        board.nextId += 1
+        // next_id is the last allocated id — a fresh id
+        // comes from allocId (see BoardStroke.add).
+        let id = allocId(&board)
         let item = Item(id: id, pos: point, size: size, group: group, kind: kind, rotation: nil)
         board.items.append(item)
         return item
