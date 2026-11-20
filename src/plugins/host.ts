@@ -152,7 +152,30 @@ export function boardDeleteSelected(): boolean {
 
 // ---------------------------------------------------------------- events
 
+// "items-moved" is coalesced to one emission per animation
+// frame (see emitPluginEvent): this is the pending flag.
+let itemsMovedPending = false;
+
 export function emitPluginEvent(event: string): void {
+  // "items-moved" fires on every pointermove of a drag,
+  // and every listener (the toolbar's note colour bar)
+  // re-renders on each one. Coalesce it to one emission
+  // per animation frame: a listener reads the live board
+  // when it runs, so it sees the latest positions anyway,
+  // and the eye cannot use more than a frame.
+  if (event === "items-moved") {
+    if (itemsMovedPending) return;
+    itemsMovedPending = true;
+    requestAnimationFrame(() => {
+      itemsMovedPending = false;
+      emitPluginEventNow("items-moved");
+    });
+    return;
+  }
+  emitPluginEventNow(event);
+}
+
+function emitPluginEventNow(event: string): void {
   const set = listeners.get(event);
   if (!set) return;
   for (const fn of Array.from(set)) {
