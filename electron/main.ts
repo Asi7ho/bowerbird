@@ -29,6 +29,16 @@ import { openBoardFile } from "./open-with";
 // type-checked.
 import { transform as sucraseTransform } from "./sucrase.cjs";
 
+// Render on the host GPU, not the CPU: the board is thousands
+// of cards, strokes and text, and painting them on the CPU is
+// the slow part of panning and zooming. Chromium composites on
+// the GPU by default, but rasterization (painting the pixels)
+// stays on the CPU unless asked — this asks. On a machine
+// without a usable GPU Chromium falls back to software, so the
+// flag is a no-op there, not a crash. It must be set before
+// the app is ready, so it lives here at the top level.
+app.commandLine.appendSwitch("enable-gpu-rasterization");
+
 let win: BaseWindow | null = null;
 let boardView: WebContentsView | null = null;
 
