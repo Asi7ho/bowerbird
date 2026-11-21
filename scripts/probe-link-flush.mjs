@@ -126,6 +126,55 @@ if (m.card2.bottom - m.title2.bottom < 10 || m.card2.bottom - m.title2.bottom > 
 if (m.title1Action !== "open-link" || m.domain1Action !== "open-link") {
   fail("title/domain lost the open-link action");
 }
+// Only the title and the domain open the link: the image
+// wrapper is a plain div with no action, so clicking the
+// image selects the card instead of opening the site.
+const imgWrap = await page.evaluate(() => {
+  const w = document.querySelector(`#cards .card[data-id="1"] .link-image`);
+  return w ? { tag: w.tagName, action: w.getAttribute("data-action") } : null;
+});
+if (!imgWrap) fail("no link-image wrapper");
+if (imgWrap.tag !== "DIV" || imgWrap.action !== null) {
+  fail(`link image wrapper is <${imgWrap.tag}> with action ${imgWrap.action}, expected a plain <div>`);
+}
+// The image never changes on select/deselect: its fit and
+// box are identical deselected, selected, and deselected
+// again. Click the image (top, clear of the title/domain
+// overlay) to select, then empty board to deselect.
+const imgState = () => page.evaluate(() => {
+  const card = document.querySelector(`#cards .card[data-id="1"]`);
+  const img = card?.querySelector(".link-image img");
+  if (!img) return null;
+  const r = img.getBoundingClientRect();
+  return {
+    fit: getComputedStyle(img).objectFit,
+    inlineFit: img.style.objectFit || null,
+    rect: { top: r.top, left: r.left, w: r.width, h: r.height },
+    selected: card.classList.contains("selected"),
+  };
+});
+const before = await imgState();
+if (!before) fail("no link image to measure");
+if (before.fit !== "cover") fail(`link image fit is ${before.fit} deselected, expected cover`);
+if (before.selected) fail("link card starts selected");
+await page.mouse.click(260, 160);
+await page.waitForFunction(() => {
+  const card = document.querySelector(`#cards .card[data-id="1"]`);
+  return card && card.classList.contains("selected");
+}, { timeout: 10000 }).catch(() => fail("clicking the link image did not select the card"));
+const selected = await imgState();
+await page.mouse.click(900, 500);
+await page.waitForFunction(() => {
+  const card = document.querySelector(`#cards .card[data-id="1"]`);
+  return card && !card.classList.contains("selected");
+}, { timeout: 10000 }).catch(() => fail("clicking empty board did not deselect the card"));
+const after = await imgState();
+const same = (a, b) => a && b && a.fit === b.fit && a.inlineFit === b.inlineFit &&
+  Math.abs(a.rect.top - b.rect.top) <= tol && Math.abs(a.rect.left - b.rect.left) <= tol &&
+  Math.abs(a.rect.w - b.rect.w) <= tol && Math.abs(a.rect.h - b.rect.h) <= tol;
+if (!same(before, selected)) fail(`link image changed on select: ${JSON.stringify(before)} -> ${JSON.stringify(selected)}`);
+if (!same(before, after)) fail(`link image changed on deselect: ${JSON.stringify(before)} -> ${JSON.stringify(after)}`);
+console.log("link image identical deselected/selected/deselected:", JSON.stringify(before));
 
 const shot = path.join(path.dirname(fileURLToPath(import.meta.url)), "link-flush-shot.png");
 await page.screenshot({ path: shot });

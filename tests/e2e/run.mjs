@@ -1113,6 +1113,64 @@ async function main() {
       }
     });
 
+    await check("resizing a card keeps its aspect ratio", async () => {
+      // A resize drag scales the card by one factor: dragging
+      // the handle mostly sideways must not stretch it. Add a
+      // fresh image card at a known ratio, select it, drag its
+      // resize handle, and read the new size off disk. The card
+      // sits at (500, 650): clear of the layout grid, the
+      // transcript card at (100, 650), the mic check's
+      // double-click point (200, 625), and the GLB cube at
+      // (100, 850) — even after it grows from the drag.
+      const board = readBoard();
+      let id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
+      const cid = id;
+      board.items.push({ id, group: null, pos: { x: 500, y: 650 }, size: { w: 360, h: 203 }, kind: { Image: { path: path.join(tmp, "assets", "welcome-bower.jpg") } } });
+      board.next_id = id + 1;
+      const tmp2 = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp2, JSON.stringify(board));
+      fs.renameSync(tmp2, boardPath);
+      await page.locator(`#cards .card[data-id="${cid}"]`).first().waitFor({ timeout: READY_TIMEOUT_MS });
+      await page.keyboard.press("f");
+      await new Promise((r) => setTimeout(r, 500));
+      const rect = await page.evaluate((cid2) => {
+        const card = document.querySelector(`#cards .card[data-id="${cid2}"]`);
+        if (!card) return null;
+        const r = card.getBoundingClientRect();
+        return { cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+      }, String(cid));
+      assert.ok(rect, "resize test card on screen");
+      await page.mouse.click(rect.cx, rect.cy);
+      const handle = await waitFor("resize handle on the test card", async () => {
+        const h = await page.evaluate(() => {
+          const rh = document.querySelector("#resize-handle");
+          if (!rh || getComputedStyle(rh).display === "none") return null;
+          const r = rh.getBoundingClientRect();
+          return { cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+        });
+        return h;
+      });
+      // Drag mostly sideways: a freeform resize would widen
+      // the card far more than it grows tall.
+      await page.mouse.move(handle.cx, handle.cy);
+      await page.mouse.down();
+      await page.mouse.move(handle.cx + 120, handle.cy + 15, { steps: 12 });
+      await page.mouse.up();
+      const after = await waitFor("resized card on disk", () => {
+        const it = readBoard().items.find((x) => x.id === cid);
+        return it && (it.size.w !== 360 || it.size.h !== 203) ? it.size : null;
+      });
+      assert.ok(after.w > 360, "card grew wider");
+      const ratio = after.w / after.h;
+      assert.ok(Math.abs(ratio - 360 / 203) < 0.01, `card ratio ${ratio.toFixed(3)} kept 360/203`);
+      // Take the card back out: it is only here to prove the
+      // resize, and leaving it would stretch the board's
+      // bounds and move the fit (and the later mic and
+      // search checks) for every check after this one.
+      await page.keyboard.press("Delete");
+      await page.locator(`#cards .card[data-id="${cid}"]`).waitFor({ state: "detached", timeout: READY_TIMEOUT_MS });
+    });
+
     await check("an audio card shows a real waveform and clicking it seeks", async () => {
       // The grid's birdsong card: 15 seconds, real peaks,
       // so the waveform must have 100 bars of varying
@@ -2371,6 +2429,10 @@ async function main() {
         return found.length === before + 1 ? found[found.length - 1] : null;
       });
       assert.ok(fs.existsSync(card.kind.PdfCard.path), "embedded pdf asset exists on disk");
+      // The sample PDF is a landscape 200x100 page, so the
+      // card lands at its ratio (260x174), not the old
+      // fixed 260x360.
+      assert.deepEqual(card.size, { w: 260, h: 174 }, "dropped PDF lands at its page ratio");
     });
 
 
