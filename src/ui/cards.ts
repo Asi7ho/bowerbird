@@ -458,7 +458,6 @@ export function activate(api: PluginContext): void {
       const c = chrome(item, plain);
       const { source, remote, poster } = data as VideoData;
       const name = remote ? api.text.domainOf(source) : (source.split("/").pop() ?? source);
-      const thumbH = (c.ww - 24) * 9 / 16;
       // A video card is a poster until it is played. A live
       // <video> element per card costs a decoder and a
       // composited frame on every pan, and a board of videos
@@ -468,17 +467,16 @@ export function activate(api: PluginContext): void {
       // another is played. Remote links (YouTube, Vimeo, …)
       // and formats Chromium cannot play still open outside
       // the app, as before.
+      // The poster, live video or dark tile fills the card
+      // like an image card: cover normally, contain when
+      // selected so the whole frame shows.
       const inline = isInlineVideo(source, remote);
+      const fit = c.sel ? "contain" : "cover";
       const active = !plain && inline && api.media.getVideoState().id === c.id;
       if (active) {
         const src = api.files.fileUrl(source);
-        if (c.hh >= thumbH + 70) {
-          return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
-            <video controls preload="metadata" playsinline src="${src}" data-name="${api.text.escapeHtml(name)}" data-path="${api.text.escapeHtml(source)}" style="width:${c.ww - 24}px;height:${thumbH}px;object-fit:${c.sel ? "contain" : "cover"};border-radius:10px;background:#1d1d1f;pointer-events:auto"></video>
-            </div></div>`;
-        }
-        return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px">
-          <video controls preload="metadata" playsinline src="${src}" data-name="${api.text.escapeHtml(name)}" data-path="${api.text.escapeHtml(source)}" style="width:96px;height:56px;object-fit:${c.sel ? "contain" : "cover"};border-radius:10px;background:#1d1d1f;pointer-events:auto"></video>
+        return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner">
+          <video controls preload="metadata" playsinline src="${src}" data-name="${api.text.escapeHtml(name)}" data-path="${api.text.escapeHtml(source)}" style="width:100%;height:100%;object-fit:${fit};border-radius:12px;background:#1d1d1f;pointer-events:auto"></video>
           </div></div>`;
       }
       // The poster, with the play button over it. No poster
@@ -486,22 +484,12 @@ export function activate(api: PluginContext): void {
       // falls through to the dark tile below.
       if (inline && poster) {
         const posterUrl = api.files.fileUrl(poster);
-        if (c.hh >= thumbH + 70) {
-          return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
-            <button type="button" class="video-thumb clickable" data-action="play-video" aria-label="Play video" data-id="${c.id}" style="width:${c.ww - 24}px;height:${thumbH}px;font-size:28px;overflow:hidden"><img src="${posterUrl}" alt=""><span class="video-play">▶</span></button>
-            </div></div>`;
-        }
-        return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px">
-          <button type="button" class="video-thumb clickable" data-action="play-video" aria-label="Play video" data-id="${c.id}" style="width:96px;height:56px;font-size:20px;overflow:hidden"><img src="${posterUrl}" alt=""><span class="video-play">▶</span></button>
+        return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner">
+          <button type="button" class="video-thumb clickable" data-action="play-video" aria-label="Play video" data-id="${c.id}" style="width:100%;height:100%;font-size:28px;overflow:hidden"><img src="${posterUrl}" alt=""><span class="video-play">▶</span></button>
           </div></div>`;
       }
-      if (c.hh >= thumbH + 70) {
-        return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
-          <button type="button" class="video-thumb clickable" data-action="play-video" aria-label="Play video" data-id="${c.id}" style="width:${c.ww - 24}px;height:${thumbH}px;font-size:28px">▶</button>
-          </div></div>`;
-      }
-      return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px">
-        <button type="button" class="video-thumb clickable" data-action="play-video" aria-label="Play video" data-id="${c.id}" style="width:96px;height:56px;font-size:20px">▶</button>
+      return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner">
+        <button type="button" class="video-thumb clickable" data-action="play-video" aria-label="Play video" data-id="${c.id}" style="width:100%;height:100%;font-size:28px">▶</button>
         </div></div>`;
     },
   });

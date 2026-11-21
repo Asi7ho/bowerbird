@@ -1100,9 +1100,10 @@ async function main() {
         assert.ok(m.content.left >= m.card.left - tol, `${kind} content left inside the card`);
         assert.ok(m.content.right <= m.card.right + tol, `${kind} content right inside the card`);
         // An image fills its card by design (a photo fills
-        // its frame), so it has no bottom clearance to check;
-        // every other type's content must clear the bottom edge.
-        if (kind !== "image") {
+        // its frame), and so does a video poster, so neither
+        // has bottom clearance to check; every other type's
+        // content must clear the bottom edge.
+        if (kind !== "image" && kind !== "video") {
           assert.ok(m.content.bottom <= m.card.bottom - 4, `${kind} content clears the card's bottom edge`);
         }
         if (m.sub) {
