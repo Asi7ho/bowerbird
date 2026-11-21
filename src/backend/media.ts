@@ -5,6 +5,7 @@
 import { api } from "./api";
 import { peaksFromSamples } from "./audio-peaks";
 import { boardGet, type Board } from "./model";
+import { fileCardHeightForWidth } from "./live-import";
 
 export interface MediaContext {
   getBoard(): Board;
@@ -12,6 +13,10 @@ export interface MediaContext {
   bumpSearchVersion(): void;
   requestSearchUpdate(): void;
   requestRender(): void;
+  // Write the board without an undo step: for heals, not
+  // for user actions, so a healed card never becomes an
+  // undoable change.
+  saveWithoutUndo(): void;
   // The cards layer, read lazily: the board DOM is built by
   // the core-board plugin, so the cards element does not
   // exist when the media module is created at module load.
@@ -31,6 +36,10 @@ export interface Media {
   indexPdfForSearch(path: string): void;
   loadPdfPage(id: number, path: string): void;
   renderPdfPage(id: number, path: string): Promise<void>;
+  // Heal a FileCard saved at the stale height (see
+  // loadFileCardSize): measure its preview and shrink the
+  // card to the ratio of the file when it is still wrong.
+  loadFileCardSize(id: number, preview: string): void;
   loadAudioDuration(id: number, path: string): void;
   // Waveform peaks for an audio card (100 bars, 0..1), from
   // a real decode of the file — never fake bars. Loaded on
@@ -403,6 +412,56 @@ export function createMedia(host: MediaContext): Media {
     // it, and a later render re-runs this for the new canvas.
     void renderPdfPage(id, path);
   }
+  // FileCard preview dimensions, cached per path, and the
+  // paths with a load in flight. A preview is measured once
+  // per file, not once per render.
+  const fileCardPreviewSize = new Map<string, { w: number; h: number }>();
+  const fileCardPreviewLoading = new Set<string>();
+  // Heal a FileCard saved when fileCardSize added 70px for a
+  // title and sub-line that no longer exist: such a card is
+  // 46px too tall, so its preview letterboxes. When the
+  // preview image loads, measure it; if the card is still
+  // at the stale height, shrink it to the ratio of the file
+  // and save (no undo step — this is a heal, not an action).
+  // A card the user resized by hand is left alone: its height
+  // will not match the stale formula. Called from the
+  // FileCard renderer, like loadPdfPage.
+  function loadFileCardSize(id: number, preview: string): void {
+    const cached = fileCardPreviewSize.get(preview);
+    if (cached) {
+      healFileCardSize(id, preview, cached.w, cached.h);
+      return;
+    }
+    if (fileCardPreviewLoading.has(preview)) return;
+    fileCardPreviewLoading.add(preview);
+    const img = new Image();
+    img.onload = () => {
+      fileCardPreviewLoading.delete(preview);
+      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+        fileCardPreviewSize.set(preview, { w: img.naturalWidth, h: img.naturalHeight });
+        healFileCardSize(id, preview, img.naturalWidth, img.naturalHeight);
+      }
+    };
+    img.onerror = () => {
+      fileCardPreviewLoading.delete(preview);
+      // A missing preview leaves the card alone.
+    };
+    img.src = api.fileUrl(preview);
+  }
+  function healFileCardSize(id: number, preview: string, artW: number, artH: number): void {
+    const it = boardGet(host.getBoard(), id);
+    if (!it || !("FileCard" in it.kind) || it.kind.FileCard.preview !== preview) return;
+    const correctH = fileCardHeightForWidth(artW, artH, it.size.w);
+    // The stale height is exactly 46px taller: the old
+    // formula added 70 for the title and sub-line, the new
+    // one adds 24 for the padding.
+    const staleH = correctH + 46;
+    if (Math.abs(it.size.h - staleH) <= 2 && it.size.h !== correctH) {
+      it.size.h = correctH;
+      host.saveWithoutUndo();
+      host.requestRender();
+    }
+  }
   function toggleAudio(id: number, path: string): void {
     if (audioId === id && audioEl && !audioEl.paused) {
       audioEl.pause();
@@ -455,6 +514,8 @@ export function createMedia(host: MediaContext): Media {
     audioDurations.clear();
     audioFailed.clear();
     audioPeaks.clear();
+    fileCardPreviewSize.clear();
+    fileCardPreviewLoading.clear();
     pendingSeek = null;
     pdfSearchText.clear();
     pdfSearchIndexing.clear();
@@ -490,6 +551,7 @@ export function createMedia(host: MediaContext): Media {
     indexPdfForSearch,
     loadPdfPage,
     renderPdfPage,
+    loadFileCardSize,
     loadAudioDuration,
     getAudioPeaks,
     loadAudioPeaks,
