@@ -516,6 +516,10 @@ export interface PluginHost {
   getAudioState: () => { id: number | null; playing: boolean; currentTime: number; duration: number };
   getAudioDuration: (path: string) => number | undefined;
   loadAudioDuration: (id: number, path: string) => void;
+  // Waveform peaks for an audio card (100 bars, 0..1), from
+  // a real decode of the file. Undefined until loaded.
+  getAudioPeaks: (path: string) => number[] | undefined;
+  loadAudioPeaks: (id: number, path: string) => Promise<void>;
   // Transcribe a recorded audio blob to text, on-device.
   // Null when the audio cannot be decoded or the model
   // cannot run. No permission needed: the model runs
@@ -533,12 +537,31 @@ export interface PluginHost {
   // is live; playing another moves it there.
   playVideo: (id: number) => void;
   getVideoState: () => { id: number | null };
-  // Seek the playing audio card to a time in seconds. The
-  // board view's seek slider. No-op when that card is not
-  // the one playing.
+  // Seek the playing audio card to a time in seconds.
+  // No-op when that card is not the one playing.
   seekAudio: (id: number, time: number) => void;
+  // Seek an audio card to a time in seconds, whether or
+  // not it is playing: a card that is not playing loads
+  // paused at that time, so play starts there.
+  seekAudioTo: (id: number, path: string, time: number) => void;
   getPdfPage: (id: number) => number;
   loadPdfPage: (id: number, path: string) => void;
+  // Heal a FileCard saved at the stale height: measure its
+  // preview and shrink the card to the ratio of the file
+  // when it is still wrong.
+  loadFileCardSize: (preview: string) => void;
+  loadVideoCardSize: (poster: string) => void;
+  // The first page's size in points, for sizing a PDF card
+  // to its page. Null when the file cannot be read.
+  probePdfSize: (path: string) => Promise<{ w: number; h: number } | null>;
+  // Heal a PdfCard saved at the stale fixed size: measure
+  // its first page and resize the card to the ratio of the
+  // page when it is still wrong.
+  loadPdfCardSize: (path: string) => void;
+  // Heal a UrlCard saved at the stale fixed size: measure
+  // its preview image and resize the card to the ratio of
+  // the image when it is still wrong.
+  loadLinkCardSize: (image: string) => void;
   // Move a PDF card to a page (clamped to the document),
   // and render it. The board view's prev/next buttons.
   // False when the document is not loaded yet.
@@ -1201,6 +1224,10 @@ export interface PluginContext {
     getAudioState: () => { id: number | null; playing: boolean; currentTime: number; duration: number };
     getAudioDuration: (path: string) => number | undefined;
     loadAudioDuration: (id: number, path: string) => void;
+    // Waveform peaks for an audio card (100 bars, 0..1), from
+    // a real decode of the file. Undefined until loaded.
+    getAudioPeaks: (path: string) => number[] | undefined;
+    loadAudioPeaks: (id: number, path: string) => Promise<void>;
     // Transcribe a recorded audio blob to text, on-device
     // (Whisper in the main process). Null when the audio
     // cannot be decoded or the model cannot run.
@@ -1214,13 +1241,32 @@ export interface PluginContext {
     // is live; playing another moves it there.
     playVideo: (id: number) => void;
     getVideoState: () => { id: number | null };
-    // Seek the playing audio card to a time in seconds. The
-    // board view's seek slider. No-op when that card is not
-    // the one playing.
+    // Seek the playing audio card to a time in seconds.
+    // No-op when that card is not the one playing.
     seekAudio: (id: number, time: number) => void;
+    // Seek an audio card to a time in seconds, whether or
+    // not it is playing: a card that is not playing loads
+    // paused at that time, so play starts there.
+    seekAudioTo: (id: number, path: string, time: number) => void;
     pdfFailed: (path: string) => boolean;
     getPdfPage: (id: number) => number;
     loadPdfPage: (id: number, path: string) => void;
+    // Heal a FileCard saved at the stale height: measure its
+    // preview and shrink the card to the ratio of the file
+    // when it is still wrong.
+    loadFileCardSize: (preview: string) => void;
+    loadVideoCardSize: (poster: string) => void;
+    // The first page's size in points, for sizing a PDF card
+    // to its page. Null when the file cannot be read.
+    probePdfSize: (path: string) => Promise<{ w: number; h: number } | null>;
+    // Heal a PdfCard saved at the stale fixed size: measure
+    // its first page and resize the card to the ratio of the
+    // page when it is still wrong.
+    loadPdfCardSize: (path: string) => void;
+    // Heal a UrlCard saved at the stale fixed size: measure
+    // its preview image and resize the card to the ratio of
+    // the image when it is still wrong.
+    loadLinkCardSize: (image: string) => void;
     // Move a PDF card to a page (clamped to the document),
     // and render it. The board view's prev/next buttons.
     // False when the document is not loaded yet.

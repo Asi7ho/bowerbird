@@ -15,7 +15,7 @@ import {
 } from "./board-render";
 import {
   Anchor, Pt, ShapeKind,
-  isInlineVideo, rectFromPoints, splitStrokeByEraser, strokeMaxWidth,
+  isInlineVideo, proportionalResize, rectFromPoints, splitStrokeByEraser, strokeMaxWidth,
   zoomCamera,
 } from "../backend/model";
 import { measureNoteCardHeight } from "./text-measure";
@@ -240,8 +240,7 @@ function startTextEdit(id: number, isNew = false): void {
 // never triggers board shortcuts.
 // Wire a rename input: Enter or leaving the field
 // commits, Escape cancels, and only the first of
-// commit/cancel runs. Shared by group-label and
-// voice-note renames.
+// commit/cancel runs. Used by the group-label rename.
 function wireRenameInput(input: HTMLInputElement, onCommit: () => void): void {
   input.focus();
   input.select();
@@ -274,38 +273,6 @@ function startGroupRename(group: number): void {
   });
 }
 
-// Is the click on a voice note's name? The card itself
-// has pointer-events: none (only its controls take
-// clicks), so a click on the name reaches the board as a
-// #cards target — the DOM target cannot say which part of
-// the card was clicked. The title's screen rect can.
-function audioTitleHit(id: number, clientX: number, clientY: number): boolean {
-  const titleEl = S.cardsEl.querySelector(`.card[data-id="${id}"] .col .title`) as HTMLElement | null;
-  if (!titleEl) return false;
-  const r = titleEl.getBoundingClientRect();
-  return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
-}
-
-// Rename a voice note: double-clicking its name swaps the
-// title for an input, like a group label. Enter or
-// leaving the field commits (one undo step), Escape
-// cancels. An empty name clears the title, so the card
-// falls back to the file's name.
-function startAudioRename(id: number): void {
-  const it = S.api.board.getItem(id);
-  if (!it || !("Audio" in it.kind)) return;
-  const current = (it.kind.Audio.title?.trim() ?? "") || (it.kind.Audio.path.split("/").pop() ?? it.kind.Audio.path);
-  const cardEl = S.cardsEl.querySelector(`.card[data-id="${id}"]`) as HTMLElement | null;
-  const titleEl = cardEl?.querySelector(".col .title") as HTMLElement | null;
-  if (!titleEl) return;
-  const input = document.createElement("input");
-  input.className = "audio-rename";
-  input.value = current;
-  input.setAttribute("aria-label", "Voice note name");
-  titleEl.textContent = "";
-  titleEl.appendChild(input);
-  wireRenameInput(input, () => { S.api.board.setAudioTitle(id, input.value); });
-}
 
 export function commitEditingIfAny(): void {
   if (S.editingId === null) return;
@@ -468,10 +435,43 @@ function navigateElements(dir: 1 | -1): void {
 
 // ---------------------------------------------------------------- input
 
+// An audio drag-scrub in progress: the card id, file path,
+// and the element whose width maps to the duration — the
+// waveform itself, or the timeline's track (not the whole
+// row, whose time labels flank it). Pointermove keeps
+// seeking without re-hitting the board. Set by the cards
+// pointerdown below, cleared on pointerup.
+let audioScrub: { id: number; path: string; el: Element } | null = null;
+// A drag that started on a playing video: the press is on the
+// <video> element, and the click that follows the pointerup
+// would land on its controls and toggle playback (or seek).
+// The capture-phase click listener below swallows that one
+// click. Set on every pointerdown, cleared on pointerup.
+let dragStartedOnVideo = false;
+// Until when a click on a video is swallowed (see above): a
+// timestamp, so a genuine click a moment later still works.
+let suppressVideoClickUntil = 0;
+function seekAudioAt(e: PointerEvent): void {
+  if (!audioScrub) return;
+  const r = audioScrub.el.getBoundingClientRect();
+  if (r.width <= 0) return;
+  const frac = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+  const dur = S.api.media.getAudioDuration(audioScrub.path) ?? S.api.media.getAudioState().duration;
+  if (!isFinite(dur) || dur <= 0) return;
+  S.api.media.seekAudioTo(audioScrub.id, audioScrub.path, frac * dur);
+}
+
 export function attachBoardListeners(): void {
   S.boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
     const target = e.target as HTMLElement;
-    if (target.closest("#toolbar, #settings-backdrop, #toast, #plugin-overlays, #search-box, #title-bar, video, input, canvas.model3d")) return;
+    dragStartedOnVideo = target.closest("video") !== null;
+    // A press on a playing video is NOT ignored: the video
+    // fills its card, so it is the only place to grab it, and
+    // a drag on it must move the card. A plain click still
+    // reaches the controls — the click that follows a drag
+    // that actually moved is swallowed by the capture-phase
+    // click listener below instead.
+    if (target.closest("#toolbar, #settings-backdrop, #toast, #plugin-overlays, #search-box, #title-bar, input, canvas.model3d, [data-audio-wave], [data-audio-timeline]")) return;
     // A board click or drag must never start a native text selection
     // across the cards (bug: clicking anywhere highlighted all text).
     if (!target.closest("textarea.note-edit")) window.getSelection()?.removeAllRanges();
@@ -560,11 +560,6 @@ export function attachBoardListeners(): void {
         const it = S.api.board.getItem(hit);
         if (it && "Plugin" in it.kind && S.api.cards.dispatchDoubleClick(it)) return;
         if (it && "Text" in it.kind) { startTextEdit(hit); return; }
-        // Double-clicking a voice note's name renames it,
-        // like a group label renames its group. Anywhere
-        // else on the card keeps its own behaviour (the tile
-        // plays, the seek seeks).
-        if (it && "Audio" in it.kind && audioTitleHit(hit, e.clientX, e.clientY)) { startAudioRename(hit); return; }
         if (it && "UrlCard" in it.kind) { openExternal(it.kind.UrlCard.url); return; }
         if (it && "PdfCard" in it.kind) { openExternal(it.kind.PdfCard.path); return; }
         if (it && "Image" in it.kind) { openExternal(it.kind.Image.path); return; }
@@ -608,6 +603,20 @@ export function attachBoardListeners(): void {
     if (!e.shiftKey) S.api.board.setSelected([]);
     S.drag = { kind: "marquee", start: world, current: world };
   });
+
+  // A drag that started on a playing video and actually moved
+  // must not also toggle its controls: swallow the one click
+  // that follows the pointerup. Capture phase, so the event
+  // never reaches the video's controls at all. A plain click
+  // (no drag) is unaffected, and the flag expires on its own,
+  // so a genuine click a moment later still works.
+  S.cardsEl.addEventListener("click", (e: MouseEvent) => {
+    if (Date.now() > suppressVideoClickUntil) return;
+    if (!(e.target as HTMLElement).closest("video")) return;
+    suppressVideoClickUntil = 0;
+    e.preventDefault();
+    e.stopPropagation();
+  }, true);
 
   S.cardsEl.addEventListener("click", (e: MouseEvent) => {
     const target = e.target as HTMLElement;
@@ -670,14 +679,41 @@ export function attachBoardListeners(): void {
     }
   });
 
-  S.cardsEl.addEventListener("input", (e: Event) => {
-    const seek = (e.target as HTMLElement).closest("[data-audio-seek]") as HTMLInputElement | null;
-    if (!seek) return;
-    const id = Number(seek.dataset.audioSeek);
-    const state = S.api.media.getAudioState();
-    if (state.id !== id || !isFinite(state.duration) || state.duration <= 0) return;
-    S.api.media.seekAudio(id, (Number(seek.value) / 1000) * state.duration);
-  });
+    // The waveform and the timeline are both seek controls:
+    // pointerdown seeks, and dragging across them scrubs. The
+    // board's own pointerdown ignores them (see the guard
+    // above), so this never drags the card. Arrow keys seek
+    // when either has focus, instead of nudging the selection.
+    S.cardsEl.addEventListener("pointerdown", (e: PointerEvent) => {
+      const target = (e.target as HTMLElement).closest("[data-audio-wave], [data-audio-timeline]") as Element | null;
+      if (!target) return;
+      const id = Number((target as HTMLElement).dataset.audioWave ?? (target as HTMLElement).dataset.audioTimeline);
+      const it = S.api.board.getItem(id);
+      if (!it || !("Audio" in it.kind)) return;
+      e.preventDefault();
+      // The seek range is the wave itself, or the timeline's
+      // track — not the whole row, whose time labels flank it.
+      const el = target.classList.contains("audio-timeline")
+        ? (target.querySelector(".audio-track") ?? target)
+        : target;
+      audioScrub = { id, path: it.kind.Audio.path, el };
+      seekAudioAt(e);
+    });
+    S.cardsEl.addEventListener("keydown", (e: KeyboardEvent) => {
+      const target = (e.target as HTMLElement).closest("[data-audio-wave], [data-audio-timeline]") as Element | null;
+      if (!target || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+      const id = Number((target as HTMLElement).dataset.audioWave ?? (target as HTMLElement).dataset.audioTimeline);
+      const it = S.api.board.getItem(id);
+      if (!it || !("Audio" in it.kind)) return;
+      const state = S.api.media.getAudioState();
+      const dur = S.api.media.getAudioDuration(it.kind.Audio.path) ?? state.duration;
+      if (!isFinite(dur) || dur <= 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const cur = state.id === id ? state.currentTime : 0;
+      const step = e.shiftKey ? 10 : 5;
+      S.api.media.seekAudioTo(id, it.kind.Audio.path, Math.min(dur, Math.max(0, cur + (e.key === "ArrowRight" ? step : -step))));
+    });
 }
 
 // Whether a tool id is a shape kind, from the shape table
@@ -699,6 +735,10 @@ export function attachWindowListeners(): void {
   S.listenersAttached = true;
 
   window.addEventListener("pointermove", (e: PointerEvent) => {
+    if (audioScrub) {
+      seekAudioAt(e);
+      return;
+    }
     const winPt: Pt = boardPoint(e.clientX, e.clientY);
     const world = toWorld(winPt);
     if (!S.drag) {
@@ -768,7 +808,10 @@ export function attachWindowListeners(): void {
       if (!S.cachedBoard || S.cachedBoard.items.some((it) => "Connector" in it.kind)) renderSvgOnly();
       updateResizeHandle();
     } else if (S.drag.kind === "resize") {
-      S.api.board.resizeItem(S.drag.id, S.drag.origW + (world.x - S.drag.startWorld.x), S.drag.origH + (world.y - S.drag.startWorld.y));
+      // A resize keeps the card's ratio: the drag scales the
+      // card by one factor, so it can never be stretched.
+      const next = proportionalResize(S.drag.origW, S.drag.origH, world.x - S.drag.startWorld.x, world.y - S.drag.startWorld.y);
+      S.api.board.resizeItem(S.drag.id, next.w, next.h);
       if (Math.hypot(world.x - S.drag.startWorld.x, world.y - S.drag.startWorld.y) > 2) S.drag.moved = true;
       updateDraggedCards([S.drag.id]);
       updateResizeHandle();
@@ -858,6 +901,7 @@ export function attachWindowListeners(): void {
   });
 
   window.addEventListener("pointerup", (e: PointerEvent) => {
+    audioScrub = null;
     if (S.pluginToolDown) {
       S.pluginToolDown = false;
       const pt = S.api.ui.getToolDef(S.tool);
@@ -955,6 +999,13 @@ export function attachWindowListeners(): void {
       // a Ctrl+Z to get past before the real change undoes.
       if (d.moved) S.api.board.save();
       else S.api.board.saveWithoutUndo();
+      // A drag that started on a playing video and actually
+      // moved must not also toggle its controls: swallow the
+      // click that follows this pointerup (see the capture
+      // listener below). A click that never moved is a plain
+      // click on the controls, and is left alone.
+      if (d.moved && dragStartedOnVideo) suppressVideoClickUntil = Date.now() + 500;
+      dragStartedOnVideo = false;
     }
     // A move/resize that actually moved is safe to rebuild once at
     // the end (it refreshes truncation and connector endpoints with

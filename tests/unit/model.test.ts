@@ -28,6 +28,7 @@ import {
   parseMarkdown,
   pointInPolygon,
   pressureWidth,
+  proportionalResize,
   rectCrossing,
   renderMarkdownHtml,
   screenToWorld,
@@ -417,6 +418,20 @@ describe("selection and mutation", () => {
     expect(b.items[0].size).toEqual({ w: 48, h: 48 });
     resizeItem(b, 1, 200, 100);
     expect(strokeKind(b.items[0]).points[1]).toEqual({ x: 300, y: 200 });
+  });
+  it("proportionalResize keeps the ratio whichever axis drives", () => {
+    // A diagonal drag: the wider relative move wins, and
+    // both sides scale by that one factor.
+    expect(proportionalResize(360, 203, 180, 10)).toEqual({ w: 540, h: 304.5 });
+    // A mostly-vertical drag: the height move drives, and
+    // the width follows it.
+    expect(proportionalResize(360, 203, 5, 203)).toEqual({ w: 720, h: 406 });
+    // Shrinking stops at the 48px floor without breaking
+    // the ratio: the floor is on the scale, not the sides.
+    const small = proportionalResize(360, 203, -350, -200);
+    expect(small.w).toBeCloseTo(85.1, 1);
+    expect(small.h).toBeCloseTo(48, 1);
+    expect(small.w / small.h).toBeCloseTo(360 / 203, 5);
   });
 });
 

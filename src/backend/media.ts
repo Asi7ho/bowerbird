@@ -3,7 +3,9 @@
 // guards so a late result never writes into the new board.
 
 import { api } from "./api";
+import { peaksFromSamples } from "./audio-peaks";
 import { boardGet, type Board } from "./model";
+import { fileCardHeightForWidth, fileCardPreviewHeight, linkCardHeightForWidth, pdfCardHeightForWidth, videoCardHeightForWidth } from "./live-import";
 
 export interface MediaContext {
   getBoard(): Board;
@@ -11,6 +13,10 @@ export interface MediaContext {
   bumpSearchVersion(): void;
   requestSearchUpdate(): void;
   requestRender(): void;
+  // Write the board without an undo step: for heals, not
+  // for user actions, so a healed card never becomes an
+  // undoable change.
+  saveWithoutUndo(): void;
   // The cards layer, read lazily: the board DOM is built by
   // the core-board plugin, so the cards element does not
   // exist when the media module is created at module load.
@@ -30,7 +36,40 @@ export interface Media {
   indexPdfForSearch(path: string): void;
   loadPdfPage(id: number, path: string): void;
   renderPdfPage(id: number, path: string): Promise<void>;
+  // Heal a FileCard saved at the stale height (see
+  // loadFileCardSize): measure its preview and shrink the
+  // card to the ratio of the file when it is still wrong.
+  loadFileCardSize(preview: string): void;
+  // Heal a Video card saved at the stale 16:9 height (see
+  // loadVideoCardSize): measure its poster and resize the
+  // card to the ratio of the video when it is still wrong.
+  loadVideoCardSize(poster: string): void;
+  // The first page's size in points, for sizing a PDF card
+  // to its page at drop time. Null when the file cannot be
+  // read. Shares the document load with the renderer, so
+  // probing never opens the file twice.
+  probePdfSize(path: string): Promise<{ w: number; h: number } | null>;
+  // Heal a PdfCard saved at the stale fixed size (see
+  // loadPdfCardSize): measure its first page and resize the
+  // card to the ratio of the page when it is still wrong.
+  loadPdfCardSize(path: string): void;
+  // Heal a UrlCard saved at the stale fixed size (see
+  // loadLinkCardSize): measure its preview image and resize
+  // the card to the ratio of the image when it is still
+  // wrong.
+  loadLinkCardSize(image: string): void;
   loadAudioDuration(id: number, path: string): void;
+  // Waveform peaks for an audio card (100 bars, 0..1), from
+  // a real decode of the file — never fake bars. Loaded on
+  // demand like the duration, cached per path.
+  getAudioPeaks(path: string): number[] | undefined;
+  loadAudioPeaks(id: number, path: string): Promise<void>;
+  // Seek an audio card to a time in seconds. Unlike the
+  // plugin API's seekAudio (playing only), this also works
+  // on a card that is not playing: it loads the file paused
+  // at that time, so pressing play starts there instead of
+  // from the top.
+  seekAudioTo(id: number, path: string, time: number): void;
   updateAudioProgress(): void;
   formatAudioTime(sec: number): string;
   toggleAudio(id: number, path: string): void;
@@ -162,19 +201,40 @@ export function createMedia(host: MediaContext): Media {
     const s = Math.floor(sec % 60);
     return `${m}:${s.toString().padStart(2, "0")}`;
   }
+  // The waveform is the progress display now: while the
+  // audio plays, the bars up to the playback position turn
+  // dark. No full re-render — the bars are already in the
+  // DOM, only their played class moves, a few times a
+  // second. A render (play/pause, track end) paints the
+  // same state from the card itself.
+  function paintWaveProgress(wave: Element, pct: number): void {
+    const bars = wave.querySelectorAll("rect[data-i]");
+    const cut = Math.floor(pct * bars.length);
+    bars.forEach((b) => {
+      const i = Number((b as HTMLElement).dataset.i);
+      b.classList.toggle("played", i < cut);
+    });
+  }
   function updateAudioProgress(): void {
     if (!audioEl || audioId === null) return;
     const dur = audioEl.duration;
     const cur = audioEl.currentTime;
-    const timeEl = host.getCardsEl().querySelector(`[data-audio-time="${audioId}"]`);
-    if (timeEl) timeEl.textContent = formatAudioTime(cur);
-    const durEl = host.getCardsEl().querySelector(`[data-audio-dur="${audioId}"]`);
-    if (durEl && isFinite(dur)) durEl.textContent = formatAudioTime(dur);
-    const seekEl = host.getCardsEl().querySelector(`[data-audio-seek="${audioId}"]`) as HTMLInputElement | null;
-    if (seekEl && isFinite(dur) && dur > 0) {
-      seekEl.style.setProperty("--seek-pct", `${Math.round((cur / dur) * 100)}%`);
-      if (document.activeElement !== seekEl) seekEl.value = String(Math.round((cur / dur) * 1000));
-    }
+    if (!isFinite(dur) || dur <= 0) return;
+    const pct = Math.min(1, Math.max(0, cur / dur));
+    const wave = host.getCardsEl().querySelector(`[data-audio-wave="${audioId}"]`);
+    if (wave) paintWaveProgress(wave, pct);
+    const tl = host.getCardsEl().querySelector(`[data-audio-timeline="${audioId}"]`);
+    if (tl) paintTimelineProgress(tl, pct, cur);
+  }
+  // The timeline is the progress display too: while the
+  // audio plays, the track fill grows and the current time
+  // advances. In place, like the wave bars — no re-render.
+  function paintTimelineProgress(tl: Element, pct: number, cur: number): void {
+    const fill = tl.querySelector(".audio-track-fill") as HTMLElement | null;
+    if (fill) fill.style.width = `${(pct * 100).toFixed(1)}%`;
+    const now = tl.querySelector(".audio-time-current") as HTMLElement | null;
+    if (now) now.textContent = formatAudioTime(cur);
+    tl.setAttribute("aria-valuenow", String(Math.round(pct * 100)));
   }
   const audioFailed = new Set<string>();
   // Data-URL fallbacks for files whose app-file load failed,
@@ -220,6 +280,92 @@ export function createMedia(host: MediaContext): Media {
     };
     probe.preload = "metadata";
     probe.onloadedmetadata = onAudioMetadata(probe);
+  }
+  // Waveform peaks, cached per path and decoded once: the
+  // same file on two cards shares one decode. A decode in
+  // flight is not started twice. A failed decode is not
+  // an error state — the card shows its empty track and
+  // still plays; only the waveform is missing.
+  const audioPeaks = new Map<string, number[]>();
+  const audioPeaksLoading = new Set<string>();
+  function getAudioPeaks(path: string): number[] | undefined {
+    return audioPeaks.get(path);
+  }
+  async function loadAudioPeaks(_id: number, path: string): Promise<void> {
+    if (audioPeaks.has(path) || audioPeaksLoading.has(path)) return;
+    audioPeaksLoading.add(path);
+    try {
+      let bytes: ArrayBuffer;
+      try {
+        const res = await fetch(api.fileUrl(path));
+        if (!res.ok) throw new Error(`peaks fetch failed: ${res.status}`);
+        bytes = await res.arrayBuffer();
+      } catch {
+        // Same app-file fallback as the duration probe: a
+        // file that only loads as a data URL still gets a
+        // waveform.
+        const { base64 } = await api.readFileBase64(path);
+        const bin = atob(base64);
+        const arr = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        bytes = arr.buffer;
+      }
+      const ctx = new AudioContext();
+      let decoded: AudioBuffer;
+      try {
+        decoded = await ctx.decodeAudioData(bytes);
+      } finally {
+        void ctx.close();
+      }
+      if (decoded.numberOfChannels === 0 || decoded.length === 0) return;
+      // Mix down to mono, whatever the recording's format.
+      const mono = new Float32Array(decoded.length);
+      for (let c = 0; c < decoded.numberOfChannels; c++) {
+        const ch = decoded.getChannelData(c);
+        for (let i = 0; i < decoded.length; i++) mono[i] += ch[i] / decoded.numberOfChannels;
+      }
+      audioPeaks.set(path, peaksFromSamples(mono, 100));
+      // No re-render here: the card that asked for the
+      // peaks paints them into its own waveform (see
+      // cards.ts). A full render would replace the card's
+      // node under any click or measurement in flight.
+    } catch {
+      // No waveform; the card keeps its empty track.
+    } finally {
+      audioPeaksLoading.delete(path);
+    }
+  }
+  // A seek asked for before the audio's metadata loaded:
+  // applied on loadedmetadata instead of being lost.
+  let pendingSeek: { id: number; time: number } | null = null;
+  function applyPendingSeek(el: HTMLAudioElement, id: number): void {
+    if (pendingSeek && pendingSeek.id === id) {
+      el.currentTime = pendingSeek.time;
+      pendingSeek = null;
+    }
+  }
+  function seekAudioTo(id: number, path: string, time: number): void {
+    if (audioId === id && audioEl) {
+      if (audioEl.readyState === 0) pendingSeek = { id, time };
+      else audioEl.currentTime = time;
+      updateAudioProgress();
+      return;
+    }
+    // Not the current audio: load it paused at that time,
+    // so pressing play starts there instead of from the
+    // top. A later toggleAudio resumes this same element.
+    if (audioEl) audioEl.pause();
+    audioEl = new Audio(mediaDataUrls.get(path) ?? api.fileUrl(path));
+    audioId = id;
+    pendingSeek = { id, time };
+    audioEl.onloadedmetadata = () => {
+      if (audioEl && isFinite(audioEl.duration)) audioDurations.set(path, audioEl.duration);
+      if (audioEl) applyPendingSeek(audioEl, id);
+      updateAudioProgress();
+    };
+    audioEl.ontimeupdate = () => updateAudioProgress();
+    audioEl.onended = () => { audioId = null; host.requestRender(); };
+    host.requestRender();
   }
   async function renderPdfPage(id: number, path: string): Promise<void> {
     if (pdfRendering.has(id) || pdfFailed.has(path)) return;
@@ -297,9 +443,269 @@ export function createMedia(host: MediaContext): Media {
     // it, and a later render re-runs this for the new canvas.
     void renderPdfPage(id, path);
   }
+  // FileCard preview dimensions, cached per path, and the
+  // paths with a load in flight. A preview is measured once
+  // per file, not once per render.
+  const fileCardPreviewSize = new Map<string, { w: number; h: number }>();
+  const fileCardPreviewLoading = new Set<string>();
+  // Video poster dimensions, cached per path, and the paths
+  // with a load in flight. A poster is measured once per
+  // file, not once per render. The poster is captured at the
+  // video's own ratio, so its size is the video's ratio.
+  const videoCardPosterSize = new Map<string, { w: number; h: number }>();
+  const videoCardPosterLoading = new Set<string>();
+  // Heal a FileCard saved at a stale height: the old formulas
+  // sized the preview at the card minus 24px of padding and
+  // then added 70px for a title and sub-line, or 24px for the
+  // padding, that no longer exist. When the preview image
+  // loads, measure it; if the card is still at either stale
+  // height, shrink it to the ratio of the file and save (no
+  // undo step — this is a heal, not an action). A card the
+  // user resized by hand is left alone: its height will not
+  // match a stale formula. Called from the FileCard renderer,
+  // like loadPdfPage.
+  function loadFileCardSize(preview: string): void {
+    const cached = fileCardPreviewSize.get(preview);
+    if (cached) {
+      healFileCardsWithPreview(preview, cached.w, cached.h);
+      return;
+    }
+    if (fileCardPreviewLoading.has(preview)) return;
+    fileCardPreviewLoading.add(preview);
+    const img = new Image();
+    img.onload = () => {
+      fileCardPreviewLoading.delete(preview);
+      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+        fileCardPreviewSize.set(preview, { w: img.naturalWidth, h: img.naturalHeight });
+        healFileCardsWithPreview(preview, img.naturalWidth, img.naturalHeight);
+      }
+    };
+    img.onerror = () => {
+      fileCardPreviewLoading.delete(preview);
+      // A missing preview leaves the card alone.
+    };
+    img.src = api.fileUrl(preview);
+  }
+  // Shrink every FileCard using this preview that is still at
+  // a stale height to the ratio of the file. Several cards can
+  // share one preview (the same file dropped twice), so the
+  // heal runs over all of them, not just the one that asked.
+  // A card the user resized by hand is left alone: its height
+  // will not match a stale formula.
+  function healFileCardsWithPreview(preview: string, artW: number, artH: number): void {
+    let changed = false;
+    for (const it of host.getBoard().items) {
+      if (!("FileCard" in it.kind) || it.kind.FileCard.preview !== preview) continue;
+      const correctH = fileCardHeightForWidth(artW, artH, it.size.w);
+      // Both stale heights, from the preview height the old
+      // formulas used (the card minus 24px of padding): +70
+      // for the title and sub-line, +24 for the padding.
+      const previewH = fileCardPreviewHeight(artW, artH, Math.max(1, it.size.w - 24));
+      const stale70 = Math.round(previewH + 70);
+      const stale24 = Math.round(previewH + 24);
+      const isStale = Math.abs(it.size.h - stale70) <= 2 || Math.abs(it.size.h - stale24) <= 2;
+      if (isStale && it.size.h !== correctH) {
+        it.size.h = correctH;
+        changed = true;
+      }
+    }
+    if (changed) {
+      host.saveWithoutUndo();
+      host.requestRender();
+    }
+  }
+  // Heal a Video card saved at the stale 16:9 height: videos
+  // used to land at 360x203 whatever their ratio, so a 4:3
+  // clip sat in a 16:9 card. When the poster loads, measure
+  // it (it is captured at the video's own ratio); if the card
+  // is still at the 16:9 height for its width, resize it to
+  // the ratio of the video and save (no undo step — this is a
+  // heal, not an action). A card the user resized by hand is
+  // left alone: its height will not match 16:9. Called from
+  // the Video renderer, like loadFileCardSize.
+  function loadVideoCardSize(poster: string): void {
+    const cached = videoCardPosterSize.get(poster);
+    if (cached) {
+      healVideoCardsWithPoster(poster, cached.w, cached.h);
+      return;
+    }
+    if (videoCardPosterLoading.has(poster)) return;
+    videoCardPosterLoading.add(poster);
+    const img = new Image();
+    img.onload = () => {
+      videoCardPosterLoading.delete(poster);
+      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+        videoCardPosterSize.set(poster, { w: img.naturalWidth, h: img.naturalHeight });
+        healVideoCardsWithPoster(poster, img.naturalWidth, img.naturalHeight);
+      }
+    };
+    img.onerror = () => {
+      videoCardPosterLoading.delete(poster);
+      // A missing poster leaves the card alone.
+    };
+    img.src = api.fileUrl(poster);
+  }
+  // Resize every Video card using this poster that is still
+  // at the stale 16:9 height to the ratio of the video.
+  // Several cards can share one poster (the same file
+  // dropped twice), so the heal runs over all of them, not
+  // just the one that asked. A card the user resized by hand
+  // is left alone: its height will not match 16:9.
+  function healVideoCardsWithPoster(poster: string, vidW: number, vidH: number): void {
+    let changed = false;
+    for (const it of host.getBoard().items) {
+      if (!("Video" in it.kind) || it.kind.Video.poster !== poster) continue;
+      const correctH = videoCardHeightForWidth(vidW, vidH, it.size.w);
+      const staleH = Math.round((it.size.w * 9) / 16);
+      if (Math.abs(it.size.h - staleH) <= 2 && it.size.h !== correctH) {
+        it.size.h = correctH;
+        changed = true;
+      }
+    }
+    if (changed) {
+      host.saveWithoutUndo();
+      host.requestRender();
+    }
+  }
+  // PDF first-page dimensions, cached per path, and the
+  // paths with a load in flight. A page is measured once
+  // per file, not once per render. The document load is
+  // shared with the renderer (getPdfDoc), so measuring
+  // never opens the file twice.
+  const pdfPageSize = new Map<string, { w: number; h: number }>();
+  const pdfPageLoading = new Set<string>();
+  // The first page's size in points, for sizing a PDF card
+  // to its page at drop time. Null when the file cannot be
+  // read, so the caller falls back to the old default.
+  async function probePdfSize(path: string): Promise<{ w: number; h: number } | null> {
+    const cached = pdfPageSize.get(path);
+    if (cached) return cached;
+    try {
+      const doc = await getPdfDoc(path);
+      const page = await doc.getPage(1);
+      const viewport = page.getViewport({ scale: 1 });
+      if (viewport.width <= 0 || viewport.height <= 0) return null;
+      const dims = { w: viewport.width, h: viewport.height };
+      pdfPageSize.set(path, dims);
+      return dims;
+    } catch {
+      return null;
+    }
+  }
+  // Heal a PdfCard saved at the stale fixed size: PDFs used
+  // to land at 260x360 whatever the page, so a landscape
+  // page sat in a portrait card. When the first page loads,
+  // measure it; if the card is still at 260x360, resize it
+  // to the ratio of the page and save (no undo step — this
+  // is a heal, not an action). A card the user resized by
+  // hand is left alone: its size will not match 260x360.
+  // Called from the PdfCard renderer, like loadPdfPage.
+  function loadPdfCardSize(path: string): void {
+    const cached = pdfPageSize.get(path);
+    if (cached) {
+      healPdfCardsWithPage(path, cached.w, cached.h);
+      return;
+    }
+    if (pdfPageLoading.has(path)) return;
+    pdfPageLoading.add(path);
+    void probePdfSize(path).then((dims) => {
+      pdfPageLoading.delete(path);
+      if (!dims) return;
+      pdfPageSize.set(path, dims);
+      healPdfCardsWithPage(path, dims.w, dims.h);
+    });
+  }
+  // Resize every PdfCard showing this file that is still at
+  // the stale fixed size to the ratio of its first page.
+  // Several cards can show one PDF, so the heal runs over
+  // all of them, not just the one that asked.
+  function healPdfCardsWithPage(path: string, pageW: number, pageH: number): void {
+    let changed = false;
+    for (const it of host.getBoard().items) {
+      if (!("PdfCard" in it.kind) || it.kind.PdfCard.path !== path) continue;
+      if (Math.abs(it.size.w - 260) > 2 || Math.abs(it.size.h - 360) > 2) continue;
+      const correctH = pdfCardHeightForWidth(pageW, pageH, it.size.w);
+      if (it.size.h !== correctH) {
+        it.size.h = correctH;
+        changed = true;
+      }
+    }
+    if (changed) {
+      host.saveWithoutUndo();
+      host.requestRender();
+    }
+  }
+  // Link preview-image dimensions, cached per URL, and the
+  // URLs with a load in flight. An image is measured once
+  // per URL, not once per render. The image is remote, so it
+  // loads from its own URL (not the board-local file URL);
+  // reading its natural size needs no CORS.
+  const linkImageSize = new Map<string, { w: number; h: number }>();
+  const linkImageLoading = new Set<string>();
+  // Heal a UrlCard saved at the stale fixed size: a preview
+  // image used to make the card 320x300 whatever the image,
+  // so a wide banner sat in a tall card. When the preview
+  // image loads, measure it; if the card is still at
+  // 320x300, resize it to the ratio of the image and save
+  // (no undo step — this is a heal, not an action). A card
+  // the user resized by hand is left alone: its size will
+  // not match 320x300. Called from the UrlCard renderer,
+  // like loadFileCardSize.
+  function loadLinkCardSize(image: string): void {
+    const cached = linkImageSize.get(image);
+    if (cached) {
+      healLinkCardsWithImage(image, cached.w, cached.h);
+      return;
+    }
+    if (linkImageLoading.has(image)) return;
+    linkImageLoading.add(image);
+    const img = new Image();
+    img.onload = () => {
+      linkImageLoading.delete(image);
+      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+        linkImageSize.set(image, { w: img.naturalWidth, h: img.naturalHeight });
+        healLinkCardsWithImage(image, img.naturalWidth, img.naturalHeight);
+      }
+    };
+    img.onerror = () => {
+      linkImageLoading.delete(image);
+      // An image that cannot load leaves the card alone.
+    };
+    img.src = image;
+  }
+  // Resize every UrlCard using this preview image that is
+  // still at the stale fixed size to the ratio of the image.
+  function healLinkCardsWithImage(image: string, imgW: number, imgH: number): void {
+    let changed = false;
+    for (const it of host.getBoard().items) {
+      if (!("UrlCard" in it.kind) || it.kind.UrlCard.image !== image) continue;
+      if (Math.abs(it.size.w - 320) > 2 || Math.abs(it.size.h - 300) > 2) continue;
+      const correctH = linkCardHeightForWidth(imgW, imgH, it.size.w);
+      if (it.size.h !== correctH) {
+        it.size.h = correctH;
+        changed = true;
+      }
+    }
+    if (changed) {
+      host.saveWithoutUndo();
+      host.requestRender();
+    }
+  }
   function toggleAudio(id: number, path: string): void {
     if (audioId === id && audioEl && !audioEl.paused) {
       audioEl.pause();
+      host.requestRender();
+      return;
+    }
+    if (audioId === id && audioEl) {
+      // Paused, possibly after a waveform seek: resume
+      // this same element instead of starting a new one
+      // from the top.
+      audioEl.play().catch((err) => {
+        audioId = null;
+        host.toast(`Could not play audio: ${String(err)}`);
+        host.requestRender();
+      });
       host.requestRender();
       return;
     }
@@ -311,6 +717,7 @@ export function createMedia(host: MediaContext): Media {
     audioId = id;
     audioEl.onloadedmetadata = () => {
       if (audioEl && isFinite(audioEl.duration)) audioDurations.set(path, audioEl.duration);
+      if (audioEl) applyPendingSeek(audioEl, id);
       updateAudioProgress();
     };
     audioEl.ontimeupdate = () => updateAudioProgress();
@@ -335,6 +742,10 @@ export function createMedia(host: MediaContext): Media {
     mediaDataUrls.clear();
     audioDurations.clear();
     audioFailed.clear();
+    audioPeaks.clear();
+    fileCardPreviewSize.clear();
+    fileCardPreviewLoading.clear();
+    pendingSeek = null;
     pdfSearchText.clear();
     pdfSearchIndexing.clear();
     pdfPages.clear();
@@ -369,7 +780,15 @@ export function createMedia(host: MediaContext): Media {
     indexPdfForSearch,
     loadPdfPage,
     renderPdfPage,
+    loadFileCardSize,
+    loadVideoCardSize,
+    probePdfSize,
+    loadPdfCardSize,
+    loadLinkCardSize,
     loadAudioDuration,
+    getAudioPeaks,
+    loadAudioPeaks,
+    seekAudioTo,
     updateAudioProgress,
     formatAudioTime,
     toggleAudio,

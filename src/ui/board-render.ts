@@ -276,6 +276,11 @@ export function render(): void {
     if (!card || !card.dataset.id) continue;
     if (!v.paused || (isFinite(v.currentTime) && v.currentTime > 0)) {
       videoState.set(Number(card.dataset.id), { t: v.currentTime, playing: !v.paused });
+      // Pause the old node now: it is about to be detached,
+      // and a detached video keeps playing out of sight, so
+      // the new node would double its sound. The state above
+      // is restored onto the new node below.
+      v.pause();
     }
   }
   S.worldEl.innerHTML = "";
@@ -487,12 +492,14 @@ function updateSelectionInner(): void {
     const isSel = selected.includes(Number(el.dataset.id));
     el.classList.toggle("selected", isSel);
     el.setAttribute("aria-selected", String(isSel));
-    // A selected image or video shows whole (contain), not
-    // cropped (cover): cardHtml sets this at render time,
-    // but a plain click only toggles the class here, without
-    // a full render — and a full render would restart a
-    // playing video — so update the fit here too.
-    for (const media of Array.from(el.querySelectorAll("img, video"))) {
+    // A selected image shows whole (contain), not cropped
+    // (cover): cardHtml sets this at render time, but a
+    // plain click only toggles the class here, without a
+    // full render — so update the fit here too. Only the
+    // images marked data-fit-switch change: a link preview
+    // stays cover, a video poster and a live video stay
+    // contain, so none of them is touched here.
+    for (const media of Array.from(el.querySelectorAll("img[data-fit-switch]"))) {
       (media as HTMLElement).style.objectFit = isSel ? "contain" : "cover";
     }
   }
