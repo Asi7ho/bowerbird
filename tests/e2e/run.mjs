@@ -1020,42 +1020,6 @@ async function main() {
       });
     });
 
-    await check("an audio card's title can be renamed", async () => {
-      // A voice-note audio card, written from outside: the
-      // live-follow watcher reloads it. It reuses the recorded
-      // file, so the card does not flip to "File missing".
-      const board = readBoard();
-      const id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
-      const audio = board.items.find((it) => "Audio" in it.kind);
-      board.items.push({ id, pos: { x: 850, y: 650 }, size: { w: 300, h: 136 }, group: null, kind: { Audio: { path: audio.kind.Audio.path } } });
-      board.next_id = id;
-      const tmp = `${boardPath}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify(board));
-      fs.renameSync(tmp, boardPath);
-      // Wait for the live-follow reload first: refitting the
-      // camera (F) saves the board, and a save before the
-      // reload would clobber this outside write.
-      await page.locator(`#cards .card[data-id="${id}"] .title`).first().waitFor({ timeout: READY_TIMEOUT_MS });
-      // Refit the camera: the board has grown since F, so the
-      // new card can sit below the visible area.
-      await page.keyboard.press("f");
-      // Double-clicking the name swaps it for an input.
-      const titleBox = await page.locator(`#cards .card[data-id="${id}"] .title`).first().boundingBox();
-      assert.ok(titleBox, "audio title on screen");
-      await doubleClick(page, titleBox.x + titleBox.width / 2, titleBox.y + titleBox.height / 2);
-      await page.locator(`#cards .card[data-id="${id}"] input.audio-rename`).waitFor({ timeout: READY_TIMEOUT_MS });
-      // Typing a new name and pressing Enter commits it: the
-      // card shows it, and it lands on disk.
-      await page.locator(`#cards .card[data-id="${id}"] input.audio-rename`).fill("Morning idea");
-      await page.keyboard.press("Enter");
-      await waitFor("renamed title shows on the card", async () => {
-        const t = await page.locator(`#cards .card[data-id="${id}"] .title`).first().textContent().catch(() => "");
-        return (t ?? "").includes("Morning idea");
-      });
-      const card = readBoard().items.find((it) => it.id === id);
-      assert.equal(card.kind.Audio.title, "Morning idea");
-    });
-
     await check("every card type's content is fully visible inside its card", async () => {
       // The video and PDF text were cut by the tag row, and the
       // same class of bug — content reaching into the bottom
@@ -1095,18 +1059,19 @@ async function main() {
       await page.keyboard.press("f");
       await new Promise((r) => setTimeout(r, 500));
       // The content selector per kind: the element whose text
-      // or image must not be cut. The title/sub are the text
-      // that was cut on video and PDF.
+      // or image must not be cut. The cards carry no title
+      // any more, so the content is the preview itself: the
+      // PDF page canvas, the audio seek bar, the video poster.
       const contentSel = {
         text: ".note-body",
         image: "img",
         swatch: ".swatch-pill",
         url: ".link-title",
-        pdf: ".title",
-        audio: ".title",
-        video: ".title",
+        pdf: "[data-pdf-canvas]",
+        audio: ".audio-seek",
+        video: ".video-thumb",
       };
-      const subSel = { url: ".link-desc", pdf: ".sub", audio: ".sub", video: ".sub" };
+      const subSel = { pdf: ".sub", audio: ".sub" };
       for (const [kind, cid] of Object.entries(ids)) {
         const m = await page.evaluate(([cid2, sel, sub]) => {
           const card = document.querySelector(`#cards .card[data-id="${cid2}"]`);
@@ -1170,7 +1135,6 @@ async function main() {
           video: !!card.querySelector("video"),
           thumb: !!card.querySelector(".video-thumb"),
           poster: !!card.querySelector(".video-thumb img"),
-          title: card.querySelector(".title")?.textContent ?? "",
         };
       }, String(id));
       // No <video> element at rest, just the play tile.
@@ -1179,11 +1143,10 @@ async function main() {
       assert.equal(atRest.video, false, "no video element before play");
       assert.equal(atRest.thumb, true, "play tile shown before play");
       // The backfill captures the poster frame and writes it
-      // to the board: the tile becomes the captured frame,
-      // and the card shows the poster with its title.
+      // to the board: the tile becomes the captured frame.
       await waitFor("poster frame appears on the video card", async () => (await state())?.poster, 30000);
       const afterPoster = await state();
-      assert.ok(afterPoster.title.includes("welcome-video"), "title shows on the video card");
+      assert.ok(afterPoster.poster, "poster shows on the video card");
       const filled = readBoard().items.find((it) => it.id === id);
       assert.ok(filled.kind.Video.poster, "poster path saved on the card");
       assert.ok(typeof filled.kind.Video.duration === "number" && filled.kind.Video.duration > 0, "duration saved on the card");
