@@ -2,6 +2,7 @@
 
 import type { Board, Item } from "./model";
 import { estimateTextHeight } from "./model";
+import { fileCardSize } from "./live-import";
 
 export function welcomeBoard(boardDir: string, pdfSize: number, videoSize: number, modelSize: number, psdSize: number, aiSize: number): Board {
   const b: Board = {
@@ -85,10 +86,12 @@ export function welcomeBoard(boardDir: string, pdfSize: number, videoSize: numbe
   add({ id: next(), pos: { x: 1535.58, y: 140.02 }, size: { w: 17.74, h: 9.73 }, group: null, rotation: 6, kind: {"Shape":{"shape":"rect","fill":"#ff6b35"}} });
   add({ id: next(), pos: { x: 1468, y: 214 }, size: { w: 2, h: 12 }, group: null, kind: {"Stroke":{"points":[{"x":1470,"y":214},{"x":1468,"y":226}],"color":"#1a1a1a","width":3,"marker":false}} });
   add({ id: next(), pos: { x: 1484, y: 214 }, size: { w: 2, h: 12 }, group: null, kind: {"Stroke":{"points":[{"x":1484,"y":214},{"x":1486,"y":226}],"color":"#1a1a1a","width":3,"marker":false}} });
-  // AI: dropped from the sample file — one FileCard.
-  add({ id: next(), pos: { x: 1700, y: 110 }, size: { w: 360, h: 294 }, group: null, kind: { FileCard: { path: `${boardDir}/welcome-heron.ai`, size_bytes: aiSize, format: "ai", preview: `${boardDir}/welcome-heron-preview.png` } } });
-  // PSD: dropped from the sample file — one FileCard.
-  add({ id: next(), pos: { x: 1240, y: 360 }, size: { w: 360, h: 294 }, group: null, kind: { FileCard: { path: `${boardDir}/welcome-garden.psd`, size_bytes: psdSize, format: "psd", preview: `${boardDir}/welcome-garden-preview.png` } } });
+  // AI: dropped from the sample file — one FileCard. The
+  // preview is 600x400 (3:2), so the card is 360x248.
+  add({ id: next(), pos: { x: 1700, y: 110 }, size: fileCardSize(600, 400), group: null, kind: { FileCard: { path: `${boardDir}/welcome-heron.ai`, size_bytes: aiSize, format: "ai", preview: `${boardDir}/welcome-heron-preview.png` } } });
+  // PSD: dropped from the sample file — one FileCard. The
+  // preview is 300x200 (3:2), so the card is 360x248.
+  add({ id: next(), pos: { x: 1240, y: 360 }, size: fileCardSize(300, 200), group: null, kind: { FileCard: { path: `${boardDir}/welcome-garden.psd`, size_bytes: psdSize, format: "psd", preview: `${boardDir}/welcome-garden-preview.png` } } });
   // Cube: dropped from the sample file — the model itself.
   add({ id: next(), pos: { x: 1690, y: 445 }, size: { w: 360, h: 300 }, group: null, kind: { Model3D: { path: `${boardDir}/welcome-cube.glb`, size_bytes: modelSize } } });
   b.next_group = 2;
