@@ -1,6 +1,7 @@
 // core-settings: the Settings window as a first-party plugin.
 
 import type { PluginContext, PluginManifest } from "../plugins/host";
+import { SHORTCUT_ACTIONS, allOverrides, binding, bindingFromEvent, displayBinding, reset, set, type ShortcutId } from "./shortcuts";
 
 export const manifest: PluginManifest = {
   apiVersion: "2",
@@ -26,48 +27,31 @@ function feedbackMailto(message: string, buildId: string, platform: string): str
   return `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
-const SHORTCUTS: Array<[string, string]> = [
-  ["V", "Select tool"],
-  ["L", "Lasso selection"],
-  ["P", "Pen tool"],
-  ["X", "Eraser tool"],
-  ["A", "Arrow (connector) tool"],
-  ["R", "Rectangle tool"],
-  ["E", "Ellipse tool"],
-  ["Delete / Backspace", "Delete the selection"],
-  ["Ctrl / Cmd + Z", "Undo"],
-  ["Ctrl / Cmd + Shift + Z", "Redo"],
-  ["Ctrl / Cmd + Y", "Redo"],
-  ["Ctrl / Cmd + G", "Group the selection"],
-  ["Ctrl / Cmd + U", "Ungroup the selection"],
-  ["[", "Rotate the selection −15°"],
-  ["]", "Rotate the selection +15°"],
-  ["+ / =", "Zoom in"],
-  ["−", "Zoom out"],
-  ["0", "Reset the view"],
-  ["F", "Zoom to fit"],
-  ["Ctrl / Cmd + scroll", "Zoom at the cursor"],
-  ["Scroll", "Pan the canvas"],
-  ["Space + drag", "Pan the canvas"],
-  ["Ctrl / Cmd + ,", "Open settings"],
+// Fixed keys: not rebindable — focus and navigation (Escape,
+// Tab, Space, arrows) and the search box's own keys.
+const FIXED_SHORTCUTS: Array<[string, string]> = [
   ["Esc", "Close settings, commit a note, or clear the selection"],
   ["Tab", "Go to the next element"],
   ["Shift + Tab", "Go to the previous element"],
-  ["Enter", "New note, edit the selected note, or rename the selected group"],
+  ["Space", "Hold Space and drag to pan the canvas"],
   ["Arrow keys", "Move the selection (Shift: 10 px)"],
-  ["Ctrl / Cmd + B", "Show or hide plugin panels"],
-  ["Ctrl / Cmd + T", "Focus the toolbar"],
-  ["Ctrl / Cmd + F", "Search the board"],
   ["Enter in search", "Jump to the next match"],
   ["Shift + Enter in search", "Jump to the previous match"],
   ["Arrow down / Ctrl + J in search", "Move to the next match"],
   ["Arrow up / Ctrl + K in search", "Move to the previous match"],
   ["Esc in search", "Clear the search"],
-  ["Ctrl / Cmd + K", "Open the command palette"],
+];
+
+// Mouse and scroll gestures: not keys, so not rebindable.
+// (L and E are gone: V and R cover them by remembering.
+// The "Double-click a link card" row duplicated the Click
+// row, so only the Click row is kept.)
+const GESTURES: Array<[string, string]> = [
+  ["Ctrl / Cmd + scroll", "Zoom at the cursor"],
+  ["Scroll", "Pan the canvas"],
   ["Double-click empty space", "New note"],
   ["Double-click a note", "Edit it in place"],
   ["Click a link card", "Open it in your browser"],
-  ["Double-click a link card", "Open it in your browser"],
   ["Double-click a PDF or picture", "Open it outside Bowerbird"],
   ["Click a play tile", "Play audio / video"],
   ["Drag a card corner", "Resize the card (nwse cursor on hover)"],
@@ -76,6 +60,13 @@ const SHORTCUTS: Array<[string, string]> = [
   ["Drag on empty space", "Marquee-select"],
   ["Ctrl / Cmd + V", "Paste a link or an image as a card"],
 ];
+
+// The action being rebound, if a key button is waiting for
+// the next key press. Null when not capturing.
+let capturingId: ShortcutId | null = null;
+// The hardware acceleration value when the sheet opened, so
+// the Restart button only shows when it actually changed.
+let hardwareAccelAtOpen = true;
 
 let api: PluginContext | null = null;
 let backdrop: HTMLDivElement | null = null;
@@ -92,6 +83,7 @@ function setSettingsTab(tab: string): void {
   }
   const sections: Record<string, string> = {
     general: "settings-section-general",
+    shortcuts: "settings-section-shortcuts",
     plugins: "settings-section-plugins",
     "plugin-settings": "settings-section-plugin-settings",
   };
@@ -103,13 +95,79 @@ function setSettingsTab(tab: string): void {
   if (content) content.scrollTop = 0;
 }
 
-function renderShortcutsTable(): void {
+// The Shortcuts tab: each rebindable action is a row with
+// its label, a key button showing the current binding, and a
+// Reset button for that action only. Clicking the key button
+// waits for the next key press (captured by the sheet's own
+// keydown listener); Escape cancels. A duplicate binding is
+// allowed — the board runs the first match in its key order.
+function renderShortcutsTab(): void {
   if (!api) return;
-  const table = el<HTMLTableElement>("shortcuts-table");
+  const container = el<HTMLDivElement>("shortcuts-edit-list");
+  if (!container) return;
+  container.innerHTML = "";
+  for (const action of SHORTCUT_ACTIONS) {
+    const row = document.createElement("div");
+    row.className = "shortcut-row";
+    const label = document.createElement("span");
+    label.className = "shortcut-label";
+    label.textContent = action.label;
+    const keyBtn = document.createElement("button");
+    keyBtn.className = "shortcut-key";
+    keyBtn.type = "button";
+    const isCapturing = capturingId === action.id;
+    keyBtn.textContent = isCapturing ? "Press a key…" : displayBinding(binding(action.id));
+    if (isCapturing) keyBtn.classList.add("capturing");
+    keyBtn.addEventListener("click", () => {
+      capturingId = capturingId === action.id ? null : action.id;
+      renderShortcutsTab();
+      if (capturingId === action.id) keyBtn.focus();
+    });
+    const resetBtn = document.createElement("button");
+    resetBtn.className = "shortcut-reset";
+    resetBtn.type = "button";
+    resetBtn.textContent = "Reset";
+    resetBtn.addEventListener("click", async () => {
+      reset(action.id);
+      await api!.app.setShortcuts(allOverrides());
+      renderShortcutsTab();
+    });
+    row.append(label, keyBtn, resetBtn);
+    container.appendChild(row);
+  }
+  renderFixedShortcutsTable();
+}
+
+// Fixed keys, gestures and plugin shortcuts, read-only,
+// below the editable rows.
+function renderFixedShortcutsTable(): void {
+  if (!api) return;
+  const table = el<HTMLTableElement>("shortcuts-fixed-table");
   if (!table) return;
-  const allShortcuts: Array<[string, string]> = [...SHORTCUTS];
-  for (const s of api.ui.listShortcuts()) allShortcuts.push([s.key.toUpperCase(), `${s.title} (${s.pluginName})`]);
-  table.innerHTML = allShortcuts.map(([k, v]) => `<tr><td><kbd>${api!.text.escapeHtml(k)}</kbd></td><td>${api!.text.escapeHtml(v)}</td></tr>`).join("");
+  const rows: Array<[string, string]> = [...FIXED_SHORTCUTS, ...GESTURES];
+  for (const s of api.ui.listShortcuts()) rows.push([s.key.toUpperCase(), `${s.title} (${s.pluginName})`]);
+  table.innerHTML = rows.map(([k, v]) => `<tr><td><kbd>${api!.text.escapeHtml(k)}</kbd></td><td>${api!.text.escapeHtml(v)}</td></tr>`).join("");
+}
+
+// The Performance section in the General tab: the hardware
+// acceleration toggle. Changing it saves immediately; the
+// Restart button only shows when the value differs from the
+// one the sheet opened with. Closing without restarting
+// still saves it — it applies on the next launch.
+async function renderHardwareAccel(): Promise<void> {
+  if (!api) return;
+  const btn = el<HTMLButtonElement>("btn-hardware-accel");
+  const restartBtn = el<HTMLButtonElement>("btn-restart");
+  if (!btn) return;
+  let on = true;
+  try {
+    const s = await api.app.getAppSettings();
+    on = s.hardwareAcceleration ?? true;
+  } catch { on = true; }
+  hardwareAccelAtOpen = on;
+  btn.textContent = on ? "On" : "Off";
+  btn.dataset.on = on ? "true" : "false";
+  if (restartBtn) restartBtn.style.display = "none";
 }
 
 // One option row: a set of preview buttons in a
@@ -267,7 +325,7 @@ function countPluginCards(pluginId: string): { count: number; frames: number } {
 // shortcuts, plugin sections, the plugin list, and the
 // board itself.
 function refreshPluginUI(): void {
-  renderShortcutsTable();
+  renderShortcutsTab();
   renderPluginSettingsSections();
   renderPluginSettings();
   api!.board.render();
@@ -413,14 +471,15 @@ function setSettings(open: boolean): void {
   backdrop.classList.toggle("open", open);
   // A disable confirmation left open is dropped when the
   // sheet closes, so it is not still armed next time.
-  if (!open) confirmingDisable = null;
+  if (!open) { confirmingDisable = null; capturingId = null; }
   if (open) {
     const confirmEl = el<HTMLDivElement>("reset-confirm");
     const resetBtn = el<HTMLButtonElement>("btn-reset");
     if (confirmEl) confirmEl.style.display = "none";
     if (resetBtn) resetBtn.style.display = "";
     renderMeta();
-    renderShortcutsTable();
+    renderShortcutsTab();
+    void renderHardwareAccel();
     renderBgOpts();
     renderGridOpts();
     void renderBackups();
@@ -453,16 +512,22 @@ export function activate(context: PluginContext): void {
       <div id="settings-layout">
         <div id="settings-tabs">
           <button data-settings-tab="general" class="active">General</button>
+          <button data-settings-tab="shortcuts">Shortcuts</button>
           <button data-settings-tab="plugins">Plugins</button>
           <button data-settings-tab="plugin-settings">Plugin settings</button>
         </div>
         <div id="settings-content">
           <div id="settings-section-general" class="settings-section">
-            <h3>Keyboard shortcuts</h3>
-            <table id="shortcuts-table"></table>
             <h3>Canvas</h3>
             <div class="canvas-opt" id="bg-opts"></div>
             <div class="canvas-opt" id="grid-opts"></div>
+            <h3>Performance</h3>
+            <div class="perf-row">
+              <span>Hardware acceleration</span>
+              <button id="btn-hardware-accel" type="button">On</button>
+            </div>
+            <button id="btn-restart" type="button" style="display:none">Restart to apply</button>
+            <p class="meta">Takes effect on the next launch.</p>
             <h3>Data</h3>
             <p class="meta" id="board-dir-meta"></p>
             <p class="meta" id="build-meta"></p>
@@ -479,6 +544,12 @@ export function activate(context: PluginContext): void {
             <p class="meta">Opens in your email app, addressed to <span class="email">wren7762@gmail.com</span>.</p>
             <textarea id="feedback-text" rows="4" placeholder="What happened, or what would you like?"></textarea>
             <button id="btn-feedback">Send feedback</button>
+          </div>
+          <div id="settings-section-shortcuts" class="settings-section" style="display:none">
+            <h3>Keyboard shortcuts</h3>
+            <div id="shortcuts-edit-list"></div>
+            <h3>Fixed keys and gestures</h3>
+            <table id="shortcuts-fixed-table"></table>
           </div>
           <div id="settings-section-plugins" class="settings-section" style="display:none">
             <div id="plugin-list"></div>
@@ -514,6 +585,24 @@ export function activate(context: PluginContext): void {
   // back to the first (and back again with Shift+Tab).
   const sheet = backdrop;
   backdrop.addEventListener("keydown", (e) => {
+    // Capture mode: the next key becomes the binding for the
+    // action being rebound. Escape cancels; a pure modifier
+    // press is ignored and keeps waiting. The event is stopped
+    // so the board handler behind the sheet does not close
+    // Settings on Escape or fire a board shortcut.
+    if (capturingId) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === "Escape") { capturingId = null; renderShortcutsTab(); return; }
+      const b = bindingFromEvent(e);
+      if (!b) return;
+      const id = capturingId;
+      capturingId = null;
+      set(id, b);
+      void api!.app.setShortcuts(allOverrides()).then(() => renderShortcutsTab());
+      renderShortcutsTab();
+      return;
+    }
     if (e.key !== "Tab" || !settingsOpen) return;
     const focusable = Array.from(sheet.querySelectorAll<HTMLElement>("button, input, textarea, select, [tabindex]:not([tabindex='-1'])")).filter((el) => !el.hasAttribute("disabled") && el.offsetParent !== null);
     if (focusable.length === 0) return;
@@ -530,6 +619,24 @@ export function activate(context: PluginContext): void {
   for (const btn of Array.from(backdrop.querySelectorAll("[data-settings-tab]"))) {
     (btn as HTMLElement).addEventListener("click", () => setSettingsTab((btn as HTMLElement).dataset.settingsTab ?? "general"));
   }
+  // Hardware acceleration: the toggle saves immediately. The
+  // Restart button only shows when the value differs from the
+  // one the sheet opened with; closing without restarting
+  // still saves it, and it applies on the next launch.
+  el("btn-hardware-accel")?.addEventListener("click", async () => {
+    if (!api) return;
+    const btn = el<HTMLButtonElement>("btn-hardware-accel");
+    const restartBtn = el<HTMLButtonElement>("btn-restart");
+    if (!btn) return;
+    const next = btn.dataset.on !== "true";
+    const saved = await api.app.setHardwareAcceleration(next);
+    btn.textContent = saved ? "On" : "Off";
+    btn.dataset.on = saved ? "true" : "false";
+    if (restartBtn) restartBtn.style.display = saved !== hardwareAccelAtOpen ? "" : "none";
+  });
+  el("btn-restart")?.addEventListener("click", async () => {
+    await api!.app.restart();
+  });
   // Export data: download the whole install as a ZIP — every
   // board, the user-installed plugins with their full folders,
   // and the app state — so a fresh install comes back whole.
