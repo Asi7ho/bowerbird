@@ -4,7 +4,7 @@
 import { api } from "./api";
 import { isPdfCompatible, renderAiPreview } from "./ai-import";
 import type { ImportedItem } from "./import-types";
-import { base64ToBytes, fileCardSize, findSourceGroup, groupBBox, translateImportedToAnchor } from "./live-import";
+import { base64ToBytes, fileCardSize, findSourceGroup, groupBBox, linkCardSize, pdfCardSize, translateImportedToAnchor, videoCardSize } from "./live-import";
 import { MODEL3D_EXTENSIONS } from "./model3d";
 import { boardGet, domainOf, estimateTextHeight, normaliseHex, type Board, type Item, type Kind, type Pt, type Size } from "./model";
 import { ensureVideoPoster } from "./poster";
@@ -22,6 +22,10 @@ export interface DropsContext {
   toast(msg: string): void;
   syncWatchedSources(): void;
   clearSelection(ids: number[]): void;
+  // The first page's size in points, for sizing a PDF card
+  // to its page at drop time. Null when the file cannot be
+  // read, so the caller falls back to the old default.
+  probePdfSize(path: string): Promise<{ w: number; h: number } | null>;
 }
 
 export interface Drops {
@@ -48,10 +52,11 @@ export function createDrops(ctx: DropsContext): Drops {
     // resize it smaller, where it falls back to a row.
     pdf: { size: { w: 260, h: 360 }, needsSize: true, kind: (stored, size) => ({ PdfCard: { path: stored, size_bytes: size } }) },
     audio: { size: { w: 300, h: 104 }, needsSize: false, kind: (stored) => ({ Audio: { path: stored } }) },
-    video: { size: { w: 360, h: 264 }, needsSize: true, kind: (stored, size) => ({ Video: { source: stored, remote: false, size_bytes: size } }) },
-    // Wide enough for the viewport plus the title row
-    // below it (the canvas takes the height above it).
-    model3d: { size: { w: 360, h: 300 }, needsSize: true, kind: (stored, size) => ({ Model3D: { path: stored, size_bytes: size } }) },
+    video: { size: { w: 360, h: 203 }, needsSize: true, kind: (stored, size) => ({ Video: { source: stored, remote: false, size_bytes: size } }) },
+    // A 3D model is framed from its bounding sphere, so the
+    // viewport is square: no axis is favoured, and the model
+    // fills the card whichever way it is turned.
+    model3d: { size: { w: 360, h: 360 }, needsSize: true, kind: (stored, size) => ({ Model3D: { path: stored, size_bytes: size } }) },
   };
 
   function dropKindForExt(ext: string): string {
@@ -104,7 +109,7 @@ export function createDrops(ctx: DropsContext): Drops {
     })();
     if (isVideo) {
       const id = ctx.allocId();
-      ctx.getBoard().items.push({ id, pos: at, size: { w: 360, h: 264 }, group: null, kind: { Video: { source: url, remote: true, size_bytes: 0 } } });
+      ctx.getBoard().items.push({ id, pos: at, size: { w: 360, h: 203 }, group: null, kind: { Video: { source: url, remote: true, size_bytes: 0 } } });
       ctx.save(); ctx.requestRender();
       return;
     }
@@ -122,8 +127,14 @@ export function createDrops(ctx: DropsContext): Drops {
         it.kind.UrlCard.description = preview.description;
         it.kind.UrlCard.image = preview.image;
         it.kind.UrlCard.icon = preview.icon;
-        // A preview image makes the card taller: banner on top, text below.
-        if (preview.image) it.size = { w: 320, h: 300 };
+        // A preview image sizes the card to the image: the
+        // image fills the card edge to edge, so the card is
+        // the image's ratio. The probe reads the image's own
+        // dimensions; when it cannot, the old fixed size.
+        if (preview.image) {
+          const dims = await probeLinkImageSize(preview.image);
+          it.size = dims ? linkCardSize(dims.w, dims.h) : { w: 320, h: 300 };
+        }
         // A preview fill is background work, not a user change: it
         // must not become its own undo step (see saveWithoutUndo).
         ctx.saveWithoutUndo(); ctx.requestRender();
@@ -136,6 +147,56 @@ export function createDrops(ctx: DropsContext): Drops {
   // change: it saves without an undo step, like a link
   // preview fill. A video whose poster cannot be captured
   // keeps the dark tile.
+  // The ratio of a local video file, from its metadata alone:
+  // a <video> with preload="metadata" reads videoWidth and
+  // videoHeight without decoding frames. Null when the file
+  // cannot be read (or the metadata takes too long), so the
+  // caller falls back to the 16:9 default. Mirrors the image
+  // card's natural-size probe.
+  async function probeVideoSize(stored: string): Promise<Size | null> {
+    const dims = await new Promise<{ w: number; h: number } | null>((resolve) => {
+      const v = document.createElement("video");
+      v.preload = "metadata";
+      const done = (r: { w: number; h: number } | null) => { resolve(r); };
+      const timer = setTimeout(() => done(null), 5000);
+      v.onloadedmetadata = () => {
+        clearTimeout(timer);
+        done(v.videoWidth > 0 && v.videoHeight > 0 ? { w: v.videoWidth, h: v.videoHeight } : null);
+      };
+      v.onerror = () => { clearTimeout(timer); done(null); };
+      v.src = api.fileUrl(stored);
+    });
+    if (!dims) return null;
+    return videoCardSize(dims.w, dims.h);
+  }
+
+  // The ratio of a local PDF file, from its first page alone.
+  // Null when the file cannot be read, so the caller falls
+  // back to the old default. Mirrors probeVideoSize.
+  async function probePdfSize(stored: string): Promise<Size | null> {
+    const dims = await ctx.probePdfSize(stored);
+    if (!dims) return null;
+    return pdfCardSize(dims.w, dims.h);
+  }
+
+  // A link preview image's own dimensions, read from the
+  // remote image itself. Reading its natural size needs no
+  // CORS. Null when the image cannot load (or takes too
+  // long), so the caller falls back to the old fixed size.
+  // Mirrors probeVideoSize.
+  async function probeLinkImageSize(url: string): Promise<{ w: number; h: number } | null> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      const timer = setTimeout(() => resolve(null), 5000);
+      img.onload = () => {
+        clearTimeout(timer);
+        resolve(img.naturalWidth > 0 && img.naturalHeight > 0 ? { w: img.naturalWidth, h: img.naturalHeight } : null);
+      };
+      img.onerror = () => { clearTimeout(timer); resolve(null); };
+      img.src = url;
+    });
+  }
+
   async function fillVideoPoster(board: Board, id: number, source: string): Promise<void> {
     const filled = await ensureVideoPoster(source);
     if (!filled) return;
@@ -354,7 +415,16 @@ export function createDrops(ctx: DropsContext): Drops {
           const size = desc.needsSize ? await api.fileSize(stored).catch(() => 0) : 0;
           if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
           const id = ctx.allocId();
-          ctx.getBoard().items.push({ id, pos: at, size: desc.size, group: null, kind: desc.kind(stored, size) });
+          // A video lands at the ratio of the video itself, not
+          // the 16:9 default: probe its dimensions first, the
+          // way an image card probes its natural size. A probe
+          // that fails (or a board switch mid-probe) falls back
+          // to the default, and contain keeps the ratio anyway.
+          const cardSize = kind === "video" ? await probeVideoSize(stored) ?? desc.size
+            : kind === "pdf" ? await probePdfSize(stored) ?? desc.size
+            : desc.size;
+          if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
+          ctx.getBoard().items.push({ id, pos: at, size: cardSize, group: null, kind: desc.kind(stored, size) });
           added++;
           if (kind === "video") {
             // The poster is background work, not the drop

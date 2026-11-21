@@ -952,7 +952,7 @@ async function main() {
       // The card lands after transcription; the model ships
       // with the app, so the wait is for inference, not a
       // download.
-      await page.locator("text=voice-note").first().waitFor({ timeout: 180000 });
+      await page.locator("#cards .card .audio-play").first().waitFor({ timeout: 180000 });
       const audios = readBoard().items.filter((it) => "Audio" in it.kind);
       assert.equal(audios.length, 1);
       assert.ok(fs.existsSync(audios[0].kind.Audio.path));
@@ -965,7 +965,7 @@ async function main() {
       assert.ok(transcript.length > 0, "expected a non-empty transcript");
       assert.ok(/hello|world|test|voice|transcription/i.test(transcript), `transcript did not contain the spoken words: ${transcript}`);
       // The card is centred on the double-click point.
-      const audioBox = await page.locator("#cards .card", { hasText: "voice-note" }).first().boundingBox();
+      const audioBox = await page.locator(`#cards .card[data-id="${audios[0].id}"]`).first().boundingBox();
       assert.ok(audioBox);
       assert.ok(Math.abs(audioBox.x + audioBox.width / 2 - cx) < 5);
       assert.ok(Math.abs(audioBox.y + audioBox.height / 2 - cy) < 5);
@@ -1025,42 +1025,6 @@ async function main() {
       });
     });
 
-    await check("an audio card's title can be renamed", async () => {
-      // A voice-note audio card, written from outside: the
-      // live-follow watcher reloads it. It reuses the recorded
-      // file, so the card does not flip to "File missing".
-      const board = readBoard();
-      const id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
-      const audio = board.items.find((it) => "Audio" in it.kind);
-      board.items.push({ id, pos: { x: 850, y: 650 }, size: { w: 300, h: 136 }, group: null, kind: { Audio: { path: audio.kind.Audio.path } } });
-      board.next_id = id;
-      const tmp = `${boardPath}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify(board));
-      fs.renameSync(tmp, boardPath);
-      // Wait for the live-follow reload first: refitting the
-      // camera (F) saves the board, and a save before the
-      // reload would clobber this outside write.
-      await page.locator(`#cards .card[data-id="${id}"] .title`).first().waitFor({ timeout: READY_TIMEOUT_MS });
-      // Refit the camera: the board has grown since F, so the
-      // new card can sit below the visible area.
-      await page.keyboard.press("f");
-      // Double-clicking the name swaps it for an input.
-      const titleBox = await page.locator(`#cards .card[data-id="${id}"] .title`).first().boundingBox();
-      assert.ok(titleBox, "audio title on screen");
-      await doubleClick(page, titleBox.x + titleBox.width / 2, titleBox.y + titleBox.height / 2);
-      await page.locator(`#cards .card[data-id="${id}"] input.audio-rename`).waitFor({ timeout: READY_TIMEOUT_MS });
-      // Typing a new name and pressing Enter commits it: the
-      // card shows it, and it lands on disk.
-      await page.locator(`#cards .card[data-id="${id}"] input.audio-rename`).fill("Morning idea");
-      await page.keyboard.press("Enter");
-      await waitFor("renamed title shows on the card", async () => {
-        const t = await page.locator(`#cards .card[data-id="${id}"] .title`).first().textContent().catch(() => "");
-        return (t ?? "").includes("Morning idea");
-      });
-      const card = readBoard().items.find((it) => it.id === id);
-      assert.equal(card.kind.Audio.title, "Morning idea");
-    });
-
     await check("every card type's content is fully visible inside its card", async () => {
       // The video and PDF text were cut by the tag row, and the
       // same class of bug — content reaching into the bottom
@@ -1100,18 +1064,19 @@ async function main() {
       await page.keyboard.press("f");
       await new Promise((r) => setTimeout(r, 500));
       // The content selector per kind: the element whose text
-      // or image must not be cut. The title/sub are the text
-      // that was cut on video and PDF.
+      // or image must not be cut. The cards carry no title
+      // any more, so the content is the preview itself: the
+      // PDF page canvas, the audio waveform, the video poster.
       const contentSel = {
         text: ".note-body",
         image: "img",
         swatch: ".swatch-pill",
         url: ".link-title",
-        pdf: ".title",
-        audio: ".title",
-        video: ".title",
+        pdf: "[data-pdf-canvas]",
+        audio: ".audio-wave",
+        video: ".video-thumb",
       };
-      const subSel = { url: ".link-desc", pdf: ".sub", audio: ".sub", video: ".sub" };
+      const subSel = { pdf: ".sub" };
       for (const [kind, cid] of Object.entries(ids)) {
         const m = await page.evaluate(([cid2, sel, sub]) => {
           const card = document.querySelector(`#cards .card[data-id="${cid2}"]`);
@@ -1140,9 +1105,10 @@ async function main() {
         assert.ok(m.content.left >= m.card.left - tol, `${kind} content left inside the card`);
         assert.ok(m.content.right <= m.card.right + tol, `${kind} content right inside the card`);
         // An image fills its card by design (a photo fills
-        // its frame), so it has no bottom clearance to check;
-        // every other type's content must clear the bottom edge.
-        if (kind !== "image") {
+        // its frame), and so does a video poster, so neither
+        // has bottom clearance to check; every other type's
+        // content must clear the bottom edge.
+        if (kind !== "image" && kind !== "video") {
           assert.ok(m.content.bottom <= m.card.bottom - 4, `${kind} content clears the card's bottom edge`);
         }
         if (m.sub) {
@@ -1150,6 +1116,180 @@ async function main() {
           assert.ok(m.sub.top >= m.card.top - tol, `${kind} sub text top inside the card`);
         }
       }
+    });
+
+    await check("resizing a card keeps its aspect ratio", async () => {
+      // A resize drag scales the card by one factor: dragging
+      // the handle mostly sideways must not stretch it. Add a
+      // fresh image card at a known ratio, select it, drag its
+      // resize handle, and read the new size off disk. The card
+      // sits at (500, 650): clear of the layout grid, the
+      // transcript card at (100, 650), the mic check's
+      // double-click point (200, 625), and the GLB cube at
+      // (100, 850) — even after it grows from the drag.
+      const board = readBoard();
+      let id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
+      const cid = id;
+      board.items.push({ id, group: null, pos: { x: 500, y: 650 }, size: { w: 360, h: 203 }, kind: { Image: { path: path.join(tmp, "assets", "welcome-bower.jpg") } } });
+      board.next_id = id + 1;
+      const tmp2 = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp2, JSON.stringify(board));
+      fs.renameSync(tmp2, boardPath);
+      await page.locator(`#cards .card[data-id="${cid}"]`).first().waitFor({ timeout: READY_TIMEOUT_MS });
+      await page.keyboard.press("f");
+      await new Promise((r) => setTimeout(r, 500));
+      const rect = await page.evaluate((cid2) => {
+        const card = document.querySelector(`#cards .card[data-id="${cid2}"]`);
+        if (!card) return null;
+        const r = card.getBoundingClientRect();
+        return { cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+      }, String(cid));
+      assert.ok(rect, "resize test card on screen");
+      await page.mouse.click(rect.cx, rect.cy);
+      const handle = await waitFor("resize handle on the test card", async () => {
+        const h = await page.evaluate(() => {
+          const rh = document.querySelector("#resize-handle");
+          if (!rh || getComputedStyle(rh).display === "none") return null;
+          const r = rh.getBoundingClientRect();
+          return { cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+        });
+        return h;
+      });
+      // Drag mostly sideways: a freeform resize would widen
+      // the card far more than it grows tall.
+      await page.mouse.move(handle.cx, handle.cy);
+      await page.mouse.down();
+      await page.mouse.move(handle.cx + 120, handle.cy + 15, { steps: 12 });
+      await page.mouse.up();
+      const after = await waitFor("resized card on disk", () => {
+        const it = readBoard().items.find((x) => x.id === cid);
+        return it && (it.size.w !== 360 || it.size.h !== 203) ? it.size : null;
+      });
+      assert.ok(after.w > 360, "card grew wider");
+      const ratio = after.w / after.h;
+      assert.ok(Math.abs(ratio - 360 / 203) < 0.01, `card ratio ${ratio.toFixed(3)} kept 360/203`);
+      // Take the card back out: it is only here to prove the
+      // resize, and leaving it would stretch the board's
+      // bounds and move the fit (and the later mic and
+      // search checks) for every check after this one.
+      await page.keyboard.press("Delete");
+      await page.locator(`#cards .card[data-id="${cid}"]`).waitFor({ state: "detached", timeout: READY_TIMEOUT_MS });
+    });
+
+    await check("an audio card shows a real waveform and clicking it seeks", async () => {
+      // The grid's birdsong card: 15 seconds, real peaks,
+      // so the waveform must have 100 bars of varying
+      // height — never fake bars — and clicking the wave
+      // must move playback there.
+      const board = readBoard();
+      const audio = board.items.find((it) => "Audio" in it.kind && it.pos.x === 400 && it.pos.y === 320);
+      assert.ok(audio, "grid audio card on the board");
+      const id = audio.id;
+      await page.keyboard.press("f");
+      await new Promise((r) => setTimeout(r, 500));
+      const wave = page.locator(`#cards .card[data-id="${id}"] .audio-wave`).first();
+      await waitFor("waveform peaks load", async () => (await wave.locator("rect").count()) === 100);
+      const varied = await wave.evaluate((svg) => {
+        const hs = [...svg.querySelectorAll("rect")].map((r) => r.getAttribute("height"));
+        return new Set(hs).size > 1;
+      });
+      assert.ok(varied, "waveform bars vary in height (real peaks)");
+      // Play, then click the wave three quarters across.
+      await page.locator(`#cards .card[data-id="${id}"] .audio-play`).first().click();
+      await waitFor("audio play shows Pause", async () => {
+        const label = await page.evaluate((cid) => document.querySelector(`#cards .card[data-id="${cid}"] button.audio-play`)?.getAttribute("aria-label") ?? "", String(id));
+        return label === "Pause audio" ? true : null;
+      });
+      const box = await wave.boundingBox();
+      assert.ok(box, "waveform on screen");
+      await page.mouse.click(box.x + box.width * 0.75, box.y + box.height / 2);
+      // Pause at once, so the played fill freezes where
+      // the click put it instead of running on.
+      await page.locator(`#cards .card[data-id="${id}"] .audio-play`).first().click();
+      await waitFor("waveform shows the seek", async () => {
+        const n = await wave.locator("rect.played").count();
+        return n >= 68 && n <= 84 ? n : null;
+      });
+    });
+
+    await check("an audio card has a soft player bar below the wave on one uniform background, no big button", async () => {
+      // The big white circle over the wave is gone: a small
+      // play/pause, a timeline with the times, and the
+      // transcript toggle sit in a soft bar below the bars.
+      // One uniform background: the wave no longer sits on
+      // the grey system field, and the bar is only a
+      // barely-there tint — no grey/white split. The
+      // timeline seeks, like the wave. Reuses the grid's
+      // birdsong card, so no new card changes the board.
+      const board = readBoard();
+      const audio = board.items.find((it) => "Audio" in it.kind && it.pos.x === 400 && it.pos.y === 320);
+      assert.ok(audio, "grid audio card on the board");
+      const id = audio.id;
+      await page.keyboard.press("f");
+      await new Promise((r) => setTimeout(r, 500));
+      const layout = await waitFor("audio timeline shows the times", async () => {
+        const l = await page.evaluate((cid) => {
+          const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
+          if (!card) return null;
+          const waveEl = card.querySelector(".audio-wave-wrap");
+          const row = card.querySelector(".audio-controls");
+          const play = card.querySelector("button.audio-play");
+          const tl = card.querySelector(".audio-timeline");
+          if (!waveEl || !row || !play || !tl) return null;
+          const w = waveEl.getBoundingClientRect();
+          const r = row.getBoundingClientRect();
+          const p = play.getBoundingClientRect();
+          const waveBg = getComputedStyle(waveEl).backgroundColor;
+          const barBg = getComputedStyle(row).backgroundColor;
+          const barRadius = getComputedStyle(row).borderRadius;
+          const barBorder = getComputedStyle(row).borderTopWidth;
+          return {
+            rowBelowWave: r.top >= w.bottom - 1,
+            playSmall: p.width <= 28 && p.height <= 28,
+            playInRow: row.contains(play),
+            hasTimes: tl.querySelectorAll(".audio-time").length === 2,
+            hasTrack: !!tl.querySelector(".audio-track-fill"),
+            current: tl.querySelector(".audio-time-current")?.textContent ?? "",
+            total: tl.querySelector(".audio-time-total")?.textContent ?? "",
+            waveBg,
+            barBg,
+            barRadius,
+            barBorder,
+          };
+        }, String(id));
+        return l && /^\d+:\d{2}$/.test(l.total) ? l : null;
+      });
+      assert.ok(layout, "audio controls row found");
+      assert.ok(layout.rowBelowWave, "controls row sits below the wave");
+      assert.ok(layout.playSmall, "play button is small, not the big circle");
+      assert.ok(layout.playInRow, "play button lives in the controls row");
+      assert.ok(layout.hasTimes, "timeline shows current and total time");
+      assert.ok(layout.hasTrack, "timeline has a progress track");
+      assert.ok(/^\d+:\d{2}$/.test(layout.current), "current time shown");
+      // One uniform background: the wave no longer sits on
+      // the grey system field, and the bar is only a
+      // barely-there tint — no grey/white split.
+      assert.notEqual(layout.waveBg, "rgb(245, 245, 247)", "wave is not on the grey field");
+      assert.ok(layout.waveBg === "rgba(0, 0, 0, 0)" || layout.waveBg === "rgb(255, 255, 255)", "wave sits on the card's white");
+      assert.equal(layout.barBg, "rgba(0, 0, 0, 0.03)", "player bar is only a barely-there tint");
+      assert.equal(layout.barRadius, "10px", "player bar is rounded");
+      assert.equal(layout.barBorder, "1px", "player bar has a hairline border");
+      // The small play toggles playback.
+      await page.locator(`#cards .card[data-id="${id}"] .audio-play`).first().click();
+      await waitFor("small play shows Pause", async () => {
+        const label = await page.evaluate((cid) => document.querySelector(`#cards .card[data-id="${cid}"] button.audio-play`)?.getAttribute("aria-label") ?? "", String(id));
+        return label === "Pause audio" ? true : null;
+      });
+      // Clicking the timeline track three quarters across seeks there.
+      const track = page.locator(`#cards .card[data-id="${id}"] .audio-track`).first();
+      const tbox = await track.boundingBox();
+      assert.ok(tbox, "timeline track on screen");
+      await page.mouse.click(tbox.x + tbox.width * 0.75, tbox.y + tbox.height / 2);
+      await page.locator(`#cards .card[data-id="${id}"] .audio-play`).first().click();
+      await waitFor("timeline seek shows", async () => {
+        const n = await page.locator(`#cards .card[data-id="${id}"] .audio-wave`).first().locator("rect.played").count();
+        return n >= 68 && n <= 84 ? n : null;
+      });
     });
 
     await check("a video card shows a poster, not a video element, until played", async () => {
@@ -1175,7 +1315,6 @@ async function main() {
           video: !!card.querySelector("video"),
           thumb: !!card.querySelector(".video-thumb"),
           poster: !!card.querySelector(".video-thumb img"),
-          sub: card.querySelector(".sub")?.textContent ?? "",
         };
       }, String(id));
       // No <video> element at rest, just the play tile.
@@ -1184,11 +1323,10 @@ async function main() {
       assert.equal(atRest.video, false, "no video element before play");
       assert.equal(atRest.thumb, true, "play tile shown before play");
       // The backfill captures the poster frame and writes it
-      // to the board: the tile becomes the captured frame,
-      // and the duration appears in the sub-line.
+      // to the board: the tile becomes the captured frame.
       await waitFor("poster frame appears on the video card", async () => (await state())?.poster, 30000);
       const afterPoster = await state();
-      assert.ok(afterPoster.sub.includes("0:10"), "duration shows in the sub-line");
+      assert.ok(afterPoster.poster, "poster shows on the video card");
       const filled = readBoard().items.find((it) => it.id === id);
       assert.ok(filled.kind.Video.poster, "poster path saved on the card");
       assert.ok(typeof filled.kind.Video.duration === "number" && filled.kind.Video.duration > 0, "duration saved on the card");
@@ -1203,6 +1341,51 @@ async function main() {
         }, String(id));
         return s && !s.paused && s.t > 0 ? s : null;
       });
+    });
+
+    await check("dragging a playing video moves its card and keeps it playing", async () => {
+      // A press on the playing video is a drag, not a click:
+      // the card moves with the pointer, and the video keeps
+      // playing — the drag must not pause it or toggle its
+      // controls. The previous check left the video playing.
+      const board = readBoard();
+      const video = board.items.find((it) => "Video" in it.kind);
+      assert.ok(video, "video card on the board");
+      const id = video.id;
+      const zoom = board.camera.zoom || 1;
+      const before = await page.evaluate((cid) => {
+        const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
+        const v = card.querySelector("video");
+        const r = card.getBoundingClientRect();
+        return { x: r.x, y: r.y, cx: r.x + r.width / 2, cy: r.y + r.height / 2, t: v.currentTime, paused: v.paused, videos: document.querySelectorAll("video").length };
+      }, String(id));
+      assert.equal(before.paused, false, "video is playing before the drag");
+      await page.mouse.move(before.cx, before.cy);
+      await page.mouse.down();
+      await page.mouse.move(before.cx + 80, before.cy + 40, { steps: 12 });
+      await page.mouse.up();
+      await new Promise((r) => setTimeout(r, 500));
+      const after = await page.evaluate((cid) => {
+        const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
+        const v = card.querySelector("video");
+        const r = card.getBoundingClientRect();
+        return { x: r.x, y: r.y, t: v ? v.currentTime : -1, paused: v ? v.paused : true, hasVideo: !!v, videos: document.querySelectorAll("video").length };
+      }, String(id));
+      assert.ok(Math.abs(after.x - (before.x + 80)) <= 5 && Math.abs(after.y - (before.y + 40)) <= 5, "card moved with the drag");
+      assert.equal(after.hasVideo, true, "live video element still there after the drag");
+      assert.equal(after.paused, false, "video still playing after the drag");
+      assert.ok(after.t > before.t, "video time advanced across the drag");
+      assert.equal(after.videos, 1, "exactly one video element after the drag");
+      // The move saved: the board's stored position moved by
+      // the drag in board units (the screen delta over zoom).
+      const moved = readBoard().items.find((it) => it.id === id);
+      assert.ok(Math.abs(moved.pos.x - (video.pos.x + 80 / zoom)) <= 5 && Math.abs(moved.pos.y - (video.pos.y + 40 / zoom)) <= 5, "board position moved with the drag");
+      // The drag is undone, so the card is back where the
+      // checks after this one expect it.
+      await page.keyboard.press("Control+z");
+      await new Promise((r) => setTimeout(r, 500));
+      const back = readBoard().items.find((it) => it.id === id);
+      assert.ok(Math.abs(back.pos.x - video.pos.x) <= 5 && Math.abs(back.pos.y - video.pos.y) <= 5, "card back after undoing the drag");
     });
 
     await check("Enter toggles an audio card selected by Tab", async () => {
@@ -1238,8 +1421,8 @@ async function main() {
       }
       assert.ok(selected, "Tab selected the audio card");
       await page.keyboard.press("Enter");
-      await waitFor("audio tile shows Pause", async () => {
-        const label = await page.evaluate((cid) => document.querySelector(`#cards .card[data-id="${cid}"] button.audio-tile`)?.getAttribute("aria-label") ?? "", String(id));
+      await waitFor("audio play shows Pause", async () => {
+        const label = await page.evaluate((cid) => document.querySelector(`#cards .card[data-id="${cid}"] button.audio-play`)?.getAttribute("aria-label") ?? "", String(id));
         return label === "Pause audio" ? true : null;
       });
     });
@@ -1406,7 +1589,12 @@ async function main() {
       // change (no zoom). The drag above set lastInteract,
       // so the model holds still and cannot explain a
       // pixel change — or a lack of one.
-      const boxBefore = await canvas.boundingBox();
+      let boxBefore = null;
+      for (let i = 0; i < 20; i++) {
+        boxBefore = await canvas.boundingBox();
+        if (boxBefore) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
       assert.ok(boxBefore, "model canvas on screen before the wheel");
       await page.mouse.move(boxBefore.x + boxBefore.width / 2, boxBefore.y + boxBefore.height / 2);
       // A small wheel: enough to pan the board (the card
@@ -2272,6 +2460,11 @@ async function main() {
       assert.ok(fs.existsSync(card.kind.FileCard.preview), "preview png exists on disk");
       assert.ok(card.kind.FileCard.size_bytes > 0, "file card records the source size");
       assert.ok(card.group !== null, "file card is in its linked group");
+      // The preview carries a PSD pill in its top-right corner,
+      // so the artwork is never mistaken for a plain image.
+      await page.locator(`#cards .card[data-id="${card.id}"] .filecard-pill`).first().waitFor({ timeout: READY_TIMEOUT_MS });
+      const pill = await page.evaluate((cid) => document.querySelector(`#cards .card[data-id="${cid}"] .filecard-pill`)?.textContent ?? "", String(card.id));
+      assert.equal(pill, "PSD", "psd card shows a PSD pill on its preview");
     });
 
     await check("dropping a PDF-compatible .ai lands one FileCard, not a PdfCard", async () => {
@@ -2290,6 +2483,9 @@ async function main() {
       assert.ok(card.kind.FileCard.preview, "file card has a preview");
       assert.ok(fs.existsSync(card.kind.FileCard.preview), "preview png exists on disk");
       assert.ok(card.group !== null, "file card is in its linked group");
+      await page.locator(`#cards .card[data-id="${card.id}"] .filecard-pill`).first().waitFor({ timeout: READY_TIMEOUT_MS });
+      const pill = await page.evaluate((cid) => document.querySelector(`#cards .card[data-id="${cid}"] .filecard-pill`)?.textContent ?? "", String(card.id));
+      assert.equal(pill, "AI", "ai card shows an AI pill on its preview");
     });
 
     await check("dropping a vector .ai lands one FileCard with a preview of the artwork", async () => {
@@ -2322,6 +2518,10 @@ async function main() {
         return found.length === before + 1 ? found[found.length - 1] : null;
       });
       assert.ok(fs.existsSync(card.kind.PdfCard.path), "embedded pdf asset exists on disk");
+      // The sample PDF is a landscape 200x100 page, so the
+      // card lands at its ratio (260x174), not the old
+      // fixed 260x360.
+      assert.deepEqual(card.size, { w: 260, h: 174 }, "dropped PDF lands at its page ratio");
     });
 
 

@@ -717,6 +717,23 @@ export function resizeItem(board: Board, id: number, newW: number, newH: number)
   it.size = { w: newW, h: newH };
 }
 
+// Resize a card by a drag while keeping its aspect ratio:
+// the card scales by one factor, driven by whichever axis
+// the pointer moved further (relatively), so a diagonal
+// drag follows the pointer and a mostly-horizontal or
+// mostly-vertical drag still keeps the ratio. The factor
+// is floored so neither side goes below the 48px minimum
+// resizeItem enforces — clamping the sides separately
+// would break the ratio at the floor.
+export function proportionalResize(origW: number, origH: number, dx: number, dy: number): { w: number; h: number } {
+  if (!(origW > 0) || !(origH > 0)) return { w: Math.max(48, origW + dx), h: Math.max(48, origH + dy) };
+  const sx = (origW + dx) / origW;
+  const sy = (origH + dy) / origH;
+  let s = Math.abs(sx - 1) >= Math.abs(sy - 1) ? sx : sy;
+  s = Math.max(s, 48 / origW, 48 / origH);
+  return { w: origW * s, h: origH * s };
+}
+
 export function domainOf(url: string): string {
   const after = url.split("://")[1] ?? url;
   let host = after.split("/")[0].split("?")[0].split(":")[0];
