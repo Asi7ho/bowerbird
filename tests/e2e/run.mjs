@@ -947,7 +947,7 @@ async function main() {
       // The card lands after transcription; the model ships
       // with the app, so the wait is for inference, not a
       // download.
-      await page.locator("#cards .card .audio-tile").first().waitFor({ timeout: 180000 });
+      await page.locator("#cards .card .audio-play").first().waitFor({ timeout: 180000 });
       const audios = readBoard().items.filter((it) => "Audio" in it.kind);
       assert.equal(audios.length, 1);
       assert.ok(fs.existsSync(audios[0].kind.Audio.path));
@@ -1061,17 +1061,17 @@ async function main() {
       // The content selector per kind: the element whose text
       // or image must not be cut. The cards carry no title
       // any more, so the content is the preview itself: the
-      // PDF page canvas, the audio seek bar, the video poster.
+      // PDF page canvas, the audio waveform, the video poster.
       const contentSel = {
         text: ".note-body",
         image: "img",
         swatch: ".swatch-pill",
         url: ".link-title",
         pdf: "[data-pdf-canvas]",
-        audio: ".audio-seek",
+        audio: ".audio-wave",
         video: ".video-thumb",
       };
-      const subSel = { pdf: ".sub", audio: ".sub" };
+      const subSel = { pdf: ".sub" };
       for (const [kind, cid] of Object.entries(ids)) {
         const m = await page.evaluate(([cid2, sel, sub]) => {
           const card = document.querySelector(`#cards .card[data-id="${cid2}"]`);
@@ -1110,6 +1110,42 @@ async function main() {
           assert.ok(m.sub.top >= m.card.top - tol, `${kind} sub text top inside the card`);
         }
       }
+    });
+
+    await check("an audio card shows a real waveform and clicking it seeks", async () => {
+      // The grid's birdsong card: 15 seconds, real peaks,
+      // so the waveform must have 100 bars of varying
+      // height — never fake bars — and clicking the wave
+      // must move playback there.
+      const board = readBoard();
+      const audio = board.items.find((it) => "Audio" in it.kind && it.pos.x === 400 && it.pos.y === 320);
+      assert.ok(audio, "grid audio card on the board");
+      const id = audio.id;
+      await page.keyboard.press("f");
+      await new Promise((r) => setTimeout(r, 500));
+      const wave = page.locator(`#cards .card[data-id="${id}"] .audio-wave`).first();
+      await waitFor("waveform peaks load", async () => (await wave.locator("rect").count()) === 100);
+      const varied = await wave.evaluate((svg) => {
+        const hs = [...svg.querySelectorAll("rect")].map((r) => r.getAttribute("height"));
+        return new Set(hs).size > 1;
+      });
+      assert.ok(varied, "waveform bars vary in height (real peaks)");
+      // Play, then click the wave three quarters across.
+      await page.locator(`#cards .card[data-id="${id}"] .audio-play`).first().click();
+      await waitFor("audio play shows Pause", async () => {
+        const label = await page.evaluate((cid) => document.querySelector(`#cards .card[data-id="${cid}"] button.audio-play`)?.getAttribute("aria-label") ?? "", String(id));
+        return label === "Pause audio" ? true : null;
+      });
+      const box = await wave.boundingBox();
+      assert.ok(box, "waveform on screen");
+      await page.mouse.click(box.x + box.width * 0.75, box.y + box.height / 2);
+      // Pause at once, so the played fill freezes where
+      // the click put it instead of running on.
+      await page.locator(`#cards .card[data-id="${id}"] .audio-play`).first().click();
+      await waitFor("waveform shows the seek", async () => {
+        const n = await wave.locator("rect.played").count();
+        return n >= 68 && n <= 84 ? n : null;
+      });
     });
 
     await check("a video card shows a poster, not a video element, until played", async () => {
@@ -1196,8 +1232,8 @@ async function main() {
       }
       assert.ok(selected, "Tab selected the audio card");
       await page.keyboard.press("Enter");
-      await waitFor("audio tile shows Pause", async () => {
-        const label = await page.evaluate((cid) => document.querySelector(`#cards .card[data-id="${cid}"] button.audio-tile`)?.getAttribute("aria-label") ?? "", String(id));
+      await waitFor("audio play shows Pause", async () => {
+        const label = await page.evaluate((cid) => document.querySelector(`#cards .card[data-id="${cid}"] button.audio-play`)?.getAttribute("aria-label") ?? "", String(id));
         return label === "Pause audio" ? true : null;
       });
     });
