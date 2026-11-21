@@ -10,7 +10,7 @@ import { render, updateSelection } from "./board-render";
 import {
   attachBoardListeners, attachWindowListeners, commitEditingIfAny, deleteSelected, getSelectMode, groupSelected, setSelectMode, setTool, ungroupSelected,
 } from "./board-input";
-import { disposeAllModel3DViewers } from "../backend/model3d";
+import { disposeModel3DViewersIfLoaded } from "../backend/model3d-lazy";
 
 export const manifest: PluginManifest = {
   id: "core-board",
@@ -126,6 +126,6 @@ export function activate(a: PluginContext): void {
 }
 
 export function deactivate(): void {
-  disposeAllModel3DViewers();
+  disposeModel3DViewersIfLoaded();
   S.boardEl?.remove();
 }

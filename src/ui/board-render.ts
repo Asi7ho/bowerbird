@@ -12,7 +12,7 @@ import { rectsOverlap } from "./overlay-placement";
 import {
   Board, GRID, Item,
 } from "../backend/model";
-import { syncModel3DViews } from "../backend/model3d";
+import { getLoadedModel3d, loadModel3d } from "../backend/model3d-lazy";
 
 // ---------------------------------------------------------------- rendering
 
@@ -250,6 +250,29 @@ function renderGroupFrames(board: Board): void {
   S.selectedGroupsEl.innerHTML = framesHtml + labelsHtml;
 }
 
+// Lazy 3D sync (see model3d-lazy.ts): three.js is fetched on
+// the first Model3D card mount, not at module load. Once it
+// is in, sync runs synchronously on every render, exactly as
+// the old static call did; before that, the sync is skipped
+// unless a 3D card is actually in the DOM — no views exist
+// before the first load, so there is nothing to dispose.
+// The load is async, so the mount sync runs once the module
+// arrives; it reads the live DOM and live items then, so a
+// render in between cannot leave it syncing a stale board.
+function syncModel3DViewsLazy(boardEl: HTMLElement, cardsEl: HTMLElement, items: Item[]): void {
+  const deps = {
+    fileUrl: (p: string) => S.api.files.fileUrl(p),
+    onSelect: (id: number, additive: boolean) => S.api.board.setSelected(S.api.board.selectCard(S.api.board.getSelected(), id, additive)),
+  };
+  const loaded = getLoadedModel3d();
+  if (loaded) {
+    loaded.syncModel3DViews(boardEl, cardsEl, items, deps);
+    return;
+  }
+  if (!cardsEl.querySelector("canvas.model3d")) return;
+  void loadModel3d().then((m) => m.syncModel3DViews(boardEl, cardsEl, items, deps));
+}
+
 export function render(): void {
   // A render requested before the board DOM exists (during
   // plugin activation) finds nothing to draw; init() renders
@@ -335,11 +358,13 @@ export function render(): void {
   // Mount 3D views for the Model3D cards in the DOM and
   // drop views whose card is gone or off-screen. The shared
   // WebGL layer lives in #board, not #cards, so a render
-  // never touches it.
-  syncModel3DViews(S.boardEl, S.cardsEl, board.items, {
-    fileUrl: (p) => S.api.files.fileUrl(p),
-    onSelect: (id, additive) => S.api.board.setSelected(S.api.board.selectCard(S.api.board.getSelected(), id, additive)),
-  });
+  // never touches it. three.js loads lazily (see
+  // model3d-lazy.ts): once it is in, the sync runs here on
+  // every render as before; before that, a board with no 3D
+  // card in the DOM skips it entirely — there are no views
+  // to dispose yet — and the first 3D mount fetches the
+  // module and syncs once it arrives.
+  syncModel3DViewsLazy(S.boardEl, S.cardsEl, board.items);
   for (const [id, st] of videoState) {
     const v = S.cardsEl.querySelector(`[data-id="${id}"] video`) as HTMLVideoElement | null;
     if (!v) continue;

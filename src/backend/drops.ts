@@ -5,11 +5,28 @@ import { api } from "./api";
 import { isPdfCompatible, renderAiPreview } from "./ai-import";
 import type { ImportedItem } from "./import-types";
 import { base64ToBytes, fileCardSize, findSourceGroup, groupBBox, linkCardSize, pdfCardSize, translateImportedToAnchor, videoCardSize } from "./live-import";
-import { MODEL3D_EXTENSIONS } from "./model3d";
+import { MODEL3D_EXTENSIONS } from "./model3d-extensions";
 import { boardGet, domainOf, estimateTextHeight, normaliseHex, type Board, type Item, type Kind, type Pt, type Size } from "./model";
 import { ensureVideoPoster } from "./poster";
-import { parsePsd, renderPsdPreview } from "./psd-import";
 import { parseSvgToItems } from "./svg-import";
+
+// ag-psd is ~367 KB: it loads on the first .psd drop or
+// re-import, not at module load — the welcome board's PSD
+// card uses a pre-rendered PNG preview, so nothing at
+// startup needs it. Cached (import once, reuse), following
+// the pdf.js pattern in media.ts / ai-import.ts.
+let psdImport: typeof import("./psd-import") | null = null;
+let psdImportLoading: Promise<typeof import("./psd-import")> | null = null;
+function loadPsdImport(): Promise<typeof import("./psd-import")> {
+  if (psdImport) return Promise.resolve(psdImport);
+  if (!psdImportLoading) {
+    psdImportLoading = import("./psd-import").then((m) => {
+      psdImport = m;
+      return m;
+    });
+  }
+  return psdImportLoading;
+}
 
 interface DropsContext {
   getBoard(): Board;
@@ -40,6 +57,14 @@ export interface Drops {
 }
 
 export function createDrops(ctx: DropsContext): Drops {
+  // A .psd preview parses with ag-psd, loaded lazily on
+  // first use (see loadPsdImport above). Shared by the drop
+  // flow and the live re-import.
+  async function renderPsdPreviewFor(data: Uint8Array<ArrayBuffer>): Promise<{ png: Uint8Array; width: number; height: number } | null> {
+    const psd = await loadPsdImport();
+    return psd.renderPsdPreview(psd.parsePsd(data.buffer));
+  }
+
   // ---------------------------------------------------------------- drops
 
   // Stored files (pdf, audio, video, model3d) all embed as
@@ -337,7 +362,7 @@ export function createDrops(ctx: DropsContext): Drops {
       let artW = 0, artH = 0;
       try {
         const rendered = format === "psd"
-          ? await renderPsdPreview(parsePsd(data.buffer))
+          ? await renderPsdPreviewFor(data)
           : await renderAiPreview(data);
         if (rendered) {
           preview = await api.embedFileBytes(`${stem}-preview.png`, rendered.png);
@@ -534,7 +559,7 @@ export function createDrops(ctx: DropsContext): Drops {
       let artW = 0, artH = 0;
       try {
         const rendered = source.kind === "psd"
-          ? await renderPsdPreview(parsePsd(bytes.buffer))
+          ? await renderPsdPreviewFor(bytes)
           : await renderAiPreview(bytes);
         if (rendered) {
           const stem = entry.label.replace(/\.[^.]*$/, "") || source.kind;

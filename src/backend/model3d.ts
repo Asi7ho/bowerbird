@@ -26,14 +26,9 @@ interface ViewState {
   distance: number;
 }
 
-// The 3D formats a card can load, by file extension.
-// .gltf is deliberately out: its geometry lives in a
-// separate .bin that would not be embedded with it, so
-// it would land as a broken card. The rest are
-// self-contained — an .obj without its .mtl still shows
-// its geometry, a .dae without its textures still shows
-// its shape — so they load, just with default materials.
-export const MODEL3D_EXTENSIONS = new Set(["glb", "obj", "fbx", "stl", "usdz", "dae"]);
+// The 3D formats a card can load live in model3d-extensions.ts
+// (drops.ts imports them without pulling in three.js).
+export { MODEL3D_EXTENSIONS } from "./model3d-extensions";
 
 // The extension of a model URL or stored path, lowercased.
 export function model3DExtension(path: string): string {
