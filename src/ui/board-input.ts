@@ -15,7 +15,7 @@ import {
 } from "./board-render";
 import {
   Anchor, Pt, ShapeKind,
-  isInlineVideo, rectFromPoints, splitStrokeByEraser, strokeMaxWidth,
+  isInlineVideo, proportionalResize, rectFromPoints, splitStrokeByEraser, strokeMaxWidth,
   zoomCamera,
 } from "../backend/model";
 import { measureNoteCardHeight } from "./text-measure";
@@ -803,7 +803,10 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
     if (!S.cachedBoard || S.cachedBoard.items.some((it) => "Connector" in it.kind)) renderSvgOnly();
     updateResizeHandle();
   } else if (S.drag.kind === "resize") {
-    S.api.board.resizeItem(S.drag.id, S.drag.origW + (world.x - S.drag.startWorld.x), S.drag.origH + (world.y - S.drag.startWorld.y));
+    // A resize keeps the card's ratio: the drag scales the
+    // card by one factor, so it can never be stretched.
+    const next = proportionalResize(S.drag.origW, S.drag.origH, world.x - S.drag.startWorld.x, world.y - S.drag.startWorld.y);
+    S.api.board.resizeItem(S.drag.id, next.w, next.h);
     if (Math.hypot(world.x - S.drag.startWorld.x, world.y - S.drag.startWorld.y) > 2) S.drag.moved = true;
     updateDraggedCards([S.drag.id]);
     updateResizeHandle();
