@@ -47,23 +47,27 @@ function importedBBox(items: ImportedItem[]): { x: number; y: number; w: number;
 }
 
 // Size a FileCard from its artwork's aspect: the card is
-// 360 wide like a video card, the preview fills the width
-// (12px of padding each side) and the height is the preview
-// plus the 12px of padding top and bottom, so the card is
-// the same ratio as the file. The preview is capped at 360
-// tall so a very tall artwork does not make a giant card,
-// and floored at 80 so it stays visible. A missing or
-// empty artwork falls back to the video card's size.
-// The height for a card of any width: the preview box is
-// the card minus the 24px of vertical padding.
+// 360 wide like a video card, the preview fills the card
+// edge to edge, so the card is the same ratio as the file.
+// The preview is capped at 360 tall so a very tall artwork
+// does not make a giant card, and floored at 80 so it stays
+// visible. A missing or empty artwork falls back to the
+// video card's size (16:9).
+// The preview height for artwork of a ratio at a given
+// width, capped and floored as above. The heal uses it to
+// work out the heights the old formulas produced.
+export function fileCardPreviewHeight(artW: number, artH: number, w: number): number {
+  return Math.min(360, Math.max(80, (artH / artW) * Math.max(1, w)));
+}
+
+// The height for a card of any width: the preview fills the
+// card, so the card height is the preview height.
 export function fileCardHeightForWidth(artW: number, artH: number, w: number): number {
-  const previewW = Math.max(1, w - 24);
-  const previewH = Math.min(360, Math.max(80, (artH / artW) * previewW));
-  return Math.round(previewH + 24);
+  return Math.round(fileCardPreviewHeight(artW, artH, w));
 }
 
 export function fileCardSize(artW: number, artH: number): { w: number; h: number } {
-  if (!(artW > 0) || !(artH > 0)) return { w: 360, h: 264 };
+  if (!(artW > 0) || !(artH > 0)) return { w: 360, h: 203 };
   return { w: 360, h: fileCardHeightForWidth(artW, artH, 360) };
 }
 
