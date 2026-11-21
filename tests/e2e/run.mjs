@@ -1436,7 +1436,10 @@ async function main() {
       const ids = [];
       for (let i = 0; i < formats.length; i++) {
         const ext = formats[i];
-        board.items.push({ id, pos: { x: 100 + i * 400, y: 850 }, size: { w: 360, h: 300 }, group: null, kind: { Model3D: { path: path.join(assetsDir, `cube.${ext}`), size_bytes: fs.statSync(path.join(assetsDir, `cube.${ext}`)).size } } });
+        // y=1250, clear of the GLB cube at (100, 850): the
+        // cover check below screenshots the GLB card, and a
+        // model landing on top of it would hide its blue.
+        board.items.push({ id, pos: { x: 100 + i * 400, y: 1250 }, size: { w: 360, h: 300 }, group: null, kind: { Model3D: { path: path.join(assetsDir, `cube.${ext}`), size_bytes: fs.statSync(path.join(assetsDir, `cube.${ext}`)).size } } });
         ids.push(id);
         id++;
       }
