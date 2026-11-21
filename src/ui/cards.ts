@@ -468,15 +468,18 @@ export function activate(api: PluginContext): void {
       // and formats Chromium cannot play still open outside
       // the app, as before.
       // The poster, live video or dark tile fills the card
-      // like an image card: cover normally, contain when
-      // selected so the whole frame shows.
+      // like an image card. The video keeps its original
+      // aspect ratio: contain, never cropped or stretched.
+      // The card is sized to the video's ratio (see
+      // videoCardSize), so in the normal case contain fills
+      // it exactly; a hand-resized card letterboxes instead
+      // of cutting the frame.
       const inline = isInlineVideo(source, remote);
-      const fit = c.sel ? "contain" : "cover";
       const active = !plain && inline && api.media.getVideoState().id === c.id;
       if (active) {
         const src = api.files.fileUrl(source);
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner">
-          <video controls preload="metadata" playsinline src="${src}" data-name="${api.text.escapeHtml(name)}" data-path="${api.text.escapeHtml(source)}" style="width:100%;height:100%;object-fit:${fit};border-radius:12px;background:#1d1d1f;pointer-events:auto"></video>
+          <video controls preload="metadata" playsinline src="${src}" data-name="${api.text.escapeHtml(name)}" data-path="${api.text.escapeHtml(source)}" style="width:100%;height:100%;object-fit:contain;border-radius:12px;background:#1d1d1f;pointer-events:auto"></video>
           </div></div>`;
       }
       // The poster, with the play button over it. No poster
