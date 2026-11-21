@@ -1207,10 +1207,13 @@ async function main() {
       });
     });
 
-    await check("an audio card has a controls row below the wave, no big button", async () => {
+    await check("an audio card has a soft player bar below the wave on one uniform background, no big button", async () => {
       // The big white circle over the wave is gone: a small
       // play/pause, a timeline with the times, and the
-      // transcript toggle sit in a row below the bars. The
+      // transcript toggle sit in a soft bar below the bars.
+      // One uniform background: the wave no longer sits on
+      // the grey system field, and the bar is only a
+      // barely-there tint — no grey/white split. The
       // timeline seeks, like the wave. Reuses the grid's
       // birdsong card, so no new card changes the board.
       const board = readBoard();
@@ -1231,6 +1234,10 @@ async function main() {
           const w = waveEl.getBoundingClientRect();
           const r = row.getBoundingClientRect();
           const p = play.getBoundingClientRect();
+          const waveBg = getComputedStyle(waveEl).backgroundColor;
+          const barBg = getComputedStyle(row).backgroundColor;
+          const barRadius = getComputedStyle(row).borderRadius;
+          const barBorder = getComputedStyle(row).borderTopWidth;
           return {
             rowBelowWave: r.top >= w.bottom - 1,
             playSmall: p.width <= 28 && p.height <= 28,
@@ -1239,6 +1246,10 @@ async function main() {
             hasTrack: !!tl.querySelector(".audio-track-fill"),
             current: tl.querySelector(".audio-time-current")?.textContent ?? "",
             total: tl.querySelector(".audio-time-total")?.textContent ?? "",
+            waveBg,
+            barBg,
+            barRadius,
+            barBorder,
           };
         }, String(id));
         return l && /^\d+:\d{2}$/.test(l.total) ? l : null;
@@ -1250,6 +1261,14 @@ async function main() {
       assert.ok(layout.hasTimes, "timeline shows current and total time");
       assert.ok(layout.hasTrack, "timeline has a progress track");
       assert.ok(/^\d+:\d{2}$/.test(layout.current), "current time shown");
+      // One uniform background: the wave no longer sits on
+      // the grey system field, and the bar is only a
+      // barely-there tint — no grey/white split.
+      assert.notEqual(layout.waveBg, "rgb(245, 245, 247)", "wave is not on the grey field");
+      assert.ok(layout.waveBg === "rgba(0, 0, 0, 0)" || layout.waveBg === "rgb(255, 255, 255)", "wave sits on the card's white");
+      assert.equal(layout.barBg, "rgba(0, 0, 0, 0.03)", "player bar is only a barely-there tint");
+      assert.equal(layout.barRadius, "10px", "player bar is rounded");
+      assert.equal(layout.barBorder, "1px", "player bar has a hairline border");
       // The small play toggles playback.
       await page.locator(`#cards .card[data-id="${id}"] .audio-play`).first().click();
       await waitFor("small play shows Pause", async () => {
