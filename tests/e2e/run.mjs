@@ -1170,7 +1170,7 @@ async function main() {
           video: !!card.querySelector("video"),
           thumb: !!card.querySelector(".video-thumb"),
           poster: !!card.querySelector(".video-thumb img"),
-          sub: card.querySelector(".sub")?.textContent ?? "",
+          title: card.querySelector(".title")?.textContent ?? "",
         };
       }, String(id));
       // No <video> element at rest, just the play tile.
@@ -1180,10 +1180,10 @@ async function main() {
       assert.equal(atRest.thumb, true, "play tile shown before play");
       // The backfill captures the poster frame and writes it
       // to the board: the tile becomes the captured frame,
-      // and the duration appears in the sub-line.
+      // and the card shows the poster with its title.
       await waitFor("poster frame appears on the video card", async () => (await state())?.poster, 30000);
       const afterPoster = await state();
-      assert.ok(afterPoster.sub.includes("0:10"), "duration shows in the sub-line");
+      assert.ok(afterPoster.title.includes("welcome-video"), "title shows on the video card");
       const filled = readBoard().items.find((it) => it.id === id);
       assert.ok(filled.kind.Video.poster, "poster path saved on the card");
       assert.ok(typeof filled.kind.Video.duration === "number" && filled.kind.Video.duration > 0, "duration saved on the card");
