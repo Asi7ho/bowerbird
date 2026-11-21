@@ -522,7 +522,7 @@ export function activate(api: PluginContext): void {
       const canvasH = Math.max(80, c.hh - 24);
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
         <div style="position:relative;width:${c.ww - 24}px;height:${canvasH}px;flex:none">
-          <canvas class="model3d clickable" data-id="${c.id}" data-path="${api.text.escapeHtml(path)}" style="width:100%;height:100%;border-radius:10px;background:var(--bg-system)"></canvas>
+          <canvas class="model3d clickable" data-id="${c.id}" data-path="${api.text.escapeHtml(path)}" style="width:100%;height:100%;border-radius:10px"></canvas>
         </div></div></div>`;
     },
   });

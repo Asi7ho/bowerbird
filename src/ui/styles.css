@@ -520,7 +520,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    blurred, hairline border. It re-frames the model. */
 .card .model3d-tile {
   display: flex; align-items: center; justify-content: center;
-  background: var(--bg-system); border-radius: 10px; color: var(--grey);
+  border-radius: 10px; color: var(--grey);
   font-size: 28px; font-weight: 700;
 }
 /* A design file whose artwork could not be rendered: the
