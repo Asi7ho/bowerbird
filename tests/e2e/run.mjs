@@ -1026,9 +1026,10 @@ async function main() {
     });
 
     await check("every card type's content is fully visible inside its card", async () => {
-      // The video and PDF text were cut by the tag row, and the
-      // same class of bug — content reaching into the bottom
-      // row or past the card's bottom edge — can hit any type.
+      // Video and PDF text once reached into the bottom row
+      // and were cut, and the same class of bug — content
+      // reaching into the bottom row or past the card's
+      // bottom edge — can hit any type.
       // One card of each kind, from the repo's own fixtures,
       // laid out in a grid; each type's content must sit fully
       // inside its card with clearance from the bottom edge.
@@ -1428,10 +1429,10 @@ async function main() {
     });
 
     await check("hovering a decoration does not change its style", async () => {
-      // A tag pill lost its colour and became invisible on
-      // hover. The checklist progress is the decoration left
-      // in the bottom row; hovering it must not change how it
-      // looks.
+      // A decoration pill once lost its colour and became
+      // invisible on hover. The checklist progress is the
+      // decoration left in the bottom row; hovering it must
+      // not change how it looks.
       const board = readBoard();
       const text = board.items.find((it) => "Text" in it.kind && it.kind.Text.text.includes("Checklist card"));
       assert.ok(text, "checklist card on the board");

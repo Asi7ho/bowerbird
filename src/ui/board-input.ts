@@ -1263,7 +1263,7 @@ export function attachWindowListeners(): void {
     // its normal job of moving focus around the sheet.
     if (e.key === "Tab" && !S.api.ui.isSettingsOpen()) {
       // Tab in a text input keeps its normal focus job too: a
-      // panel input (a section rename, a search) commits on
+      // panel input (a group-label rename, a search) commits on
       // blur, and Tab is how the user leaves it. Cycling here
       // would steal the blur — the rename would never commit —
       // and the selection with it.

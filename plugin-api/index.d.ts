@@ -27,8 +27,9 @@ export type Kind =
   | { UrlCard: { url: string; title: string | null; description: string | null; image?: string | null; icon?: string | null; embed?: boolean } }
   | { PdfCard: { path: string; size_bytes: number } }
   // A native design file (.psd, .ai) lands as one card,
-  // like a PDF: a preview of the artwork, the file name
-  // and size below it. `path` is the source file itself
+  // like a PDF: a preview of the artwork, with a small
+  // format pill on its bottom-right corner — no file name
+  // or size below it. `path` is the source file itself
   // (kept in the board's assets, live-synced); `preview`
   // is the rendered artwork, embedded alongside it.
   // Double-clicking opens the source in its app.
@@ -425,7 +426,7 @@ export interface PluginHost {
   // with it. One save, one undo step. Returns the group id,
   // or null when fewer than two cards were given.
   createGroup: (ids: number[]) => number | null;
-  // Rename a group's section label. One save, one undo
+  // Rename a group's label. One save, one undo
   // step. False when the group has fewer than two members
   // or the label is empty after trimming.
   setGroupLabel: (group: number, label: string) => boolean;
@@ -657,7 +658,7 @@ export interface PluginContext {
     // with it. One save, one undo step. Returns the group id,
     // or null when fewer than two cards were given.
     createGroup: (ids: number[]) => number | null;
-    // Rename a group's section label. One save, one undo
+    // Rename a group's label. One save, one undo
     // step. False when the group has fewer than two members
     // or the label is empty after trimming.
     setGroupLabel: (group: number, label: string) => boolean;

@@ -2,7 +2,7 @@
 
 An infinite whiteboard for creatives. One window, always there, ready to drop things onto.
 
-Drop images, notes, links, PDFs, audio, video and colours onto the board. Pan and zoom freely, sketch with a pen, connect things with lines, draw shapes, rotate cards and strokes, and group items that belong together. The board saves on every change, and backs itself up at most once an hour.
+Drop images, notes, links, PDFs, audio, video and colours onto the board. Pan and zoom freely, sketch with a pen, connect things with lines, draw shapes, rotate cards and strokes, and group items that belong together. Drop a 3D model (`.glb`, `.obj`, `.fbx`, `.stl`, `.usdz` or `.dae`) and it lands as a model card you can drag to rotate; drop a Photoshop or Illustrator file and it lands as a design-file card with a preview of the artwork. The board saves on every change, and backs itself up at most once an hour.
 
 Link cards are previews only. They do not embed web pages.
 
@@ -60,9 +60,9 @@ Or push a version tag (`v0.2.2`) and the release workflow builds all three and a
 ```
 electron/          main process (TypeScript, compiled to electron-dist/)
 src/               renderer: boot, backend, plugin host, UI
-src/backend/       headless core (model, search, media, undo, drops, api, cards, model3d, poster, welcome)
-src/plugins/       plugin host
-src/ui/            first-party UI plugins
+src/backend/       headless core (model, search, media, undo, drops, api, cards, model3d, poster, welcome, ai-import, audio-peaks, import-types, live-import, markdown, psd-import, svg-import)
+src/plugins/       plugin host (host.ts plus host-cards, host-panels, host-state, host-views)
+src/ui/            first-party UI plugins; the board is split six ways (board, board-input, board-render, board-state, board-geometry, board-drag-preview)
 plugins/           bundled plugins
 index.html         board shell
 assets/            welcome media and icon

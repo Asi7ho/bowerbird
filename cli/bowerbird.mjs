@@ -1,7 +1,7 @@
 // The Bowerbird agent CLI: read and write boards from the shell,
 // with the app closed — or open, which follows the file within
-// about two seconds. Plain Node, no dependencies. JSON out, exit
-// codes 0 ok, 1 usage, 2 board or card not found, 3 write failed.
+// about 300 ms. Plain Node, no dependencies. JSON out, exit
+// codes 0 ok, 1 usage, 2 board not found, 3 write failed.
 // The contract is BOWERBIRD_SPEC.md; this file implements it.
 import fs from "node:fs";
 import os from "node:os";
@@ -215,7 +215,7 @@ Options:
   --human        Readable lines instead of JSON
   --json         JSON output (the default)
 
-Exit codes: 0 ok, 1 usage error, 2 board or card not found, 3 write failed.`;
+Exit codes: 0 ok, 1 usage error, 2 board not found, 3 write failed.`;
 
 function parseArgs(argv) {
   const opts = { board: undefined, text: undefined, x: undefined, y: undefined, w: undefined, h: undefined, dryRun: false, human: false };

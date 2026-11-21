@@ -13,6 +13,7 @@
   },
   "main": "electron-dist/main.js",
   "name": "bowerbird",
+  "description": "An infinite whiteboard for creatives.",
   "private": true,
   "engines": {
     "node": ">=24"

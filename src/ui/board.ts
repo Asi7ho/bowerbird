@@ -1,7 +1,8 @@
-// core-board: builds the board DOM and owns the render and
-// input loops. Uses only the public API plus pure model
-// functions. The core owns the board; the plugin reads it
-// through the API.
+// core-board: activation and wiring for the board plugin.
+// Builds the board DOM and wires the render loop
+// (board-render.ts) and the input loop (board-input.ts).
+// Uses only the public API plus pure model functions. The core
+// owns the board; the plugin reads it through the API.
 
 import type { PluginContext, PluginManifest } from "../plugins/host";
 import { S } from "./board-state";

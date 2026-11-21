@@ -1,6 +1,7 @@
-// Plugin API v1, renderer side. Loads plugins, builds each
-// one's API object, and owns the registries for cards, tools,
-// panels, views and commands.
+// Plugin API v2, renderer side. Loads plugins and builds each
+// one's API object. The registries for cards, tools, panels,
+// views and commands live in host-state.ts; this module imports
+// them.
 
 import type { Anchor, ArrangeOptions, Board, BoardController, Camera, Item, Kind, PluginBridge, PluginBuiltinCardDef, PluginCardDecoratorDef, PluginCardDef, PluginCommandDef, PluginContext, PluginCreateActionDef, PluginHost, PluginManifest, PluginOverlayDef, PluginPanelDef, PluginSettingsSectionDef, PluginShortcutDef, PluginToolDef, PluginViewDef, Pt, SettingsUI, ShellElements, Size } from "bowerbird-plugin-api";
 export type { Anchor, ArrangeOptions, Board, BoardController, Camera, Item, Kind, PluginBridge, PluginBuiltinCardDef, PluginCardDecoratorDef, PluginCardDef, PluginCommandDef, PluginContext, PluginCreateActionDef, PluginHost, PluginManifest, PluginOverlayDef, PluginPanelDef, PluginSettingsSectionDef, PluginShortcutDef, PluginToolDef, PluginViewDef, Pt, SettingsUI, ShellElements, Size };
@@ -215,9 +216,9 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
     version: "2",
     plugin: { id: manifest.id, name: manifest.name, version: manifest.version },
     has: (capability: string) => {
-      // Capabilities in v1: every domain documented in PLUGIN_API.md.
+      // Capabilities in v2: every domain documented in PLUGIN_API.md.
       // A future core may add more; a plugin should check before
-      // using a capability that was added after v1.
+      // using a capability that was added after v2.
       return ["board", "boards", "app", "backups", "view", "window", "ui", "cards", "files", "storage", "events", "tools", "panels", "commands", "views", "overlays", "settingsSections", "shortcuts", "library", "plugins", "pen", "media", "text", "geometry", "shapes"].includes(capability);
     },
     board: {
@@ -1098,7 +1099,7 @@ export function renderSettingsSections(): void {
 }
 
 function registerShortcut(pluginId: string, def: PluginShortcutDef): void {
-  // Shortcuts in v1 are single keys, no modifiers. Core keys win:
+  // Shortcuts in v2 are single keys, no modifiers. Core keys win:
   // the core checks its own shortcuts first, and handlePluginShortcut
   // is only called for keys the core did not handle, with Ctrl/Cmd
   // held keys excluded, so a plugin cannot steal Ctrl+G or similar.

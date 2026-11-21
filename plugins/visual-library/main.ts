@@ -37,10 +37,10 @@
 // do neither: a video's native controls play in place,
 // and an audio tile plays in place.
 //
-// Strokes and connectors are not library elements: they are
-// drawing and annotation, not cards, and duplicating them
-// would need their board positions and item references. The
-// library refreshes automatically when the board is saved, and
+// Strokes, shapes, 3D models and design files are not library
+// elements: strokes and connectors are drawing and annotation,
+// not cards, and duplicating them would need their board
+// positions and item references. The library refreshes automatically when the board is saved, and
 // the Refresh command still exists in Settings → Plugins for
 // a manual refresh.
 //
