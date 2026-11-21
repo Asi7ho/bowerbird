@@ -2263,6 +2263,11 @@ async function main() {
       assert.ok(fs.existsSync(card.kind.FileCard.preview), "preview png exists on disk");
       assert.ok(card.kind.FileCard.size_bytes > 0, "file card records the source size");
       assert.ok(card.group !== null, "file card is in its linked group");
+      // The preview carries a PSD pill in its top-right corner,
+      // so the artwork is never mistaken for a plain image.
+      await page.locator(`#cards .card[data-id="${card.id}"] .filecard-pill`).first().waitFor({ timeout: READY_TIMEOUT_MS });
+      const pill = await page.evaluate((cid) => document.querySelector(`#cards .card[data-id="${cid}"] .filecard-pill`)?.textContent ?? "", String(card.id));
+      assert.equal(pill, "PSD", "psd card shows a PSD pill on its preview");
     });
 
     await check("dropping a PDF-compatible .ai lands one FileCard, not a PdfCard", async () => {
@@ -2281,6 +2286,9 @@ async function main() {
       assert.ok(card.kind.FileCard.preview, "file card has a preview");
       assert.ok(fs.existsSync(card.kind.FileCard.preview), "preview png exists on disk");
       assert.ok(card.group !== null, "file card is in its linked group");
+      await page.locator(`#cards .card[data-id="${card.id}"] .filecard-pill`).first().waitFor({ timeout: READY_TIMEOUT_MS });
+      const pill = await page.evaluate((cid) => document.querySelector(`#cards .card[data-id="${cid}"] .filecard-pill`)?.textContent ?? "", String(card.id));
+      assert.equal(pill, "AI", "ai card shows an AI pill on its preview");
     });
 
     await check("dropping a vector .ai lands one FileCard with a preview of the artwork", async () => {
