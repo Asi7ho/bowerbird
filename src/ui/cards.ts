@@ -309,7 +309,7 @@ export function activate(api: PluginContext): void {
       const footer = `<div class="link-footer"><a class="link-domain" data-action="open-link" data-id="${c.id}">${ico ? `<img class="favicon" src="${api.text.escapeHtml(ico)}" alt="" onerror="this.style.display='none';var f=this.nextElementSibling;if(f)f.style.display='flex'" /><span class="favicon-fallback" style="display:none;background:${api.text.tint(tile, 0.85)};color:${tile}">${api.text.escapeHtml(initial)}</span>` : `<span class="favicon-fallback" style="background:${api.text.tint(tile, 0.85)};color:${tile}">${api.text.escapeHtml(initial)}</span>`}<span>${api.text.escapeHtml(domain)}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" /></svg></a></div>`;
       if (img) {
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner link-card">
-          <a class="link-image" data-action="open-link" data-id="${c.id}"><img src="${api.text.escapeHtml(img)}" draggable="false" alt="" onerror="this.closest('.link-image').style.display='none'" /></a>
+          <a class="link-image" data-action="open-link" data-id="${c.id}"><img src="${api.text.escapeHtml(img)}" draggable="false" alt="" onerror="this.closest('.link-card').classList.add('no-image');this.closest('.link-image').style.display='none'" /></a>
           <div class="link-body">
             <a class="link-title" data-action="open-link" data-id="${c.id}">${api.text.escapeHtml(head)}</a>
             ${footer}
