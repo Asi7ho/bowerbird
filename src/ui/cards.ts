@@ -255,7 +255,7 @@ export function activate(api: PluginContext): void {
     title: "Link",
     render: (item, data, plain = false) => {
       const c = chrome(item, plain);
-      const { url, title, description, image, icon } = data as UrlCardData;
+      const { url, title, image, icon } = data as UrlCardData;
       const domain = api.text.domainOf(url);
       const head = title ?? domain;
       const tile = api.text.tileColorFor(domain);
@@ -268,14 +268,12 @@ export function activate(api: PluginContext): void {
           <a class="link-image" data-action="open-link" data-id="${c.id}"><img src="${api.text.escapeHtml(img)}" draggable="false" alt="" onerror="this.closest('.link-image').style.display='none'" /></a>
           <div class="link-body">
             <a class="link-title" data-action="open-link" data-id="${c.id}">${api.text.escapeHtml(head)}</a>
-            ${description ? `<div class="link-desc">${api.text.escapeHtml(description)}</div>` : ""}
             ${footer}
           </div></div></div>`;
       }
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner link-card no-image">
         <div class="link-body">
           <a class="link-title" data-action="open-link" data-id="${c.id}">${api.text.escapeHtml(head)}</a>
-          ${description ? `<div class="link-desc">${api.text.escapeHtml(description)}</div>` : ""}
           ${footer}
         </div></div></div>`;
     },
