@@ -947,7 +947,7 @@ async function main() {
       // The card lands after transcription; the model ships
       // with the app, so the wait is for inference, not a
       // download.
-      await page.locator("text=voice-note").first().waitFor({ timeout: 180000 });
+      await page.locator("#cards .card .audio-tile").first().waitFor({ timeout: 180000 });
       const audios = readBoard().items.filter((it) => "Audio" in it.kind);
       assert.equal(audios.length, 1);
       assert.ok(fs.existsSync(audios[0].kind.Audio.path));
@@ -960,7 +960,7 @@ async function main() {
       assert.ok(transcript.length > 0, "expected a non-empty transcript");
       assert.ok(/hello|world|test|voice|transcription/i.test(transcript), `transcript did not contain the spoken words: ${transcript}`);
       // The card is centred on the double-click point.
-      const audioBox = await page.locator("#cards .card", { hasText: "voice-note" }).first().boundingBox();
+      const audioBox = await page.locator(`#cards .card[data-id="${audios[0].id}"]`).first().boundingBox();
       assert.ok(audioBox);
       assert.ok(Math.abs(audioBox.x + audioBox.width / 2 - cx) < 5);
       assert.ok(Math.abs(audioBox.y + audioBox.height / 2 - cy) < 5);
@@ -1364,7 +1364,12 @@ async function main() {
       // change (no zoom). The drag above set lastInteract,
       // so the model holds still and cannot explain a
       // pixel change — or a lack of one.
-      const boxBefore = await canvas.boundingBox();
+      let boxBefore = null;
+      for (let i = 0; i < 20; i++) {
+        boxBefore = await canvas.boundingBox();
+        if (boxBefore) break;
+        await new Promise((r) => setTimeout(r, 500));
+      }
       assert.ok(boxBefore, "model canvas on screen before the wheel");
       await page.mouse.move(boxBefore.x + boxBefore.width / 2, boxBefore.y + boxBefore.height / 2);
       await page.mouse.wheel(0, 200);
