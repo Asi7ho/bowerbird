@@ -90,6 +90,34 @@ function shapeOutlineSvg(shape: string, w: number, h: number, color: string): st
   return `<svg width="100%" height="100%" viewBox="0 0 ${w} ${h}">${inner}</svg>`;
 }
 
+// A waveform from real peaks: one thin bar per bucket,
+// centred vertically, the played bars darker. With no
+// peaks yet (still decoding) a quiet centre line stands
+// in — never fake bars. The svg is the seek control: a
+// slider for keyboard users, a pointer target for the rest.
+function audioWaveSvg(peaks: number[] | undefined, pct: number, id: number): string {
+  const bars = 100;
+  const slider = `role="slider" tabindex="0" aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pct * 100)}"`;
+  if (!peaks) {
+    return `<svg class="audio-wave" data-audio-wave="${id}" viewBox="0 0 100 32" preserveAspectRatio="none" ${slider}><line x1="0" y1="16" x2="100" y2="16" stroke="#dcdce0" stroke-width="1" vector-effect="non-scaling-stroke"/></svg>`;
+  }
+  let rects = "";
+  const cut = Math.floor(pct * bars);
+  for (let i = 0; i < bars; i++) {
+    const p = peaks[i] ?? 0;
+    const h = p > 0 ? Math.max(1.2, p * 28) : 0;
+    const y = (32 - h) / 2;
+    rects += `<rect data-i="${i}" x="${i}" y="${y.toFixed(2)}" width="0.62" height="${h.toFixed(2)}"${i < cut ? ' class="played"' : ""}/>`;
+  }
+  return `<svg class="audio-wave" data-audio-wave="${id}" viewBox="0 0 100 32" preserveAspectRatio="none" ${slider}>${rects}</svg>`;
+}
+const AUDIO_PLAY_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
+const AUDIO_PAUSE_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>`;
+// The transcript toggle: a quiet document icon, not a text
+// button. It reads as part of the card, like the swatch
+// pill, and darkens while the transcript is open.
+const TRANSCRIPT_SVG = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6"/></svg>`;
+
 export function activate(api: PluginContext): void {
   const num = (v: unknown, fallback: number): number => {
     const n = Number(v);
@@ -346,8 +374,8 @@ export function activate(api: PluginContext): void {
       const c = chrome(item, plain);
       const { path, title, transcript } = data as AudioData;
       const text = typeof transcript === "string" ? transcript.trim() : "";
-      // A voice note can be renamed: the title is shown when
-      // set, otherwise the file's name.
+      // The title is only the identifier in the missing-file
+      // error now: the card itself shows no name.
       const name = (typeof title === "string" && title.trim() !== "") ? title.trim() : (path.split("/").pop() ?? path);
       if (api.media.audioFailed(path)) {
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px"><div class="missing-media" style="flex:1 1 auto">File missing: ${api.text.escapeHtml(name)}</div></div></div>`;
@@ -357,34 +385,31 @@ export function activate(api: PluginContext): void {
       const isCurrent = !plain && state.id === c.id;
       const dur = isCurrent && state.duration > 0 ? state.duration : (api.media.getAudioDuration(path) ?? NaN);
       const cur = isCurrent ? state.currentTime : 0;
-      const seekVal = isFinite(dur) && dur > 0 ? Math.round((cur / dur) * 1000) : 0;
-      const seekPct = isFinite(dur) && dur > 0 ? Math.round((cur / dur) * 100) : 0;
+      const pct = isFinite(dur) && dur > 0 ? Math.min(1, Math.max(0, cur / dur)) : 0;
       if (!isCurrent) api.media.loadAudioDuration(c.id, path);
-      // A tile, a title, and the time as a quiet grey sub-line.
-      // The time stays: it is live player state, not a static
-      // description like the file sizes the other media cards
-      // used to show. The seek control is a thin track in the
-      // tile's own purple, not a chunky browser slider in blue.
-      const tile = c.hh >= 104 ? 56 : 48;
+      // The waveform is the card's content, like a video
+      // poster: real peaks, decoded on demand and cached
+      // per path. A plain render (slides, library, export)
+      // draws whatever is cached and never starts a decode.
+      const peaks = api.media.getAudioPeaks(path);
+      if (!peaks && !plain) api.media.loadAudioPeaks(c.id, path);
       // A voice recording carries its transcript under the
-      // player, hidden by default. The toggle lives in the
-      // card, below the seek — in both states. Once the card
-      // is grown the toggle heads the transcript, above the
-      // text, and the text fills the card and scrolls, so a
-      // long note does not grow the card.
+      // player, hidden by default. The toggle is a quiet
+      // icon now, not a text button; once the card is grown
+      // it sits above the text, and the text fills the card
+      // and scrolls, so a long note does not grow the card.
       const expanded = text.length > 0 && c.hh > api.cards.audioHeights.transcriptHidden;
       const toggleHtml = text.length > 0
-        ? `<button type="button" class="audio-transcript-toggle" data-action="toggle-transcript" data-id="${c.id}" aria-expanded="${expanded}"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${expanded ? "M6 9l6 6 6-6" : "M9 6l6 6-6 6"}"/></svg> Transcript</button>`
+        ? `<button type="button" class="audio-transcript-toggle" data-action="toggle-transcript" data-id="${c.id}" aria-expanded="${expanded}" aria-label="Transcript" title="Transcript"${expanded ? ' style="color:var(--ink)"' : ""}>${TRANSCRIPT_SVG}</button>`
         : "";
       const transcriptHtml = expanded
         ? `<div class="audio-transcript-text">${api.text.escapeHtml(text)}</div>`
         : "";
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
-        <div style="display:flex;align-items:center;gap:12px">
-          <button type="button" class="audio-tile clickable" data-action="play-audio" data-id="${c.id}" aria-label="${playing ? "Pause audio" : "Play audio"}" style="width:${tile}px;height:${tile}px;background:${api.text.tint("#6A4C93", 0.88)};color:#6a4c93;font-size:${tile === 56 ? 18 : 16}px">${playing ? "❚❚" : "▶"}</button>
-          <div class="sub" style="font-size:12px"><span data-audio-time="${c.id}">${api.media.formatAudioTime(cur)}</span> / <span data-audio-dur="${c.id}">${api.media.formatAudioTime(dur)}</span></div>
+        <div class="audio-wave-wrap">
+          ${audioWaveSvg(peaks, pct, c.id)}
+          <button type="button" class="audio-play clickable" data-action="play-audio" data-id="${c.id}" aria-label="${playing ? "Pause audio" : "Play audio"}">${playing ? AUDIO_PAUSE_SVG : AUDIO_PLAY_SVG}</button>
         </div>
-        <input class="audio-seek" type="range" min="0" max="1000" value="${seekVal}" style="--seek-pct:${seekPct}%" data-audio-seek="${c.id}" aria-label="Seek">
         ${toggleHtml}${transcriptHtml}
       </div></div>`;
     },
