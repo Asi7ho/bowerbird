@@ -870,10 +870,15 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #settings .shortcut-key.capturing { background: var(--fill); }
 #settings .shortcut-reset {
   border: 1px solid var(--separator); background: #fff; border-radius: 9px;
-  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
+  padding: 6px 8px; cursor: pointer; font-size: 13px; font-weight: 600;
   color: var(--ink); box-shadow: var(--shadow-sm); flex: none;
+  display: flex; align-items: center; justify-content: center;
 }
 #settings .shortcut-reset:hover { background: var(--fill); }
+#settings .shortcut-reset svg {
+  width: 16px; height: 16px; display: block; fill: none;
+  stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+}
 /* Performance: one row, label on the left and the On/Off
    toggle on the right, in the same button style as the
    plugin rows. The Restart button sits below it. */
