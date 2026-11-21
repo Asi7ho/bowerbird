@@ -29,20 +29,6 @@ import { openBoardFile } from "./open-with";
 // type-checked.
 import { transform as sucraseTransform } from "./sucrase.cjs";
 
-// Render on the host GPU, not the CPU: the board is thousands
-// of cards, strokes and text, and painting them on the CPU is
-// the slow part of panning and zooming. Chromium composites on
-// the GPU by default, but rasterization (painting the pixels)
-// stays on the CPU unless asked — this asks. Skipped in CI:
-// the runners have no GPU, and forcing GPU rasterization
-// there routes the painting through SwiftShader, the software
-// GL stand-in, which is far slower than plain CPU painting
-// and times out the end-to-end tests. It must be set before
-// the app is ready, so it lives here at the top level.
-if (!process.env.CI) {
-  app.commandLine.appendSwitch("enable-gpu-rasterization");
-}
-
 let win: BaseWindow | null = null;
 let boardView: WebContentsView | null = null;
 
@@ -67,6 +53,12 @@ let currentBoard: string | null = null;
 let panelOrder: string[] = [];
 let panelWidth = 290;
 let dockVisible = true;
+// Hardware acceleration (GPU rasterization) is on unless the
+// user turns it off in Settings. Shortcut overrides are the
+// actions that differ from their defaults, as action id to
+// binding string. Both persist in settings.json.
+let hardwareAcceleration = true;
+let shortcuts: Record<string, string> = {};
 
 function clampPanelWidth(w: unknown): number {
   const n = typeof w === "number" && Number.isFinite(w) ? Math.round(w) : 290;
@@ -77,6 +69,21 @@ function appSettingsPath(): string {
   return path.join(app.getPath("userData"), "settings.json");
 }
 
+// Shortcut overrides from disk or IPC: an object of string
+// action ids to string bindings, capped at 50 entries. Bad
+// entries are dropped, never trusted; the renderer ignores
+// unknown ids and bad bindings when it loads them.
+function cleanShortcuts(v: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!v || typeof v !== "object" || Array.isArray(v)) return out;
+  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof val !== "string") continue;
+    if (Object.keys(out).length >= 50) break;
+    out[k] = val.slice(0, 64);
+  }
+  return out;
+}
+
 function loadAppSettings(): void {
   try {
     const parsed = JSON.parse(fs.readFileSync(appSettingsPath(), "utf8"));
@@ -84,6 +91,8 @@ function loadAppSettings(): void {
     if (parsed && Array.isArray(parsed.panelOrder)) panelOrder = parsed.panelOrder.filter((x: unknown) => typeof x === "string");
     if (parsed && typeof parsed.panelWidth === "number") panelWidth = clampPanelWidth(parsed.panelWidth);
     if (parsed && typeof parsed.dockVisible === "boolean") dockVisible = parsed.dockVisible;
+    if (parsed && typeof parsed.hardwareAcceleration === "boolean") hardwareAcceleration = parsed.hardwareAcceleration;
+    if (parsed) shortcuts = cleanShortcuts(parsed.shortcuts);
     if (parsed && typeof parsed.currentBoard === "string" && parsed.currentBoard && parsed.currentBoard !== "Main") {
       currentBoard = parsed.currentBoard.slice(0, 64);
     }
@@ -97,12 +106,29 @@ function saveAppSettings(): void {
     const file = appSettingsPath();
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const tmp = file + ".tmp";
-    fs.writeFileSync(tmp, JSON.stringify({ corner: cornerReveal, panelOrder, panelWidth, dockVisible, currentBoard }));
+    fs.writeFileSync(tmp, JSON.stringify({ corner: cornerReveal, panelOrder, panelWidth, dockVisible, hardwareAcceleration, shortcuts, currentBoard }));
     fs.renameSync(tmp, file);
   } catch {
     // Settings are a convenience, not board data: never fail the app
     // over a settings write.
   }
+}
+
+// Render on the host GPU, not the CPU: the board is thousands
+// of cards, strokes and text, and painting them on the CPU is
+// the slow part of panning and zooming. Chromium composites on
+// the GPU by default, but rasterization (painting the pixels)
+// stays on the CPU unless asked — this asks, when the setting
+// is on. Skipped in CI: the runners have no GPU, and forcing
+// GPU rasterization there routes the painting through
+// SwiftShader, the software GL stand-in, which is far slower
+// than plain CPU painting and times out the end-to-end tests.
+// The setting is read from disk first, so the flag decision
+// waits for it — and the flag must be set before the app is
+// ready, so this whole block lives here at the top level.
+loadAppSettings();
+if (hardwareAcceleration && !process.env.CI) {
+  app.commandLine.appendSwitch("enable-gpu-rasterization");
 }
 
 // Corner icon: the board hides into a corner, it does not vanish.
@@ -1476,7 +1502,7 @@ function registerIpc(): void {
     if (isBoardLocal(local)) return openBoardFile(local, { openDefault: (p) => shell.openPath(p) });
     throw new Error("not a public web address or a board-local file");
   });
-  ipcMain.handle("bowerbird:get-app-settings", () => ({ corner: cornerReveal, panelOrder: [...panelOrder], panelWidth, dockVisible }));
+  ipcMain.handle("bowerbird:get-app-settings", () => ({ corner: cornerReveal, panelOrder: [...panelOrder], panelWidth, dockVisible, hardwareAcceleration, shortcuts: { ...shortcuts } }));
   ipcMain.handle("bowerbird:list-boards", () => {
     return listBoards();
   });
@@ -1632,6 +1658,21 @@ function registerIpc(): void {
     dockVisible = visible;
     saveAppSettings();
     return dockVisible;
+  });
+  ipcMain.handle("bowerbird:set-shortcuts", (_event, value: unknown) => {
+    shortcuts = cleanShortcuts(value);
+    saveAppSettings();
+    return { ...shortcuts };
+  });
+  ipcMain.handle("bowerbird:set-hardware-acceleration", (_event, enabled: unknown) => {
+    if (typeof enabled !== "boolean") return hardwareAcceleration;
+    hardwareAcceleration = enabled;
+    saveAppSettings();
+    return hardwareAcceleration;
+  });
+  ipcMain.handle("bowerbird:restart", () => {
+    app.relaunch();
+    app.quit();
   });
   ipcMain.handle("bowerbird:list-plugins", () => listPlugins());
   ipcMain.handle("bowerbird:read-plugin-file", (_event, pluginId: string, relativePath: string) => {
@@ -2030,9 +2071,11 @@ app.whenReady().then(() => {
       return new Response("not found", { status: 404 });
     }
   });
-  loadAppSettings();
   // A board deleted outside the app must not leave the
   // app pointing at a missing folder: fall back to Main.
+  // (App settings are already loaded at the top level,
+  // before the GPU flag decision, so they are not loaded
+  // again here.)
   if (currentBoard && !fs.existsSync(boardPathFor(currentBoard)) && !fs.existsSync(path.dirname(boardPathFor(currentBoard)))) {
     currentBoard = null;
     saveAppSettings();
