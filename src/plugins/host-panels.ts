@@ -325,5 +325,16 @@ export function registerPanel(pluginId: string, def: PluginPanelDef): void {
   // focus from the panel the user is already looking at.
   if (activePanelKey === null) activePanelKey = key;
   updatePanelDock();
-  host.render();
+  // No full board re-render while plugins are still
+  // activating: every panel registration used to trigger
+  // one, so the six panel plugins meant six renders before
+  // the board was even usable. The board already rendered
+  // before user-plugin activation (see init in main.ts),
+  // and init renders once more after all plugins activate,
+  // so a panel that registers mid-activation still shows
+  // up — its tab and body are in the DOM via updatePanelDock
+  // above, and the final render picks up any board content
+  // that depends on it. Matches setActivePanel and
+  // setDockVisible above, which guard the same way.
+  if (deps?.isPluginsReady()) host.render();
 }

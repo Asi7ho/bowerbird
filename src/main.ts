@@ -835,6 +835,20 @@ async function init(): Promise<void> {
     // settingsSectionsEl is registered by the settings plugin
     // itself (core-settings), which builds that container.
   });
+  // Read the board DOM elements the core-board plugin built
+  // into C (board, cards, toast). Runs twice: once when the
+  // first-party plugins are up, so the board can render
+  // before user-plugin activation, and once after initPlugins
+  // in case anything changed — the assignments are idempotent.
+  function readBoardElements(): void {
+    const els = getBoardElements();
+    if (els.board) C.boardEl = els.board as HTMLDivElement;
+    if (els.canvas) {
+      const [, , c] = els.canvas;
+      if (c) C.cardsEl = c as HTMLDivElement;
+    }
+    if (els.toast) C.toastEl = els.toast as HTMLDivElement;
+  }
   await initPlugins(pluginHost, api, [
     // Board first: the toolbar appends to it, the title bar
     // inserts before it, and the core reads its elements
@@ -847,7 +861,17 @@ async function init(): Promise<void> {
     // its box into the container the title bar builds.
     { manifest: coreTitlebar.manifest, module: coreTitlebar },
     { manifest: coreSearch.manifest, module: coreSearch },
-  ]);
+  ], () => {
+    // First render, before user-plugin activation: the
+    // board DOM exists (core-board is first-party) and the
+    // user plugins take ~2s to activate, so the cards
+    // appear as early as possible instead of after them.
+    // Panel registrations during that activation no longer
+    // re-render (see registerPanel), and init renders once
+    // more below, after all plugins activate.
+    readBoardElements();
+    boardRender();
+  });
   // The board DOM is built by the core-board plugin, so the
   // core reads its elements from the shell now, after the
   // plugin has activated. Before this they are undefined.
@@ -857,15 +881,7 @@ async function init(): Promise<void> {
   // The core keeps only the board element (the host's
   // boardEl mount point), the cards element (for the media
   // and search modules) and the toast element.
-  {
-    const els = getBoardElements();
-    if (els.board) C.boardEl = els.board as HTMLDivElement;
-    if (els.canvas) {
-      const [, , c] = els.canvas;
-      if (c) C.cardsEl = c as HTMLDivElement;
-    }
-    if (els.toast) C.toastEl = els.toast as HTMLDivElement;
-  }
+  readBoardElements();
   // The board plugin attached its own listeners in activate().
   // Render once the board DOM exists.
   boardRender();

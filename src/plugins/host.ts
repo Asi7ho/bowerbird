@@ -1417,6 +1417,19 @@ export async function initPlugins(
   h: PluginHost,
   b: PluginBridge,
   firstParty: Array<{ manifest: PluginManifest; module: { activate?: (api: PluginContext) => void | Promise<void>; deactivate?: () => void | Promise<void> } }> = [],
+  // Called after the first-party plugins activate and
+  // before any user plugin activates: the board DOM exists
+  // by then, so the caller can render the board first and
+  // the user sees cards ~2s before the last user plugin
+  // finishes activating. Without this, the first render
+  // happened mid-plugin-loop (via a panel registration)
+  // and each panel plugin triggered a full board render
+  // during activation — and guarding those renders alone
+  // would delay first paint until after all plugins
+  // activate. The user-plugin loop below still runs after
+  // this returns; pluginsReady is set only at its end, so
+  // registerPanel's render guard holds through it.
+  onFirstPartyReady?: () => void,
 ): Promise<void> {
   host = h;
   bridge = b;
@@ -1497,6 +1510,10 @@ export async function initPlugins(
       h.toast(`Built-in plugin ${fp.manifest.name} failed to load: ${String(e)}`);
     }
   }
+  // First-party UI is up (board DOM included): let the
+  // caller render the board now, before the user plugins
+  // start activating — see the parameter comment above.
+  onFirstPartyReady?.();
   let manifests: PluginManifest[] = [];
   try {
     manifests = await b.listPlugins();
