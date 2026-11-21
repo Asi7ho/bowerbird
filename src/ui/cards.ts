@@ -291,9 +291,7 @@ export function activate(api: PluginContext): void {
     render: (item, data, plain = false) => {
       const c = chrome(item, plain);
       const { path } = data as PdfCardData;
-      const name = path.split("/").pop() ?? path;
-      const tile = `<div class="tile" style="background:${api.text.tint("#E63946", 0.88)};color:#E63946;font-size:13px">PDF</div>
-        ${titleCol(name, c.ww - 92)}`;
+      const tile = `<div class="tile" style="background:${api.text.tint("#E63946", 0.88)};color:#E63946;font-size:13px">PDF</div>`;
       // Plain rendering (slides, library, export) stays a tile:
       // a canvas drawn by PDF.js does not survive as HTML, so
       // a rendered page there would export as a blank box.
@@ -304,17 +302,14 @@ export function activate(api: PluginContext): void {
       api.media.loadPdfPage(c.id, path);
       const pageNum = api.media.getPdfPage(c.id);
       if (c.hh < 200) {
-        // A short card, like the old 96px tile: a small page
-        // preview on the left, name on the right, the same
-        // row shape as audio and video cards.
+        // A short card, like the old 96px tile: just a small
+        // page preview.
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px" data-pdf-wrap="${c.id}">
-          <div style="width:56px;height:${c.hh - 24}px;flex:none;background:var(--bg-system);border-radius:10px;overflow:hidden"><canvas data-pdf-canvas="${c.id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
-          ${titleCol(name, c.ww - 92)}</div></div>`;
+          <div style="width:56px;height:${c.hh - 24}px;flex:none;background:var(--bg-system);border-radius:10px;overflow:hidden"><canvas data-pdf-canvas="${c.id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div></div></div>`;
       }
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px" data-pdf-wrap="${c.id}">
         <div style="flex:1 1 auto;min-height:0;background:var(--bg-system);border-radius:10px;overflow:hidden"><canvas data-pdf-canvas="${c.id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
-        <div style="display:flex;align-items:center;gap:8px"><div class="title" style="font-size:14px;flex:1 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${api.text.escapeHtml(name)}</div>
-        <button class="pdf-nav" data-action="pdf-prev" data-id="${c.id}" title="Previous page" aria-label="Previous page" ${pageNum <= 1 ? "disabled" : ""}>‹</button><span class="sub" data-pdf-count="${c.id}">…</span><button class="pdf-nav" data-action="pdf-next" data-id="${c.id}" title="Next page" aria-label="Next page">›</button></div></div></div>`;
+        <div style="display:flex;align-items:center;justify-content:center;gap:8px"><button class="pdf-nav" data-action="pdf-prev" data-id="${c.id}" title="Previous page" aria-label="Previous page" ${pageNum <= 1 ? "disabled" : ""}>‹</button><span class="sub" data-pdf-count="${c.id}">…</span><button class="pdf-nav" data-action="pdf-next" data-id="${c.id}" title="Next page" aria-label="Next page">›</button></div></div></div>`;
     },
   });
 
