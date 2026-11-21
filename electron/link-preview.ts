@@ -20,7 +20,7 @@ export async function readCappedText(
   let total = 0;
   let truncated = false;
   try {
-    for (;;) {
+    for (; ;) {
       const { done, value } = await reader.read();
       if (done) break;
       if (!value) continue;

@@ -106,11 +106,13 @@ describe("boards and cards", () => {
 
   it("addTextCard never collides when next_id lags behind the highest id", () => {
     // The welcome board's shape: ids 1..3 with next_id 2.
-    const board = { items: [
-      { id: 1, pos: { x: 0, y: 0 }, size: { w: 10, h: 10 }, group: null, kind: { Text: { text: "a", bold: false, size: 16, color: "#1A1A1A" } } },
-      { id: 2, pos: { x: 0, y: 0 }, size: { w: 10, h: 10 }, group: null, kind: { Text: { text: "b", bold: false, size: 16, color: "#1A1A1A" } } },
-      { id: 3, pos: { x: 0, y: 0 }, size: { w: 10, h: 10 }, group: null, kind: { Text: { text: "c", bold: false, size: 16, color: "#1A1A1A" } } },
-    ], camera: { x: 0, y: 0, zoom: 1 }, next_id: 2, next_group: 1, bg: "#FFFFFF", grid: "Dots" };
+    const board = {
+      items: [
+        { id: 1, pos: { x: 0, y: 0 }, size: { w: 10, h: 10 }, group: null, kind: { Text: { text: "a", bold: false, size: 16, color: "#1A1A1A" } } },
+        { id: 2, pos: { x: 0, y: 0 }, size: { w: 10, h: 10 }, group: null, kind: { Text: { text: "b", bold: false, size: 16, color: "#1A1A1A" } } },
+        { id: 3, pos: { x: 0, y: 0 }, size: { w: 10, h: 10 }, group: null, kind: { Text: { text: "c", bold: false, size: 16, color: "#1A1A1A" } } },
+      ], camera: { x: 0, y: 0, zoom: 1 }, next_id: 2, next_group: 1, bg: "#FFFFFF", grid: "Dots"
+    };
     const item = addTextCard(board, { text: "New", x: 10, y: 10, w: 320, h: 80 });
     expect(item.id).toBe(4);
     expect(board.next_id).toBe(4);

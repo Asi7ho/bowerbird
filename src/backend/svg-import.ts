@@ -435,7 +435,7 @@ function decodeDataUri(href: string): { name: string; data: Uint8Array } | null 
 function walkSvg(node: XmlNode, m: Matrix, out: RawItem[]): void {
   const tag = node.tag;
   if (tag === "defs" || tag === "title" || tag === "desc" || tag === "metadata" || tag === "style" || tag === "script" ||
-      tag === "use" || tag === "clipPath" || tag === "mask" || tag === "pattern" || tag === "symbol") return;
+    tag === "use" || tag === "clipPath" || tag === "mask" || tag === "pattern" || tag === "symbol") return;
   const local = parseTransform(node.attrs.transform);
   const mm = multiplyMatrix(m, local);
   if (parseOpacity(node.attrs.opacity) === 0) return;

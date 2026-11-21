@@ -141,5 +141,5 @@ export function loadLibraryAudioDuration(api: PluginContext, wrap: HTMLElement, 
     libAudioDurations.set(path, audio.duration);
     if (wrap.isConnected && dur.isConnected) dur.textContent = formatAudioTime(audio.duration);
   });
-  audio.addEventListener("error", () => {});
+  audio.addEventListener("error", () => { });
 }

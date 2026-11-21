@@ -1,1 +1,18 @@
-{"compilerOptions":{"allowImportingTsExtensions":false,"esModuleInterop":true,"lib":["ES2022","DOM"],"module":"nodenext","moduleResolution":"nodenext","noEmit":true,"target":"ES2022"},"extends":"./tsconfig.json","include":["plugins"]}
+{
+    "compilerOptions": {
+        "allowImportingTsExtensions": false,
+        "esModuleInterop": true,
+        "lib": [
+            "ES2022",
+            "DOM"
+        ],
+        "module": "nodenext",
+        "moduleResolution": "nodenext",
+        "noEmit": true,
+        "target": "ES2022"
+    },
+    "extends": "./tsconfig.json",
+    "include": [
+        "plugins"
+    ]
+}

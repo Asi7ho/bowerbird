@@ -47,14 +47,14 @@ describe("createBoardSearch", () => {
         contextIndexSave: async () => undefined,
       },
       // The engine registers a beforeunload flush on creation.
-      addEventListener: () => {},
+      addEventListener: () => { },
     });
-    input = { value: "", addEventListener: () => {} };
+    input = { value: "", addEventListener: () => { } };
     count = { textContent: "" };
     results = {
       style: {},
       innerHTML: "",
-      addEventListener: () => {},
+      addEventListener: () => { },
       querySelector: () => null,
     };
     const mod = await import("../../src/backend/search");
@@ -63,16 +63,16 @@ describe("createBoardSearch", () => {
       getBoardGeneration: () => 1,
       getBoardSearchVersion: () => 1,
       media: {
-        indexPdfForSearch: () => {},
+        indexPdfForSearch: () => { },
         pdfSearchText: new Map(),
       } as unknown as import("../../src/backend/media").Media,
       getCardsEl: () => ({ children: [] }) as unknown as HTMLDivElement,
-      onJumpTo: () => {},
+      onJumpTo: () => { },
     });
     search.setSearchElements({
       input: input as unknown as HTMLInputElement,
       count: count as unknown as HTMLElement,
-      clear: { style: {}, addEventListener: () => {} } as unknown as HTMLButtonElement,
+      clear: { style: {}, addEventListener: () => { } } as unknown as HTMLButtonElement,
       results: results as unknown as HTMLElement,
     });
   });

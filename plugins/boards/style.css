@@ -3,58 +3,139 @@
    No pills, no badges, no custom colours beyond the accent
    for the current board's name. */
 .plugin-panel[data-panel="boards"] .bd-meta {
-  color: var(--grey); font-size: 12px; line-height: 1.45; margin: 0 0 12px;
+  color: var(--grey);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 0 0 12px;
 }
+
 .plugin-panel[data-panel="boards"] .bd-form {
-  display: flex; gap: 6px; margin-bottom: 12px;
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
 }
+
 .plugin-panel[data-panel="boards"] .bd-input {
-  flex: 1 1 auto; min-width: 0; box-sizing: border-box;
-  font: inherit; font-size: 13px; color: var(--ink);
-  background: var(--bg-system); border: none; border-radius: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink);
+  background: var(--bg-system);
+  border: none;
+  border-radius: 8px;
   padding: 8px 12px;
 }
+
 .plugin-panel[data-panel="boards"] .bd-create {
-  flex: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--ink);
-  background: #fff; border: 1px solid var(--separator); border-radius: 9px;
-  padding: 6px 12px; cursor: pointer;
+  flex: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--separator);
+  border-radius: 9px;
+  padding: 6px 12px;
+  cursor: pointer;
 }
-.plugin-panel[data-panel="boards"] .bd-create:hover { background: var(--fill); }
+
+.plugin-panel[data-panel="boards"] .bd-create:hover {
+  background: var(--fill);
+}
+
 .plugin-panel[data-panel="boards"] .bd-list {
-  display: flex; flex-direction: column;
+  display: flex;
+  flex-direction: column;
 }
+
 .plugin-panel[data-panel="boards"] .bd-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 12px; border-radius: 9px; border-bottom: 1px solid var(--separator);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border-bottom: 1px solid var(--separator);
 }
-.plugin-panel[data-panel="boards"] .bd-row:hover { background: var(--fill); }
+
+.plugin-panel[data-panel="boards"] .bd-row:hover {
+  background: var(--fill);
+}
+
 .plugin-panel[data-panel="boards"] .bd-name {
-  flex: 1 1 auto; min-width: 0; text-align: left;
-  font: inherit; font-size: 13px; font-weight: 600; color: var(--ink);
-  background: none; border: none; padding: 0; cursor: pointer;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.plugin-panel[data-panel="boards"] .bd-current .bd-name { color: var(--accent); }
+
+.plugin-panel[data-panel="boards"] .bd-current .bd-name {
+  color: var(--accent);
+}
+
 .plugin-panel[data-panel="boards"] .bd-row .bd-meta {
-  flex: none; margin: 0; white-space: nowrap;
+  flex: none;
+  margin: 0;
+  white-space: nowrap;
 }
+
 .plugin-panel[data-panel="boards"] .bd-del {
   /* A × glyph sits high in its box on its baseline, so
      line-height alone leaves it off-centre: flex-centre it,
      with no padding, and the glyph lands in the middle. */
-  flex: none; display: inline-flex; align-items: center; justify-content: center;
-  width: 24px; height: 24px; padding: 0; font-size: 16px; line-height: 1;
-  color: var(--grey); background: none; border: none; border-radius: 9px; cursor: pointer;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--grey);
+  background: none;
+  border: none;
+  border-radius: 9px;
+  cursor: pointer;
 }
-.plugin-panel[data-panel="boards"] .bd-del:hover { background: rgba(0, 0, 0, 0.05); color: var(--ink); }
+
+.plugin-panel[data-panel="boards"] .bd-del:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--ink);
+}
+
 .plugin-panel[data-panel="boards"] .bd-rename {
-  flex: 1 1 auto; min-width: 0; box-sizing: border-box;
-  font: inherit; font-size: 13px; font-weight: 600; color: var(--ink);
-  background: var(--bg-system); border: none; border-radius: 8px; padding: 6px 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--bg-system);
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
 }
+
 .plugin-panel[data-panel="boards"] .bd-armed {
-  width: auto; padding: 0 8px; color: #e63946; font-size: 13px;
+  width: auto;
+  padding: 0 8px;
+  color: #e63946;
+  font-size: 13px;
 }
+
 /* Versions: the recovery journal and every kept backup, under
    a hairline below the board list. Rows mirror .bd-row; the
    Restore button is the core button style (white, hairline
@@ -62,33 +143,83 @@
    backup restore. The journal row is the unsaved-changes
    entry: it also gets a quiet Discard button. */
 .plugin-panel[data-panel="boards"] .bd-history {
-  margin-top: 16px; border-top: 1px solid var(--separator); padding-top: 12px;
+  margin-top: 16px;
+  border-top: 1px solid var(--separator);
+  padding-top: 12px;
 }
+
 .plugin-panel[data-panel="boards"] .bd-history-title {
-  font-size: 12px; font-weight: 600; color: var(--grey); margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--grey);
+  margin: 0 0 4px;
 }
+
 .plugin-panel[data-panel="boards"] .bd-history-list {
-  display: flex; flex-direction: column;
+  display: flex;
+  flex-direction: column;
 }
+
 .plugin-panel[data-panel="boards"] .bd-version-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 10px 12px; border-radius: 9px; border-bottom: 1px solid var(--separator);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 9px;
+  border-bottom: 1px solid var(--separator);
 }
-.plugin-panel[data-panel="boards"] .bd-version-row:hover { background: var(--fill); }
+
+.plugin-panel[data-panel="boards"] .bd-version-row:hover {
+  background: var(--fill);
+}
+
 .plugin-panel[data-panel="boards"] .bd-version-row .bd-meta {
-  flex: 1 1 auto; min-width: 0; margin: 0;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
+
 .plugin-panel[data-panel="boards"] .bd-restore {
-  flex: none; border: 1px solid var(--separator); background: #fff; border-radius: 9px;
-  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
-  color: var(--ink); box-shadow: var(--shadow-sm);
+  flex: none;
+  border: 1px solid var(--separator);
+  background: #fff;
+  border-radius: 9px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
 }
-.plugin-panel[data-panel="boards"] .bd-restore:hover { background: var(--fill); }
-.plugin-panel[data-panel="boards"] .bd-restore.bd-armed { color: #e63946; }
+
+.plugin-panel[data-panel="boards"] .bd-restore:hover {
+  background: var(--fill);
+}
+
+.plugin-panel[data-panel="boards"] .bd-restore.bd-armed {
+  color: #e63946;
+}
+
 .plugin-panel[data-panel="boards"] .bd-discard {
-  flex: none; border: none; background: transparent; border-radius: 9px;
-  padding: 6px 8px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--grey);
+  flex: none;
+  border: none;
+  background: transparent;
+  border-radius: 9px;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--grey);
 }
-.plugin-panel[data-panel="boards"] .bd-discard:hover { background: var(--fill); color: var(--ink); }
-.plugin-panel[data-panel="boards"] .bd-discard.bd-armed { color: #e63946; }
+
+.plugin-panel[data-panel="boards"] .bd-discard:hover {
+  background: var(--fill);
+  color: var(--ink);
+}
+
+.plugin-panel[data-panel="boards"] .bd-discard.bd-armed {
+  color: #e63946;
+}

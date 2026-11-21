@@ -19,9 +19,11 @@ const pluginsDir = path.join(tmp, "plugins");
 fs.mkdirSync(dataHome, { recursive: true });
 fs.mkdirSync(configHome, { recursive: true });
 fs.mkdirSync(pluginsDir, { recursive: true });
-const board = { items: [
-  { id: 1, pos: { x: 300, y: 300 }, size: { w: 200, h: 100 }, group: null, kind: { Text: { text: "hello", bold: false, size: 16, color: "#000000" } } },
-], camera: { x: 0, y: 0, zoom: 1 }, next_id: 2, next_group: 1, bg: "#FFFFFF", grid: "Dots" };
+const board = {
+  items: [
+    { id: 1, pos: { x: 300, y: 300 }, size: { w: 200, h: 100 }, group: null, kind: { Text: { text: "hello", bold: false, size: 16, color: "#000000" } } },
+  ], camera: { x: 0, y: 0, zoom: 1 }, next_id: 2, next_group: 1, bg: "#FFFFFF", grid: "Dots"
+};
 fs.writeFileSync(boardPath, JSON.stringify(board));
 
 const app = await electron.launch({

@@ -303,7 +303,7 @@ function strokePointInFrame(item: Item, world: Pt, tol: number): Pt | null {
   const rot = itemRotation(item);
   const p = rot !== 0 ? rotatePoint(world, centre(item), -rot) : world;
   if (p.x < item.pos.x - tol || p.x > item.pos.x + item.size.w + tol ||
-      p.y < item.pos.y - tol || p.y > item.pos.y + item.size.h + tol) return null;
+    p.y < item.pos.y - tol || p.y > item.pos.y + item.size.h + tol) return null;
   return p;
 }
 function strokeHitTest(points: Pt[], p: Pt, tol: number): boolean {

@@ -1,1 +1,22 @@
-{"compilerOptions":{"allowImportingTsExtensions":false,"esModuleInterop":true,"lib":["ES2022"],"module":"nodenext","moduleResolution":"nodenext","noEmit":false,"outDir":"electron-dist","rootDir":"electron","target":"ES2022","types":["node"]},"extends":"./tsconfig.json","include":["electron"]}
+{
+    "compilerOptions": {
+        "allowImportingTsExtensions": false,
+        "esModuleInterop": true,
+        "lib": [
+            "ES2022"
+        ],
+        "module": "nodenext",
+        "moduleResolution": "nodenext",
+        "noEmit": false,
+        "outDir": "electron-dist",
+        "rootDir": "electron",
+        "target": "ES2022",
+        "types": [
+            "node"
+        ]
+    },
+    "extends": "./tsconfig.json",
+    "include": [
+        "electron"
+    ]
+}

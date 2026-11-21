@@ -8,24 +8,35 @@
    dock. The panel body is a flex column so the sections scroll
    inside it while the search row stays visible. */
 .plugin-panel[data-panel="library"] {
-  flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0;
+   flex: 1 1 auto;
+   display: flex;
+   flex-direction: column;
+   min-height: 0;
 }
+
 .plugin-panel[data-panel="library"] .plugin-panel-body {
-  display: flex; flex-direction: column; flex: 1 1 auto;
-  min-height: 0; overflow: hidden;
-  /* No type override: a panel is a panel, so it uses the
+   display: flex;
+   flex-direction: column;
+   flex: 1 1 auto;
+   min-height: 0;
+   overflow: hidden;
+   /* No type override: a panel is a panel, so it uses the
      core panel type (13px/1.5), like every other panel.
      The whiteboard view keeps the core view type (14px/1.6)
      from #plugin-view, because a full-board view is a
      different surface from a sidebar panel — same surface,
      same style, not panel forced to match view. */
 }
+
 /* Panel head: no override here — a panel head is the core
    panel head (13px/600, 10px/12px, hairline underneath),
    like every other panel, including Palette. */
 .plugin-panel[data-panel="library"] .vl-sections {
-  flex: 1 1 auto; overflow-y: auto; overflow-x: hidden; min-height: 0;
-  /* 15px on the right is the scrollbar's own lane, not card
+   flex: 1 1 auto;
+   overflow-y: auto;
+   overflow-x: hidden;
+   min-height: 0;
+   /* 15px on the right is the scrollbar's own lane, not card
      space: the panel sections element is itself the scroller,
      so an overlay scrollbar would otherwise float over the
      cards' right edge and hide parts of them, and a classic
@@ -39,59 +50,118 @@
      padding the left-column cards sat flush against the
      scroller edge, so that small part on the left was
      clipped by overflow-x: hidden. */
-  padding: 0 15px 0 4px;
+   padding: 0 15px 0 4px;
 }
+
 /* Search row: search input plus a single icon button for the
    mode switch. The button matches the search input's height. */
-.vl-search-row { display: flex; gap: 6px; margin-bottom: 12px; }
-.vl-search {
-  flex: 1; min-width: 0; box-sizing: border-box;
-  /* Core search field, as in the title bar: a quiet grey
-     field, no border, not a bordered white web input. */
-  padding: 6px 8px 6px 12px;
-  background: var(--bg-system); border: none; border-radius: 8px;
-  font: inherit; color: var(--ink); outline: none;
+.vl-search-row {
+   display: flex;
+   gap: 6px;
+   margin-bottom: 12px;
 }
-.vl-search::placeholder { color: var(--grey); }
+
+.vl-search {
+   flex: 1;
+   min-width: 0;
+   box-sizing: border-box;
+   /* Core search field, as in the title bar: a quiet grey
+     field, no border, not a bordered white web input. */
+   padding: 6px 8px 6px 12px;
+   background: var(--bg-system);
+   border: none;
+   border-radius: 8px;
+   font: inherit;
+   color: var(--ink);
+   outline: none;
+}
+
+.vl-search::placeholder {
+   color: var(--grey);
+}
+
 /* Icon button, as a toolbar button: no border, transparent,
    9px radius, hover a quiet black tint — not a bordered
    white button, which is the core panel button style for
    text buttons, not icon buttons. The prefix beats the
    core .plugin-panel-body button rule. */
 .vl-search-row .vl-icon-btn {
-  width: 32px; height: 32px; padding: 0; box-sizing: border-box;
-  border: none; border-radius: 9px;
-  background: transparent; cursor: pointer; display: flex;
-  align-items: center; justify-content: center; flex: none;
+   width: 32px;
+   height: 32px;
+   padding: 0;
+   box-sizing: border-box;
+   border: none;
+   border-radius: 9px;
+   background: transparent;
+   cursor: pointer;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   flex: none;
 }
-.vl-search-row .vl-icon-btn:hover { background: rgba(0, 0, 0, 0.05); }
+
+.vl-search-row .vl-icon-btn:hover {
+   background: rgba(0, 0, 0, 0.05);
+}
+
 /* The new-category button is text, not an icon: a plain
    plus at a size that reads as a button, not a speck. */
-.vl-search-row .vl-icon-btn { font-size: 18px; font-weight: 400; color: var(--ink); }
+.vl-search-row .vl-icon-btn {
+   font-size: 18px;
+   font-weight: 400;
+   color: var(--ink);
+}
+
 /* Icon glyphs are pure CSS, so no asset is needed. Masonry:
    three columns of blocks. Sidebar: a main area with a
    right-hand bar. */
 .vl-icon-masonry {
-  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px;
-  width: 16px; height: 16px;
+   display: grid;
+   grid-template-columns: 1fr 1fr 1fr;
+   gap: 2px;
+   width: 16px;
+   height: 16px;
 }
-.vl-icon-masonry::before, .vl-icon-masonry::after {
-  content: ""; background: var(--ink); border-radius: 1px;
+
+.vl-icon-masonry::before,
+.vl-icon-masonry::after {
+   content: "";
+   background: var(--ink);
+   border-radius: 1px;
 }
-.vl-icon-masonry::before { grid-row: span 2; }
+
+.vl-icon-masonry::before {
+   grid-row: span 2;
+}
+
 .vl-icon-sidebar {
-  width: 16px; height: 16px; border: 1.5px solid var(--ink);
-  border-radius: 2px; position: relative; box-sizing: border-box;
+   width: 16px;
+   height: 16px;
+   border: 1.5px solid var(--ink);
+   border-radius: 2px;
+   position: relative;
+   box-sizing: border-box;
 }
+
 .vl-icon-sidebar::after {
-  content: ""; position: absolute; top: 0; right: 0; bottom: 0;
-  width: 5px; background: var(--ink); border-radius: 0 1px 1px 0;
+   content: "";
+   position: absolute;
+   top: 0;
+   right: 0;
+   bottom: 0;
+   width: 5px;
+   background: var(--ink);
+   border-radius: 0 1px 1px 0;
 }
+
 /* Sections: a header button (arrow, name, count) and a
    masonry body. The body is position relative so scaled
    cards are placed with left/top. An empty section has no
    body content at all — just the header. */
-.vl-category { margin-bottom: 16px; }
+.vl-category {
+   margin-bottom: 16px;
+}
+
 /* The header rule is prefixed with its section class so it
    beats the core .plugin-panel-body button rule, exactly as
    the icon button rule above does. Without the prefix the
@@ -106,64 +176,146 @@
    between the category name and the first card, which was
    only the button's own 6px padding before. */
 .vl-category .vl-category-head {
-  display: flex; align-items: center; gap: 6px; width: 100%;
-  padding: 6px 4px; margin-bottom: 12px; background: none; border: none;
-  border-radius: 0; cursor: pointer;
-  font: inherit; font-weight: 600; text-align: left; box-sizing: border-box;
+   display: flex;
+   align-items: center;
+   gap: 6px;
+   width: 100%;
+   padding: 6px 4px;
+   margin-bottom: 12px;
+   background: none;
+   border: none;
+   border-radius: 0;
+   cursor: pointer;
+   font: inherit;
+   font-weight: 600;
+   text-align: left;
+   box-sizing: border-box;
 }
-.vl-category .vl-category-head:hover { background: var(--fill); border-radius: 8px; border: none; }
-.vl-arrow { width: 12px; flex: none; text-align: center; color: var(--grey); }
-.vl-category-name { flex: 1 1 auto; min-width: 0; }
-.vl-count { color: var(--grey); font-weight: 400; }
+
+.vl-category .vl-category-head:hover {
+   background: var(--fill);
+   border-radius: 8px;
+   border: none;
+}
+
+.vl-arrow {
+   width: 12px;
+   flex: none;
+   text-align: center;
+   color: var(--grey);
+}
+
+.vl-category-name {
+   flex: 1 1 auto;
+   min-width: 0;
+}
+
+.vl-count {
+   color: var(--grey);
+   font-weight: 400;
+}
+
 /* Capped section: how many of the section are shown, at the
    bottom of the masonry. Absolutely positioned like the
    thumbnails, so it does not disturb the column heights. */
-.vl-more { position: absolute; left: 0; color: var(--grey); font-size: 12px; }
+.vl-more {
+   position: absolute;
+   left: 0;
+   color: var(--grey);
+   font-size: 12px;
+}
+
 /* Delete a user category: a quiet grey cross at the end of
    the header, next to the count. Only user categories get
    one — Uncategorized has nothing to delete. */
 .vl-category-delete {
-  flex: none; width: 20px; height: 20px; display: flex;
-  align-items: center; justify-content: center;
-  color: var(--grey); font-size: 16px; line-height: 1;
-  border-radius: 6px; cursor: pointer;
+   flex: none;
+   width: 20px;
+   height: 20px;
+   display: flex;
+   align-items: center;
+   justify-content: center;
+   color: var(--grey);
+   font-size: 16px;
+   line-height: 1;
+   border-radius: 6px;
+   cursor: pointer;
 }
-.vl-category-delete:hover { background: var(--fill); color: var(--ink); }
+
+.vl-category-delete:hover {
+   background: var(--fill);
+   color: var(--ink);
+}
+
 /* Rename inline: the name becomes a text field in place,
    in the header's own type, with the app's quiet grey
    field background — not a bordered white web input. */
 .vl-category-rename {
-  flex: 1 1 auto; min-width: 0; box-sizing: border-box;
-  padding: 2px 6px; background: var(--bg-system); border: none;
-  border-radius: 6px; font: inherit; font-weight: 600;
-  color: var(--ink); outline: none;
+   flex: 1 1 auto;
+   min-width: 0;
+   box-sizing: border-box;
+   padding: 2px 6px;
+   background: var(--bg-system);
+   border: none;
+   border-radius: 6px;
+   font: inherit;
+   font-weight: 600;
+   color: var(--ink);
+   outline: none;
 }
-.vl-category-body { position: relative; }
+
+.vl-category-body {
+   position: relative;
+}
+
 /* A library card wrapper: a positioning box at the column
    width, with the board card inside it, scaled uniformly to
    fit. The wrapper carries no card chrome of its own — the
    board card inside it already has border, radius and shadow
    — so a library card never looks like a different app. */
 .vl-board-wrap {
-  position: absolute; overflow: hidden; cursor: pointer;
-  -webkit-user-select: none; user-select: none;
+   position: absolute;
+   overflow: hidden;
+   cursor: pointer;
+   -webkit-user-select: none;
+   user-select: none;
 }
+
 /* Selected on the board: the library preview shows the same
    selection, so the user can see at a glance which library
    cards are selected, and the first one scrolls into view. */
 .vl-board-wrap.vl-selected {
-  outline: 2px solid #007AFF; outline-offset: 2px; border-radius: 12px;
+   outline: 2px solid #007AFF;
+   outline-offset: 2px;
+   border-radius: 12px;
 }
+
 /* Drag ghost: the same board card, scaled to 120px wide. */
 .vl-ghost {
-  position: fixed; z-index: 100; pointer-events: none;
-  overflow: hidden; opacity: 0.9;
-  box-shadow: var(--shadow-lg);
+   position: fixed;
+   z-index: 100;
+   pointer-events: none;
+   overflow: hidden;
+   opacity: 0.9;
+   box-shadow: var(--shadow-lg);
 }
+
 /* Whiteboard view: the head and the sections sit clear of the
    left toolbar, as the board does. */
-.vl-view-head { margin-bottom: 16px; margin-left: 60px; }
+.vl-view-head {
+   margin-bottom: 16px;
+   margin-left: 60px;
+}
+
 /* View title, as a document title in Settings: 17px/700,
    not the old 20px, which was larger than any core title. */
-.vl-view-head h2 { font-size: 17px; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 12px; }
-#plugin-view .vl-sections { margin-left: 60px; }
+.vl-view-head h2 {
+   font-size: 17px;
+   font-weight: 700;
+   letter-spacing: -0.02em;
+   margin: 0 0 12px;
+}
+
+#plugin-view .vl-sections {
+   margin-left: 60px;
+}

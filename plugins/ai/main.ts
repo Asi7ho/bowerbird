@@ -21,4 +21,4 @@ export function activate(api: PluginContext): void {
   });
 }
 
-export function deactivate(): void {}
+export function deactivate(): void { }

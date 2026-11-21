@@ -1,41 +1,85 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Bowerbird</title>
-    <style>
-      html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; }
-      /* A small round icon, not a card: 56px circle, 12px margin
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Bowerbird</title>
+  <style>
+    html,
+    body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    /* A small round icon, not a card: 56px circle, 12px margin
          from the screen edges (the window is 80px). Hovering grows
          it slightly; the arrow points away from the corner, into
          the screen, so it reads as "open the board". */
-      #icon {
-        width: 56px; height: 56px; margin: 12px; border-radius: 50%;
-        background: rgba(255, 255, 255, 0.92);
-        border: 1px solid rgba(0, 0, 0, 0.12);
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.1);
-        display: flex; align-items: center; justify-content: center;
-        cursor: pointer;
-        transition: transform 0.15s ease, box-shadow 0.15s ease;
-      }
-      #icon:hover { transform: scale(1.1); box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22), 0 2px 8px rgba(0, 0, 0, 0.12); }
-      #icon svg { width: 24px; height: 24px; fill: none; stroke: #1d1d1f; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-      /* Base arrow points north-east (away from a bottom-left
+    #icon {
+      width: 56px;
+      height: 56px;
+      margin: 12px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18), 0 2px 6px rgba(0, 0, 0, 0.1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    #icon:hover {
+      transform: scale(1.1);
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.22), 0 2px 8px rgba(0, 0, 0, 0.12);
+    }
+
+    #icon svg {
+      width: 24px;
+      height: 24px;
+      fill: none;
+      stroke: #1d1d1f;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    /* Base arrow points north-east (away from a bottom-left
          corner); rotate it for the other corners. */
-      body.corner-bottom-left svg { transform: rotate(0deg); }
-      body.corner-bottom-right svg { transform: rotate(-90deg); }
-      body.corner-top-right svg { transform: rotate(180deg); }
-      body.corner-top-left svg { transform: rotate(90deg); }
-    </style>
-  </head>
-  <body>
-    <div id="icon" title="Click to open the board"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18l12 -12" /><path d="M12 6h6v6" /></svg></div>
-    <script>
-      const corner = new URLSearchParams(location.search).get('corner') || 'bottom-left';
-      document.body.classList.add('corner-' + corner);
-      document.getElementById('icon').addEventListener('click', () => {
-        window.bowerbird.restore().catch(() => undefined);
-      });
-    </script>
-  </body>
+    body.corner-bottom-left svg {
+      transform: rotate(0deg);
+    }
+
+    body.corner-bottom-right svg {
+      transform: rotate(-90deg);
+    }
+
+    body.corner-top-right svg {
+      transform: rotate(180deg);
+    }
+
+    body.corner-top-left svg {
+      transform: rotate(90deg);
+    }
+  </style>
+</head>
+
+<body>
+  <div id="icon" title="Click to open the board"><svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M6 18l12 -12" />
+      <path d="M12 6h6v6" />
+    </svg></div>
+  <script>
+    const corner = new URLSearchParams(location.search).get('corner') || 'bottom-left';
+    document.body.classList.add('corner-' + corner);
+    document.getElementById('icon').addEventListener('click', () => {
+      window.bowerbird.restore().catch(() => undefined);
+    });
+  </script>
+</body>
+
 </html>

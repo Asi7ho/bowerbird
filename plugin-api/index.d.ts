@@ -1084,8 +1084,8 @@ export interface PluginContext {
     // file into the board and then read it back.
     embedFile: (file: File | string) => Promise<string>;
     listLibrary: () => Promise<{ path: string; items: Array<{ name: string; path: string; relativePath: string; ext: string; kind: string; category: string | null; size_bytes: number; mtime_ms: number }>; categories: Array<{ name: string; count: number }>; uncategorizedCount: number }>;
-  createLibraryCategory: (name: string) => Promise<string>;
-  moveLibraryItem: (relativePath: string, category: string | null) => Promise<string>;
+    createLibraryCategory: (name: string) => Promise<string>;
+    moveLibraryItem: (relativePath: string, category: string | null) => Promise<string>;
     fileUrl: (path: string) => string;
     readTextFile: (path: string) => Promise<string>;
     // Read a file as base64 with its MIME type, for the
