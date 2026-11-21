@@ -15,9 +15,16 @@
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06);
   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.06);
 }
-* { box-sizing: border-box; }
-html, body {
-  margin: 0; height: 100%; overflow: hidden;
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
     "Helvetica Neue", "Segoe UI", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -26,6 +33,7 @@ html, body {
   color: var(--ink);
   background: #fff;
 }
+
 /* The window is a row: a main column (title bar on top,
    board below it) on the left, plugin panels on the right.
    Panels are full window height, so a panel's header sits
@@ -33,10 +41,32 @@ html, body {
    instead of starting below the bar. The board's area
    starts below the bar and left of the panels, so nothing
    in the board can slide over the bar or under a panel. */
-body { display: flex; flex-direction: row; }
-#main-column { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; min-height: 0; }
-button { font-family: inherit; }
-#board { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: none; }
+body {
+  display: flex;
+  flex-direction: row;
+}
+
+#main-column {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+button {
+  font-family: inherit;
+}
+
+#board {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
 
 /* Custom title bar: opaque white, hairline underneath, the
    window's drag region. It is a layout sibling above the
@@ -46,27 +76,48 @@ button { font-family: inherit; }
    own controls opt out of dragging; everything else on the
    bar drags the window. */
 #title-bar {
-  position: relative; z-index: 50; flex: none; height: 48px;
-  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
-  gap: 12px; padding: 0 16px;
-  background: #fff; border-bottom: 1px solid var(--separator);
+  position: relative;
+  z-index: 50;
+  flex: none;
+  height: 48px;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+  background: #fff;
+  border-bottom: 1px solid var(--separator);
   -webkit-app-region: drag;
 }
+
 #title-bar-left {
-  display: flex; align-items: center; gap: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   -webkit-app-region: drag;
 }
+
 #title-bar-name {
-  font-size: 13px; font-weight: 600; white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
   -webkit-app-region: drag;
 }
+
 #title-bar-undo {
-  display: flex; align-items: center; gap: 2px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
+
 #title-bar-actions {
-  display: flex; align-items: center; justify-content: flex-end; gap: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
   -webkit-app-region: drag;
 }
+
 /* Title-bar icon buttons (undo, redo, panels toggle), as a
    toolbar icon button: borderless, 32px, 9px radius, hover a
    quiet black tint, active white with the toolbar active
@@ -74,26 +125,58 @@ button { font-family: inherit; }
    Every button opts out of the title bar's drag region, or a
    click on it would move the window instead of acting. */
 #title-bar button {
-  border: none; background: transparent; border-radius: 9px;
-  width: 32px; height: 32px; display: flex; align-items: center;
-  justify-content: center; cursor: pointer; color: var(--ink);
+  border: none;
+  background: transparent;
+  border-radius: 9px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--ink);
   -webkit-app-region: no-drag;
 }
-#title-bar button:hover { background: rgba(0, 0, 0, 0.05); }
+
+#title-bar button:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
 #panels-toggle.active {
   background: #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
 }
-#title-bar button.dim { opacity: 0.35; cursor: default; }
-#title-bar button.dim:hover { background: transparent; }
-#title-bar button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+#title-bar button.dim {
+  opacity: 0.35;
+  cursor: default;
+}
+
+#title-bar button.dim:hover {
+  background: transparent;
+}
+
+#title-bar button svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 /* Focus: the header comment promises a 2px ring, and
    only audio seek had one. Every button, input and
    tab now gets the same accent ring on keyboard
    focus, so keyboard use is visible everywhere. */
-button:focus-visible, input:focus-visible, .plugin-tab:focus-visible {
-  outline: 2px solid var(--accent); outline-offset: 2px;
+button:focus-visible,
+input:focus-visible,
+.plugin-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
+
 /* Window controls: the window is frameless, so there
    are no native ones — the app draws what each OS would
    draw, and the renderer puts the group where that OS
@@ -122,90 +205,240 @@ button:focus-visible, input:focus-visible, .plugin-tab:focus-visible {
      is a red tint with a red icon — not Windows' solid
      red, and not macOS' coloured circles. */
 #window-controls {
-  display: flex; align-items: center; flex: none;
+  display: flex;
+  align-items: center;
+  flex: none;
   -webkit-app-region: no-drag;
 }
+
 /* Shared: one button is shown per platform, the other
    icon set is hidden; the maximise button shows its
    restore icon only while maximised, and the full
    screen button shows its exit icon only while in
    full screen. */
-#window-controls .icon-os { display: none; }
-#window-controls .icon-exit, #window-controls .icon-restore { display: none; }
-#window-controls .win-fullscreen.is-fullscreen .icon-enter { display: none; }
-#window-controls .win-fullscreen.is-fullscreen .icon-exit { display: inline; }
-#window-controls .win-maximise.is-maximised .icon-maximise { display: none; }
-#window-controls .win-maximise.is-maximised .icon-restore { display: inline; }
+#window-controls .icon-os {
+  display: none;
+}
+
+#window-controls .icon-exit,
+#window-controls .icon-restore {
+  display: none;
+}
+
+#window-controls .win-fullscreen.is-fullscreen .icon-enter {
+  display: none;
+}
+
+#window-controls .win-fullscreen.is-fullscreen .icon-exit {
+  display: inline;
+}
+
+#window-controls .win-maximise.is-maximised .icon-maximise {
+  display: none;
+}
+
+#window-controls .win-maximise.is-maximised .icon-restore {
+  display: inline;
+}
+
 /* The restore icon's front square masks the back square's
    corner: it must actually be filled white, not the
    title-bar buttons' usual fill:none. */
-#window-controls .icon-restore path:nth-child(2) { fill: #fff; }
+#window-controls .icon-restore path:nth-child(2) {
+  fill: #fff;
+}
+
 /* macOS */
-body.platform-darwin #window-controls { gap: 8px; }
+body.platform-darwin #window-controls {
+  gap: 8px;
+}
+
 body.platform-darwin #title-bar button.win-close,
 body.platform-darwin #title-bar button.win-minimise,
 body.platform-darwin #title-bar button.win-fullscreen {
-  width: 12px; height: 12px; padding: 0; border-radius: 50%;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  border-radius: 50%;
   box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.15);
 }
-body.platform-darwin #title-bar button.win-close { background: #ff5f57; order: 1; }
-body.platform-darwin #title-bar button.win-minimise { background: #febc2e; order: 2; }
-body.platform-darwin #title-bar button.win-fullscreen { background: #28c840; order: 3; }
+
+body.platform-darwin #title-bar button.win-close {
+  background: #ff5f57;
+  order: 1;
+}
+
+body.platform-darwin #title-bar button.win-minimise {
+  background: #febc2e;
+  order: 2;
+}
+
+body.platform-darwin #title-bar button.win-fullscreen {
+  background: #28c840;
+  order: 3;
+}
+
 /* Hover keeps the colour: each hover rule repeats the
    button's own colour, so the generic title-bar grey
    hover tint never replaces it. */
-body.platform-darwin #title-bar button.win-close:hover { background: #ff5f57; }
-body.platform-darwin #title-bar button.win-minimise:hover { background: #febc2e; }
-body.platform-darwin #title-bar button.win-fullscreen:hover { background: #28c840; }
-body.platform-darwin #title-bar button.win-maximise { display: none; }
+body.platform-darwin #title-bar button.win-close:hover {
+  background: #ff5f57;
+}
+
+body.platform-darwin #title-bar button.win-minimise:hover {
+  background: #febc2e;
+}
+
+body.platform-darwin #title-bar button.win-fullscreen:hover {
+  background: #28c840;
+}
+
+body.platform-darwin #title-bar button.win-maximise {
+  display: none;
+}
+
 body.platform-darwin #window-controls svg {
-  width: 8px; height: 8px; stroke: rgba(0, 0, 0, 0.55); stroke-width: 1.4;
+  width: 8px;
+  height: 8px;
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 1.4;
   opacity: 0;
 }
-body.platform-darwin #window-controls:hover svg { opacity: 1; }
+
+body.platform-darwin #window-controls:hover svg {
+  opacity: 1;
+}
+
 /* Windows */
-body.platform-win32 #title-bar { padding-right: 0; }
-body.platform-win32 #window-controls { gap: 0; height: 48px; }
+body.platform-win32 #title-bar {
+  padding-right: 0;
+}
+
+body.platform-win32 #window-controls {
+  gap: 0;
+  height: 48px;
+}
+
 body.platform-win32 #title-bar button.win-close,
 body.platform-win32 #title-bar button.win-minimise,
 body.platform-win32 #title-bar button.win-maximise {
-  width: 46px; height: 48px; padding: 0; border-radius: 0;
+  width: 46px;
+  height: 48px;
+  padding: 0;
+  border-radius: 0;
 }
-body.platform-win32 #title-bar button.win-minimise { order: 1; }
-body.platform-win32 #title-bar button.win-maximise { order: 2; }
-body.platform-win32 #title-bar button.win-close { order: 3; }
-body.platform-win32 #title-bar button.win-fullscreen { display: none; }
-body.platform-win32 #window-controls .icon-mac { display: none; }
-body.platform-win32 #window-controls .icon-os { display: inline; }
+
+body.platform-win32 #title-bar button.win-minimise {
+  order: 1;
+}
+
+body.platform-win32 #title-bar button.win-maximise {
+  order: 2;
+}
+
+body.platform-win32 #title-bar button.win-close {
+  order: 3;
+}
+
+body.platform-win32 #title-bar button.win-fullscreen {
+  display: none;
+}
+
+body.platform-win32 #window-controls .icon-mac {
+  display: none;
+}
+
+body.platform-win32 #window-controls .icon-os {
+  display: inline;
+}
+
 body.platform-win32 #window-controls svg {
-  width: 16px; height: 16px; stroke-width: 1.5;
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.5;
 }
+
 body.platform-win32 #title-bar button.win-minimise:hover,
-body.platform-win32 #title-bar button.win-maximise:hover { background: rgba(0, 0, 0, 0.06); }
+body.platform-win32 #title-bar button.win-maximise:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
 body.platform-win32 #title-bar button.win-minimise:active,
-body.platform-win32 #title-bar button.win-maximise:active { background: rgba(0, 0, 0, 0.12); }
-body.platform-win32 #title-bar button.win-close:hover { background: #e81123; color: #fff; }
-body.platform-win32 #title-bar button.win-close:active { background: #c50f1f; color: #fff; }
+body.platform-win32 #title-bar button.win-maximise:active {
+  background: rgba(0, 0, 0, 0.12);
+}
+
+body.platform-win32 #title-bar button.win-close:hover {
+  background: #e81123;
+  color: #fff;
+}
+
+body.platform-win32 #title-bar button.win-close:active {
+  background: #c50f1f;
+  color: #fff;
+}
+
 /* Linux (GNOME-style) */
-body.platform-linux #window-controls { gap: 4px; }
+body.platform-linux #window-controls {
+  gap: 4px;
+}
+
 body.platform-linux #title-bar button.win-close,
 body.platform-linux #title-bar button.win-minimise,
 body.platform-linux #title-bar button.win-maximise {
-  width: 32px; height: 32px; padding: 0; border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
 }
-body.platform-linux #title-bar button.win-minimise { order: 1; }
-body.platform-linux #title-bar button.win-maximise { order: 2; }
-body.platform-linux #title-bar button.win-close { order: 3; }
-body.platform-linux #title-bar button.win-fullscreen { display: none; }
-body.platform-linux #window-controls .icon-mac { display: none; }
-body.platform-linux #window-controls .icon-os { display: inline; }
+
+body.platform-linux #title-bar button.win-minimise {
+  order: 1;
+}
+
+body.platform-linux #title-bar button.win-maximise {
+  order: 2;
+}
+
+body.platform-linux #title-bar button.win-close {
+  order: 3;
+}
+
+body.platform-linux #title-bar button.win-fullscreen {
+  display: none;
+}
+
+body.platform-linux #window-controls .icon-mac {
+  display: none;
+}
+
+body.platform-linux #window-controls .icon-os {
+  display: inline;
+}
+
 body.platform-linux #window-controls svg {
-  width: 16px; height: 16px; stroke-width: 1.5;
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.5;
 }
+
 body.platform-linux #title-bar button.win-minimise:hover,
-body.platform-linux #title-bar button.win-maximise:hover { background: var(--fill); }
-body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57, 70, 0.12); color: #e63946; }
-#canvas-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+body.platform-linux #title-bar button.win-maximise:hover {
+  background: var(--fill);
+}
+
+body.platform-linux #title-bar button.win-close:hover {
+  background: rgba(230, 57, 70, 0.12);
+  color: #e63946;
+}
+
+#canvas-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
 /* The draw-preview layer, above #cards in the DOM (see board.ts):
    same geometry as #canvas-svg, so a shape preview lines up with
    the world it is drawn in. It is purely visual: pointer-events
@@ -218,15 +451,35 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    chrome and modal overlays still cover it. #board creates no
    stacking context, so this z-index competes in the root one
    and beats the bar's fixed z-index 40. */
-#preview-svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 110; }
-#grid { position: absolute; inset: 0; pointer-events: none; }
+#preview-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 110;
+}
+
+#grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
 /* #cards must NOT have overflow:hidden: cards live in world
    coordinates, so a card at world x=1500 sits outside the layer's
    own 1439px box and would be clipped before the camera transform
    moves it into view. Clipping to the viewport is #board's job
    (#board is untransformed and overflow:hidden), which clips in
    screen space after the transform. */
-#cards { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; pointer-events: none; }
+#cards {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+  pointer-events: none;
+}
+
 /* The #cards layer itself takes no clicks: its children
    re-enable pointer events only where they need them
    (.card button, .note-body, …), so a click on empty
@@ -240,7 +493,14 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    It sits BEFORE #cards in the DOM, so it paints below them:
    a card placed over a frame's edge covers the dashed line,
    instead of the line painting over the card. */
-#group-frames { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; pointer-events: none; }
+#group-frames {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+  pointer-events: none;
+}
+
 /* #selected-groups mirrors the frames and labels ABOVE the
    cards, so a selected group's outline travels with the
    group instead of diving under the cards it passes over.
@@ -249,20 +509,50 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    The layer never takes clicks: its labels are display
    only, and renaming still goes through the #groups label
    below, exactly where no card covers it. */
-#selected-groups { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; pointer-events: none; }
-#selected-groups .group-frame:not(.selected), #selected-groups .group-label:not(.selected) { display: none; }
-#selected-groups .group-label { pointer-events: none; }
+#selected-groups {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+  pointer-events: none;
+}
+
+#selected-groups .group-frame:not(.selected),
+#selected-groups .group-label:not(.selected) {
+  display: none;
+}
+
+#selected-groups .group-label {
+  pointer-events: none;
+}
+
 /* #groups holds the group labels. Same no-overflow rule
    as #cards: labels live in world coordinates. The layer
    sits above the cards so a frame's label takes clicks —
    but the layer itself never takes them (pointer-events
    none, only the label re-enables them). */
-#groups { position: absolute; inset: 0; transform-origin: 0 0; will-change: transform; pointer-events: none; }
+#groups {
+  position: absolute;
+  inset: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+  pointer-events: none;
+}
+
 /* Text inside cards is never selected by a board click or drag — the
    board is a canvas, not a document. The note editor and Settings are
    the exceptions, where selecting text is the point. */
-#board textarea.note-edit, #settings { user-select: text; -webkit-user-select: text; }
-.card img { -webkit-user-drag: none; user-select: none; -webkit-user-select: none; }
+#board textarea.note-edit,
+#settings {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.card img {
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
 
 /* Resize handle: a real, visible square at the selected card's
    bottom-right corner, above the cards. It used to live in the SVG
@@ -271,11 +561,20 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    board's corner-hit test does the resizing, and the handle just
    shows where to grab. */
 #resize-handle {
-  position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px;
-  background: #fff; border: 1px solid #8e8e93; border-radius: 3px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); pointer-events: none;
-  z-index: 100; display: none; cursor: nwse-resize;
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  background: #fff;
+  border: 1px solid #8e8e93;
+  border-radius: 3px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  z-index: 100;
+  display: none;
+  cursor: nwse-resize;
 }
+
 /* Rotation handle: a round grip above the selected card's top
    centre, joined to the card by a short stem (the stem is drawn
    by the handle's own ::before, so no extra element is needed).
@@ -285,49 +584,85 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    that, the stem stayed straight down at every angle, and
    at 180° it pointed away from the card. */
 #rotate-handle {
-  position: absolute; width: 18px; height: 18px; margin: -9px 0 0 -9px;
-  background: #fff; border: 1.5px solid #007aff; border-radius: 50%;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2); pointer-events: none;
-  z-index: 100; display: none; cursor: grab;
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  background: #fff;
+  border: 1.5px solid #007aff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  z-index: 100;
+  display: none;
+  cursor: grab;
 }
+
 #rotate-handle::before {
-  content: ""; position: absolute; left: 50%; top: 100%; width: 1.5px;
-  height: 20px; margin-left: -0.75px; background: #007aff;
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  width: 1.5px;
+  height: 20px;
+  margin-left: -0.75px;
+  background: #007aff;
 }
 
 /* Cards: white, 12px radius, soft macOS shadow. Selection is a blue
    focus ring, the way Finder and Notes show it. */
 .card {
-  position: absolute; background: #fff;
-  border: 1px solid var(--hairline); border-radius: 12px;
-  overflow: hidden; pointer-events: none;
+  position: absolute;
+  background: #fff;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  overflow: hidden;
+  pointer-events: none;
   box-shadow: var(--shadow-sm);
 }
+
 .card.selected {
   border-color: rgba(0, 122, 255, 0.5);
   box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.35), var(--shadow-md);
 }
+
 /* Shape cards carry no drop shadow: the figure is the
    shape itself, and a rectangular shadow around its box
    reads as a box, not as the figure. Selected, only the
    blue ring remains. */
-.card.shape { box-shadow: none; }
-.card.shape.selected { box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.35); }
-.card.stroke { box-shadow: none; overflow: visible; }
-.card.stroke.selected { box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.35); }
+.card.shape {
+  box-shadow: none;
+}
+
+.card.shape.selected {
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.35);
+}
+
+.card.stroke {
+  box-shadow: none;
+  overflow: visible;
+}
+
+.card.stroke.selected {
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.35);
+}
+
 /* Frame cards are containers, not content: a transparent
    dashed border only, so the cards inside a frame stay
    visible on the board, and the frame reads as a slide
    border, not as another card. Selected, the dash turns
    blue, as a selected card's ring does. */
 .card.plugin-frame {
-  background: transparent; border: 2px dashed rgba(0, 0, 0, 0.20);
+  background: transparent;
+  border: 2px dashed rgba(0, 0, 0, 0.20);
   box-shadow: none;
 }
+
 .card.plugin-frame.selected {
   border-color: rgba(0, 122, 255, 0.6);
   box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.25);
 }
+
 /* Group frames are containers, not content: a transparent
    dashed border only, the same treatment as slide frames,
    so the cards inside stay visible and the frame reads as
@@ -336,23 +671,32 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    Selected, the dash turns blue, as a selected card's
    ring does. */
 .group-frame {
-  position: absolute; background: transparent;
+  position: absolute;
+  background: transparent;
   border: 2px dashed rgba(0, 0, 0, 0.20);
   border-radius: 12px;
   pointer-events: none;
 }
-.group-frame.selected { border-color: rgba(0, 122, 255, 0.6); }
+
+.group-frame.selected {
+  border-color: rgba(0, 122, 255, 0.6);
+}
+
 /* A live-import group's frame is invisible on the board:
    no dash, no border, so its cards sit like any other
    cards. When a member is selected it becomes a solid
    blue outline around the whole import — the same ring a
    selected card gets — so the import reads as one
    selected thing. */
-.group-frame.live-import { border: 2px solid transparent; }
+.group-frame.live-import {
+  border: 2px solid transparent;
+}
+
 .group-frame.live-import.selected {
   border-color: rgba(0, 122, 255, 0.5);
   box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.35);
 }
+
 /* The section label: the app's own frame-label treatment,
    as on slides — a small white chip at the frame's top
    left. It sits astride the top border, half above it, so
@@ -365,29 +709,55 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    the label no card covers. */
 .group-label {
   position: absolute;
-  background: #fff; border: 1px solid var(--hairline);
-  border-radius: 6px; padding: 2px 8px;
-  font-size: 12px; font-weight: 600; color: var(--ink);
-  pointer-events: auto; white-space: nowrap; cursor: text;
+  background: #fff;
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  pointer-events: auto;
+  white-space: nowrap;
+  cursor: text;
 }
+
 .group-frame .group-rename {
-  font: inherit; color: inherit;
-  background: none; border: none; outline: none; padding: 0;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+  padding: 0;
 }
+
 /* A voice note's name, while it is being renamed: the
    input fills the title's width, so a long name scrolls
    inside it instead of pushing the card wider. */
 .card .audio-rename {
-  font: inherit; color: inherit;
-  background: none; border: none; outline: none; padding: 0;
-  width: 100%; box-sizing: border-box;
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  outline: none;
+  padding: 0;
+  width: 100%;
+  box-sizing: border-box;
 }
-.card .inner { width: 100%; height: 100%; overflow: hidden; }
+
+.card .inner {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
 /* A note taller than its card scrolls inside the card: the
    note body is the card's inner, so it gets a vertical
    scrollbar of its own instead of clipping the text. This
    sits after .inner so it wins for overflow-y. */
-.card .note-body { overflow-y: auto; }
+.card .note-body {
+  overflow-y: auto;
+}
+
 /* Card decorations: inside the card, at its bottom edge.
    Checklist progress is plain grey text at the bottom
    right, and any decoration a plugin registered sits at
@@ -395,218 +765,600 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    clicks, so it cannot steal a drag or a marquee
    selection. */
 .card-decorations {
-  position: absolute; display: flex; flex-wrap: wrap; gap: 6px;
-  font-size: 12px; line-height: 1.4; color: var(--ink);
-  pointer-events: none; overflow: hidden;
+  position: absolute;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink);
+  pointer-events: none;
+  overflow: hidden;
 }
+
 .card-decorations-right .card-progress {
-  color: var(--grey); white-space: nowrap;
+  color: var(--grey);
+  white-space: nowrap;
 }
-.card button, .card .clickable, .card textarea, .card a, .card video, .card input, .card .note-body, .card .audio-transcript-text { pointer-events: auto; }
-.card .note-body { padding: 14px; line-height: 1.55; word-wrap: break-word; }
-.card .note-body p { margin: 0 0 6px; }
-.card .note-body h1, .card .note-body h2, .card .note-body h3 {
-  margin: 0 0 6px; line-height: 1.3; font-weight: 700; letter-spacing: -0.02em;
+
+.card button,
+.card .clickable,
+.card textarea,
+.card a,
+.card video,
+.card input,
+.card .note-body,
+.card .audio-transcript-text {
+  pointer-events: auto;
 }
-.card .note-body h1 { font-size: 1.5em; }
-.card .note-body h2 { font-size: 1.25em; }
-.card .note-body h3 { font-size: 1.1em; }
+
+.card .note-body {
+  padding: 14px;
+  line-height: 1.55;
+  word-wrap: break-word;
+}
+
+.card .note-body p {
+  margin: 0 0 6px;
+}
+
+.card .note-body h1,
+.card .note-body h2,
+.card .note-body h3 {
+  margin: 0 0 6px;
+  line-height: 1.3;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.card .note-body h1 {
+  font-size: 1.5em;
+}
+
+.card .note-body h2 {
+  font-size: 1.25em;
+}
+
+.card .note-body h3 {
+  font-size: 1.1em;
+}
+
 .card .note-body pre {
-  background: var(--bg-system); border-radius: 8px; padding: 8px 10px;
-  overflow: hidden; margin: 0 0 6px; white-space: pre-wrap;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.9em;
+  background: var(--bg-system);
+  border-radius: 8px;
+  padding: 8px 10px;
+  overflow: hidden;
+  margin: 0 0 6px;
+  white-space: pre-wrap;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.9em;
 }
+
 .card .note-body code {
-  background: var(--bg-system); border-radius: 4px; padding: 1px 4px;
-  font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 0.9em;
+  background: var(--bg-system);
+  border-radius: 4px;
+  padding: 1px 4px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.9em;
 }
-.card .note-body pre .tok-kw { color: #6a4c93; }
-.card .note-body pre .tok-str { color: #2a9d8f; }
-.card .note-body pre .tok-com { color: #86868b; }
-.card .note-body pre .tok-num { color: #b56576; }
-.card .note-body pre .tok-fn { color: #2e86ab; }
-.card .note-body .task { display: flex; align-items: flex-start; gap: 6px; }
-.card .note-body .task input[type="checkbox"] { flex: none; margin: 3px 0 0; accent-color: var(--accent); }
+
+.card .note-body pre .tok-kw {
+  color: #6a4c93;
+}
+
+.card .note-body pre .tok-str {
+  color: #2a9d8f;
+}
+
+.card .note-body pre .tok-com {
+  color: #86868b;
+}
+
+.card .note-body pre .tok-num {
+  color: #b56576;
+}
+
+.card .note-body pre .tok-fn {
+  color: #2e86ab;
+}
+
+.card .note-body .task {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.card .note-body .task input[type="checkbox"] {
+  flex: none;
+  margin: 3px 0 0;
+  accent-color: var(--accent);
+}
+
 .card .note-body blockquote {
-  margin: 0 0 6px; padding-left: 10px; color: var(--grey);
+  margin: 0 0 6px;
+  padding-left: 10px;
+  color: var(--grey);
   border-left: 2px solid var(--separator);
 }
-.card .note-body a { color: var(--accent); text-decoration: none; cursor: pointer; }
-.card .note-body a:hover { text-decoration: underline; }
-.card textarea.note-edit {
-  width: 100%; height: 100%; border: none; outline: none; resize: none;
-  padding: 14px; font: inherit; line-height: 1.55; background: transparent;
+
+.card .note-body a {
+  color: var(--accent);
+  text-decoration: none;
+  cursor: pointer;
 }
+
+.card .note-body a:hover {
+  text-decoration: underline;
+}
+
+.card textarea.note-edit {
+  width: 100%;
+  height: 100%;
+  border: none;
+  outline: none;
+  resize: none;
+  padding: 14px;
+  font: inherit;
+  line-height: 1.55;
+  background: transparent;
+}
+
 /* The text box and the creation-action icon beside it: the
    textarea shrinks to leave the icon its own column, and
    the icon is a quiet grey button that darkens on hover. */
-.card .note-edit-row { display: flex; align-items: stretch; width: 100%; height: 100%; }
-.card .note-edit-row .note-edit { width: auto; flex: 1 1 auto; min-width: 0; }
+.card .note-edit-row {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  height: 100%;
+}
+
+.card .note-edit-row .note-edit {
+  width: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .card .note-edit-mic {
-  flex: none; align-self: center; border: none; background: transparent;
-  color: var(--grey); cursor: pointer; padding: 6px; margin-left: 8px; margin-right: 6px;
-  border-radius: 6px; line-height: 0;
+  flex: none;
+  align-self: center;
+  border: none;
+  background: transparent;
+  color: var(--grey);
+  cursor: pointer;
+  padding: 6px;
+  margin-left: 8px;
+  margin-right: 6px;
+  border-radius: 6px;
+  line-height: 0;
 }
-.card .note-edit-mic:hover { color: var(--ink); background: var(--fill); }
-.card .note-edit-mic svg { width: 18px; height: 18px; display: block; }
-.card .row { display: flex; align-items: center; gap: 12px; padding: 12px; height: 100%; }
+
+.card .note-edit-mic:hover {
+  color: var(--ink);
+  background: var(--fill);
+}
+
+.card .note-edit-mic svg {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.card .row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  height: 100%;
+}
+
 .card .tile {
-  flex: none; width: 56px; height: 56px; border-radius: 10px;
-  display: flex; align-items: center; justify-content: center;
-  font-weight: 700; font-size: 24px;
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 24px;
 }
-.card .col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.card .title { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.card .sub { color: var(--grey); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.card .col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.card .title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card .sub {
+  color: var(--grey);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .card .pdf-nav {
-  flex: none; border: none; background: transparent; border-radius: 6px;
-  width: 24px; height: 24px; cursor: pointer; font-size: 16px; color: var(--ink);
+  flex: none;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 16px;
+  color: var(--ink);
 }
-.card .pdf-nav:hover { background: rgba(0, 0, 0, 0.05); }
-.card .pdf-nav:disabled { opacity: 0.35; cursor: default; }
-.card .pdf-nav:disabled:hover { background: transparent; }
+
+.card .pdf-nav:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.card .pdf-nav:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.card .pdf-nav:disabled:hover {
+  background: transparent;
+}
+
 /* Link preview card: the site's own image on top when it has one,
    otherwise a clean text card. Title, description and domain all
    link out to the site; the whole card is never a fake embed. */
-.card .link-card { display: flex; flex-direction: column; height: 100%; padding: 12px; gap: 8px; }
-.card .link-image {
-  display: block; flex: none; height: 168px; overflow: hidden;
-  background: var(--bg-system); border-radius: 10px;
+.card .link-card {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 12px;
+  gap: 8px;
 }
-.card .link-image img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+.card .link-image {
+  display: block;
+  flex: none;
+  height: 168px;
+  overflow: hidden;
+  background: var(--bg-system);
+  border-radius: 10px;
+}
+
+.card .link-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .card .link-body {
-  flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
   padding: 0;
 }
-.card .link-card.no-image .link-body { padding: 0; justify-content: center; }
+
+.card .link-card.no-image .link-body {
+  padding: 0;
+  justify-content: center;
+}
+
 .card a.link-title {
-  color: var(--ink); text-decoration: none; cursor: pointer;
-  font-size: 14px; font-weight: 600; line-height: 1.35; letter-spacing: -0.01em;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  color: var(--ink);
+  text-decoration: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
-.card a.link-title:hover { color: var(--accent); }
+
+.card a.link-title:hover {
+  color: var(--accent);
+}
+
 .card .link-desc {
-  color: var(--grey); font-size: 12px; line-height: 1.45;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  color: var(--grey);
+  font-size: 12px;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
-.card .link-card.no-image .link-desc { -webkit-line-clamp: 3; }
-.card .link-footer { margin-top: auto; padding-top: 2px; }
+
+.card .link-card.no-image .link-desc {
+  -webkit-line-clamp: 3;
+}
+
+.card .link-footer {
+  margin-top: auto;
+  padding-top: 2px;
+}
+
 .card a.link-domain {
-  display: flex; align-items: center; gap: 6px; color: var(--grey);
-  text-decoration: none; cursor: pointer; font-size: 12px; font-weight: 500;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--grey);
+  text-decoration: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.card a.link-domain:hover { color: var(--ink); }
-.card a.link-domain .favicon { width: 16px; height: 16px; border-radius: 4px; flex: none; object-fit: cover; }
+
+.card a.link-domain:hover {
+  color: var(--ink);
+}
+
+.card a.link-domain .favicon {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  flex: none;
+  object-fit: cover;
+}
+
 .card a.link-domain .favicon-fallback {
-  width: 16px; height: 16px; border-radius: 4px; flex: none;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 700;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
 }
+
 .card a.link-domain svg {
-  width: 13px; height: 13px; flex: none; fill: none; stroke: currentColor;
-  stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  width: 13px;
+  height: 13px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
+
 .card .swatch-pill {
-  position: absolute; right: 10px; bottom: 10px;
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
   background: #fff;
-  border: 1px solid var(--hairline); border-radius: 8px; padding: 4px 8px;
-  font-weight: 600; font-size: 12px; box-shadow: var(--shadow-sm);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-weight: 600;
+  font-size: 12px;
+  box-shadow: var(--shadow-sm);
 }
+
 .card .video-thumb {
-  position: relative; background: #1d1d1f; border-radius: 10px;
-  display: flex; align-items: center; justify-content: center; color: #fff; cursor: pointer;
+  position: relative;
+  background: #1d1d1f;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  cursor: pointer;
   /* A button since the a11y pass: drop the UA chrome. */
-  border: 0; padding: 0;
+  border: 0;
+  padding: 0;
 }
+
 /* A video poster: the captured frame fills the tile, the play
    mark rides over it. The image is out of flow so the mark
    stays centred by the flex layout. */
-.card .video-thumb img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 10px; display: block; }
-.card .video-thumb .video-play { position: relative; text-shadow: 0 1px 8px rgba(0,0,0,.65); }
+.card .video-thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 10px;
+  display: block;
+}
+
+.card .video-thumb .video-play {
+  position: relative;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, .65);
+}
+
 /* A 3D model card: the canvas is the viewport (drag rotates,
    wheel zooms); a plain render gets a static tile, and a
    failed load gets an error box in place of the canvas. */
-.card canvas.model3d { display: block; touch-action: none; cursor: grab; }
-.card canvas.model3d:active { cursor: grabbing; }
+.card canvas.model3d {
+  display: block;
+  touch-action: none;
+  cursor: grab;
+}
+
+.card canvas.model3d:active {
+  cursor: grabbing;
+}
+
 /* The fit button on a 3D card: a small quiet pill in the
    corner of the viewport, like the swatch pill — white,
    blurred, hairline border. It re-frames the model. */
 .card .model3d-tile {
-  display: flex; align-items: center; justify-content: center;
-  background: var(--bg-system); border-radius: 10px; color: var(--grey);
-  font-size: 28px; font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-system);
+  border-radius: 10px;
+  color: var(--grey);
+  font-size: 28px;
+  font-weight: 700;
 }
+
 /* A design file whose artwork could not be rendered: the
    format label fills the preview area, in the format's
    colour, like the PDF's red tile. */
 .card .filecard-tile {
-  display: flex; align-items: center; justify-content: center;
-  width: 100%; height: 100%;
-  font-size: 28px; font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-size: 28px;
+  font-weight: 700;
 }
+
 .card .model3d-error {
-  display: flex; align-items: center; justify-content: center; text-align: center;
-  background: var(--bg-system); border-radius: 10px; color: var(--grey);
-  font-size: 13px; padding: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  background: var(--bg-system);
+  border-radius: 10px;
+  color: var(--grey);
+  font-size: 13px;
+  padding: 12px;
 }
+
 .card .audio-tile {
-  flex: none; width: 48px; height: 48px; border-radius: 10px;
-  display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px;
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
   /* A button since the a11y pass: drop the UA chrome. */
-  border: 0; padding: 0;
+  border: 0;
+  padding: 0;
 }
+
 /* Audio seek: a thin track in the tile's purple, with a small
    white thumb — quiet, like the rest of the cards, not a chunky
    browser slider in blue. The fill is driven by --seek-pct, set
    from the card and updated while playing. */
 .card .audio-seek {
-  -webkit-appearance: none; appearance: none;
-  width: 100%; height: 12px; margin: 0; background: transparent; cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 12px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
 }
+
 .card .audio-seek::-webkit-slider-runnable-track {
-  height: 4px; border-radius: 2px;
+  height: 4px;
+  border-radius: 2px;
   background: linear-gradient(to right, #6a4c93 var(--seek-pct, 0%), #e9e9ec var(--seek-pct, 0%));
 }
+
 .card .audio-seek::-webkit-slider-thumb {
-  -webkit-appearance: none; appearance: none;
-  width: 16px; height: 16px; margin-top: -6px; border-radius: 50%;
-  background: #fff; border: 1px solid rgba(0, 0, 0, 0.12);
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
 }
+
 /* Voice-note transcript: the toggle lives in the card,
    below the seek (and above the text once grown). The
    text fills the rest of the card and scrolls, so a long
    note does not grow the card. */
 .audio-transcript-toggle {
-  display: inline-flex; align-items: center; gap: 4px;
-  font: inherit; font-size: 12px; font-weight: 600; color: var(--grey);
-  background: transparent; border: 0; padding: 3px 0; cursor: pointer;
-  white-space: nowrap; pointer-events: auto; text-align: left;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--grey);
+  background: transparent;
+  border: 0;
+  padding: 3px 0;
+  cursor: pointer;
+  white-space: nowrap;
+  pointer-events: auto;
+  text-align: left;
 }
-.audio-transcript-toggle:hover { color: var(--ink); }
-.audio-transcript-toggle svg { width: 12px; height: 12px; flex: none; }
-.card .audio-transcript-toggle { align-self: flex-start; }
+
+.audio-transcript-toggle:hover {
+  color: var(--ink);
+}
+
+.audio-transcript-toggle svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+
+.card .audio-transcript-toggle {
+  align-self: flex-start;
+}
+
 .card .audio-transcript-text {
-  flex: 1 1 auto; min-height: 0; overflow-y: auto;
-  font-size: 13px; line-height: 1.45; color: var(--ink);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink);
   /* The bottom row sits over the card's bottom edge, so
      the text ends 36px up — 12 of padding above the row —
      instead of running underneath it. */
-  padding-bottom: 36px; box-sizing: border-box;
+  padding-bottom: 36px;
+  box-sizing: border-box;
 }
-.card .audio-seek:hover::-webkit-slider-thumb { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22); }
+
+.card .audio-seek:hover::-webkit-slider-thumb {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
+}
+
 .card .audio-seek::-moz-range-track {
-  height: 4px; border-radius: 2px;
+  height: 4px;
+  border-radius: 2px;
   background: linear-gradient(to right, #6a4c93 var(--seek-pct, 0%), #e9e9ec var(--seek-pct, 0%));
 }
+
 .card .audio-seek::-moz-range-thumb {
-  width: 16px; height: 16px; border-radius: 50%;
-  background: #fff; border: 1px solid rgba(0, 0, 0, 0.12);
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
 }
-.card .audio-seek:hover::-moz-range-thumb { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22); }
-.card .audio-seek:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+
+.card .audio-seek:hover::-moz-range-thumb {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
+}
+
+.card .audio-seek:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
 
 /* Vertical toolbar, left side: a frosted macOS material bar, centred
    vertically, 12px from the edge. The bar itself is the window drag
@@ -617,70 +1369,177 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    connector the user never asked for. The palette is a flyout to
    the toolbar's right instead, so the tools never move. */
 #toolbar-wrap {
-  position: absolute; top: 50%; left: 12px; transform: translateY(-50%);
-  display: flex; pointer-events: none;
+  position: absolute;
+  top: 50%;
+  left: 12px;
+  transform: translateY(-50%);
+  display: flex;
+  pointer-events: none;
   /* z-index 120: above the draw-preview layer (110), so a shape
      dragged across the board's left edge never paints over the
      toolbar — below the plugin overlays (150), so a modal overlay
      like the command palette still covers it. */
   z-index: 120;
 }
+
 #toolbar {
   position: relative;
-  pointer-events: auto; display: flex; flex-direction: column; align-items: center;
-  gap: 10px; padding: 12px 8px; width: 56px;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 8px;
+  width: 62px;
   background: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 16px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
   box-shadow: var(--shadow-md);
   -webkit-app-region: drag;
 }
+
 #toolbar .seg {
-  display: flex; flex-direction: column; background: var(--fill);
-  border-radius: 10px; padding: 2px; gap: 2px; width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--fill);
+  border-radius: 10px;
+  padding: 2px;
+  gap: 2px;
+  width: 100%;
 }
+
 /* The seg is 40px wide including its 2px padding, so its buttons must
    fill the remaining 36px — a fixed 40px button overflowed the grey
    container by 2px on each side and sat off-centre. */
-#toolbar .seg button { width: 100%; height: 40px; }
+#toolbar .seg button {
+  width: 100%;
+  height: 40px;
+}
+
 #toolbar button {
-  border: none; background: transparent; border-radius: 9px;
-  width: 40px; height: 40px; display: flex; align-items: center; justify-content: center;
-  cursor: pointer; color: var(--ink); -webkit-app-region: no-drag;
+  border: none;
+  background: transparent;
+  border-radius: 9px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--ink);
+  -webkit-app-region: no-drag;
   transition: background 0.15s ease, color 0.15s ease;
 }
-#toolbar button:hover { background: rgba(0, 0, 0, 0.05); }
-#toolbar button:active { background: rgba(0, 0, 0, 0.09); }
+
+#toolbar button:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+#toolbar button:active {
+  background: rgba(0, 0, 0, 0.09);
+}
+
 #toolbar button.active {
-  background: #fff; color: var(--ink);
+  background: #fff;
+  color: var(--ink);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
 }
-#toolbar button.dim { opacity: 0.35; cursor: default; }
-#toolbar button.dim:hover { background: transparent; }
-#toolbar button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-#toolbar .divider { width: 32px; height: 1px; background: var(--separator); flex: none; }
-#toolbar .zoom-group { display: flex; flex-direction: column; gap: 2px; width: 100%; }
-#toolbar .zoom-group button { width: 100%; }
-#toolbar button.zoom-label { width: 100%; height: auto; padding: 2px 0; font-size: 11px; font-weight: 600; color: var(--grey); }
-#title-bar-left .saved-label { font-size: 12px; color: var(--grey); white-space: nowrap; }
+
+#toolbar button.dim {
+  opacity: 0.35;
+  cursor: default;
+}
+
+#toolbar button.dim:hover {
+  background: transparent;
+}
+
+#toolbar button svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+#toolbar .divider {
+  width: 32px;
+  height: 1px;
+  background: var(--separator);
+  flex: none;
+}
+
+#toolbar .zoom-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+}
+
+#toolbar .zoom-group button {
+  width: 100%;
+}
+
+#toolbar button.zoom-label {
+  width: 100%;
+  height: auto;
+  padding: 2px 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--grey);
+}
+
+#title-bar-left .saved-label {
+  font-size: 12px;
+  color: var(--grey);
+  white-space: nowrap;
+}
+
 #toolbar .palette {
-  position: absolute; left: calc(100% + 8px); top: 12px;
-  display: flex; flex-direction: column; gap: 6px; align-items: center;
-  padding: 8px; background: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 16px;
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
   box-shadow: var(--shadow-md);
 }
+
 #toolbar .swatch {
-  width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.12);
-  cursor: pointer; -webkit-app-region: no-drag; padding: 0;
-  appearance: none; -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-#toolbar .swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-#toolbar .swatch:hover { transform: scale(1.1); }
+
+#toolbar .swatch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+#toolbar .swatch:hover {
+  transform: scale(1.1);
+}
+
 #toolbar .swatch.active {
-  width: 26px; height: 26px;
+  width: 26px;
+  height: 26px;
   box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent);
 }
+
 /* Shape picker: the same floating .palette surface as the
    pen colours, but lower, so it sits beside the shape
    button (the fourth tool) instead of at the top, and so
@@ -693,105 +1552,238 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    screen coordinates, so it stays a usable size at any
    zoom. Its swatches are the toolbar's .swatch buttons. */
 .note-colour-bar {
-  position: fixed; z-index: 40;
-  display: flex; flex-direction: column; gap: 6px; align-items: center;
-  padding: 8px; background: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 16px;
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
   box-shadow: var(--shadow-md);
 }
+
 .note-colour-bar .swatch {
-  width: 22px; height: 22px; border-radius: 50%; border: 1px solid rgba(0, 0, 0, 0.12);
-  cursor: pointer; -webkit-app-region: no-drag; padding: 0;
-  appearance: none; -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-.note-colour-bar .swatch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.note-colour-bar .swatch:hover { transform: scale(1.1); }
+
+.note-colour-bar .swatch:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.note-colour-bar .swatch:hover {
+  transform: scale(1.1);
+}
+
 .note-colour-bar .swatch.active {
-  width: 26px; height: 26px;
+  width: 26px;
+  height: 26px;
   box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--accent);
 }
+
 /* The shape picker: two columns — filled on the left,
    outline on the right — and no switch. Picking a shape
    sets the fill mode from its column. Each column is a
    vertical stack of the shapes; the filled column's icons
    are filled in, the outline column's are stroked. */
-#toolbar .palette#shape-picker { top: 140px; flex-direction: row; }
+#toolbar .palette#shape-picker {
+  top: 140px;
+  flex-direction: row;
+}
+
 #toolbar .palette .shape-column {
-  display: flex; flex-direction: column; gap: 6px; align-items: center;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
 }
+
 #toolbar .palette .shape-option {
-  width: 36px; height: 36px; padding: 0;
+  width: 36px;
+  height: 36px;
+  padding: 0;
 }
+
 #toolbar .palette .shape-option[data-mode="filled"] svg {
-  fill: currentColor; stroke: none;
+  fill: currentColor;
+  stroke: none;
 }
+
 /* The colour swatch in the toolbar: the pen colour in
    use, as a round swatch. Clicking it opens the colour
    bar. It is a toolbar button in size, a swatch in look. */
 #toolbar button.colour-swatch {
-  width: 100%; height: 40px; padding: 0;
-  display: flex; align-items: center; justify-content: center;
+  width: 100%;
+  height: 40px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
+
 #toolbar button.colour-swatch::before {
-  content: ""; width: 22px; height: 22px; border-radius: 50%;
-  background: var(--swatch-color, #1A1A1A); border: 1px solid rgba(0, 0, 0, 0.12);
+  content: "";
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--swatch-color, #1A1A1A);
+  border: 1px solid rgba(0, 0, 0, 0.12);
   box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35);
 }
+
 #toolbar .palette .shape-option.active {
-  background: #fff; color: var(--ink);
+  background: #fff;
+  color: var(--ink);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
 }
+
 #toolbar .palette .shape-option svg {
-  width: 20px; height: 20px; fill: none; stroke: currentColor;
-  stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
+
 .missing-media {
-  width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
-  padding: 12px; box-sizing: border-box; text-align: center;
-  background: var(--bg-system); color: var(--grey); font-size: 13px; border-radius: 12px;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  box-sizing: border-box;
+  text-align: center;
+  background: var(--bg-system);
+  color: var(--grey);
+  font-size: 13px;
+  border-radius: 12px;
   word-break: break-all;
 }
+
 /* Settings: a centred macOS sheet — opaque, 16px radius, soft shadow.
    It used to be frosted (white at 0.92 over a blurred board), so board
    content showed through the text and made it harder to read. Opaque
    also drops a full-board backdrop blur while Settings is open. */
 #settings-backdrop {
-  position: absolute; inset: 0; background: rgba(0, 0, 0, 0.22);
-  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
-  display: none; align-items: center; justify-content: center; padding: 24px; z-index: 200;
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 200;
 }
-#settings-backdrop.open { display: flex; }
+
+#settings-backdrop.open {
+  display: flex;
+}
+
 /* Recovery offer: the same centred sheet as Settings — opaque,
    16px radius, soft shadow — but compact, one decision. The
    backdrop never dismisses it: discarding unsaved work by
    accident is the failure the dialog exists to prevent. */
 #recovery-backdrop {
-  position: absolute; inset: 0; background: rgba(0, 0, 0, 0.22);
-  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
-  display: flex; align-items: center; justify-content: center; padding: 24px; z-index: 200;
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  z-index: 200;
 }
+
 #recovery-dialog {
-  width: min(420px, 92vw); background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 16px;
-  padding: 20px 24px 24px; box-shadow: var(--shadow-lg);
+  width: min(420px, 92vw);
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  padding: 20px 24px 24px;
+  box-shadow: var(--shadow-lg);
 }
-#recovery-dialog h2 { margin: 0 0 8px; font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
-#recovery-dialog p { margin: 0 0 20px; font-size: 13px; line-height: 1.55; color: var(--grey); }
-#recovery-dialog .recovery-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+#recovery-dialog h2 {
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+#recovery-dialog p {
+  margin: 0 0 20px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--grey);
+}
+
+#recovery-dialog .recovery-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 #recovery-dialog .recovery-restore {
-  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
-  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
-  color: var(--ink); box-shadow: var(--shadow-sm);
+  border: 1px solid var(--separator);
+  background: #fff;
+  border-radius: 9px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
 }
-#recovery-dialog .recovery-restore:hover { background: var(--fill); }
-#recovery-dialog .recovery-restore:disabled { opacity: 0.5; cursor: default; }
+
+#recovery-dialog .recovery-restore:hover {
+  background: var(--fill);
+}
+
+#recovery-dialog .recovery-restore:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 #recovery-dialog .recovery-discard {
-  border: none; background: transparent; border-radius: 9px;
-  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--grey);
+  border: none;
+  background: transparent;
+  border-radius: 9px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--grey);
 }
-#recovery-dialog .recovery-discard:hover { background: var(--fill); color: var(--ink); }
-#recovery-dialog .recovery-discard:disabled { opacity: 0.5; cursor: default; }
+
+#recovery-dialog .recovery-discard:hover {
+  background: var(--fill);
+  color: var(--ink);
+}
+
+#recovery-dialog .recovery-discard:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* Settings as a proper two-pane window, not a popup that
    resizes to its content: a fixed height, a header with a
    hairline underneath, a clean tab list on the left with a
@@ -801,56 +1793,150 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    not a grey pill block: inactive tabs are grey, the active
    one is black on a light fill, with no shadow. */
 #settings {
-  width: min(760px, 92vw); height: min(680px, calc(100% - 48px));
-  display: flex; flex-direction: column; overflow: hidden;
+  width: min(760px, 92vw);
+  height: min(680px, calc(100% - 48px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: #ffffff;
-  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 16px;
-  padding: 20px 24px 24px; box-shadow: var(--shadow-lg);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  padding: 20px 24px 24px;
+  box-shadow: var(--shadow-lg);
 }
+
 #settings-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding-bottom: 16px; border-bottom: 1px solid var(--separator);
-  margin-bottom: 20px; flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--separator);
+  margin-bottom: 20px;
+  flex: none;
 }
-#settings h2 { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -0.02em; }
-#settings h3 { margin: 24px 0 8px; font-size: 13px; font-weight: 600; color: var(--ink); }
-#plugin-settings-sections .plugin-settings-section:first-child h3 { margin-top: 0; }
-.settings-section > h3:first-child { margin-top: 0; }
-#settings-layout { display: flex; flex: 1 1 auto; min-height: 0; }
+
+#settings h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+#settings h3 {
+  margin: 24px 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+#plugin-settings-sections .plugin-settings-section:first-child h3 {
+  margin-top: 0;
+}
+
+.settings-section>h3:first-child {
+  margin-top: 0;
+}
+
+#settings-layout {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 #settings-content {
-  flex: 1 1 auto; min-width: 0; overflow: auto; padding-left: 24px;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: auto;
+  padding-left: 24px;
   scrollbar-width: none;
 }
-#settings-content::-webkit-scrollbar { display: none; }
+
+#settings-content::-webkit-scrollbar {
+  display: none;
+}
+
 #settings-tabs {
-  display: flex; flex-direction: column; gap: 2px; background: transparent;
-  flex: none; width: 180px; padding-right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: transparent;
+  flex: none;
+  width: 180px;
+  padding-right: 16px;
   border-right: 1px solid var(--separator);
 }
+
 #settings-tabs button {
-  border: none; background: transparent; border-radius: 8px;
-  padding: 8px 12px; cursor: pointer; font-size: 13px; font-weight: 500; color: var(--grey);
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--grey);
   text-align: left;
 }
-#settings-tabs button:hover { background: var(--fill); }
+
+#settings-tabs button:hover {
+  background: var(--fill);
+}
+
 #settings-tabs button.active {
-  background: var(--fill); color: var(--ink); font-weight: 600;
+  background: var(--fill);
+  color: var(--ink);
+  font-weight: 600;
   box-shadow: none;
 }
+
 #settings .close {
-  border: none; background: var(--fill); width: 26px; height: 26px; flex: none;
-  border-radius: 50%; font-size: 16px; line-height: 1; cursor: pointer; color: var(--grey);
-  display: flex; align-items: center; justify-content: center; margin: 0;
+  border: none;
+  background: var(--fill);
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border-radius: 50%;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--grey);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
 }
-#settings .close:hover { background: rgba(0, 0, 0, 0.1); }
-#settings table { width: 100%; border-collapse: collapse; font-size: 13px; }
-#settings td { padding: 6px 0; vertical-align: top; }
-#settings td:first-child { width: 42%; color: var(--grey); }
+
+#settings .close:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+#settings table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+#settings td {
+  padding: 6px 0;
+  vertical-align: top;
+}
+
+#settings td:first-child {
+  width: 42%;
+  color: var(--grey);
+}
+
 #settings td kbd {
-  background: #fff; border: 1px solid var(--separator); border-bottom-width: 2px;
-  border-radius: 5px; padding: 1px 6px; font-family: inherit; font-size: 12px;
+  background: #fff;
+  border: 1px solid var(--separator);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  padding: 1px 6px;
+  font-family: inherit;
+  font-size: 12px;
   box-shadow: var(--shadow-sm);
 }
+
 /* Shortcut rows: one row per rebindable action — the label,
    a key button in the kbd treatment, and a Reset button in
    the Settings neutral button style. The key button is a
@@ -858,43 +1944,103 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    look. While it waits for a key it takes the app's selected
    fill, the same as an active tab. */
 #settings .shortcut-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px 0; font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13px;
 }
-#settings .shortcut-row .shortcut-label { flex: 1 1 auto; }
+
+#settings .shortcut-row .shortcut-label {
+  flex: 1 1 auto;
+}
+
 #settings .shortcut-key {
-  background: #fff; border: 1px solid var(--separator); border-bottom-width: 2px;
-  border-radius: 5px; padding: 1px 6px; font-family: inherit; font-size: 12px;
-  box-shadow: var(--shadow-sm); cursor: pointer; color: var(--ink); flex: none;
+  background: #fff;
+  border: 1px solid var(--separator);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  padding: 1px 6px;
+  font-family: inherit;
+  font-size: 12px;
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  color: var(--ink);
+  flex: none;
 }
-#settings .shortcut-key.capturing { background: var(--fill); }
+
+#settings .shortcut-key.capturing {
+  background: var(--fill);
+}
+
 #settings .shortcut-reset {
-  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
-  padding: 6px 8px; cursor: pointer; font-size: 13px; font-weight: 600;
-  color: var(--ink); box-shadow: var(--shadow-sm); flex: none;
-  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--separator);
+  background: #fff;
+  border-radius: 9px;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-#settings .shortcut-reset:hover { background: var(--fill); }
+
+#settings .shortcut-reset:hover {
+  background: var(--fill);
+}
+
 #settings .shortcut-reset svg {
-  width: 14px; height: 14px; display: block; fill: none;
-  stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  width: 14px;
+  height: 14px;
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
+
 /* Performance: one row, label on the left and the On/Off
    toggle on the right, in the same button style as the
    plugin rows. The Restart button sits below it. */
 #settings .perf-row {
-  display: flex; align-items: center; gap: 12px; margin: 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0;
 }
-#settings .perf-row span { flex: 1 1 auto; font-size: 13px; }
+
+#settings .perf-row span {
+  flex: 1 1 auto;
+  font-size: 13px;
+}
+
 #settings #btn-hardware-accel,
 #settings #btn-restart {
-  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
-  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
-  color: var(--ink); box-shadow: var(--shadow-sm);
+  border: 1px solid var(--separator);
+  background: #fff;
+  border-radius: 9px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
 }
+
 #settings #btn-hardware-accel:hover,
-#settings #btn-restart:hover { background: var(--fill); }
-#settings #btn-restart { margin: 6px 0; }
+#settings #btn-restart:hover {
+  background: var(--fill);
+}
+
+#settings #btn-restart {
+  margin: 6px 0;
+}
+
 /* Canvas options are previews, not text: a swatch of the colour,
    or a tile showing the grid pattern. The button is the control
    and the preview sits inside it, so the active option uses the
@@ -904,49 +2050,101 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    aria-label only. The two groups are spaced out, not crammed
    into a segmented control. */
 #settings .canvas-opt {
-  display: inline-flex; gap: 8px; margin: 4px 20px 4px 0;
+  display: inline-flex;
+  gap: 8px;
+  margin: 4px 20px 4px 0;
 }
+
 #settings .canvas-opt button {
-  width: 36px; height: 36px; border: none; background: transparent;
-  border-radius: 9px; padding: 5px; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  border-radius: 9px;
+  padding: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
+
 #settings .canvas-opt button.active {
   background: #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
 }
+
 #settings .canvas-opt .bg-swatch {
-  width: 26px; height: 26px; border-radius: 50%;
-  border: 1px solid rgba(0, 0, 0, 0.12); flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  flex: none;
 }
+
 #settings .canvas-opt .grid-tile {
-  width: 26px; height: 26px; border-radius: 5px; background: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.12); flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 5px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  flex: none;
 }
+
 #settings .canvas-opt .grid-tile.grid-dots {
   background-image: radial-gradient(circle, rgba(0, 0, 0, 0.28) 1px, transparent 1.3px);
-  background-size: 6px 6px; background-position: 2px 2px;
+  background-size: 6px 6px;
+  background-position: 2px 2px;
 }
+
 #settings .canvas-opt .grid-tile.grid-lines {
   background-image: linear-gradient(to right, rgba(0, 0, 0, 0.16) 0 1px, transparent 1px), linear-gradient(to bottom, rgba(0, 0, 0, 0.16) 0 1px, transparent 1px);
-  background-size: 6px 6px; background-position: 2px 2px;
+  background-size: 6px 6px;
+  background-position: 2px 2px;
 }
-#settings .meta { color: var(--grey); font-size: 12px; line-height: 1.5; word-break: break-all; margin: 0 0 12px; }
+
+#settings .meta {
+  color: var(--grey);
+  font-size: 12px;
+  line-height: 1.5;
+  word-break: break-all;
+  margin: 0 0 12px;
+}
+
 /* An email address inside a .meta line keeps together: the
    break-all above would split it mid-word ("w\nren7762@…"). */
-#settings .meta .email { word-break: normal; }
-#settings #reset-confirm { margin-top: 12px; }
+#settings .meta .email {
+  word-break: normal;
+}
+
+#settings #reset-confirm {
+  margin-top: 12px;
+}
+
 /* Feedback box: a plain textarea in the core style — white, hairline
    border, the same radius as a card, system font. Fixed height: it
    never resizes, and long text scrolls inside it. */
 #feedback-text {
-  display: block; width: 100%; box-sizing: border-box;
-  margin: 0 0 12px; padding: 8px 10px; resize: none; overflow-y: auto;
-  font-family: inherit; font-size: 13px; line-height: 1.5; color: var(--ink);
-  background: #fff; border: 1px solid var(--separator); border-radius: 9px;
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  resize: none;
+  overflow-y: auto;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+  background: #fff;
+  border: 1px solid var(--separator);
+  border-radius: 9px;
   outline: none;
 }
-#feedback-text:focus { border-color: var(--accent); }
+
+#feedback-text:focus {
+  border-color: var(--accent);
+}
+
 /* The Send, Export and Import buttons in the core button
    style — white, hairline border, 9px radius, 6px 12px,
    13px/600 — the same as Restore and the plugin rows. Each
@@ -955,54 +2153,123 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 #settings #btn-feedback,
 #settings #btn-export-data,
 #settings #btn-import-data {
-  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
-  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
-  color: var(--ink); box-shadow: var(--shadow-sm);
+  border: 1px solid var(--separator);
+  background: #fff;
+  border-radius: 9px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
 }
+
 #settings #btn-feedback:hover,
 #settings #btn-export-data:hover,
-#settings #btn-import-data:hover { background: var(--fill); }
+#settings #btn-import-data:hover {
+  background: var(--fill);
+}
+
 #settings #btn-factory-reset {
-  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
-  padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 600;
-  color: #e63946; box-shadow: var(--shadow-sm);
+  border: 1px solid var(--separator);
+  background: #fff;
+  border-radius: 9px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: #e63946;
+  box-shadow: var(--shadow-sm);
 }
-#settings #btn-factory-reset:hover { background: rgba(230, 57, 70, 0.06); }
+
+#settings #btn-factory-reset:hover {
+  background: rgba(230, 57, 70, 0.06);
+}
+
 #settings #btn-factory-reset-confirm {
-  border: none; background: #e63946; color: #fff; border-radius: 9px;
-  padding: 8px 16px; cursor: pointer; font-size: 13px; font-weight: 600; margin-right: 8px;
+  border: none;
+  background: #e63946;
+  color: #fff;
+  border-radius: 9px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  margin-right: 8px;
 }
+
 /* Backups: one row, last backup only — info on the left,
    Restore on the right, in the same button style as the
    plugin rows in Settings (white, hairline border, 9px
    radius), not a browser-default button. The armed
    confirm state reads red, like other confirm states. */
 #settings .backup-row {
-  display: flex; align-items: center; gap: 12px; margin: 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 6px 0;
 }
-#settings .backup-row .meta { flex: 1 1 auto; margin: 0; }
+
+#settings .backup-row .meta {
+  flex: 1 1 auto;
+  margin: 0;
+}
+
 #settings .backup-row button {
-  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
-  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
-  margin: 0; flex: none; color: var(--ink);
+  border: 1px solid var(--separator);
+  background: #fff;
+  border-radius: 9px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+  flex: none;
+  color: var(--ink);
 }
-#settings .backup-row button:hover { background: var(--fill); }
+
+#settings .backup-row button:hover {
+  background: var(--fill);
+}
+
 #settings .backup-row button.armed {
-  color: #e63946; border-color: rgba(230, 57, 70, 0.4);
+  color: #e63946;
+  border-color: rgba(230, 57, 70, 0.4);
 }
 
 
 /* Visually hidden but still announced: the live region
    that tells a screen reader what the selection is. */
-.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 
 #toast {
-  position: absolute; left: 16px; bottom: 16px;
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
   background: #1c1c1e;
-  color: #fff; font-size: 13px; padding: 10px 14px; border-radius: 12px;
-  display: none; z-index: 30; max-width: 70vw; box-shadow: var(--shadow-md);
+  color: #fff;
+  font-size: 13px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  display: none;
+  z-index: 30;
+  max-width: 70vw;
+  box-shadow: var(--shadow-md);
 }
-#toast.show { display: block; }
+
+#toast.show {
+  display: block;
+}
 
 /* The eraser's reach, drawn at the cursor while the eraser
    tool is active. A white ring with a dark outline, so it
@@ -1010,7 +2277,10 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    size and position are set from the code (the radius in
    world units, scaled by the zoom). */
 #eraser-ring {
-  position: fixed; display: none; pointer-events: none; z-index: 60;
+  position: fixed;
+  display: none;
+  pointer-events: none;
+  z-index: 60;
   border: 1.5px solid rgba(255, 255, 255, 0.95);
   box-shadow: 0 0 0 1.5px rgba(29, 29, 31, 0.55);
   border-radius: 50%;
@@ -1023,14 +2293,20 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    clicking the count never move the window. */
 #search-box {
   position: relative;
-  display: flex; align-items: center; gap: 6px; width: min(360px, 60vw);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: min(360px, 60vw);
   /* Fixed height: the bar must not grow when the clear button or the
      match count appear. 34px = 22px clear button + 6px padding each side. */
   height: 34px;
   padding: 6px 8px 6px 12px;
-  background: var(--bg-system); border: none; border-radius: 8px;
+  background: var(--bg-system);
+  border: none;
+  border-radius: 8px;
   -webkit-app-region: no-drag;
 }
+
 /* Search results list: a ranked list under the search
    field, styled like the rest of the app, not like a web
    dropdown. Opaque white, like a board card and like the
@@ -1044,47 +2320,142 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    the app's 9px button radius; type at 12px, the app's
    smallest text size, not a new 11px size. */
 #search-results {
-  position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
-  width: 480px; max-width: 90vw; max-height: 360px; overflow-y: auto;
-  background: #fff; border: 1px solid var(--hairline); border-radius: 12px;
-  box-shadow: var(--shadow-md); z-index: 50; padding: 4px;
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 480px;
+  max-width: 90vw;
+  max-height: 360px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  z-index: 50;
+  padding: 4px;
   -webkit-app-region: no-drag;
 }
-.search-result { padding: 10px 12px; border-radius: 9px; cursor: pointer; }
-.search-result-selected, .search-result:hover { background: var(--fill); }
-.search-result-top { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
-.search-result-type { font-size: 12px; color: var(--grey); white-space: nowrap; flex: none; }
-.search-result-title { font-size: 13px; font-weight: 600; line-height: 1.45; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.search-result {
+  padding: 10px 12px;
+  border-radius: 9px;
+  cursor: pointer;
+}
+
+.search-result-selected,
+.search-result:hover {
+  background: var(--fill);
+}
+
+.search-result-top {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.search-result-type {
+  font-size: 12px;
+  color: var(--grey);
+  white-space: nowrap;
+  flex: none;
+}
+
+.search-result-title {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .search-result-excerpt {
-  font-size: 13px; line-height: 1.45; color: var(--grey); margin-top: 2px;
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--grey);
+  margin-top: 2px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
-.search-result-excerpt strong { font-weight: 600; color: var(--ink); }
-#search-box input, #search-box button { -webkit-app-region: no-drag; }
+
+.search-result-excerpt strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+#search-box input,
+#search-box button {
+  -webkit-app-region: no-drag;
+}
+
 #search-input {
-  flex: 1; min-width: 0; border: none; background: transparent;
-  font-size: 14px; color: var(--ink); outline: none;
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  font-size: 14px;
+  color: var(--ink);
+  outline: none;
 }
-#search-input::placeholder { color: var(--grey); }
-#search-count { font-size: 12px; color: var(--grey); white-space: nowrap; flex: none;
+
+#search-input::placeholder {
+  color: var(--grey);
+}
+
+#search-count {
+  font-size: 12px;
+  color: var(--grey);
+  white-space: nowrap;
+  flex: none;
   /* Fixed width, right-aligned: the count text ("No matches", "3 of 299", …)
      changes length as you type, and the input must not resize with it. A
      long indexing suffix is cut with an ellipsis; the match count, first,
      always stays visible. */
-  width: 96px; text-align: right; overflow: hidden; text-overflow: ellipsis; }
+  width: 96px;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 #search-box #search-clear {
   /* Always in the layout (hidden, not removed): toggling it in and out
      resized the input on every keystroke. Scoped to #search-box so this
      beats #title-bar button, which would otherwise force it to 32px. */
-  display: flex; visibility: hidden; border: none; background: var(--fill); width: 22px; height: 22px;
-  border-radius: 50%; font-size: 15px; line-height: 1; cursor: pointer; color: var(--grey);
-  flex: none; align-items: center; justify-content: center;
+  display: flex;
+  visibility: hidden;
+  border: none;
+  background: var(--fill);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--grey);
+  flex: none;
+  align-items: center;
+  justify-content: center;
 }
-#search-clear:hover { background: rgba(0, 0, 0, 0.1); }
+
+#search-clear:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
 /* Search hits: an accent outline on matches, the rest dimmed. The
    outline (not a shadow) leaves the card's own shadow untouched. */
-.card.search-match { outline: 2px solid var(--accent); outline-offset: 2px; }
-.card.search-dim { opacity: 0.35; }
+.card.search-match {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.card.search-dim {
+  opacity: 0.35;
+}
 
 /* Plugin overlays (see PLUGIN_API.md): a full-board layer that
    takes no clicks itself, so board clicks pass through everywhere
@@ -1096,9 +2467,18 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    stayed visible (and clickable) on top of the palette.
    Below the Settings dialog (200). */
 #plugin-overlays {
-  position: absolute; inset: 0; pointer-events: none; z-index: 150;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 150;
 }
-.plugin-overlay { position: absolute; inset: 0; pointer-events: none; }
+
+.plugin-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
 /* Plugins (see PLUGIN_API.md): a right dock for plugin panels, a
    full-board container for plugin views, and a bottom-centre view
    switcher. Panels and the switcher use the same frosted style as
@@ -1119,23 +2499,42 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
      not by :has: a tabbed panel can be shown but inactive,
      or hidden, and the dock can be closed while panels are
      still shown — three states :has cannot tell apart. */
-  flex: none; align-self: stretch; position: relative;
-  display: flex; flex-direction: column; gap: 0; width: 0;
-  overflow: hidden; pointer-events: none; z-index: 10;
+  flex: none;
+  align-self: stretch;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 10;
 }
-#plugin-panels::-webkit-scrollbar { display: none; }
+
+#plugin-panels::-webkit-scrollbar {
+  display: none;
+}
+
 /* The dock resize handle: a thin strip on the dock's left edge,
    invisible until hovered, so the dock still reads as a flush
    sidebar. Dragging it resizes the dock (200–600px); the width
    is saved on release. */
 .panel-resize-handle {
-  position: absolute; left: 0; top: 0; bottom: 0; width: 6px;
-  cursor: ew-resize; z-index: 20; pointer-events: auto;
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: ew-resize;
+  z-index: 20;
+  pointer-events: auto;
   background: transparent;
 }
+
 .panel-resize-handle:hover {
   background: var(--hairline);
 }
+
 /* Mini tabs, as a Settings segmented control: a fill-grey
    pill with icon tabs, active tab white with the
    segmented active shadow. Tabs are icons only — the
@@ -1151,47 +2550,102 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    old panel-head close, moved here: it hides the whole
    dock, not one tab. */
 .plugin-tabs {
-  flex: none; height: 48px; display: flex; align-items: center;
-  justify-content: space-between; gap: 8px; padding: 0 12px;
-  background: #fff; border-bottom: 1px solid var(--separator);
+  flex: none;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 12px;
+  background: #fff;
+  border-bottom: 1px solid var(--separator);
   border-left: 1px solid var(--separator);
-  pointer-events: auto; overflow: hidden;
+  pointer-events: auto;
+  overflow: hidden;
 }
+
 .plugin-tabs-list {
-  display: flex; gap: 2px; background: var(--fill);
-  border-radius: 9px; padding: 2px; overflow-x: auto;
+  display: flex;
+  gap: 2px;
+  background: var(--fill);
+  border-radius: 9px;
+  padding: 2px;
+  overflow-x: auto;
   scrollbar-width: none;
 }
-.plugin-tabs-list::-webkit-scrollbar { display: none; }
+
+.plugin-tabs-list::-webkit-scrollbar {
+  display: none;
+}
+
 .plugin-tab {
-  flex: none; border: none; background: transparent;
-  border-radius: 7px; padding: 4px 10px; cursor: pointer;
-  font-size: 13px; font-weight: 500; color: var(--ink);
+  flex: none;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
   white-space: nowrap;
 }
+
 /* Icon tab: a 32px square, icon centred, as a toolbar
    button at tab-bar size. The SVG itself sets its own
    colours (Palette dots are coloured, Visual Library
    is ink stroke via currentColor), so the core only
    sets size here, never a fill or stroke override. */
 .plugin-tab.has-icon {
-  width: 32px; height: 32px; padding: 0;
-  display: flex; align-items: center; justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.plugin-tab.has-icon svg { width: 20px; height: 20px; display: block; }
-.plugin-tab.dragging { opacity: 0.5; cursor: grabbing; }
-.plugin-tab:hover { background: var(--fill); }
+
+.plugin-tab.has-icon svg {
+  width: 20px;
+  height: 20px;
+  display: block;
+}
+
+.plugin-tab.dragging {
+  opacity: 0.5;
+  cursor: grabbing;
+}
+
+.plugin-tab:hover {
+  background: var(--fill);
+}
+
 .plugin-tab.active {
   background: #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
 }
+
 .plugin-tabs-close {
-  flex: none; border: none; background: transparent; cursor: pointer;
-  font-size: 16px; line-height: 1; color: var(--grey);
-  width: 22px; height: 22px; padding: 0; border-radius: 50%;
-  display: inline-flex; align-items: center; justify-content: center;
+  flex: none;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--grey);
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
-.plugin-tabs-close:hover { background: rgba(0, 0, 0, 0.1); }
+
+.plugin-tabs-close:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
 .plugin-panel {
   /* One panel at a time fills the dock below the tab bar,
      so it gets the full dock height instead of half a
@@ -1200,33 +2654,75 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
      so a panel reads as part of the app, not something
      added on top of it. Only the left edge carries a
      border (the flush edge). */
-  flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0;
-  pointer-events: auto; background: #fff;
-  border: none; border-left: 1px solid var(--separator);
-  border-radius: 0; box-shadow: none; overflow: hidden;
-}
-.plugin-panel-body { padding: 12px; font-size: 13px; line-height: 1.5; }
-.plugin-panel-body button {
-  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
-  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
-}
-.plugin-panel-body button:hover { background: var(--fill); }
-#plugin-view {
-  position: absolute; inset: 0; background: #fff; overflow: auto; z-index: 5;
-  padding: 24px; font-size: 14px; line-height: 1.6;
-}
-#view-switcher {
-  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
-  gap: 4px; padding: 4px; z-index: 15;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  pointer-events: auto;
   background: #fff;
-  border: 1px solid rgba(0, 0, 0, 0.08); border-radius: 12px;
+  border: none;
+  border-left: 1px solid var(--separator);
+  border-radius: 0;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.plugin-panel-body {
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.plugin-panel-body button {
+  border: 1px solid var(--separator);
+  background: #fff;
+  border-radius: 9px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.plugin-panel-body button:hover {
+  background: var(--fill);
+}
+
+#plugin-view {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  overflow: auto;
+  z-index: 5;
+  padding: 24px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+#view-switcher {
+  position: absolute;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  gap: 4px;
+  padding: 4px;
+  z-index: 15;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
   box-shadow: var(--shadow-md);
 }
+
 #view-switcher button {
-  border: 1px solid transparent; background: transparent; border-radius: 9px;
-  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 9px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--grey);
 }
+
 /* The bar itself is frosted white over a white board, so a
    white active button on it was white on white — the selected
    view was invisible. Same frosted pill style, but the active
@@ -1234,57 +2730,114 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
    shadow, and full-strength text, while inactive buttons stay
    dimmed. No new colour, no new shape, just contrast. */
 #view-switcher button.active {
-  background: #fff; color: #1d1d1f;
-  border-color: rgba(0, 0, 0, 0.10); box-shadow: var(--shadow-md);
+  background: #fff;
+  color: #1d1d1f;
+  border-color: rgba(0, 0, 0, 0.10);
+  box-shadow: var(--shadow-md);
 }
+
 /* Plugin rows as a list, not bordered cards: name and
    description on the left, the toggle on the right, rows
    separated by a hairline. */
-#settings .plugin-row { 
-  display: flex; align-items: center; gap: 12px;
+#settings .plugin-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   border-bottom: 1px solid var(--separator);
-  padding: 12px 0; margin: 0;
+  padding: 12px 0;
+  margin: 0;
 }
-#settings .plugin-row:last-child { border-bottom: none; }
-#settings .plugin-row-text { flex: 1 1 auto; min-width: 0; }
-#settings .plugin-row-text .meta { margin: 4px 0 0; }
+
+#settings .plugin-row:last-child {
+  border-bottom: none;
+}
+
+#settings .plugin-row-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+#settings .plugin-row-text .meta {
+  margin: 4px 0 0;
+}
+
 /* The disable warning is plain words, not a path or an id:
    it must break between words, never inside one, so
    "re-enable" is never split as "re-enabl" and "e". */
-#settings .plugin-row-text .meta.plugin-warn { word-break: normal; overflow-wrap: break-word; }
+#settings .plugin-row-text .meta.plugin-warn {
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+
 /* The one-line description under the name: quiet grey, 12px, so
    the name stays the row's loudest text and the description reads
    as a caption. An off plugin dims its description with its name. */
 #settings .plugin-row-text .plugin-desc {
-  margin: 2px 0 0; color: var(--grey); font-size: 12px; line-height: 1.4;
+  margin: 2px 0 0;
+  color: var(--grey);
+  font-size: 12px;
+  line-height: 1.4;
 }
-#settings .plugin-row-off .plugin-row-text .plugin-desc { color: var(--grey); }
+
+#settings .plugin-row-off .plugin-row-text .plugin-desc {
+  color: var(--grey);
+}
+
 /* The state dot, before the name: filled ink when the plugin
    is on, a hollow grey ring when it is off. The whole row
    dims with it, so the state is visible without reading. */
 #settings .plugin-row .plugin-dot {
-  width: 8px; height: 8px; border-radius: 50%; flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
   background: var(--ink);
 }
+
 #settings .plugin-row-off .plugin-dot {
-  background: transparent; border: 1.5px solid var(--grey);
+  background: transparent;
+  border: 1.5px solid var(--grey);
 }
-#settings .plugin-row-off .plugin-row-text strong { color: var(--grey); }
+
+#settings .plugin-row-off .plugin-row-text strong {
+  color: var(--grey);
+}
+
 /* Reset plugins: back to the factory state (core on, extras
    off). Red, like the board-data reset: it undoes work the
    user may have done (turning plugins back off), so it reads
    as a destructive action, not a neutral one. */
 #settings #plugins-reset {
-  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
-  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
-  color: #e63946; box-shadow: var(--shadow-sm); margin-top: 16px;
+  border: 1px solid var(--separator);
+  background: #fff;
+  border-radius: 9px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: #e63946;
+  box-shadow: var(--shadow-sm);
+  margin-top: 16px;
 }
-#settings #plugins-reset:hover { background: rgba(230, 57, 70, 0.06); }
+
+#settings #plugins-reset:hover {
+  background: rgba(230, 57, 70, 0.06);
+}
+
 #settings .plugin-row button {
-  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
-  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
-  margin: 0; flex: none;
+  border: 1px solid var(--separator);
+  background: #fff;
+  border-radius: 9px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+  flex: none;
 }
+
 /* The armed confirm state reads red, like other confirm states:
    "Disable anyway" is a deliberate second click, not a toggle. */
-#settings .plugin-row button.armed { color: #e63946; }
+#settings .plugin-row button.armed {
+  color: #e63946;
+}
