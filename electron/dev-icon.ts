@@ -77,16 +77,38 @@ function registerWithLaunchServices(appBundle: string): void {
   }
 }
 
+// Resolve the Electron.app bundle the canonical way: require("electron")
+// returns the path to the Electron executable, which on macOS is
+// .../Electron.app/Contents/MacOS/Electron — three levels up is the
+// bundle. Fall back to the usual node_modules path, which is not
+// guaranteed: a fresh copy may not have run the postinstall binary
+// download yet.
+function resolveElectronApp(root: string): string | null {
+  try {
+    const binary: string = require("electron") as string;
+    const marker = `${path.sep}Electron.app${path.sep}Contents${path.sep}MacOS${path.sep}Electron`;
+    if (typeof binary === "string" && binary.endsWith(marker)) {
+      const appBundle = path.dirname(path.dirname(path.dirname(binary)));
+      if (fs.existsSync(path.join(appBundle, "Contents", "Info.plist"))) return appBundle;
+    }
+  } catch {
+    // require("electron") failed; fall through to the hardcoded path.
+  }
+  const fallback = path.join(root, "node_modules", "electron", "dist", "Electron.app");
+  if (fs.existsSync(path.join(fallback, "Contents", "Info.plist"))) return fallback;
+  return null;
+}
+
 export function brandDevAppIcon(root: string): void {
   if (process.platform !== "darwin") return;
   try {
-    const appBundle = path.join(root, "node_modules", "electron", "dist", "Electron.app");
-    const resources = path.join(appBundle, "Contents", "Resources");
-    const infoPlist = path.join(appBundle, "Contents", "Info.plist");
-    if (!fs.existsSync(resources) || !fs.existsSync(infoPlist)) {
-      console.warn(`Dev icon: Electron.app bundle not found at ${appBundle}, skipping (Mission Control will show the Electron icon)`);
+    const appBundle = resolveElectronApp(root);
+    if (appBundle === null) {
+      console.warn("Dev icon: Electron.app bundle not found — Electron does not appear to be installed in this copy. Run `npm ci` here first (the binary download happens on install); Mission Control will show the Electron icon until then");
       return;
     }
+    const resources = path.join(appBundle, "Contents", "Resources");
+    const infoPlist = path.join(appBundle, "Contents", "Info.plist");
     const target = path.join(resources, `${ICNS_NAME}.icns`);
     const plist = fs.readFileSync(infoPlist, "utf8");
     const plistBranded = new RegExp(`<key>CFBundleIconFile<\\/key>\\s*<string>${ICNS_NAME}<\\/string>`).test(plist);
