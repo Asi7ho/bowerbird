@@ -308,6 +308,13 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 .card.selected {
   box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.35);
 }
+/* File cards are the exception to the borderless rule: a design
+   file reads as a framed document on the board, so it keeps a
+   visible rounded hairline border. Selected, the blue focus
+   ring shows as well as the hairline. */
+.card.filecard {
+  border-color: var(--hairline);
+}
 /* Shape cards carry no drop shadow: the figure is the
    shape itself, and a rectangular shadow around its box
    reads as a box, not as the figure. Selected, only the

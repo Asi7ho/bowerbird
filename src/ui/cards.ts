@@ -375,7 +375,7 @@ export function activate(api: PluginContext): void {
       const previewHtml = preview
         ? `<img src="${api.files.fileUrl(preview)}" draggable="false" alt="" style="width:100%;height:100%;object-fit:contain;display:block" />`
         : `<div class="filecard-tile" style="background:${api.text.tint(tint, 0.88)};color:${tint}">${label}</div>`;
-      return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
+      return `<div class="${c.cls} filecard" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
         <div style="flex:1 1 auto;min-height:0;border-radius:10px;overflow:hidden;position:relative">${previewHtml}${preview ? `<span class="filecard-pill" style="color:${tint}">${label}</span>` : ""}</div></div></div>`;
     },
   });
