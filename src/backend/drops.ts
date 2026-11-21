@@ -48,7 +48,7 @@ export function createDrops(ctx: DropsContext): Drops {
     // resize it smaller, where it falls back to a row.
     pdf: { size: { w: 260, h: 360 }, needsSize: true, kind: (stored, size) => ({ PdfCard: { path: stored, size_bytes: size } }) },
     audio: { size: { w: 300, h: 104 }, needsSize: false, kind: (stored) => ({ Audio: { path: stored } }) },
-    video: { size: { w: 360, h: 264 }, needsSize: true, kind: (stored, size) => ({ Video: { source: stored, remote: false, size_bytes: size } }) },
+    video: { size: { w: 360, h: 203 }, needsSize: true, kind: (stored, size) => ({ Video: { source: stored, remote: false, size_bytes: size } }) },
     // Wide enough for the viewport plus the title row
     // below it (the canvas takes the height above it).
     model3d: { size: { w: 360, h: 300 }, needsSize: true, kind: (stored, size) => ({ Model3D: { path: stored, size_bytes: size } }) },
@@ -104,7 +104,7 @@ export function createDrops(ctx: DropsContext): Drops {
     })();
     if (isVideo) {
       const id = ctx.allocId();
-      ctx.getBoard().items.push({ id, pos: at, size: { w: 360, h: 264 }, group: null, kind: { Video: { source: url, remote: true, size_bytes: 0 } } });
+      ctx.getBoard().items.push({ id, pos: at, size: { w: 360, h: 203 }, group: null, kind: { Video: { source: url, remote: true, size_bytes: 0 } } });
       ctx.save(); ctx.requestRender();
       return;
     }
