@@ -540,7 +540,12 @@ export function attachBoardListeners(): void {
       return;
     }
     // Select tool.
-    const now = Date.now();
+    // The press's own timestamp, not the wall clock: on a
+    // busy board the main thread can process the second
+    // press more than 500ms after it happened, and the
+    // double-click would be missed. e.timeStamp is when
+    // the press occurred, so the gap is the user's gap.
+    const now = e.timeStamp;
     const isDoubleClick =
       now - S.lastPointerDown.t < 500 &&
       Math.hypot(winPt.x - S.lastPointerDown.x, winPt.y - S.lastPointerDown.y) < 5;
