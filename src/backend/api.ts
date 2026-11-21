@@ -65,7 +65,7 @@ export interface BowerbirdAPI {
   aiHasKey(): Promise<boolean>;
   aiSetKey(key: string): Promise<boolean>;
   openExternal(target: string): Promise<void>;
-  getAppSettings(): Promise<{ corner: string; panelOrder?: string[]; panelWidth?: number; dockVisible?: boolean }>;
+  getAppSettings(): Promise<{ corner: string; panelOrder?: string[]; panelWidth?: number; dockVisible?: boolean; shortcuts?: Record<string, string>; hardwareAcceleration?: boolean }>;
   setPanelWidth(width: number): Promise<number>;
   setDockVisible(visible: boolean): Promise<boolean>;
   setCorner(corner: string): Promise<string>;
