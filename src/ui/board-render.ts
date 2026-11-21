@@ -492,12 +492,14 @@ function updateSelectionInner(): void {
     const isSel = selected.includes(Number(el.dataset.id));
     el.classList.toggle("selected", isSel);
     el.setAttribute("aria-selected", String(isSel));
-    // A selected image or video shows whole (contain), not
-    // cropped (cover): cardHtml sets this at render time,
-    // but a plain click only toggles the class here, without
-    // a full render — and a full render would restart a
-    // playing video — so update the fit here too.
-    for (const media of Array.from(el.querySelectorAll("img, video"))) {
+    // A selected image shows whole (contain), not cropped
+    // (cover): cardHtml sets this at render time, but a
+    // plain click only toggles the class here, without a
+    // full render — so update the fit here too. Only the
+    // images marked data-fit-switch change: a link preview
+    // stays cover, a video poster and a live video stay
+    // contain, so none of them is touched here.
+    for (const media of Array.from(el.querySelectorAll("img[data-fit-switch]"))) {
       (media as HTMLElement).style.objectFit = isSel ? "contain" : "cover";
     }
   }

@@ -467,9 +467,9 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 /* Link preview card: the site's own image fills the card edge
    to edge, with the title and domain overlaid at the bottom
    on a gradient scrim; without an image it is a clean text
-   card with the title and domain at the bottom. Title and
-   domain link out to the site; the whole card is never a
-   fake embed. */
+   card with the title and domain at the bottom. Only the
+   title and the domain open the site; the image never
+   does — clicking it selects the card. */
 .card .link-card { position: relative; height: 100%; }
 .card .link-image {
   position: absolute; inset: 0; display: block; overflow: hidden;

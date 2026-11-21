@@ -290,7 +290,7 @@ export function activate(api: PluginContext): void {
       // selected. Selecting switches to contain, so the full
       // image is visible; deselecting goes back to cover.
       const fit = c.sel ? "contain" : "cover";
-      return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner"><img src="${api.files.fileUrl(path)}" data-name="${api.text.escapeHtml(name)}" data-path="${api.text.escapeHtml(path)}" draggable="false" style="width:100%;height:100%;object-fit:${fit};border-radius:12px" alt="" /></div></div>`;
+      return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner"><img src="${api.files.fileUrl(path)}" data-name="${api.text.escapeHtml(name)}" data-path="${api.text.escapeHtml(path)}" draggable="false" data-fit-switch style="width:100%;height:100%;object-fit:${fit};border-radius:12px" alt="" /></div></div>`;
     },
   });
 
@@ -309,7 +309,7 @@ export function activate(api: PluginContext): void {
       const footer = `<div class="link-footer"><a class="link-domain" data-action="open-link" data-id="${c.id}">${ico ? `<img class="favicon" src="${api.text.escapeHtml(ico)}" alt="" onerror="this.style.display='none';var f=this.nextElementSibling;if(f)f.style.display='flex'" /><span class="favicon-fallback" style="display:none;background:${api.text.tint(tile, 0.85)};color:${tile}">${api.text.escapeHtml(initial)}</span>` : `<span class="favicon-fallback" style="background:${api.text.tint(tile, 0.85)};color:${tile}">${api.text.escapeHtml(initial)}</span>`}<span>${api.text.escapeHtml(domain)}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" /></svg></a></div>`;
       if (img) {
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner link-card">
-          <a class="link-image" data-action="open-link" data-id="${c.id}"><img src="${api.text.escapeHtml(img)}" draggable="false" alt="" onerror="this.closest('.link-card').classList.add('no-image');this.closest('.link-image').style.display='none'" /></a>
+          <div class="link-image"><img src="${api.text.escapeHtml(img)}" draggable="false" alt="" onerror="this.closest('.link-card').classList.add('no-image');this.closest('.link-image').style.display='none'" /></div>
           <div class="link-body">
             <a class="link-title" data-action="open-link" data-id="${c.id}">${api.text.escapeHtml(head)}</a>
             ${footer}
@@ -381,7 +381,7 @@ export function activate(api: PluginContext): void {
       // the preview directly.
       const fit = c.sel ? "contain" : "cover";
       const previewHtml = preview
-        ? `<img src="${api.files.fileUrl(preview)}" draggable="false" alt="" style="width:100%;height:100%;object-fit:${fit};border-radius:12px;display:block" />`
+        ? `<img src="${api.files.fileUrl(preview)}" draggable="false" data-fit-switch alt="" style="width:100%;height:100%;object-fit:${fit};border-radius:12px;display:block" />`
         : `<div class="filecard-tile" style="background:${api.text.tint(tint, 0.88)};color:${tint}">${label}</div>`;
       return `<div class="${c.cls} filecard" data-id="${c.id}" style="${c.style}"><div class="inner">${previewHtml}${preview ? `<span class="filecard-pill" style="color:${tint}">${label}</span>` : ""}</div></div>`;
     },
