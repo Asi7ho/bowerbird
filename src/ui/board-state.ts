@@ -114,6 +114,10 @@ interface BoardState {
   pendingZoomAnchor: Pt | null;
   zoomFrame: number | null;
   zoomSettleTimer: ReturnType<typeof setTimeout> | null;
+  // Armed by the settle timer, not the wheel event: the save
+  // waits for a longer quiet period than the content refresh,
+  // so a slow pinch with pauses does not save mid-gesture.
+  zoomSaveTimer: ReturnType<typeof setTimeout> | null;
   wheelSaveTimer: ReturnType<typeof setTimeout> | null;
   cursorRaf: number;
   pendingCursor: Pt | null;
@@ -153,6 +157,7 @@ export const S: BoardState = {
   pendingZoomAnchor: null,
   zoomFrame: null,
   zoomSettleTimer: null,
+  zoomSaveTimer: null,
   wheelSaveTimer: null,
   cursorRaf: 0,
   pendingCursor: null,

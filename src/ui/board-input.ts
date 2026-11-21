@@ -34,6 +34,34 @@ function zoomCentre(factor: number): void {
   const s = boardSize();
   zoomAt({ x: s.x / 2, y: s.y / 2 }, factor);
 }
+// One frame of the coalesced pinch zoom. A compositor stall lets
+// wheel events pile up into one large pending factor; applying it
+// in a single frame is the jump after the stall. Cap each frame
+// at ~15% and carry the remainder to following frames, so the
+// zoom catches up over frames instead of leaping. Sensitivity is
+// untouched — the same total factor lands, spread out.
+const ZOOM_FRAME_CAP = 1.15;
+function flushPendingZoom(): void {
+  S.zoomFrame = null;
+  if (S.pendingZoomAnchor && S.pendingZoomFactor !== 1) {
+    const f = S.pendingZoomFactor;
+    const capped = f > ZOOM_FRAME_CAP ? ZOOM_FRAME_CAP : f < 1 / ZOOM_FRAME_CAP ? 1 / ZOOM_FRAME_CAP : f;
+    zoomAt(S.pendingZoomAnchor, capped);
+    const rest = f / capped;
+    // A residue within 0.2% of 1 is floating-point noise from
+    // the division, not a real remainder: snap it away, or the
+    // frame chain never ends.
+    S.pendingZoomFactor = Math.abs(Math.log(rest)) < 0.002 ? 1 : rest;
+    if (S.pendingZoomFactor !== 1) {
+      S.zoomFrame = requestAnimationFrame(flushPendingZoom);
+      applyCamera();
+      return;
+    }
+  }
+  S.pendingZoomFactor = 1;
+  S.pendingZoomAnchor = null;
+  applyCamera();
+}
 // F: zoom to fit — every item on screen at once. A no-op on
 // an empty board. Like the 0 reset, this only moves the view;
 // it does not save.
@@ -1127,20 +1155,19 @@ export function attachWindowListeners(): void {
       S.pendingZoomFactor *= Math.exp(-dy * 0.005);
       S.pendingZoomAnchor = boardPoint(e.clientX, e.clientY);
       if (S.zoomFrame === null) {
-        S.zoomFrame = requestAnimationFrame(() => {
-          S.zoomFrame = null;
-          if (S.pendingZoomAnchor && S.pendingZoomFactor !== 1) {
-            zoomAt(S.pendingZoomAnchor, S.pendingZoomFactor);
-          }
-          S.pendingZoomFactor = 1;
-          S.pendingZoomAnchor = null;
-          applyCamera();
-        });
+        S.zoomFrame = requestAnimationFrame(flushPendingZoom);
       }
       if (S.zoomSettleTimer) clearTimeout(S.zoomSettleTimer);
+      if (S.zoomSaveTimer) clearTimeout(S.zoomSaveTimer);
       S.zoomSettleTimer = setTimeout(() => {
         refreshContentIfVisibleChanged();
-        S.api.board.save();
+        // The save waits for a longer quiet period than the
+        // content refresh: a slow deliberate pinch with pauses
+        // over 120 ms used to trigger a full-board save (JSON
+        // stringify + synchronous journal write) mid-gesture.
+        // 500 ms of quiet after the refresh means the gesture
+        // is really done, and the board still saves promptly.
+        S.zoomSaveTimer = setTimeout(() => S.api.board.save(), 500);
       }, 120);
       return;
     }
