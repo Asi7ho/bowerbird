@@ -440,6 +440,15 @@ function navigateElements(dir: 1 | -1): void {
 // the board. Set by the cards pointerdown below, cleared
 // on pointerup.
 let waveScrub: { id: number; path: string } | null = null;
+// A drag that started on a playing video: the press is on the
+// <video> element, and the click that follows the pointerup
+// would land on its controls and toggle playback (or seek).
+// The capture-phase click listener below swallows that one
+// click. Set on every pointerdown, cleared on pointerup.
+let dragStartedOnVideo = false;
+// Until when a click on a video is swallowed (see above): a
+// timestamp, so a genuine click a moment later still works.
+let suppressVideoClickUntil = 0;
 function seekWaveAt(e: PointerEvent): void {
   if (!waveScrub) return;
   const wave = S.cardsEl.querySelector(`[data-audio-wave="${waveScrub.id}"]`) as SVGElement | null;
@@ -455,7 +464,14 @@ function seekWaveAt(e: PointerEvent): void {
 export function attachBoardListeners(): void {
 S.boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
   const target = e.target as HTMLElement;
-  if (target.closest("#toolbar, #settings-backdrop, #toast, #plugin-overlays, #search-box, #title-bar, video, input, canvas.model3d, [data-audio-wave]")) return;
+  dragStartedOnVideo = target.closest("video") !== null;
+  // A press on a playing video is NOT ignored: the video
+  // fills its card, so it is the only place to grab it, and
+  // a drag on it must move the card. A plain click still
+  // reaches the controls — the click that follows a drag
+  // that actually moved is swallowed by the capture-phase
+  // click listener below instead.
+  if (target.closest("#toolbar, #settings-backdrop, #toast, #plugin-overlays, #search-box, #title-bar, input, canvas.model3d, [data-audio-wave]")) return;
   // A board click or drag must never start a native text selection
   // across the cards (bug: clicking anywhere highlighted all text).
   if (!target.closest("textarea.note-edit")) window.getSelection()?.removeAllRanges();
@@ -587,6 +603,20 @@ S.boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
   if (!e.shiftKey) S.api.board.setSelected([]);
   S.drag = { kind: "marquee", start: world, current: world };
 });
+
+// A drag that started on a playing video and actually moved
+// must not also toggle its controls: swallow the one click
+// that follows the pointerup. Capture phase, so the event
+// never reaches the video's controls at all. A plain click
+// (no drag) is unaffected, and the flag expires on its own,
+// so a genuine click a moment later still works.
+S.cardsEl.addEventListener("click", (e: MouseEvent) => {
+  if (Date.now() > suppressVideoClickUntil) return;
+  if (!(e.target as HTMLElement).closest("video")) return;
+  suppressVideoClickUntil = 0;
+  e.preventDefault();
+  e.stopPropagation();
+}, true);
 
 S.cardsEl.addEventListener("click", (e: MouseEvent) => {
   const target = e.target as HTMLElement;
@@ -961,6 +991,13 @@ window.addEventListener("pointerup", (e: PointerEvent) => {
     // a Ctrl+Z to get past before the real change undoes.
     if (d.moved) S.api.board.save();
     else S.api.board.saveWithoutUndo();
+    // A drag that started on a playing video and actually
+    // moved must not also toggle its controls: swallow the
+    // click that follows this pointerup (see the capture
+    // listener below). A click that never moved is a plain
+    // click on the controls, and is left alone.
+    if (d.moved && dragStartedOnVideo) suppressVideoClickUntil = Date.now() + 500;
+    dragStartedOnVideo = false;
   }
   // A move/resize that actually moved is safe to rebuild once at
   // the end (it refreshes truncation and connector endpoints with

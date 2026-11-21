@@ -276,6 +276,11 @@ export function render(): void {
     if (!card || !card.dataset.id) continue;
     if (!v.paused || (isFinite(v.currentTime) && v.currentTime > 0)) {
       videoState.set(Number(card.dataset.id), { t: v.currentTime, playing: !v.paused });
+      // Pause the old node now: it is about to be detached,
+      // and a detached video keeps playing out of sight, so
+      // the new node would double its sound. The state above
+      // is restored onto the new node below.
+      v.pause();
     }
   }
   S.worldEl.innerHTML = "";
