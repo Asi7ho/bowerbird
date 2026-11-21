@@ -329,56 +329,6 @@ async function main() {
     });
     page = await app.firstWindow();
 
-    // Diagnostic dump for a failing check (CI-only debugging):
-    // logs the board state, the DOM selection, what has focus,
-    // and what element sits under the click point, so a timeout
-    // in CI shows what the app was actually doing instead of
-    // just "timed out". Each probe is guarded so a diagnostic
-    // failure never masks the real failure.
-    const dumpDiagnostics = async (name) => {
-      const log = (label, value) => {
-        try {
-          console.log(`  diag [${name}] ${label}: ${value}`);
-        } catch { /* never mask the real failure */ }
-      };
-      try {
-        const b = readBoard();
-        log("board groups", JSON.stringify(b.groups ?? {}));
-        log("board items (id:kind:group)", b.items.map((it) => `${it.id}:${Object.keys(it.kind)[0]}:${it.group}`).join(" "));
-      } catch (e) { log("board read", `failed: ${String(e)}`); }
-      try {
-        const sel = await page.evaluate(() => {
-          const els = [...document.querySelectorAll("#cards .card.selected")];
-          return els.map((el) => el.dataset.id).join(",");
-        });
-        log("selected .card ids", sel === "" ? "(none)" : sel);
-      } catch (e) { log("selected", `failed: ${String(e)}`); }
-      try {
-        const active = await page.evaluate(() => {
-          const a = document.activeElement;
-          return a ? `${a.tagName}#${a.id || ""}.${(a.className && a.className.baseVal === undefined ? String(a.className) : "")}` : "(null)";
-        });
-        log("activeElement", active);
-      } catch (e) { log("activeElement", `failed: ${String(e)}`); }
-      try {
-        const at = await page.evaluate(() => {
-          const el = document.elementFromPoint(730, 624);
-          if (!el) return "(null)";
-          const card = el.closest(".card");
-          return `${el.tagName}.${String(el.className && el.className.baseVal === undefined ? el.className : "")} card=${card ? card.dataset.id : "(none)"}`;
-        });
-        log("elementFromPoint(730,624)", at);
-      } catch (e) { log("elementFromPoint", `failed: ${String(e)}`); }
-      try {
-        const size = await page.evaluate(() => `${window.innerWidth}x${window.innerHeight}`);
-        log("window size", size);
-      } catch (e) { log("window size", `failed: ${String(e)}`); }
-      try {
-        const editors = await page.evaluate(() => `textarea.note-edit=${document.querySelectorAll("textarea.note-edit").length} input.group-rename=${document.querySelectorAll("input.group-rename").length}`);
-        log("open editors", editors);
-      } catch (e) { log("open editors", `failed: ${String(e)}`); }
-    };
-
     const check = async (name, fn) => {
       try {
         await fn();
@@ -387,7 +337,6 @@ async function main() {
       } catch (error) {
         results.push({ name, ok: false, error });
         console.log(`  FAIL  ${name}: ${String(error.message).split("\n")[0]}`);
-        await dumpDiagnostics(name);
       }
     };
 
