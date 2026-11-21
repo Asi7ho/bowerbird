@@ -851,6 +851,45 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   border-radius: 5px; padding: 1px 6px; font-family: inherit; font-size: 12px;
   box-shadow: var(--shadow-sm);
 }
+/* Shortcut rows: one row per rebindable action — the label,
+   a key button in the kbd treatment, and a Reset button in
+   the Settings neutral button style. The key button is a
+   button, not a kbd, so it can be clicked; it keeps the kbd
+   look. While it waits for a key it takes the app's selected
+   fill, the same as an active tab. */
+#settings .shortcut-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 0; font-size: 13px;
+}
+#settings .shortcut-row .shortcut-label { flex: 1 1 auto; }
+#settings .shortcut-key {
+  background: #fff; border: 1px solid var(--separator); border-bottom-width: 2px;
+  border-radius: 5px; padding: 1px 6px; font-family: inherit; font-size: 12px;
+  box-shadow: var(--shadow-sm); cursor: pointer; color: var(--ink); flex: none;
+}
+#settings .shortcut-key.capturing { background: var(--fill); }
+#settings .shortcut-reset {
+  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
+  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
+  color: var(--ink); box-shadow: var(--shadow-sm); flex: none;
+}
+#settings .shortcut-reset:hover { background: var(--fill); }
+/* Performance: one row, label on the left and the On/Off
+   toggle on the right, in the same button style as the
+   plugin rows. The Restart button sits below it. */
+#settings .perf-row {
+  display: flex; align-items: center; gap: 12px; margin: 6px 0;
+}
+#settings .perf-row span { flex: 1 1 auto; font-size: 13px; }
+#settings #btn-hardware-accel,
+#settings #btn-restart {
+  border: 1px solid var(--separator); background: #fff; border-radius: 9px;
+  padding: 6px 12px; cursor: pointer; font-size: 13px; font-weight: 600;
+  color: var(--ink); box-shadow: var(--shadow-sm);
+}
+#settings #btn-hardware-accel:hover,
+#settings #btn-restart:hover { background: var(--fill); }
+#settings #btn-restart { margin: 6px 0; }
 /* Canvas options are previews, not text: a swatch of the colour,
    or a tile showing the grid pattern. The button is the control
    and the preview sits inside it, so the active option uses the
