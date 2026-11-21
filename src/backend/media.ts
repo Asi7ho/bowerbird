@@ -39,7 +39,7 @@ export interface Media {
   // Heal a FileCard saved at the stale height (see
   // loadFileCardSize): measure its preview and shrink the
   // card to the ratio of the file when it is still wrong.
-  loadFileCardSize(id: number, preview: string): void;
+  loadFileCardSize(preview: string): void;
   loadAudioDuration(id: number, path: string): void;
   // Waveform peaks for an audio card (100 bars, 0..1), from
   // a real decode of the file — never fake bars. Loaded on
@@ -427,10 +427,10 @@ export function createMedia(host: MediaContext): Media {
   // user resized by hand is left alone: its height will not
   // match a stale formula. Called from the FileCard renderer,
   // like loadPdfPage.
-  function loadFileCardSize(id: number, preview: string): void {
+  function loadFileCardSize(preview: string): void {
     const cached = fileCardPreviewSize.get(preview);
     if (cached) {
-      healFileCardSize(id, preview, cached.w, cached.h);
+      healFileCardsWithPreview(preview, cached.w, cached.h);
       return;
     }
     if (fileCardPreviewLoading.has(preview)) return;
@@ -440,7 +440,7 @@ export function createMedia(host: MediaContext): Media {
       fileCardPreviewLoading.delete(preview);
       if (img.naturalWidth > 0 && img.naturalHeight > 0) {
         fileCardPreviewSize.set(preview, { w: img.naturalWidth, h: img.naturalHeight });
-        healFileCardSize(id, preview, img.naturalWidth, img.naturalHeight);
+        healFileCardsWithPreview(preview, img.naturalWidth, img.naturalHeight);
       }
     };
     img.onerror = () => {
@@ -449,19 +449,30 @@ export function createMedia(host: MediaContext): Media {
     };
     img.src = api.fileUrl(preview);
   }
-  function healFileCardSize(id: number, preview: string, artW: number, artH: number): void {
-    const it = boardGet(host.getBoard(), id);
-    if (!it || !("FileCard" in it.kind) || it.kind.FileCard.preview !== preview) return;
-    const correctH = fileCardHeightForWidth(artW, artH, it.size.w);
-    // Both stale heights, from the preview height the old
-    // formulas used (the card minus 24px of padding): +70
-    // for the title and sub-line, +24 for the padding.
-    const previewH = fileCardPreviewHeight(artW, artH, Math.max(1, it.size.w - 24));
-    const stale70 = Math.round(previewH + 70);
-    const stale24 = Math.round(previewH + 24);
-    const isStale = Math.abs(it.size.h - stale70) <= 2 || Math.abs(it.size.h - stale24) <= 2;
-    if (isStale && it.size.h !== correctH) {
-      it.size.h = correctH;
+  // Shrink every FileCard using this preview that is still at
+  // a stale height to the ratio of the file. Several cards can
+  // share one preview (the same file dropped twice), so the
+  // heal runs over all of them, not just the one that asked.
+  // A card the user resized by hand is left alone: its height
+  // will not match a stale formula.
+  function healFileCardsWithPreview(preview: string, artW: number, artH: number): void {
+    let changed = false;
+    for (const it of host.getBoard().items) {
+      if (!("FileCard" in it.kind) || it.kind.FileCard.preview !== preview) continue;
+      const correctH = fileCardHeightForWidth(artW, artH, it.size.w);
+      // Both stale heights, from the preview height the old
+      // formulas used (the card minus 24px of padding): +70
+      // for the title and sub-line, +24 for the padding.
+      const previewH = fileCardPreviewHeight(artW, artH, Math.max(1, it.size.w - 24));
+      const stale70 = Math.round(previewH + 70);
+      const stale24 = Math.round(previewH + 24);
+      const isStale = Math.abs(it.size.h - stale70) <= 2 || Math.abs(it.size.h - stale24) <= 2;
+      if (isStale && it.size.h !== correctH) {
+        it.size.h = correctH;
+        changed = true;
+      }
+    }
+    if (changed) {
       host.saveWithoutUndo();
       host.requestRender();
     }

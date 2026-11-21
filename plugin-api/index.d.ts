@@ -549,7 +549,7 @@ export interface PluginHost {
   // Heal a FileCard saved at the stale height: measure its
   // preview and shrink the card to the ratio of the file
   // when it is still wrong.
-  loadFileCardSize: (id: number, preview: string) => void;
+  loadFileCardSize: (preview: string) => void;
   // Move a PDF card to a page (clamped to the document),
   // and render it. The board view's prev/next buttons.
   // False when the document is not loaded yet.
@@ -1242,7 +1242,7 @@ export interface PluginContext {
     // Heal a FileCard saved at the stale height: measure its
     // preview and shrink the card to the ratio of the file
     // when it is still wrong.
-    loadFileCardSize: (id: number, preview: string) => void;
+    loadFileCardSize: (preview: string) => void;
     // Move a PDF card to a page (clamped to the document),
     // and render it. The board view's prev/next buttons.
     // False when the document is not loaded yet.

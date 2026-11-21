@@ -372,7 +372,7 @@ export function activate(api: PluginContext): void {
       const { format, preview } = data as FileCardData;
       // A card saved at the stale height is healed to the
       // ratio of its file once the preview loads.
-      if (preview && !plain) api.media.loadFileCardSize(c.id, preview);
+      if (preview && !plain) api.media.loadFileCardSize(preview);
       const label = format === "psd" ? "PSD" : "AI";
       const tint = format === "psd" ? "#2E86AB" : "#FF6B35";
       // The preview fills the card like an image card: cover

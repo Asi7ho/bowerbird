@@ -810,7 +810,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
       pdfFailed: (path: string) => host!.pdfFailed(path),
       getPdfPage: (id: number) => host!.getPdfPage(id),
       loadPdfPage: (id: number, path: string) => host!.loadPdfPage(id, path),
-      loadFileCardSize: (id: number, preview: string) => host!.loadFileCardSize(id, preview),
+      loadFileCardSize: (preview: string) => host!.loadFileCardSize(preview),
       setPdfPage: (id: number, path: string, page: number) => host!.setPdfPage(id, path, page),
     },
     text: {
