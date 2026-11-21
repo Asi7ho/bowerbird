@@ -93,6 +93,16 @@ export interface Media {
 type PdfDoc = import("pdfjs-dist").PDFDocumentProxy;
 
 export function createMedia(host: MediaContext): Media {
+  // The cards layer, read safely: it does not exist until
+  // the core-board plugin builds it, and async callbacks —
+  // an audio probe's loadedmetadata, a PDF page render —
+  // can fire before then, while getCardsEl() still returns
+  // undefined (main.ts only assigns it after the board
+  // plugin activates). A missing layer is not an error:
+  // the card is not on screen yet, so there is nothing to
+  // write into — and a later render re-runs the work.
+  // Every getCardsEl().querySelector below goes through here.
+  const cardsEl = (): HTMLElement | null => (host.getCardsEl() as HTMLElement | undefined) ?? null;
   // PDF.js is loaded lazily, not statically imported: it
   // used to sit in the main chunk (533 KB) and every launch
   // paid for it, including boards with no PDFs. It is now
@@ -221,9 +231,10 @@ export function createMedia(host: MediaContext): Media {
     const cur = audioEl.currentTime;
     if (!isFinite(dur) || dur <= 0) return;
     const pct = Math.min(1, Math.max(0, cur / dur));
-    const wave = host.getCardsEl().querySelector(`[data-audio-wave="${audioId}"]`);
+    const el = cardsEl();
+    const wave = el?.querySelector(`[data-audio-wave="${audioId}"]`);
     if (wave) paintWaveProgress(wave, pct);
-    const tl = host.getCardsEl().querySelector(`[data-audio-timeline="${audioId}"]`);
+    const tl = el?.querySelector(`[data-audio-timeline="${audioId}"]`);
     if (tl) paintTimelineProgress(tl, pct, cur);
   }
   // The timeline is the progress display too: while the
@@ -253,7 +264,7 @@ export function createMedia(host: MediaContext): Media {
       if (!it || !("Audio" in it.kind) || it.kind.Audio.path !== path) return;
       if (isFinite(el.duration)) {
         audioDurations.set(path, el.duration);
-        const durEl = host.getCardsEl().querySelector(`[data-audio-dur="${id}"]`);
+        const durEl = cardsEl()?.querySelector(`[data-audio-dur="${id}"]`);
         if (durEl) durEl.textContent = formatAudioTime(el.duration);
       }
     };
@@ -393,7 +404,7 @@ export function createMedia(host: MediaContext): Media {
         return it && "PdfCard" in it.kind && it.kind.PdfCard.path === path;
       };
       if (!stillPdf()) return;
-      canvas = host.getCardsEl().querySelector(`[data-pdf-canvas="${id}"]`) as HTMLCanvasElement | null;
+      canvas = (cardsEl()?.querySelector(`[data-pdf-canvas="${id}"]`) ?? null) as HTMLCanvasElement | null;
       if (!canvas) return;
       const pageNum = pdfPages.get(id) ?? 1;
       renderedPage = pageNum;
@@ -408,10 +419,10 @@ export function createMedia(host: MediaContext): Media {
       const ctx = canvas.getContext("2d");
       if (!ctx) return;
       await page.render({ canvas, viewport }).promise;
-      const countEl = host.getCardsEl().querySelector(`[data-pdf-count="${id}"]`);
+      const countEl = cardsEl()?.querySelector(`[data-pdf-count="${id}"]`);
       if (countEl) countEl.textContent = `${pageNum} / ${doc.numPages}`;
-      const prev = host.getCardsEl().querySelector(`[data-action="pdf-prev"][data-id="${id}"]`) as HTMLButtonElement | null;
-      const next = host.getCardsEl().querySelector(`[data-action="pdf-next"][data-id="${id}"]`) as HTMLButtonElement | null;
+      const prev = (cardsEl()?.querySelector(`[data-action="pdf-prev"][data-id="${id}"]`) ?? null) as HTMLButtonElement | null;
+      const next = (cardsEl()?.querySelector(`[data-action="pdf-next"][data-id="${id}"]`) ?? null) as HTMLButtonElement | null;
       if (prev) prev.disabled = pageNum <= 1;
       if (next) next.disabled = pageNum >= doc.numPages;
     } catch {
@@ -421,7 +432,7 @@ export function createMedia(host: MediaContext): Media {
       const it = boardGet(host.getBoard(), id);
       if (!it || !("PdfCard" in it.kind) || it.kind.PdfCard.path !== path) return;
       pdfFailed.add(path);
-      const wrap = host.getCardsEl().querySelector(`[data-pdf-wrap="${id}"]`);
+      const wrap = cardsEl()?.querySelector(`[data-pdf-wrap="${id}"]`);
       if (wrap) wrap.textContent = "Could not render this PDF. Double-click to open it.";
     } finally {
       pdfRendering.delete(id);
@@ -432,7 +443,7 @@ export function createMedia(host: MediaContext): Media {
       // Never re-render after a board switch, for the same
       // reason as above.
       const it = boardGet(host.getBoard(), id);
-      const current = host.getCardsEl().querySelector(`[data-pdf-canvas="${id}"]`) as HTMLCanvasElement | null;
+      const current = (cardsEl()?.querySelector(`[data-pdf-canvas="${id}"]`) ?? null) as HTMLCanvasElement | null;
       const stale = renderedPage !== 0 && (pdfPages.get(id) ?? 1) !== renderedPage;
       if (it && "PdfCard" in it.kind && it.kind.PdfCard.path === path && current && (current !== canvas || stale) && !pdfFailed.has(path)) void renderPdfPage(id, path);
     }

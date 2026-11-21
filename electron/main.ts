@@ -27,8 +27,17 @@ import { CORNERS, clampPanelWidth, cleanShortcuts, parseAppSettings, serialiseAp
 // build time (scripts/bundle-sucrase.mjs). The packaged app ships
 // no node_modules, so the transpiler is a file inside electron-dist.
 // Types come from electron/sucrase.d.cts; the .cjs itself is never
-// type-checked.
-import { transform as sucraseTransform } from "./sucrase.cjs";
+// type-checked. It is 460 KB and loads on the first plugin
+// transpile, not at startup — no plugin is transpiled until the
+// first user plugin activates.
+type SucraseTransform = typeof import("./sucrase.cjs").transform;
+let sucraseTransform: SucraseTransform | null = null;
+async function loadSucrase(): Promise<SucraseTransform> {
+  if (sucraseTransform) return sucraseTransform;
+  const m = await import("./sucrase.cjs");
+  sucraseTransform = m.transform;
+  return sucraseTransform;
+}
 
 let win: BaseWindow | null = null;
 let boardView: WebContentsView | null = null;
@@ -1986,12 +1995,13 @@ app.whenReady().then(() => {
   // and no rebuild. A plugin is just files in a folder; adding
   // one is dropping it in, not building the app.
   const tsCache = new Map<string, { mtimeMs: number; js: string }>();
-  function transpilePluginTs(filePath: string): string {
+  async function transpilePluginTs(filePath: string): Promise<string> {
     const stat = fs.statSync(filePath);
     const hit = tsCache.get(filePath);
     if (hit && hit.mtimeMs === stat.mtimeMs) return hit.js;
     const src = fs.readFileSync(filePath, "utf8");
-    const js = sucraseTransform(src, { transforms: ["typescript"] }).code;
+    const transform = await loadSucrase();
+    const js = transform(src, { transforms: ["typescript"] }).code;
     tsCache.set(filePath, { mtimeMs: stat.mtimeMs, js });
     return js;
   }
@@ -2001,7 +2011,7 @@ app.whenReady().then(() => {
   // is plugin://<plugin-id>/<relative-path>. Only the plugin's
   // own folder is served, and only .js/.ts/.css/.json — a path that
   // escapes the folder, or an unknown plugin id, is a 404.
-  protocol.handle("plugin", (request) => {
+  protocol.handle("plugin", async (request) => {
     try {
       const u = new URL(request.url);
       const pluginId = u.hostname;
@@ -2038,7 +2048,7 @@ app.whenReady().then(() => {
       }
       const realExt = path.extname(realResolved).toLowerCase();
       if (realExt === ".ts") {
-        return new Response(transpilePluginTs(realResolved), { headers: { "Content-Type": "application/javascript" } });
+        return new Response(await transpilePluginTs(realResolved), { headers: { "Content-Type": "application/javascript" } });
       }
       const data = fs.readFileSync(realResolved);
       const type = realExt === ".js" ? "application/javascript" : realExt === ".css" ? "text/css" : "application/json";
