@@ -97,12 +97,16 @@ export function activate(api: PluginContext): void {
   };
   const safeColor = (v: unknown, fallback: string): string =>
     typeof v === "string" && /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(v) ? v : fallback;
-  // The escaped, elided title line, and the title+sub
-  // column it sits in. Shared by the media card renderers.
+  // The escaped, elided title line, and the columns it sits
+  // in: title+sub for the audio card's live time readout,
+  // title-only everywhere else. Shared by the media card
+  // renderers.
   const titleHtml = (name: string, width: number): string =>
     `<div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, width, 14, true))}</div>`;
   const titleSubCol = (name: string, width: number, sub: string): string =>
     `<div class="col">${titleHtml(name, width)}<div class="sub" style="font-size:12px">${sub}</div></div>`;
+  const titleCol = (name: string, width: number): string =>
+    `<div class="col">${titleHtml(name, width)}</div>`;
   const formatKB = (size_bytes: number): number => Math.round(num(size_bytes, 0) / 1024);
 
   // Markdown is a per-character regex walk, so re-parsing every note
@@ -287,11 +291,10 @@ export function activate(api: PluginContext): void {
     title: "PDF",
     render: (item, data, plain = false) => {
       const c = chrome(item, plain);
-      const { path, size_bytes } = data as PdfCardData;
+      const { path } = data as PdfCardData;
       const name = path.split("/").pop() ?? path;
-      const kb = formatKB(size_bytes);
       const tile = `<div class="tile" style="background:${api.text.tint("#E63946", 0.88)};color:#E63946;font-size:13px">PDF</div>
-        ${titleSubCol(name, c.ww - 92, `${kb} KB`)}`;
+        ${titleCol(name, c.ww - 92)}`;
       // Plain rendering (slides, library, export) stays a tile:
       // a canvas drawn by PDF.js does not survive as HTML, so
       // a rendered page there would export as a blank box.
@@ -303,17 +306,16 @@ export function activate(api: PluginContext): void {
       const pageNum = api.media.getPdfPage(c.id);
       if (c.hh < 200) {
         // A short card, like the old 96px tile: a small page
-        // preview on the left, name and page count on the right,
-        // the same row shape as audio and video cards.
+        // preview on the left, name on the right, the same
+        // row shape as audio and video cards.
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px" data-pdf-wrap="${c.id}">
           <div style="width:56px;height:${c.hh - 24}px;flex:none;background:var(--bg-system);border-radius:10px;overflow:hidden"><canvas data-pdf-canvas="${c.id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
-          ${titleSubCol(name, c.ww - 92, `${kb} KB · <span data-pdf-count="${c.id}">…</span>`)}</div></div>`;
+          ${titleCol(name, c.ww - 92)}</div></div>`;
       }
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px" data-pdf-wrap="${c.id}">
         <div style="flex:1 1 auto;min-height:0;background:var(--bg-system);border-radius:10px;overflow:hidden"><canvas data-pdf-canvas="${c.id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
         <div style="display:flex;align-items:center;gap:8px"><div class="title" style="font-size:14px;flex:1 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${api.text.escapeHtml(name)}</div>
-        <button class="pdf-nav" data-action="pdf-prev" data-id="${c.id}" title="Previous page" aria-label="Previous page" ${pageNum <= 1 ? "disabled" : ""}>‹</button><span class="sub" data-pdf-count="${c.id}">…</span><button class="pdf-nav" data-action="pdf-next" data-id="${c.id}" title="Next page" aria-label="Next page">›</button></div>
-        <div class="sub" style="font-size:12px">${kb} KB</div></div></div>`;
+        <button class="pdf-nav" data-action="pdf-prev" data-id="${c.id}" title="Previous page" aria-label="Previous page" ${pageNum <= 1 ? "disabled" : ""}>‹</button><span class="sub" data-pdf-count="${c.id}">…</span><button class="pdf-nav" data-action="pdf-next" data-id="${c.id}" title="Next page" aria-label="Next page">›</button></div></div></div>`;
     },
   });
 
@@ -375,10 +377,11 @@ export function activate(api: PluginContext): void {
       const seekVal = isFinite(dur) && dur > 0 ? Math.round((cur / dur) * 1000) : 0;
       const seekPct = isFinite(dur) && dur > 0 ? Math.round((cur / dur) * 100) : 0;
       if (!isCurrent) api.media.loadAudioDuration(c.id, path);
-      // Like the other media cards: a tile, a title, and the time as
-      // a quiet grey sub-line — the same shape as the PDF card's
-      // "1 KB". The seek control is a thin track in the tile's own
-      // purple, not a chunky browser slider in blue.
+      // A tile, a title, and the time as a quiet grey sub-line.
+      // The time stays: it is live player state, not a static
+      // description like the file sizes the other media cards
+      // used to show. The seek control is a thin track in the
+      // tile's own purple, not a chunky browser slider in blue.
       const tile = c.hh >= 104 ? 56 : 48;
       // A voice recording carries its transcript under the
       // player, hidden by default. The toggle lives in the
