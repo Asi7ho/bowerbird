@@ -351,6 +351,10 @@ export interface PluginBridge {
   setPanelWidth: (width: number) => Promise<number>;
   setDockVisible: (visible: boolean) => Promise<boolean>;
   setCorner: (corner: string) => Promise<string>;
+  setPanelOrder: (order: string[]) => Promise<string[]>;
+  setShortcuts: (overrides: Record<string, string>) => Promise<Record<string, string>>;
+  setHardwareAcceleration: (enabled: boolean) => Promise<boolean>;
+  restart: () => Promise<void>;
 }
 
 // What the core provides to the plugin system. All board mutation
@@ -744,10 +748,21 @@ export interface PluginContext {
   // settings, plugins, plugin storage, secure storage) and is a
   // board write, not available to a trial plugin. The caller
   // reloads after it returns, so the fresh defaults load.
+  // getAppSettings reads the persisted app settings (corner,
+  // panel layout, hardware acceleration, shortcut overrides);
+  // setShortcuts and setHardwareAcceleration write them back,
+  // and restart relaunches the app so a new hardware
+  // acceleration value takes effect. The writers are board
+  // writes, like factoryReset, and are not available to a
+  // trial plugin.
   app: {
     getBuildId: () => string;
     getPlatform: () => string;
     factoryReset: (opts?: { confirmed?: boolean }) => Promise<{ ok: boolean }>;
+    getAppSettings: () => Promise<{ corner: string; panelOrder?: string[]; panelWidth?: number; dockVisible?: boolean; shortcuts?: Record<string, string>; hardwareAcceleration?: boolean }>;
+    setShortcuts: (overrides: Record<string, string>) => Promise<Record<string, string>>;
+    setHardwareAcceleration: (enabled: boolean) => Promise<boolean>;
+    restart: () => Promise<void>;
   };
   // Backups: list them (newest first) and restore one. A
   // restore loads the backup's board into the app, like

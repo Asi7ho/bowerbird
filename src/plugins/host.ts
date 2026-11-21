@@ -477,6 +477,22 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
         requireNotTrial("factory reset");
         return bridge!.factoryReset(opts);
       },
+      getAppSettings: async () => bridge!.getAppSettings(),
+      setShortcuts: async (overrides: Record<string, string>) => {
+        require("board:write");
+        requireNotTrial("change shortcuts");
+        return bridge!.setShortcuts(overrides);
+      },
+      setHardwareAcceleration: async (enabled: boolean) => {
+        require("board:write");
+        requireNotTrial("change hardware acceleration");
+        return bridge!.setHardwareAcceleration(enabled);
+      },
+      restart: async () => {
+        require("board:write");
+        requireNotTrial("restart the app");
+        return bridge!.restart();
+      },
     },
     backups: {
       list: async () => bridge!.listBackups(),
