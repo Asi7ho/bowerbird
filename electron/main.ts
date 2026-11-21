@@ -33,11 +33,16 @@ import { transform as sucraseTransform } from "./sucrase.cjs";
 // of cards, strokes and text, and painting them on the CPU is
 // the slow part of panning and zooming. Chromium composites on
 // the GPU by default, but rasterization (painting the pixels)
-// stays on the CPU unless asked — this asks. On a machine
-// without a usable GPU Chromium falls back to software, so the
-// flag is a no-op there, not a crash. It must be set before
-// the app is ready, so it lives here at the top level.
-app.commandLine.appendSwitch("enable-gpu-rasterization");
+// stays on the CPU unless asked — this asks. Only on macOS,
+// where a real GPU is guaranteed: on a machine without one
+// (CI, a Linux box with no GPU) forcing GPU rasterization
+// routes the painting through SwiftShader, the software GL
+// stand-in, which is far slower than plain CPU painting and
+// times out the end-to-end tests. It must be set before the
+// app is ready, so it lives here at the top level.
+if (process.platform === "darwin") {
+  app.commandLine.appendSwitch("enable-gpu-rasterization");
+}
 
 let win: BaseWindow | null = null;
 let boardView: WebContentsView | null = null;
