@@ -98,7 +98,7 @@ function renderList(): void {
   }
 }
 
-export function moveSelection(delta: number): void {
+function moveSelection(delta: number): void {
   const list = listEl;
   if (!list || filtered.length === 0) return;
   selectedIdx = (selectedIdx + delta + filtered.length) % filtered.length;
@@ -108,7 +108,7 @@ export function moveSelection(delta: number): void {
   if (active) active.scrollIntoView({ block: "nearest" });
 }
 
-export function openPalette(): void {
+function openPalette(): void {
   const api = apiRef;
   if (!api || isOpen || !root || !input) return;
   // Opening from Settings' Run button must not leave the palette
@@ -124,7 +124,7 @@ export function openPalette(): void {
   window.addEventListener("pointerdown", onPointerDown, true);
 }
 
-export function closePalette(): void {
+function closePalette(): void {
   if (!isOpen) return;
   isOpen = false;
   if (root) root.style.display = "none";
@@ -132,7 +132,7 @@ export function closePalette(): void {
   input?.blur();
 }
 
-export function runSelected(): void {
+function runSelected(): void {
   const api = apiRef;
   if (!api || selectedIdx < 0 || selectedIdx >= filtered.length) return;
   const entry = filtered[selectedIdx];

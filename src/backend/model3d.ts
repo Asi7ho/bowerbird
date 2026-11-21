@@ -12,7 +12,7 @@ import { USDZLoader } from "three/addons/loaders/USDZLoader.js";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import type { Item } from "./model";
 
-export interface Model3DDeps {
+interface Model3DDeps {
   fileUrl: (path: string) => string;
   // Select the card, as a board click would (shift adds to
   // the selection). setSelected only toggles classes — it

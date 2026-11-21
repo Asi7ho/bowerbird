@@ -14,36 +14,27 @@ import { playLibraryAudio, seekLibAudio } from "./audio.js";
 // the board's origin in client coordinates. Centre and drop
 // points go through it, never window size or raw client
 // coordinates, or a duplicate lands 48px low.
-export function boardGeometry(): { w: number; h: number; left: number; top: number } {
+function boardGeometry(): { w: number; h: number; left: number; top: number } {
   const el = document.getElementById("board");
   if (!el) return { w: window.innerWidth, h: window.innerHeight, left: 0, top: 0 };
   const r = el.getBoundingClientRect();
   return { w: el.clientWidth, h: el.clientHeight, left: r.left, top: r.top };
 }
 
-export function cameraCentreWorld(api: PluginContext): Pt {
-  const cam = api.view.getCamera();
-  const b = boardGeometry();
-  return {
-    x: cam.x + b.w / 2 / cam.zoom,
-    y: cam.y + b.h / 2 / cam.zoom,
-  };
-}
-
-export function dropWorld(api: PluginContext, clientX: number, clientY: number): Pt {
+function dropWorld(api: PluginContext, clientX: number, clientY: number): Pt {
   const cam = api.view.getCamera();
   const b = boardGeometry();
   return { x: (clientX - b.left) / cam.zoom + cam.x, y: (clientY - b.top) / cam.zoom + cam.y };
 }
 
-export function duplicateAt(api: PluginContext, item: Item, point: Pt, showToast: boolean): void {
+function duplicateAt(api: PluginContext, item: Item, point: Pt, showToast: boolean): void {
   const kind = JSON.parse(JSON.stringify(item.kind)) as Item["kind"];
   const size = { w: item.size.w, h: item.size.h };
   api.board.addItem(kind, { x: point.x - size.w / 2, y: point.y - size.h / 2 }, size);
   if (showToast) api.ui.toast(`Duplicated ${KIND_SINGULAR[kindKey(item)] || "element"} to board`);
 }
 
-export function focusOnBoard(api: PluginContext, item: Item, mode: LibraryMode): void {
+function focusOnBoard(api: PluginContext, item: Item, mode: LibraryMode): void {
   // Focus, not duplication: show the original on the
   // board, centred and selected, and add nothing.
   // In whiteboard view mode, clicking a card must NOT
@@ -61,7 +52,7 @@ export function focusOnBoard(api: PluginContext, item: Item, mode: LibraryMode):
   api.view.centreOn(item.id);
 }
 
-export function isMediaTarget(target: EventTarget | null): boolean {
+function isMediaTarget(target: EventTarget | null): boolean {
   if (!target || !(target instanceof Element)) return false;
   return Boolean(target.closest("video") || target.closest("input.audio-seek") || target.closest(".audio-tile"));
 }

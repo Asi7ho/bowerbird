@@ -9,7 +9,7 @@ import { boardGet, escapeHtml, type Board, type Item } from "./model";
 import MiniSearch from "minisearch";
 import { getPluginCardSearchText } from "../plugins/host";
 
-export interface SearchContext {
+interface SearchContext {
   getBoard(): Board;
   getBoardGeneration(): number;
   getBoardSearchVersion(): number;
@@ -30,7 +30,7 @@ export interface SearchContext {
 // (matching, dimming, results, keyboard), operating on
 // these elements; a future step can move the results
 // rendering into the plugin itself.
-export interface SearchElements {
+interface SearchElements {
   input: HTMLInputElement;
   count: HTMLElement;
   clear: HTMLButtonElement;

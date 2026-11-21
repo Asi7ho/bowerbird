@@ -134,7 +134,7 @@ export function updateDraggedCards(ids: number[]): void {
 // separate element in #groups now, so it moves too — it
 // sits at the frame's top-left plus the same offset it
 // had as the frame's child.
-export function updateDraggedGroupFrames(ids: number[]): void {
+function updateDraggedGroupFrames(ids: number[]): void {
   if (!S.groupsEl || !S.groupFramesEl) return;
   const groups = new Set<number>();
   for (const id of ids) {

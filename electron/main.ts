@@ -1130,20 +1130,6 @@ function registerIpc(): void {
     return true;
   });
 
-  // Force-restore the welcome media, even if files already
-  // exist: the Settings button for a board whose image,
-  // audio or video shows "File missing". Returns what was
-  // copied and what could not be found, so the user can
-  // report the exact failure instead of a blank card.
-  ipcMain.handle("bowerbird:restore-showcase", () => {
-    const dir = path.dirname(boardPath());
-    try {
-      return installShowcaseAssets(dir, true);
-    } catch (e) {
-      return { copied: [], missing: [String((e as Error).message)], srcDir: assetsDir(), destDir: dir };
-    }
-  });
-
   // Visual Library folder: a user's personal collection of images
   // and PDFs, next to the board (board/library/). Listing and
   // copying are scoped to this one folder only: a plugin never gets

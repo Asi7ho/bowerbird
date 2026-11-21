@@ -101,7 +101,7 @@ export function updateSelectionHighlight(api: PluginContext): void {
   }
 }
 
-export function layoutMasonry(api: PluginContext, container: HTMLElement, items: Item[], mode: LibraryMode): void {
+function layoutMasonry(api: PluginContext, container: HTMLElement, items: Item[], mode: LibraryMode): void {
   // Spanning masonry, in both modes, so small cards pack
   // tightly instead of floating in wide columns. The grid is
   // built from small columns: a small card (a swatch, board
@@ -314,7 +314,7 @@ export function renderSections(api: PluginContext, container: HTMLElement, mode:
   }
 }
 
-export function searchRow(api: PluginContext, targetView: LibraryMode): { row: HTMLDivElement; input: HTMLInputElement } {
+function searchRow(api: PluginContext, targetView: LibraryMode): { row: HTMLDivElement; input: HTMLInputElement } {
   const row = document.createElement("div");
   row.className = "vl-search-row";
   const input = document.createElement("input");

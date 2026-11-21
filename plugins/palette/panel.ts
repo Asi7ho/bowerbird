@@ -369,8 +369,4 @@ export function renderPanel(container: HTMLElement): void {
     window.addEventListener("blur", onUp);
   };
   wheelWrap.addEventListener("pointerdown", onPointerDown);
-  // Stashed on the wrapper, as before: nothing in the app
-  // reads it, but the handler stays reachable from the DOM
-  // for a re-render that wants to detach it.
-  (wheelWrap as HTMLDivElement & { _palPointerDown?: (e: PointerEvent) => void })._palPointerDown = onPointerDown;
 }

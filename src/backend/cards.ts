@@ -7,7 +7,7 @@ import {
 } from "./model";
 import { getBuiltinCardHtml, getCardDecorations, getCardHtml, getCardRenderer } from "../plugins/host";
 
-export interface CardContext {
+interface CardContext {
   media: Media;
   isSelected(id: number): boolean;
   getEditingId(): number | null;

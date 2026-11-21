@@ -10,7 +10,7 @@ export type { Anchor, ArrangeOptions, Block, Board, Camera, GroupEntry, ImportSo
 // shape from these (clip-path) and the drag preview from these,
 // and hit-testing uses them too, so the clickable area is
 // exactly the visible shape — never its empty corners.
-export const SHAPE_POLYGONS: Record<"triangle" | "diamond" | "hexagon" | "star" | "arrow", Array<[number, number]>> = {
+const SHAPE_POLYGONS: Record<"triangle" | "diamond" | "hexagon" | "star" | "arrow", Array<[number, number]>> = {
   triangle: [[0.5, 0], [1, 1], [0, 1]],
   diamond: [[0.5, 0], [1, 0.5], [0.5, 1], [0, 0.5]],
   hexagon: [[0.25, 0], [0.75, 0], [1, 0.5], [0.75, 1], [0.25, 1], [0, 0.5]],

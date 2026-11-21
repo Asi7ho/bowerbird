@@ -28,7 +28,7 @@ export const ERASER_RADIUS = 12;
 // Fields set by activate() start as undefined (the same lie
 // the old `let x!` declarations told) and are guarded by the
 // same checks render() already had (`if (!S.boardEl) return`).
-export type DragState = null
+type DragState = null
   | { kind: "pan"; last: Pt }
   | { kind: "move"; lastWorld: Pt; moved: boolean }
   | { kind: "stroke"; points: Pt[]; pressures: number[]; width: number; marker: boolean; pencil: boolean }
@@ -40,7 +40,7 @@ export type DragState = null
   | { kind: "rotate"; id: number; origRot: number; moved: boolean }
   | { kind: "resize"; id: number; startWorld: Pt; origW: number; origH: number; moved: boolean };
 
-export interface BoardState {
+interface BoardState {
   api: PluginContext;
   // The board DOM, built by this plugin in activate().
   boardEl: HTMLDivElement;

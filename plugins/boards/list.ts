@@ -5,7 +5,7 @@
 // to edit it, Enter to save, Esc to cancel.
 import type { PluginContext } from "bowerbird-plugin-api";
 
-export interface BoardInfo {
+interface BoardInfo {
   name: string;
   current: boolean;
   items: number;
@@ -19,7 +19,7 @@ export interface BoardInfo {
 let armedBoard: string | null = null;
 let armedTimer: number | null = null;
 
-export function esc(s: unknown): string {
+function esc(s: unknown): string {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
@@ -90,7 +90,7 @@ export async function refresh(api: PluginContext, listEl: HTMLDivElement): Promi
   if (boards.length === 0) listEl.innerHTML = `<p class="bd-meta">No boards.</p>`;
 }
 
-export function startRename(api: PluginContext, listEl: HTMLDivElement, row: HTMLDivElement, board: BoardInfo): void {
+function startRename(api: PluginContext, listEl: HTMLDivElement, row: HTMLDivElement, board: BoardInfo): void {
   const nameBtn = row.querySelector(".bd-name");
   if (!nameBtn) return;
   const input = document.createElement("input");

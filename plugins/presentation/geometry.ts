@@ -19,7 +19,7 @@ import type { Slide } from "./state.js";
 // the playing view (DOM SVG) and the export (string SVG).
 // A primitive is frame-relative, so both renderers just
 // place it, without redoing clipping or arrowhead math.
-export type DrawingPrimitive =
+type DrawingPrimitive =
   | { type: "stroke"; d: string; color: string; width: number; marker: boolean }
   | { type: "connector"; a: Pt; b: Pt; p1: Pt; p2: Pt; color: string };
 
@@ -33,7 +33,7 @@ export function isFrameItem(item: Item): boolean {
   );
 }
 
-export function isCardItem(item: Item): boolean {
+function isCardItem(item: Item): boolean {
   // Frames are containers, not content — a frame inside
   // a frame is its own slide, never content — but every
   // other card kind counts, including Plugin cards.

@@ -235,7 +235,7 @@ export function startPosterBackfill(ctx: BootContext): void {
 }
 
 
-export async function runPosterBackfill(ctx: BootContext): Promise<void> {
+async function runPosterBackfill(ctx: BootContext): Promise<void> {
   const boardAtStart = ctx.board;
   const pending: Array<{ id: number; source: string }> = [];
   for (const it of boardAtStart.items) {

@@ -11,14 +11,14 @@
 // — the settings only say whether one is saved.
 import type { PluginContext } from "bowerbird-plugin-api";
 
-export interface Provider {
+interface Provider {
   id: string;
   label: string;
   base: string;
   defaultModel: string;
 }
 
-export const PROVIDERS: Provider[] = [
+const PROVIDERS: Provider[] = [
   { id: "openai", label: "OpenAI", base: "https://api.openai.com/v1", defaultModel: "gpt-4o-mini" },
   { id: "ollama", label: "Ollama Cloud", base: "https://ollama.com/v1", defaultModel: "gpt-oss:120b" },
   // The rest all speak OpenAI-compatible chat completions with a
@@ -33,11 +33,11 @@ export const PROVIDERS: Provider[] = [
   { id: "openrouter", label: "OpenRouter", base: "https://openrouter.ai/api/v1", defaultModel: "openai/gpt-4o-mini" },
 ];
 
-export function providerById(id: string): Provider {
+function providerById(id: string): Provider {
   return PROVIDERS.find((p) => p.id === id) ?? PROVIDERS[0];
 }
 
-export interface AiConfig {
+interface AiConfig {
   base: string;
   model: string;
 }

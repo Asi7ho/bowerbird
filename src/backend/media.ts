@@ -7,7 +7,7 @@ import { peaksFromSamples } from "./audio-peaks";
 import { boardGet, type Board } from "./model";
 import { fileCardHeightForWidth, fileCardPreviewHeight, linkCardHeightForWidth, pdfCardHeightForWidth, videoCardHeightForWidth } from "./live-import";
 
-export interface MediaContext {
+interface MediaContext {
   getBoard(): Board;
   getBoardGeneration(): number;
   bumpSearchVersion(): void;
@@ -90,7 +90,7 @@ export interface Media {
   clearBoardCaches(): void;
 }
 
-export type PdfDoc = import("pdfjs-dist").PDFDocumentProxy;
+type PdfDoc = import("pdfjs-dist").PDFDocumentProxy;
 
 export function createMedia(host: MediaContext): Media {
   // PDF.js is loaded lazily, not statically imported: it

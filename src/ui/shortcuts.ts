@@ -14,7 +14,7 @@ export type ShortcutId =
   | "open-settings" | "toggle-panels" | "focus-toolbar" | "search"
   | "create-edit";
 
-export interface ShortcutAction {
+interface ShortcutAction {
   id: ShortcutId;
   label: string;
   defaultBinding: string;
@@ -53,7 +53,7 @@ const DEFAULTS: Record<string, string> = Object.fromEntries(
 // Modifiers are stored in the order ctrl, alt, shift, then
 // the key. Ctrl covers Cmd as well: on the Mac the Command
 // key is the Ctrl key for shortcuts.
-export interface ParsedBinding {
+interface ParsedBinding {
   key: string;
   ctrl: boolean;
   alt: boolean;
@@ -67,7 +67,7 @@ const MODIFIERS = new Set(["ctrl", "alt", "shift", "meta", "cmd", "command"]);
 // so a binding for one must not also demand Shift.
 const SHIFTED_SYMBOLS = new Set("~!@#$%^&*()_+{}|:\"<>?".split(""));
 
-export function parseBinding(s: string): ParsedBinding | null {
+function parseBinding(s: string): ParsedBinding | null {
   const lower = s.toLowerCase().trim();
   if (lower === "") return null;
   let key: string;
@@ -113,7 +113,7 @@ export function normalizeBinding(s: string): string | null {
 // "+" also matches "=" (Shift+= types "+"), and "delete" also
 // matches "backspace": the board has always treated those
 // pairs as the same key.
-export function matchesEvent(e: KeyboardEvent, binding: string): boolean {
+function matchesEvent(e: KeyboardEvent, binding: string): boolean {
   const b = parseBinding(binding);
   if (!b) return false;
   const key = e.key.toLowerCase();

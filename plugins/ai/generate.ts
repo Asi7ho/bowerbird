@@ -4,7 +4,7 @@
 // If either block is missing, there is nothing to install yet —
 // the reply is shown as a message and the conversation continues.
 
-export interface GeneratedPlugin {
+interface GeneratedPlugin {
   id: string;
   name: string;
   description: string;

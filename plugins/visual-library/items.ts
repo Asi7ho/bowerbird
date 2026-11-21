@@ -7,13 +7,13 @@ import type { Item, PluginContext } from "bowerbird-plugin-api";
 
 export type LibraryMode = "panel" | "view";
 
-export interface LibrarySection {
+interface LibrarySection {
   key: string;
   label: string;
   items: Item[];
 }
 
-export interface LibraryCategory {
+interface LibraryCategory {
   id: string;
   name: string;
 }
@@ -136,7 +136,7 @@ export function kindKey(item: Item): string {
   return Object.keys(item.kind)[0];
 }
 
-export function isLibraryItem(item: Item): boolean {
+function isLibraryItem(item: Item): boolean {
   // Slide frames are containers, not content: a frame
   // border is not a library card, so kind "slide" is
   // excluded here, as Presentation's frames use it, and
@@ -145,11 +145,11 @@ export function isLibraryItem(item: Item): boolean {
   return LIBRARY_KINDS.has(kindKey(item)) && item.size.w > 0 && item.size.h > 0;
 }
 
-export function basename(path: string): string {
+function basename(path: string): string {
   return (path || "").split("/").pop() || path || "";
 }
 
-export function domainOfUrl(url: string): string {
+function domainOfUrl(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, "");
   } catch {
@@ -157,7 +157,7 @@ export function domainOfUrl(url: string): string {
   }
 }
 
-export function searchText(item: Item): string {
+function searchText(item: Item): string {
   const k = item.kind;
   if ("Text" in k) return k.Text.text || "";
   if ("Image" in k) return basename(k.Image.path);
@@ -170,7 +170,7 @@ export function searchText(item: Item): string {
   return "";
 }
 
-export function signature(items: Item[]): string {
+function signature(items: Item[]): string {
   // Deliberately NOT sorted: the library shows cards
   // in board order, so a reorder must change the
   // signature and refresh the view. (Presentation's

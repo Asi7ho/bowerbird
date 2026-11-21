@@ -7,7 +7,7 @@
 // (see electron/backups.ts), so restoring is reversible.
 import type { PluginContext } from "bowerbird-plugin-api";
 
-export function esc(s: unknown): string {
+function esc(s: unknown): string {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
