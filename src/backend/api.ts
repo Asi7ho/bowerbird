@@ -70,6 +70,9 @@ export interface BowerbirdAPI {
   setDockVisible(visible: boolean): Promise<boolean>;
   setCorner(corner: string): Promise<string>;
   setPanelOrder(order: string[]): Promise<string[]>;
+  setShortcuts(overrides: Record<string, string>): Promise<Record<string, string>>;
+  setHardwareAcceleration(enabled: boolean): Promise<boolean>;
+  restart(): Promise<void>;
   collapse(): Promise<void>;
   restore(): Promise<void>;
   moveWindow(dx: number, dy: number): void;
