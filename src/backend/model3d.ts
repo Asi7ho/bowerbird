@@ -416,9 +416,6 @@ function setupSharedCanvas(): void {
   // can read the layer after the frame is composited.
   sharedCanvas = document.createElement("canvas");
   sharedCanvas.id = "model3d-layer";
-  // Prefer the host's fast GPU for the 3D renderer: on a Mac
-  // with two GPUs this picks the discrete one; on a single-GPU
-  // machine it is a no-op.
   renderer = new THREE.WebGLRenderer({ canvas: sharedCanvas, antialias: true, alpha: true, preserveDrawingBuffer: true, powerPreference: "high-performance" });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setClearColor(0x000000, 0);
