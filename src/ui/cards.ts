@@ -476,6 +476,9 @@ export function activate(api: PluginContext): void {
       // of cutting the frame.
       const inline = isInlineVideo(source, remote);
       const active = !plain && inline && api.media.getVideoState().id === c.id;
+      // A card saved at the stale 16:9 height is healed to
+      // the ratio of its video once the poster loads.
+      if (poster && !plain) api.media.loadVideoCardSize(poster);
       if (active) {
         const src = api.files.fileUrl(source);
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner">

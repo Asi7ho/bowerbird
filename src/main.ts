@@ -790,6 +790,7 @@ async function init(): Promise<void> {
     getPdfPage: (id) => C.media.pdfPages.get(id) ?? 1,
     loadPdfPage: (id, path) => C.media.loadPdfPage(id, path),
     loadFileCardSize: (preview) => C.media.loadFileCardSize(preview),
+    loadVideoCardSize: (poster) => C.media.loadVideoCardSize(poster),
     // Move a PDF card to a page (clamped to the document),
     // and render it. The board view's prev/next buttons.
     // False when the document is not loaded yet.

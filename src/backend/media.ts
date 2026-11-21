@@ -5,7 +5,7 @@
 import { api } from "./api";
 import { peaksFromSamples } from "./audio-peaks";
 import { boardGet, type Board } from "./model";
-import { fileCardHeightForWidth, fileCardPreviewHeight } from "./live-import";
+import { fileCardHeightForWidth, fileCardPreviewHeight, videoCardHeightForWidth } from "./live-import";
 
 export interface MediaContext {
   getBoard(): Board;
@@ -40,6 +40,10 @@ export interface Media {
   // loadFileCardSize): measure its preview and shrink the
   // card to the ratio of the file when it is still wrong.
   loadFileCardSize(preview: string): void;
+  // Heal a Video card saved at the stale 16:9 height (see
+  // loadVideoCardSize): measure its poster and resize the
+  // card to the ratio of the video when it is still wrong.
+  loadVideoCardSize(poster: string): void;
   loadAudioDuration(id: number, path: string): void;
   // Waveform peaks for an audio card (100 bars, 0..1), from
   // a real decode of the file — never fake bars. Loaded on
@@ -417,6 +421,12 @@ export function createMedia(host: MediaContext): Media {
   // per file, not once per render.
   const fileCardPreviewSize = new Map<string, { w: number; h: number }>();
   const fileCardPreviewLoading = new Set<string>();
+  // Video poster dimensions, cached per path, and the paths
+  // with a load in flight. A poster is measured once per
+  // file, not once per render. The poster is captured at the
+  // video's own ratio, so its size is the video's ratio.
+  const videoCardPosterSize = new Map<string, { w: number; h: number }>();
+  const videoCardPosterLoading = new Set<string>();
   // Heal a FileCard saved at a stale height: the old formulas
   // sized the preview at the card minus 24px of padding and
   // then added 70px for a title and sub-line, or 24px for the
@@ -468,6 +478,59 @@ export function createMedia(host: MediaContext): Media {
       const stale24 = Math.round(previewH + 24);
       const isStale = Math.abs(it.size.h - stale70) <= 2 || Math.abs(it.size.h - stale24) <= 2;
       if (isStale && it.size.h !== correctH) {
+        it.size.h = correctH;
+        changed = true;
+      }
+    }
+    if (changed) {
+      host.saveWithoutUndo();
+      host.requestRender();
+    }
+  }
+  // Heal a Video card saved at the stale 16:9 height: videos
+  // used to land at 360x203 whatever their ratio, so a 4:3
+  // clip sat in a 16:9 card. When the poster loads, measure
+  // it (it is captured at the video's own ratio); if the card
+  // is still at the 16:9 height for its width, resize it to
+  // the ratio of the video and save (no undo step — this is a
+  // heal, not an action). A card the user resized by hand is
+  // left alone: its height will not match 16:9. Called from
+  // the Video renderer, like loadFileCardSize.
+  function loadVideoCardSize(poster: string): void {
+    const cached = videoCardPosterSize.get(poster);
+    if (cached) {
+      healVideoCardsWithPoster(poster, cached.w, cached.h);
+      return;
+    }
+    if (videoCardPosterLoading.has(poster)) return;
+    videoCardPosterLoading.add(poster);
+    const img = new Image();
+    img.onload = () => {
+      videoCardPosterLoading.delete(poster);
+      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+        videoCardPosterSize.set(poster, { w: img.naturalWidth, h: img.naturalHeight });
+        healVideoCardsWithPoster(poster, img.naturalWidth, img.naturalHeight);
+      }
+    };
+    img.onerror = () => {
+      videoCardPosterLoading.delete(poster);
+      // A missing poster leaves the card alone.
+    };
+    img.src = api.fileUrl(poster);
+  }
+  // Resize every Video card using this poster that is still
+  // at the stale 16:9 height to the ratio of the video.
+  // Several cards can share one poster (the same file
+  // dropped twice), so the heal runs over all of them, not
+  // just the one that asked. A card the user resized by hand
+  // is left alone: its height will not match 16:9.
+  function healVideoCardsWithPoster(poster: string, vidW: number, vidH: number): void {
+    let changed = false;
+    for (const it of host.getBoard().items) {
+      if (!("Video" in it.kind) || it.kind.Video.poster !== poster) continue;
+      const correctH = videoCardHeightForWidth(vidW, vidH, it.size.w);
+      const staleH = Math.round((it.size.w * 9) / 16);
+      if (Math.abs(it.size.h - staleH) <= 2 && it.size.h !== correctH) {
         it.size.h = correctH;
         changed = true;
       }
@@ -567,6 +630,7 @@ export function createMedia(host: MediaContext): Media {
     loadPdfPage,
     renderPdfPage,
     loadFileCardSize,
+    loadVideoCardSize,
     loadAudioDuration,
     getAudioPeaks,
     loadAudioPeaks,

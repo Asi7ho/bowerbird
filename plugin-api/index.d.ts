@@ -550,6 +550,7 @@ export interface PluginHost {
   // preview and shrink the card to the ratio of the file
   // when it is still wrong.
   loadFileCardSize: (preview: string) => void;
+  loadVideoCardSize: (poster: string) => void;
   // Move a PDF card to a page (clamped to the document),
   // and render it. The board view's prev/next buttons.
   // False when the document is not loaded yet.
@@ -1243,6 +1244,7 @@ export interface PluginContext {
     // preview and shrink the card to the ratio of the file
     // when it is still wrong.
     loadFileCardSize: (preview: string) => void;
+    loadVideoCardSize: (poster: string) => void;
     // Move a PDF card to a page (clamped to the document),
     // and render it. The board view's prev/next buttons.
     // False when the document is not loaded yet.
