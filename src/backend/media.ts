@@ -5,7 +5,7 @@
 import { api } from "./api";
 import { peaksFromSamples } from "./audio-peaks";
 import { boardGet, type Board } from "./model";
-import { fileCardHeightForWidth } from "./live-import";
+import { fileCardHeightForWidth, fileCardPreviewHeight } from "./live-import";
 
 export interface MediaContext {
   getBoard(): Board;
@@ -417,15 +417,16 @@ export function createMedia(host: MediaContext): Media {
   // per file, not once per render.
   const fileCardPreviewSize = new Map<string, { w: number; h: number }>();
   const fileCardPreviewLoading = new Set<string>();
-  // Heal a FileCard saved when fileCardSize added 70px for a
-  // title and sub-line that no longer exist: such a card is
-  // 46px too tall, so its preview letterboxes. When the
-  // preview image loads, measure it; if the card is still
-  // at the stale height, shrink it to the ratio of the file
-  // and save (no undo step — this is a heal, not an action).
-  // A card the user resized by hand is left alone: its height
-  // will not match the stale formula. Called from the
-  // FileCard renderer, like loadPdfPage.
+  // Heal a FileCard saved at a stale height: the old formulas
+  // sized the preview at the card minus 24px of padding and
+  // then added 70px for a title and sub-line, or 24px for the
+  // padding, that no longer exist. When the preview image
+  // loads, measure it; if the card is still at either stale
+  // height, shrink it to the ratio of the file and save (no
+  // undo step — this is a heal, not an action). A card the
+  // user resized by hand is left alone: its height will not
+  // match a stale formula. Called from the FileCard renderer,
+  // like loadPdfPage.
   function loadFileCardSize(id: number, preview: string): void {
     const cached = fileCardPreviewSize.get(preview);
     if (cached) {
@@ -452,11 +453,14 @@ export function createMedia(host: MediaContext): Media {
     const it = boardGet(host.getBoard(), id);
     if (!it || !("FileCard" in it.kind) || it.kind.FileCard.preview !== preview) return;
     const correctH = fileCardHeightForWidth(artW, artH, it.size.w);
-    // The stale height is exactly 46px taller: the old
-    // formula added 70 for the title and sub-line, the new
-    // one adds 24 for the padding.
-    const staleH = correctH + 46;
-    if (Math.abs(it.size.h - staleH) <= 2 && it.size.h !== correctH) {
+    // Both stale heights, from the preview height the old
+    // formulas used (the card minus 24px of padding): +70
+    // for the title and sub-line, +24 for the padding.
+    const previewH = fileCardPreviewHeight(artW, artH, Math.max(1, it.size.w - 24));
+    const stale70 = Math.round(previewH + 70);
+    const stale24 = Math.round(previewH + 24);
+    const isStale = Math.abs(it.size.h - stale70) <= 2 || Math.abs(it.size.h - stale24) <= 2;
+    if (isStale && it.size.h !== correctH) {
       it.size.h = correctH;
       host.saveWithoutUndo();
       host.requestRender();
