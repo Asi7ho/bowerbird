@@ -19,11 +19,11 @@ my-plugin/
 
 ```json
 {
-  "id": "hello-card",
-  "name": "Hello Card",
+  "id": "my-plugin",
+  "name": "My Plugin",
   "version": "0.1.0",
   "apiVersion": "2",
-  "description": "The smallest plugin that uses every API surface: a card, a tool, a panel, a command and a view. Copy this folder to start a new plugin.",
+  "description": "An example plugin that adds a card, a tool, a panel, a command and a view.",
   "permissions": ["board:write", "files:embed", "storage", "view:replace"],
   "main": "main.ts",
   "styles": ["style.css"],
