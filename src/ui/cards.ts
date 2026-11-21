@@ -375,11 +375,15 @@ export function activate(api: PluginContext): void {
       if (preview && !plain) api.media.loadFileCardSize(c.id, preview);
       const label = format === "psd" ? "PSD" : "AI";
       const tint = format === "psd" ? "#2E86AB" : "#FF6B35";
+      // The preview fills the card like an image card: cover
+      // normally, contain when selected so the whole file
+      // shows. The card's rounded hairline border outlines
+      // the preview directly.
+      const fit = c.sel ? "contain" : "cover";
       const previewHtml = preview
-        ? `<img src="${api.files.fileUrl(preview)}" draggable="false" alt="" style="width:100%;height:100%;object-fit:contain;display:block" />`
+        ? `<img src="${api.files.fileUrl(preview)}" draggable="false" alt="" style="width:100%;height:100%;object-fit:${fit};border-radius:12px;display:block" />`
         : `<div class="filecard-tile" style="background:${api.text.tint(tint, 0.88)};color:${tint}">${label}</div>`;
-      return `<div class="${c.cls} filecard" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
-        <div style="flex:1 1 auto;min-height:0;border-radius:10px;overflow:hidden;position:relative">${previewHtml}${preview ? `<span class="filecard-pill" style="color:${tint}">${label}</span>` : ""}</div></div></div>`;
+      return `<div class="${c.cls} filecard" data-id="${c.id}" style="${c.style}"><div class="inner">${previewHtml}${preview ? `<span class="filecard-pill" style="color:${tint}">${label}</span>` : ""}</div></div>`;
     },
   });
 
