@@ -223,9 +223,47 @@ async function reloadFromDisk(reason: "external" | "refused"): Promise<void> {
 function zoomAt(screen: Pt, factor: number): void {
   Object.assign(C.board.camera, zoomCamera(C.board.camera, screen, factor));
 }
-function zoomCentre(factor: number): void {
+// Button zoom, animated: the toolbar +/- buttons step the zoom
+// smoothly over ~180 ms instead of jumping. The pinch path stays
+// instant and 1:1 — this is only the discrete button step, kept
+// centred. A step started mid-animation restarts from the current
+// zoom, and a board switch mid-animation stops it outright.
+let zoomAnim: number | null = null;
+function animateZoomCentre(factor: number): void {
+  if (factor === 1) return;
+  if (zoomAnim !== null) cancelAnimationFrame(zoomAnim);
+  const board = C.board;
+  const startZoom = C.board.camera.zoom;
+  const targetZoom = startZoom * factor;
+  const start = performance.now();
+  const duration = 180;
+  const step = (now: number): void => {
+    if (C.board !== board) { zoomAnim = null; return; }
+    const t = Math.min(1, (now - start) / duration);
+    // easeOutCubic: fast off the mark, gentle landing.
+    const eased = 1 - Math.pow(1 - t, 3);
+    const zoom = startZoom * Math.pow(factor, eased);
+    const cur = C.board.camera.zoom;
+    if (cur !== zoom) zoomAt(boardSizeCentre(), zoom / cur);
+    boardRender();
+    if (t < 1) {
+      zoomAnim = requestAnimationFrame(step);
+    } else {
+      zoomAnim = null;
+      // Land exactly on the target: the per-frame ratios
+      // accumulate floating-point error. clampZoom inside
+      // zoomCamera keeps this honest at the zoom limits.
+      const final = C.board.camera.zoom;
+      if (final !== targetZoom) zoomAt(boardSizeCentre(), targetZoom / final);
+      emitPluginEvent("camera");
+      boardRender();
+    }
+  };
+  zoomAnim = requestAnimationFrame(step);
+}
+function boardSizeCentre(): Pt {
   const s = boardSize();
-  zoomAt({ x: s.x / 2, y: s.y / 2 }, factor);
+  return { x: s.x / 2, y: s.y / 2 };
 }
 // Apply one item patch: position, size, group, and — for
 // plugin cards only — data. Shared by updateItem and
@@ -655,7 +693,7 @@ async function init(): Promise<void> {
     // Zoom around the board centre, by a factor. The
     // toolbar's zoom buttons. The camera math stays here;
     // the plugin just says "zoom in" or "zoom out".
-    zoomBy: (factor: number) => { const z = C.board.camera.zoom; zoomCentre(factor); if (C.board.camera.zoom !== z) emitPluginEvent("camera"); boardRender(); },
+    zoomBy: (factor: number) => { animateZoomCentre(factor); },
     // The shape table for the toolbar's shape picker.
     listShapes: () => SHAPES.map((s) => ({ kind: s.kind, label: s.label, key: s.key, svg: s.svg })),
     // Drag-preview polygon points for a shape. The board
