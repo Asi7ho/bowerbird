@@ -245,6 +245,11 @@ export function activate(api: PluginContext): void {
   let lastTool = "";
 
   let lastKey = "";
+
+  // The last zoom percentage written to the label: the label
+  // is only rewritten when the rounded percentage actually
+  // changes, not on every toolbar update during a zoom.
+  let lastZoomLabel = "";
   function update(): void {
     const tool = api.ui.getTool();
     if (tool !== lastTool) {
@@ -276,7 +281,11 @@ export function activate(api: PluginContext): void {
     if (key === lastKey) return;
     lastKey = key;
 
-    zoomLabel.textContent = `${Math.round(zoom * 100)}%`;
+    const zoomText = `${Math.round(zoom * 100)}%`;
+    if (zoomText !== lastZoomLabel) {
+      zoomLabel.textContent = zoomText;
+      lastZoomLabel = zoomText;
+    }
 
     const setActive = (el: HTMLElement, on: boolean) => el.classList.toggle("active", on);
 

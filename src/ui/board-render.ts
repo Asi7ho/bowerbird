@@ -61,7 +61,12 @@ export function applyCamera(): void {
   S.groupsEl.style.transform = `translate(${-cam.x * cam.zoom}px,${-cam.y * cam.zoom}px) scale(${cam.zoom})`;
   S.selectedGroupsEl.style.transform = `translate(${-cam.x * cam.zoom}px,${-cam.y * cam.zoom}px) scale(${cam.zoom})`;
   applyGrid();
-  updateResizeHandle();
+  // During a pinch the handle is hidden whenever nothing is
+  // selected, so there is nothing to position: skip the call
+  // (and its layout reads) on zoom frames in that case. The
+  // handle's own early return already skips the rect reads
+  // when unselected; this skips the whole call mid-gesture.
+  if (S.zoomFrame === null || S.api.board.getSelected().length !== 0) updateResizeHandle();
 }
 
 // Visible world rect, with a margin so cards at the edge do not pop
