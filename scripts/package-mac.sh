@@ -86,6 +86,8 @@ fi
 mkdir -p "$APP/Contents/Resources/app/assets"
 cp assets/icon.png assets/sample.pdf assets/welcome-bower.jpg \
    assets/welcome-birdsong.mp3 assets/welcome-video.mp4 \
+   assets/welcome-cube.glb assets/welcome-garden.psd assets/welcome-heron.ai \
+   assets/welcome-garden-preview.png assets/welcome-heron-preview.png \
    "$APP/Contents/Resources/app/assets/"
 cat > "$APP/Contents/Resources/app/package.json" <<EOF
 {
