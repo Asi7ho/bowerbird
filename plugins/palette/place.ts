@@ -12,26 +12,26 @@
 // coordinates, or a swatch lands 48px low.
 import type { PluginContext, Pt } from "bowerbird-plugin-api";
 
-export function boardGeometry(): { w: number; h: number; left: number; top: number } {
+function boardGeometry(): { w: number; h: number; left: number; top: number } {
   const el = document.getElementById("board");
   if (!el) return { w: window.innerWidth, h: window.innerHeight, left: 0, top: 0 };
   const r = el.getBoundingClientRect();
   return { w: el.clientWidth, h: el.clientHeight, left: r.left, top: r.top };
 }
 
-export function cameraCentreWorld(api: PluginContext): Pt {
+function cameraCentreWorld(api: PluginContext): Pt {
   const cam = api.view.getCamera();
   const b = boardGeometry();
   return { x: cam.x + b.w / 2 / cam.zoom, y: cam.y + b.h / 2 / cam.zoom };
 }
 
-export function dropWorld(api: PluginContext, clientX: number, clientY: number): Pt {
+function dropWorld(api: PluginContext, clientX: number, clientY: number): Pt {
   const cam = api.view.getCamera();
   const b = boardGeometry();
   return { x: (clientX - b.left) / cam.zoom + cam.x, y: (clientY - b.top) / cam.zoom + cam.y };
 }
 
-export function placeAt(api: PluginContext | null, hex: string, point: Pt): void {
+function placeAt(api: PluginContext | null, hex: string, point: Pt): void {
   if (!api) return;
   api.board.addItem({ Swatch: { hex } }, { x: point.x - 60, y: point.y - 60 }, { w: 120, h: 120 });
 }

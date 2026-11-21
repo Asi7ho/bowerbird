@@ -5,8 +5,6 @@
   "apiVersion": "2",
   "description": "Chat with an AI. Ask anything, or describe a plugin and it will build it.",
   "permissions": [
-    "board:read",
-    "board:write",
     "storage",
     "plugins:install",
     "ai"

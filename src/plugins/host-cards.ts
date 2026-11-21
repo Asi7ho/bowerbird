@@ -5,7 +5,7 @@ import type { Item, PluginBuiltinCardDef, PluginCardDef, PluginCommandDef, Plugi
 import { escapeHtml } from "../backend/model";
 import { builtinCards, cards, commands, loaded, tools } from "./host-state";
 
-export interface CardDeps {
+interface CardDeps {
   getHost: () => PluginHost | null;
 }
 

@@ -7,7 +7,7 @@ export function rectsOverlap(a: OverlayRect, b: OverlayRect): boolean {
   return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
 }
 
-export type BarPlacement = { side: "left" | "right" | "hidden"; x: number; y: number };
+type BarPlacement = { side: "left" | "right" | "hidden"; x: number; y: number };
 
 const BAR_GAP = 8;
 const BAR_EDGE = 8;

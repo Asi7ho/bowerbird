@@ -60,7 +60,7 @@ export function hexToHsl(hex: string): { h: number; s: number; l: number } {
   return { h, s, l };
 }
 
-export interface PaletteDef {
+interface PaletteDef {
   name: string;
   colors: string[];
 }

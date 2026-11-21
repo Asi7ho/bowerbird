@@ -27,7 +27,7 @@ export function stopPresentationAudio(): void {
   state.presAudioDur = null;
 }
 
-export function playPresentationAudio(item: Item, tile: HTMLElement): void {
+function playPresentationAudio(item: Item, tile: HTMLElement): void {
   if (!("Audio" in item.kind)) return;
   const path = item.kind.Audio.path;
   const current = state.presAudio;

@@ -7,7 +7,7 @@ import { api } from "./api";
 import { boardGet, type Board, type GroupEntry, type Item } from "./model";
 import { emitPluginEvent } from "../plugins/host";
 
-export interface UndoState {
+interface UndoState {
   items: Item[];
   next_id: number;
   next_group: number;
@@ -17,7 +17,7 @@ export interface UndoState {
   selected: number[];
 }
 
-export interface UndoContext {
+interface UndoContext {
   getBoard(): Board;
   getSelected(): number[];
   setSelected(ids: number[]): void;

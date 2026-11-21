@@ -3,7 +3,7 @@
 import type { PluginHost, PluginViewDef } from "bowerbird-plugin-api";
 import { shell, views } from "./host-state";
 
-export interface ViewDeps {
+interface ViewDeps {
   getHost: () => PluginHost | null;
   emitEvent: (event: string) => void;
 }

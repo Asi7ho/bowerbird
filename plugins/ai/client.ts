@@ -5,7 +5,7 @@
 import type { PluginContext } from "bowerbird-plugin-api";
 import { getConfig } from "./settings.js";
 
-export interface ChatMessage {
+interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
 }

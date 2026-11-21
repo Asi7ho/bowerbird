@@ -11,7 +11,7 @@ import { ensureVideoPoster } from "./poster";
 import { parsePsd, renderPsdPreview } from "./psd-import";
 import { parseSvgToItems } from "./svg-import";
 
-export interface DropsContext {
+interface DropsContext {
   getBoard(): Board;
   allocId(): number;
   allocGroup(): number;

@@ -174,7 +174,7 @@ function parseOpacity(raw: string | undefined): number {
 
 // 2D affine matrix [a, b, c, d, e, f]: x' = a*x + c*y + e,
 // y' = b*x + d*y + f.
-export type Matrix = [number, number, number, number, number, number];
+type Matrix = [number, number, number, number, number, number];
 const IDENTITY: Matrix = [1, 0, 0, 1, 0, 0];
 
 function multiplyMatrix(m1: Matrix, m2: Matrix): Matrix {

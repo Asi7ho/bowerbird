@@ -20,14 +20,14 @@ export interface Slide {
   drawings: Item[];
 }
 
-export interface DrawStart {
+interface DrawStart {
   x: number;
   y: number;
   clientX: number;
   clientY: number;
 }
 
-export interface PresentationState {
+interface PresentationState {
   api: PluginContext | null;
   slides: Slide[];
   index: number;

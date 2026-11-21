@@ -4,7 +4,7 @@
 import type { PluginBridge, PluginHost, PluginPanelDef } from "bowerbird-plugin-api";
 import { panels, shell } from "./host-state";
 
-export interface PanelDeps {
+interface PanelDeps {
   getHost: () => PluginHost | null;
   getBridge: () => PluginBridge | null;
   isPluginsReady: () => boolean;

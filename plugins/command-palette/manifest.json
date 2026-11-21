@@ -1,12 +1,6 @@
 {
   "apiVersion": "2",
   "contributions": {
-    "commands": [
-      {
-        "id": "open",
-        "title": "Open command palette"
-      }
-    ],
     "overlays": [
       {
         "id": "palette",

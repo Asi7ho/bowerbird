@@ -1,6 +1,6 @@
 // Preload bridge: the only privileged surface the renderer sees.
 // The renderer runs with context isolation on and no Node access.
-import { contextBridge, ipcRenderer, webUtils } from "electron";
+import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("bowerbird", {
   platform: process.platform,
@@ -31,7 +31,6 @@ contextBridge.exposeInMainWorld("bowerbird", {
   importBoard: () => ipcRenderer.invoke("bowerbird:import-board"),
   resetBoard: (opts?: { confirmed?: boolean }) => ipcRenderer.invoke("bowerbird:reset-board", opts),
   factoryReset: (opts?: { confirmed?: boolean }) => ipcRenderer.invoke("bowerbird:factory-reset", opts),
-  restoreShowcase: () => ipcRenderer.invoke("bowerbird:restore-showcase"),
   readFileBase64: (filePath: string) => ipcRenderer.invoke("bowerbird:read-file-base64", filePath),
   contextEmbedImage: (filePath: string) => ipcRenderer.invoke("bowerbird:context-embed-image", filePath),
   contextEmbedFrame: (dataUrl: string) => ipcRenderer.invoke("bowerbird:context-embed-frame", dataUrl),
@@ -70,7 +69,6 @@ contextBridge.exposeInMainWorld("bowerbird", {
   fullscreen: () => ipcRenderer.invoke("bowerbird:fullscreen"),
   maximise: () => ipcRenderer.invoke("bowerbird:maximise"),
   windowState: () => ipcRenderer.invoke("bowerbird:window-state"),
-  getPathForFile: (file: File) => webUtils.getPathForFile(file),
   // app-file://localhost + path, NOT app-file:// + path:
   // Chromium lowercases the hostname of a standard
   // scheme, so app-file:///Users/x became app-file://users/x

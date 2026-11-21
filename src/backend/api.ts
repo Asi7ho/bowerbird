@@ -3,7 +3,7 @@
 // this bridge, which the main process exposes with context isolation on.
 import type { PluginManifest } from "../plugins/host";
 
-export interface BowerbirdAPI {
+interface BowerbirdAPI {
   platform: string;
   loadBoard(): Promise<{ json: string | null; board_path: string; board_dir: string; pdf_size_bytes: number; video_size_bytes: number; model_size_bytes: number; psd_size_bytes: number; ai_size_bytes: number; panelOrder?: string[]; buildId?: string; recovery?: { hasRecovery: boolean; savedAt: number | null } }>;
   saveBoard(json: string): Promise<boolean>;
@@ -82,7 +82,6 @@ export interface BowerbirdAPI {
   fullscreen(): Promise<boolean>;
   maximise(): Promise<boolean>;
   windowState(): Promise<{ maximised: boolean; fullscreen: boolean }>;
-  getPathForFile(file: File): string;
   fileUrl(path: string): string;
   listPlugins(): Promise<PluginManifest[]>;
   readPluginFile(pluginId: string, relativePath: string): Promise<string>;

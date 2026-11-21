@@ -6,7 +6,6 @@
   "description": "The smallest plugin that uses every API surface: a card, a tool, a panel, a command and a view. Copy this folder to start a new plugin.",
   "permissions": [
     "board:write",
-    "files:embed",
     "storage",
     "view:replace"
   ],

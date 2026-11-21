@@ -61,7 +61,6 @@ function setStatus(text: string): void {
 function setRecording(on: boolean): void {
   if (pill) pill.hidden = !on;
   if (stopBtn) stopBtn.hidden = !on;
-  if (pill) pill.classList.toggle("recording", on);
 }
 
 function stopTimer(): void {
