@@ -71,6 +71,23 @@ export function fileCardSize(artW: number, artH: number): { w: number; h: number
   return { w: 360, h: fileCardHeightForWidth(artW, artH, 360) };
 }
 
+// A video card is the same ratio as the video, like a
+// FileCard is the same ratio as its file: the video fills
+// the card edge to edge with contain, so in the normal case
+// there is neither a crop nor a letterbox. Same cap (360
+// tall) and floor (80) as the FileCard preview, so a very
+// tall or very wide clip does not make a giant or invisible
+// card. A video whose size cannot be read falls back to
+// 16:9, the old default.
+export function videoCardHeightForWidth(vw: number, vh: number, w: number): number {
+  return Math.min(360, Math.max(80, (vh / vw) * Math.max(1, w)));
+}
+
+export function videoCardSize(vw: number, vh: number): { w: number; h: number } {
+  if (!(vw > 0) || !(vh > 0)) return { w: 360, h: 203 };
+  return { w: 360, h: Math.round(videoCardHeightForWidth(vw, vh, 360)) };
+}
+
 export function translateImportedToAnchor(items: ImportedItem[], anchor: Pt): ImportedItem[] {
   const b = importedBBox(items);
   if (!b) return items;

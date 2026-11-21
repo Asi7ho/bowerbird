@@ -4,7 +4,7 @@
 import { api } from "./api";
 import { isPdfCompatible, renderAiPreview } from "./ai-import";
 import type { ImportedItem } from "./import-types";
-import { base64ToBytes, fileCardSize, findSourceGroup, groupBBox, translateImportedToAnchor } from "./live-import";
+import { base64ToBytes, fileCardSize, findSourceGroup, groupBBox, translateImportedToAnchor, videoCardSize } from "./live-import";
 import { MODEL3D_EXTENSIONS } from "./model3d";
 import { boardGet, domainOf, estimateTextHeight, normaliseHex, type Board, type Item, type Kind, type Pt, type Size } from "./model";
 import { ensureVideoPoster } from "./poster";
@@ -136,6 +136,29 @@ export function createDrops(ctx: DropsContext): Drops {
   // change: it saves without an undo step, like a link
   // preview fill. A video whose poster cannot be captured
   // keeps the dark tile.
+  // The ratio of a local video file, from its metadata alone:
+  // a <video> with preload="metadata" reads videoWidth and
+  // videoHeight without decoding frames. Null when the file
+  // cannot be read (or the metadata takes too long), so the
+  // caller falls back to the 16:9 default. Mirrors the image
+  // card's natural-size probe.
+  async function probeVideoSize(stored: string): Promise<Size | null> {
+    const dims = await new Promise<{ w: number; h: number } | null>((resolve) => {
+      const v = document.createElement("video");
+      v.preload = "metadata";
+      const done = (r: { w: number; h: number } | null) => { resolve(r); };
+      const timer = setTimeout(() => done(null), 5000);
+      v.onloadedmetadata = () => {
+        clearTimeout(timer);
+        done(v.videoWidth > 0 && v.videoHeight > 0 ? { w: v.videoWidth, h: v.videoHeight } : null);
+      };
+      v.onerror = () => { clearTimeout(timer); done(null); };
+      v.src = api.fileUrl(stored);
+    });
+    if (!dims) return null;
+    return videoCardSize(dims.w, dims.h);
+  }
+
   async function fillVideoPoster(board: Board, id: number, source: string): Promise<void> {
     const filled = await ensureVideoPoster(source);
     if (!filled) return;
@@ -354,7 +377,14 @@ export function createDrops(ctx: DropsContext): Drops {
           const size = desc.needsSize ? await api.fileSize(stored).catch(() => 0) : 0;
           if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
           const id = ctx.allocId();
-          ctx.getBoard().items.push({ id, pos: at, size: desc.size, group: null, kind: desc.kind(stored, size) });
+          // A video lands at the ratio of the video itself, not
+          // the 16:9 default: probe its dimensions first, the
+          // way an image card probes its natural size. A probe
+          // that fails (or a board switch mid-probe) falls back
+          // to the default, and contain keeps the ratio anyway.
+          const cardSize = kind === "video" ? await probeVideoSize(stored) ?? desc.size : desc.size;
+          if (!sameBoard()) { ctx.toast("Board switched — import stopped"); return; }
+          ctx.getBoard().items.push({ id, pos: at, size: cardSize, group: null, kind: desc.kind(stored, size) });
           added++;
           if (kind === "video") {
             // The poster is background work, not the drop
