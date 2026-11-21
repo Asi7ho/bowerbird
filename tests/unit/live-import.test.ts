@@ -3,7 +3,7 @@
 // source file, and translating a fresh import onto the group's
 // current position. Pure functions, no DOM.
 import { describe, expect, it } from "vitest";
-import { base64ToBytes, fileCardHeightForWidth, fileCardSize, findSourceGroup, groupBBox, translateImportedToAnchor, videoCardHeightForWidth, videoCardSize } from "../../src/backend/live-import";
+import { base64ToBytes, fileCardHeightForWidth, fileCardSize, findSourceGroup, groupBBox, linkCardHeightForWidth, linkCardSize, pdfCardHeightForWidth, pdfCardSize, translateImportedToAnchor, videoCardHeightForWidth, videoCardSize } from "../../src/backend/live-import";
 import type { Board } from "../../src/backend/model";
 
 function boardWithGroups(groups: Board["groups"]): Board {
@@ -102,6 +102,54 @@ describe("videoCardHeightForWidth", () => {
     // video in a 480-wide card is 360 tall.
     expect(videoCardHeightForWidth(384, 288, 360)).toBe(270);
     expect(videoCardHeightForWidth(384, 288, 480)).toBe(360);
+  });
+});
+
+describe("pdfCardSize", () => {
+  it.each([
+    // [page w, h, card w, h] — 260 wide, the preview is the
+    // card minus 24px of padding at the page's ratio, plus
+    // 56px for padding, gap and the page-nav row.
+    [200, 100, 260, 174], // landscape 2:1, the sample PDF
+    [612, 792, 260, 361], // portrait Letter: near the old 260x360
+    [0, 0, 260, 360], // unknown dimensions: old default
+    [-5, 100, 260, 360],
+  ])("pdfCardSize(%i, %i) is %ix%i", (w, h, cw, ch) => {
+    expect(pdfCardSize(w, h)).toEqual({ w: cw, h: ch });
+  });
+});
+
+describe("pdfCardHeightForWidth", () => {
+  it("scales the page preview with the card width, keeping the ratio", () => {
+    // A 2:1 page in a 260-wide card is 174 tall; the same
+    // page in a 520-wide card is 304 tall.
+    expect(pdfCardHeightForWidth(200, 100, 260)).toBe(174);
+    expect(pdfCardHeightForWidth(200, 100, 520)).toBe(304);
+  });
+});
+
+describe("linkCardSize", () => {
+  it.each([
+    // [image w, h, card w, h] — 320 wide, height from the
+    // image's own ratio, floored at 132 (the no-image
+    // height, so the title and domain fit) and capped
+    // at 480.
+    [800, 500, 320, 200], // 8:5
+    [1200, 200, 320, 132], // very wide: floored at 132
+    [400, 1200, 320, 480], // very tall: capped at 480
+    [0, 0, 320, 300], // unknown dimensions: old fixed size
+    [-5, 100, 320, 300],
+  ])("linkCardSize(%i, %i) is %ix%i", (w, h, cw, ch) => {
+    expect(linkCardSize(w, h)).toEqual({ w: cw, h: ch });
+  });
+});
+
+describe("linkCardHeightForWidth", () => {
+  it("scales the preview image with the card width, keeping the ratio", () => {
+    // An 8:5 image in a 320-wide card is 200 tall; the same
+    // image in a 640-wide card is 400 tall.
+    expect(linkCardHeightForWidth(800, 500, 320)).toBe(200);
+    expect(linkCardHeightForWidth(800, 500, 640)).toBe(400);
   });
 });
 

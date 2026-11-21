@@ -5,7 +5,7 @@
 import { api } from "./api";
 import { peaksFromSamples } from "./audio-peaks";
 import { boardGet, type Board } from "./model";
-import { fileCardHeightForWidth, fileCardPreviewHeight, videoCardHeightForWidth } from "./live-import";
+import { fileCardHeightForWidth, fileCardPreviewHeight, linkCardHeightForWidth, pdfCardHeightForWidth, videoCardHeightForWidth } from "./live-import";
 
 export interface MediaContext {
   getBoard(): Board;
@@ -44,6 +44,20 @@ export interface Media {
   // loadVideoCardSize): measure its poster and resize the
   // card to the ratio of the video when it is still wrong.
   loadVideoCardSize(poster: string): void;
+  // The first page's size in points, for sizing a PDF card
+  // to its page at drop time. Null when the file cannot be
+  // read. Shares the document load with the renderer, so
+  // probing never opens the file twice.
+  probePdfSize(path: string): Promise<{ w: number; h: number } | null>;
+  // Heal a PdfCard saved at the stale fixed size (see
+  // loadPdfCardSize): measure its first page and resize the
+  // card to the ratio of the page when it is still wrong.
+  loadPdfCardSize(path: string): void;
+  // Heal a UrlCard saved at the stale fixed size (see
+  // loadLinkCardSize): measure its preview image and resize
+  // the card to the ratio of the image when it is still
+  // wrong.
+  loadLinkCardSize(image: string): void;
   loadAudioDuration(id: number, path: string): void;
   // Waveform peaks for an audio card (100 bars, 0..1), from
   // a real decode of the file — never fake bars. Loaded on
@@ -540,6 +554,130 @@ export function createMedia(host: MediaContext): Media {
       host.requestRender();
     }
   }
+  // PDF first-page dimensions, cached per path, and the
+  // paths with a load in flight. A page is measured once
+  // per file, not once per render. The document load is
+  // shared with the renderer (getPdfDoc), so measuring
+  // never opens the file twice.
+  const pdfPageSize = new Map<string, { w: number; h: number }>();
+  const pdfPageLoading = new Set<string>();
+  // The first page's size in points, for sizing a PDF card
+  // to its page at drop time. Null when the file cannot be
+  // read, so the caller falls back to the old default.
+  async function probePdfSize(path: string): Promise<{ w: number; h: number } | null> {
+    const cached = pdfPageSize.get(path);
+    if (cached) return cached;
+    try {
+      const doc = await getPdfDoc(path);
+      const page = await doc.getPage(1);
+      const viewport = page.getViewport({ scale: 1 });
+      if (viewport.width <= 0 || viewport.height <= 0) return null;
+      const dims = { w: viewport.width, h: viewport.height };
+      pdfPageSize.set(path, dims);
+      return dims;
+    } catch {
+      return null;
+    }
+  }
+  // Heal a PdfCard saved at the stale fixed size: PDFs used
+  // to land at 260x360 whatever the page, so a landscape
+  // page sat in a portrait card. When the first page loads,
+  // measure it; if the card is still at 260x360, resize it
+  // to the ratio of the page and save (no undo step — this
+  // is a heal, not an action). A card the user resized by
+  // hand is left alone: its size will not match 260x360.
+  // Called from the PdfCard renderer, like loadPdfPage.
+  function loadPdfCardSize(path: string): void {
+    const cached = pdfPageSize.get(path);
+    if (cached) {
+      healPdfCardsWithPage(path, cached.w, cached.h);
+      return;
+    }
+    if (pdfPageLoading.has(path)) return;
+    pdfPageLoading.add(path);
+    void probePdfSize(path).then((dims) => {
+      pdfPageLoading.delete(path);
+      if (!dims) return;
+      pdfPageSize.set(path, dims);
+      healPdfCardsWithPage(path, dims.w, dims.h);
+    });
+  }
+  // Resize every PdfCard showing this file that is still at
+  // the stale fixed size to the ratio of its first page.
+  // Several cards can show one PDF, so the heal runs over
+  // all of them, not just the one that asked.
+  function healPdfCardsWithPage(path: string, pageW: number, pageH: number): void {
+    let changed = false;
+    for (const it of host.getBoard().items) {
+      if (!("PdfCard" in it.kind) || it.kind.PdfCard.path !== path) continue;
+      if (Math.abs(it.size.w - 260) > 2 || Math.abs(it.size.h - 360) > 2) continue;
+      const correctH = pdfCardHeightForWidth(pageW, pageH, it.size.w);
+      if (it.size.h !== correctH) {
+        it.size.h = correctH;
+        changed = true;
+      }
+    }
+    if (changed) {
+      host.saveWithoutUndo();
+      host.requestRender();
+    }
+  }
+  // Link preview-image dimensions, cached per URL, and the
+  // URLs with a load in flight. An image is measured once
+  // per URL, not once per render. The image is remote, so it
+  // loads from its own URL (not the board-local file URL);
+  // reading its natural size needs no CORS.
+  const linkImageSize = new Map<string, { w: number; h: number }>();
+  const linkImageLoading = new Set<string>();
+  // Heal a UrlCard saved at the stale fixed size: a preview
+  // image used to make the card 320x300 whatever the image,
+  // so a wide banner sat in a tall card. When the preview
+  // image loads, measure it; if the card is still at
+  // 320x300, resize it to the ratio of the image and save
+  // (no undo step — this is a heal, not an action). A card
+  // the user resized by hand is left alone: its size will
+  // not match 320x300. Called from the UrlCard renderer,
+  // like loadFileCardSize.
+  function loadLinkCardSize(image: string): void {
+    const cached = linkImageSize.get(image);
+    if (cached) {
+      healLinkCardsWithImage(image, cached.w, cached.h);
+      return;
+    }
+    if (linkImageLoading.has(image)) return;
+    linkImageLoading.add(image);
+    const img = new Image();
+    img.onload = () => {
+      linkImageLoading.delete(image);
+      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+        linkImageSize.set(image, { w: img.naturalWidth, h: img.naturalHeight });
+        healLinkCardsWithImage(image, img.naturalWidth, img.naturalHeight);
+      }
+    };
+    img.onerror = () => {
+      linkImageLoading.delete(image);
+      // An image that cannot load leaves the card alone.
+    };
+    img.src = image;
+  }
+  // Resize every UrlCard using this preview image that is
+  // still at the stale fixed size to the ratio of the image.
+  function healLinkCardsWithImage(image: string, imgW: number, imgH: number): void {
+    let changed = false;
+    for (const it of host.getBoard().items) {
+      if (!("UrlCard" in it.kind) || it.kind.UrlCard.image !== image) continue;
+      if (Math.abs(it.size.w - 320) > 2 || Math.abs(it.size.h - 300) > 2) continue;
+      const correctH = linkCardHeightForWidth(imgW, imgH, it.size.w);
+      if (it.size.h !== correctH) {
+        it.size.h = correctH;
+        changed = true;
+      }
+    }
+    if (changed) {
+      host.saveWithoutUndo();
+      host.requestRender();
+    }
+  }
   function toggleAudio(id: number, path: string): void {
     if (audioId === id && audioEl && !audioEl.paused) {
       audioEl.pause();
@@ -631,6 +769,9 @@ export function createMedia(host: MediaContext): Media {
     renderPdfPage,
     loadFileCardSize,
     loadVideoCardSize,
+    probePdfSize,
+    loadPdfCardSize,
+    loadLinkCardSize,
     loadAudioDuration,
     getAudioPeaks,
     loadAudioPeaks,

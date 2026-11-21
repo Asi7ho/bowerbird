@@ -308,6 +308,7 @@ export function activate(api: PluginContext): void {
       const ico = safeHttpUrl(icon);
       const footer = `<div class="link-footer"><a class="link-domain" data-action="open-link" data-id="${c.id}">${ico ? `<img class="favicon" src="${api.text.escapeHtml(ico)}" alt="" onerror="this.style.display='none';var f=this.nextElementSibling;if(f)f.style.display='flex'" /><span class="favicon-fallback" style="display:none;background:${api.text.tint(tile, 0.85)};color:${tile}">${api.text.escapeHtml(initial)}</span>` : `<span class="favicon-fallback" style="background:${api.text.tint(tile, 0.85)};color:${tile}">${api.text.escapeHtml(initial)}</span>`}<span>${api.text.escapeHtml(domain)}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8" /></svg></a></div>`;
       if (img) {
+        if (!plain) api.media.loadLinkCardSize(img);
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner link-card">
           <div class="link-image"><img src="${api.text.escapeHtml(img)}" draggable="false" alt="" onerror="this.closest('.link-card').classList.add('no-image');this.closest('.link-image').style.display='none'" /></div>
           <div class="link-body">
@@ -341,8 +342,9 @@ export function activate(api: PluginContext): void {
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px">${tile}</div></div>`;
       }
       api.media.loadPdfPage(c.id, path);
+      if (!plain) api.media.loadPdfCardSize(path);
       const pageNum = api.media.getPdfPage(c.id);
-      if (c.hh < 200) {
+      if (c.hh < 120) {
         // A short card, like the old 96px tile: just a small
         // page preview.
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px" data-pdf-wrap="${c.id}">

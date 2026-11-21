@@ -88,6 +88,41 @@ export function videoCardSize(vw: number, vh: number): { w: number; h: number } 
   return { w: 360, h: Math.round(videoCardHeightForWidth(vw, vh, 360)) };
 }
 
+// A PDF card is the same ratio as its page, like a FileCard
+// is the same ratio as its file: the page preview fills its
+// area edge to edge. The card is 260 wide; the preview is
+// the card minus 12px of padding on each side, and the card
+// height is the preview height plus the padding (24), the
+// gap (8) and the page-nav row (24). A page whose size
+// cannot be read falls back to the old default (260x360,
+// right for a portrait Letter page).
+export function pdfCardHeightForWidth(pageW: number, pageH: number, w: number): number {
+  const previewW = Math.max(1, w - 24);
+  return Math.round((pageH / pageW) * previewW + 56);
+}
+
+export function pdfCardSize(pageW: number, pageH: number): { w: number; h: number } {
+  if (!(pageW > 0) || !(pageH > 0)) return { w: 260, h: 360 };
+  return { w: 260, h: pdfCardHeightForWidth(pageW, pageH, 260) };
+}
+
+// A link card with a preview image is the same ratio as
+// the image, like a FileCard is the same ratio as its file:
+// the image fills the card edge to edge, so the card is
+// the image's ratio. The card is 320 wide; the height is
+// floored at 132 (the no-image height, so the overlaid
+// title and domain always fit) and capped at 480 so a very
+// tall image does not make a giant card. A preview whose
+// size cannot be read falls back to the old fixed size.
+export function linkCardHeightForWidth(imgW: number, imgH: number, w: number): number {
+  return Math.min(480, Math.max(132, Math.round((imgH / imgW) * Math.max(1, w))));
+}
+
+export function linkCardSize(imgW: number, imgH: number): { w: number; h: number } {
+  if (!(imgW > 0) || !(imgH > 0)) return { w: 320, h: 300 };
+  return { w: 320, h: linkCardHeightForWidth(imgW, imgH, 320) };
+}
+
 export function translateImportedToAnchor(items: ImportedItem[], anchor: Pt): ImportedItem[] {
   const b = importedBBox(items);
   if (!b) return items;

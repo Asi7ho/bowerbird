@@ -177,6 +177,7 @@ C.drops = createDrops({
   requestRender: () => boardRender(),
   toWorld: (s) => toWorld(s),
   toast,
+  probePdfSize: (path) => C.media.probePdfSize(path),
 });
 
 // Live imports: the stale check in boards.ts reaches the
@@ -791,6 +792,9 @@ async function init(): Promise<void> {
     loadPdfPage: (id, path) => C.media.loadPdfPage(id, path),
     loadFileCardSize: (preview) => C.media.loadFileCardSize(preview),
     loadVideoCardSize: (poster) => C.media.loadVideoCardSize(poster),
+    probePdfSize: (path) => C.media.probePdfSize(path),
+    loadPdfCardSize: (path) => C.media.loadPdfCardSize(path),
+    loadLinkCardSize: (image) => C.media.loadLinkCardSize(image),
     // Move a PDF card to a page (clamped to the document),
     // and render it. The board view's prev/next buttons.
     // False when the document is not loaded yet.

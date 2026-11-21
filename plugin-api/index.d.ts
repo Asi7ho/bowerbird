@@ -551,6 +551,17 @@ export interface PluginHost {
   // when it is still wrong.
   loadFileCardSize: (preview: string) => void;
   loadVideoCardSize: (poster: string) => void;
+  // The first page's size in points, for sizing a PDF card
+  // to its page. Null when the file cannot be read.
+  probePdfSize: (path: string) => Promise<{ w: number; h: number } | null>;
+  // Heal a PdfCard saved at the stale fixed size: measure
+  // its first page and resize the card to the ratio of the
+  // page when it is still wrong.
+  loadPdfCardSize: (path: string) => void;
+  // Heal a UrlCard saved at the stale fixed size: measure
+  // its preview image and resize the card to the ratio of
+  // the image when it is still wrong.
+  loadLinkCardSize: (image: string) => void;
   // Move a PDF card to a page (clamped to the document),
   // and render it. The board view's prev/next buttons.
   // False when the document is not loaded yet.
@@ -1245,6 +1256,17 @@ export interface PluginContext {
     // when it is still wrong.
     loadFileCardSize: (preview: string) => void;
     loadVideoCardSize: (poster: string) => void;
+    // The first page's size in points, for sizing a PDF card
+    // to its page. Null when the file cannot be read.
+    probePdfSize: (path: string) => Promise<{ w: number; h: number } | null>;
+    // Heal a PdfCard saved at the stale fixed size: measure
+    // its first page and resize the card to the ratio of the
+    // page when it is still wrong.
+    loadPdfCardSize: (path: string) => void;
+    // Heal a UrlCard saved at the stale fixed size: measure
+    // its preview image and resize the card to the ratio of
+    // the image when it is still wrong.
+    loadLinkCardSize: (image: string) => void;
     // Move a PDF card to a page (clamped to the document),
     // and render it. The board view's prev/next buttons.
     // False when the document is not loaded yet.

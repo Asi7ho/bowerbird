@@ -812,6 +812,9 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
       loadPdfPage: (id: number, path: string) => host!.loadPdfPage(id, path),
       loadFileCardSize: (preview: string) => host!.loadFileCardSize(preview),
       loadVideoCardSize: (poster: string) => host!.loadVideoCardSize(poster),
+      probePdfSize: (path: string) => host!.probePdfSize(path),
+      loadPdfCardSize: (path: string) => host!.loadPdfCardSize(path),
+      loadLinkCardSize: (image: string) => host!.loadLinkCardSize(image),
       setPdfPage: (id: number, path: string, page: number) => host!.setPdfPage(id, path, page),
     },
     text: {
