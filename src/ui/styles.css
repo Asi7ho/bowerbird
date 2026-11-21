@@ -88,7 +88,7 @@ button { font-family: inherit; }
 #title-bar button.dim:hover { background: transparent; }
 #title-bar button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 /* Focus: the header comment promises a 2px ring, and
-   only audio seek had one. Every button, input and
+   only the audio waveform had one. Every button, input and
    tab now gets the same accent ring on keyboard
    focus, so keyboard use is visible everywhere. */
 button:focus-visible, input:focus-visible, .plugin-tab:focus-visible {
@@ -546,42 +546,42 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   background: var(--bg-system); border-radius: 10px; color: var(--grey);
   font-size: 13px; padding: 12px;
 }
-.card .audio-tile {
-  flex: none; width: 48px; height: 48px; border-radius: 10px;
-  display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 18px;
-  /* A button since the a11y pass: drop the UA chrome. */
-  border: 0; padding: 0;
+/* Audio is a waveform now, like the other cards' visual
+   content: real peaks on a quiet grey field, the played
+   bars dark. The waveform is the seek control; the play
+   button is a white circle centred over it, like the
+   swatch pill — no purple tile, no slider, no text. */
+.card .audio-wave-wrap {
+  position: relative; flex: 1 1 auto; min-height: 0;
+  background: var(--bg-system); border-radius: 10px; overflow: hidden;
 }
-/* Audio seek: a thin track in the tile's purple, with a small
-   white thumb — quiet, like the rest of the cards, not a chunky
-   browser slider in blue. The fill is driven by --seek-pct, set
-   from the card and updated while playing. */
-.card .audio-seek {
-  -webkit-appearance: none; appearance: none;
-  width: 100%; height: 12px; margin: 0; background: transparent; cursor: pointer;
+.card .audio-wave {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  display: block; cursor: pointer;
 }
-.card .audio-seek::-webkit-slider-runnable-track {
-  height: 4px; border-radius: 2px;
-  background: linear-gradient(to right, #6a4c93 var(--seek-pct, 0%), #e9e9ec var(--seek-pct, 0%));
+.card .audio-wave rect { fill: #dcdce0; }
+.card .audio-wave rect.played { fill: var(--ink); }
+.card .audio-wave:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.card .audio-play {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 48px; height: 48px; border-radius: 50%;
+  background: #fff; border: 1px solid var(--hairline); box-shadow: var(--shadow-sm);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--ink); cursor: pointer; padding: 0;
 }
-.card .audio-seek::-webkit-slider-thumb {
-  -webkit-appearance: none; appearance: none;
-  width: 16px; height: 16px; margin-top: -6px; border-radius: 50%;
-  background: #fff; border: 1px solid rgba(0, 0, 0, 0.12);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
-}
-/* Voice-note transcript: the toggle lives in the card,
-   below the seek (and above the text once grown). The
-   text fills the rest of the card and scrolls, so a long
-   note does not grow the card. */
+.card .audio-play svg { width: 18px; height: 18px; flex: none; }
+/* Voice-note transcript: the toggle is a quiet icon below
+   the waveform (and above the text once grown). The text
+   fills the rest of the card and scrolls, so a long note
+   does not grow the card. */
 .audio-transcript-toggle {
-  display: inline-flex; align-items: center; gap: 4px;
-  font: inherit; font-size: 12px; font-weight: 600; color: var(--grey);
-  background: transparent; border: 0; padding: 3px 0; cursor: pointer;
-  white-space: nowrap; pointer-events: auto; text-align: left;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; color: var(--grey);
+  background: transparent; border: 0; padding: 0; cursor: pointer;
+  pointer-events: auto;
 }
 .audio-transcript-toggle:hover { color: var(--ink); }
-.audio-transcript-toggle svg { width: 12px; height: 12px; flex: none; }
+.audio-transcript-toggle svg { width: 14px; height: 14px; flex: none; }
 .card .audio-transcript-toggle { align-self: flex-start; }
 .card .audio-transcript-text {
   flex: 1 1 auto; min-height: 0; overflow-y: auto;
@@ -591,18 +591,6 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
      instead of running underneath it. */
   padding-bottom: 36px; box-sizing: border-box;
 }
-.card .audio-seek:hover::-webkit-slider-thumb { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22); }
-.card .audio-seek::-moz-range-track {
-  height: 4px; border-radius: 2px;
-  background: linear-gradient(to right, #6a4c93 var(--seek-pct, 0%), #e9e9ec var(--seek-pct, 0%));
-}
-.card .audio-seek::-moz-range-thumb {
-  width: 16px; height: 16px; border-radius: 50%;
-  background: #fff; border: 1px solid rgba(0, 0, 0, 0.12);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
-}
-.card .audio-seek:hover::-moz-range-thumb { box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22); }
-.card .audio-seek:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
 
 /* Vertical toolbar, left side: a frosted macOS material bar, centred
    vertically, 12px from the edge. The bar itself is the window drag
