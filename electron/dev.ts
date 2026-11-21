@@ -4,8 +4,12 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import * as http from "node:http";
 import * as path from "node:path";
+import { brandDevAppIcon } from "./dev-icon";
 
 const root = path.join(__dirname, "..");
+// Mission Control reads the bundle icon, not the Dock icon: brand the
+// dev Electron.app with the Bowerbird icon (macOS only, best-effort).
+brandDevAppIcon(root);
 let vite: ChildProcess | null = null;
 let electron: ChildProcess | null = null;
 
