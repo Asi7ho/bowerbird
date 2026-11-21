@@ -519,7 +519,7 @@ export interface PluginHost {
   // Waveform peaks for an audio card (100 bars, 0..1), from
   // a real decode of the file. Undefined until loaded.
   getAudioPeaks: (path: string) => number[] | undefined;
-  loadAudioPeaks: (id: number, path: string) => void;
+  loadAudioPeaks: (id: number, path: string) => Promise<void>;
   // Transcribe a recorded audio blob to text, on-device.
   // Null when the audio cannot be decoded or the model
   // cannot run. No permission needed: the model runs
@@ -1211,7 +1211,7 @@ export interface PluginContext {
     // Waveform peaks for an audio card (100 bars, 0..1), from
     // a real decode of the file. Undefined until loaded.
     getAudioPeaks: (path: string) => number[] | undefined;
-    loadAudioPeaks: (id: number, path: string) => void;
+    loadAudioPeaks: (id: number, path: string) => Promise<void>;
     // Transcribe a recorded audio blob to text, on-device
     // (Whisper in the main process). Null when the audio
     // cannot be decoded or the model cannot run.

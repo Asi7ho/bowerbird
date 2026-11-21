@@ -36,7 +36,7 @@ export interface Media {
   // a real decode of the file — never fake bars. Loaded on
   // demand like the duration, cached per path.
   getAudioPeaks(path: string): number[] | undefined;
-  loadAudioPeaks(id: number, path: string): void;
+  loadAudioPeaks(id: number, path: string): Promise<void>;
   // Seek an audio card to a time in seconds. Unlike the
   // plugin API's seekAudio (playing only), this also works
   // on a card that is not playing: it loads the file paused
@@ -251,7 +251,7 @@ export function createMedia(host: MediaContext): Media {
   function getAudioPeaks(path: string): number[] | undefined {
     return audioPeaks.get(path);
   }
-  async function loadAudioPeaks(id: number, path: string): Promise<void> {
+  async function loadAudioPeaks(_id: number, path: string): Promise<void> {
     if (audioPeaks.has(path) || audioPeaksLoading.has(path)) return;
     audioPeaksLoading.add(path);
     try {
@@ -285,8 +285,10 @@ export function createMedia(host: MediaContext): Media {
         for (let i = 0; i < decoded.length; i++) mono[i] += ch[i] / decoded.numberOfChannels;
       }
       audioPeaks.set(path, peaksFromSamples(mono, 100));
-      const it = boardGet(host.getBoard(), id);
-      if (it && "Audio" in it.kind && it.kind.Audio.path === path) host.requestRender();
+      // No re-render here: the card that asked for the
+      // peaks paints them into its own waveform (see
+      // cards.ts). A full render would replace the card's
+      // node under any click or measurement in flight.
     } catch {
       // No waveform; the card keeps its empty track.
     } finally {

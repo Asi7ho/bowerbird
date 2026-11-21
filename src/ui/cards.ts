@@ -95,21 +95,45 @@ function shapeOutlineSvg(shape: string, w: number, h: number, color: string): st
 // peaks yet (still decoding) a quiet centre line stands
 // in — never fake bars. The svg is the seek control: a
 // slider for keyboard users, a pointer target for the rest.
-function audioWaveSvg(peaks: number[] | undefined, pct: number, id: number): string {
-  const bars = 100;
-  const slider = `role="slider" tabindex="0" aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pct * 100)}"`;
-  if (!peaks) {
-    return `<svg class="audio-wave" data-audio-wave="${id}" viewBox="0 0 100 32" preserveAspectRatio="none" ${slider}><line x1="0" y1="16" x2="100" y2="16" stroke="#dcdce0" stroke-width="1" vector-effect="non-scaling-stroke"/></svg>`;
-  }
+// The 100 bars of a waveform, as svg rects. Shared by the
+// first render and by the in-place repaint below, so the
+// two can never drift apart.
+function waveRects(peaks: number[], pct: number): string {
   let rects = "";
-  const cut = Math.floor(pct * bars);
-  for (let i = 0; i < bars; i++) {
+  const cut = Math.floor(pct * 100);
+  for (let i = 0; i < 100; i++) {
     const p = peaks[i] ?? 0;
     const h = p > 0 ? Math.max(1.2, p * 28) : 0;
     const y = (32 - h) / 2;
     rects += `<rect data-i="${i}" x="${i}" y="${y.toFixed(2)}" width="0.62" height="${h.toFixed(2)}"${i < cut ? ' class="played"' : ""}/>`;
   }
-  return `<svg class="audio-wave" data-audio-wave="${id}" viewBox="0 0 100 32" preserveAspectRatio="none" ${slider}>${rects}</svg>`;
+  return rects;
+}
+function audioWaveSvg(peaks: number[] | undefined, pct: number, id: number): string {
+  const slider = `role="slider" tabindex="0" aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pct * 100)}"`;
+  if (!peaks) {
+    return `<svg class="audio-wave" data-audio-wave="${id}" viewBox="0 0 100 32" preserveAspectRatio="none" ${slider}><line x1="0" y1="16" x2="100" y2="16" stroke="#dcdce0" stroke-width="1" vector-effect="non-scaling-stroke"/></svg>`;
+  }
+  return `<svg class="audio-wave" data-audio-wave="${id}" viewBox="0 0 100 32" preserveAspectRatio="none" ${slider}>${waveRects(peaks, pct)}</svg>`;
+}
+// Paint freshly decoded peaks into the waveform already on
+// the board. The svg itself stays put — only its bars are
+// replaced — so a decode landing never detaches the card
+// under a click or a measurement in flight, the way a full
+// board re-render would.
+function repaintAudioWave(api: PluginContext, id: number, path: string): void {
+  const peaks = api.media.getAudioPeaks(path);
+  if (!peaks) return;
+  const it = api.board.getItem(id);
+  if (!it || !("Audio" in it.kind) || it.kind.Audio.path !== path) return;
+  const wave = document.querySelector(`[data-audio-wave="${id}"]`);
+  if (!wave) return;
+  const state = api.media.getAudioState();
+  const dur = state.id === id && state.duration > 0 ? state.duration : (api.media.getAudioDuration(path) ?? NaN);
+  const cur = state.id === id ? state.currentTime : 0;
+  const pct = isFinite(dur) && dur > 0 ? Math.min(1, Math.max(0, cur / dur)) : 0;
+  wave.innerHTML = waveRects(peaks, pct);
+  wave.setAttribute("aria-valuenow", String(Math.round(pct * 100)));
 }
 const AUDIO_PLAY_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
 const AUDIO_PAUSE_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>`;
@@ -392,7 +416,12 @@ export function activate(api: PluginContext): void {
       // per path. A plain render (slides, library, export)
       // draws whatever is cached and never starts a decode.
       const peaks = api.media.getAudioPeaks(path);
-      if (!peaks && !plain) api.media.loadAudioPeaks(c.id, path);
+      if (!peaks && !plain) {
+        // Paint the peaks into this card's waveform when
+        // the decode lands, instead of re-rendering the
+        // board (see repaintAudioWave above).
+        void api.media.loadAudioPeaks(c.id, path).then(() => repaintAudioWave(api, c.id, path));
+      }
       // A voice recording carries its transcript under the
       // player, hidden by default. The toggle is a quiet
       // icon now, not a text button; once the card is grown
