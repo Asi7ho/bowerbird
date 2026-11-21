@@ -22,6 +22,7 @@ import { handleAppFileRequest, MIME } from "./appFile";
 import * as context from "./context";
 import { isPrivateHost, linkHref, metaContent, readCappedText, tagContent } from "./link-preview";
 import { openBoardFile } from "./open-with";
+import { CORNERS, clampPanelWidth, cleanShortcuts, parseAppSettings, serialiseAppSettings } from "./app-settings";
 // The plugin TypeScript transpiler, bundled into electron-dist at
 // build time (scripts/bundle-sucrase.mjs). The packaged app ships
 // no node_modules, so the transpiler is a file inside electron-dist.
@@ -36,7 +37,8 @@ let boardView: WebContentsView | null = null;
 
 // Which screen corner reveals the board, chosen in Settings.
 // Default bottom-left, per the user's choice. "off" disables it.
-const CORNERS = ["bottom-left", "bottom-right", "top-left", "top-right", "off"];
+// (The CORNERS list lives in app-settings.ts with the rest of
+// the settings parsing.)
 let cornerReveal = "bottom-left";
 // Current board, as a display name: null (or "Main") is the
 // default board at the base folder's board.json; any other
@@ -60,42 +62,20 @@ let dockVisible = true;
 let hardwareAcceleration = true;
 let shortcuts: Record<string, string> = {};
 
-function clampPanelWidth(w: unknown): number {
-  const n = typeof w === "number" && Number.isFinite(w) ? Math.round(w) : 290;
-  return Math.min(600, Math.max(200, n));
-}
-
 function appSettingsPath(): string {
   return path.join(app.getPath("userData"), "settings.json");
 }
 
-// Shortcut overrides from disk or IPC: an object of string
-// action ids to string bindings, capped at 50 entries. Bad
-// entries are dropped, never trusted; the renderer ignores
-// unknown ids and bad bindings when it loads them.
-function cleanShortcuts(v: unknown): Record<string, string> {
-  const out: Record<string, string> = {};
-  if (!v || typeof v !== "object" || Array.isArray(v)) return out;
-  for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
-    if (typeof val !== "string") continue;
-    if (Object.keys(out).length >= 50) break;
-    out[k] = val.slice(0, 64);
-  }
-  return out;
-}
-
 function loadAppSettings(): void {
   try {
-    const parsed = JSON.parse(fs.readFileSync(appSettingsPath(), "utf8"));
-    if (parsed && CORNERS.includes(parsed.corner)) cornerReveal = parsed.corner;
-    if (parsed && Array.isArray(parsed.panelOrder)) panelOrder = parsed.panelOrder.filter((x: unknown) => typeof x === "string");
-    if (parsed && typeof parsed.panelWidth === "number") panelWidth = clampPanelWidth(parsed.panelWidth);
-    if (parsed && typeof parsed.dockVisible === "boolean") dockVisible = parsed.dockVisible;
-    if (parsed && typeof parsed.hardwareAcceleration === "boolean") hardwareAcceleration = parsed.hardwareAcceleration;
-    if (parsed) shortcuts = cleanShortcuts(parsed.shortcuts);
-    if (parsed && typeof parsed.currentBoard === "string" && parsed.currentBoard && parsed.currentBoard !== "Main") {
-      currentBoard = parsed.currentBoard.slice(0, 64);
-    }
+    const s = parseAppSettings(JSON.parse(fs.readFileSync(appSettingsPath(), "utf8")));
+    cornerReveal = s.corner;
+    panelOrder = s.panelOrder;
+    panelWidth = s.panelWidth;
+    dockVisible = s.dockVisible;
+    hardwareAcceleration = s.hardwareAcceleration;
+    shortcuts = s.shortcuts;
+    currentBoard = s.currentBoard;
   } catch {
     // No settings file yet: keep the default.
   }
@@ -106,7 +86,10 @@ function saveAppSettings(): void {
     const file = appSettingsPath();
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const tmp = file + ".tmp";
-    fs.writeFileSync(tmp, JSON.stringify({ corner: cornerReveal, panelOrder, panelWidth, dockVisible, hardwareAcceleration, shortcuts, currentBoard }));
+    fs.writeFileSync(tmp, serialiseAppSettings({
+      corner: cornerReveal, panelOrder, panelWidth, dockVisible,
+      hardwareAcceleration, shortcuts, currentBoard,
+    }));
     fs.renameSync(tmp, file);
   } catch {
     // Settings are a convenience, not board data: never fail the app
