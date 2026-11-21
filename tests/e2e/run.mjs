@@ -1207,6 +1207,67 @@ async function main() {
       });
     });
 
+    await check("an audio card has a controls row below the wave, no big button", async () => {
+      // The big white circle over the wave is gone: a small
+      // play/pause, a timeline with the times, and the
+      // transcript toggle sit in a row below the bars. The
+      // timeline seeks, like the wave. Reuses the grid's
+      // birdsong card, so no new card changes the board.
+      const board = readBoard();
+      const audio = board.items.find((it) => "Audio" in it.kind && it.pos.x === 400 && it.pos.y === 320);
+      assert.ok(audio, "grid audio card on the board");
+      const id = audio.id;
+      await page.keyboard.press("f");
+      await new Promise((r) => setTimeout(r, 500));
+      const layout = await waitFor("audio timeline shows the times", async () => {
+        const l = await page.evaluate((cid) => {
+          const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
+          if (!card) return null;
+          const waveEl = card.querySelector(".audio-wave-wrap");
+          const row = card.querySelector(".audio-controls");
+          const play = card.querySelector("button.audio-play");
+          const tl = card.querySelector(".audio-timeline");
+          if (!waveEl || !row || !play || !tl) return null;
+          const w = waveEl.getBoundingClientRect();
+          const r = row.getBoundingClientRect();
+          const p = play.getBoundingClientRect();
+          return {
+            rowBelowWave: r.top >= w.bottom - 1,
+            playSmall: p.width <= 28 && p.height <= 28,
+            playInRow: row.contains(play),
+            hasTimes: tl.querySelectorAll(".audio-time").length === 2,
+            hasTrack: !!tl.querySelector(".audio-track-fill"),
+            current: tl.querySelector(".audio-time-current")?.textContent ?? "",
+            total: tl.querySelector(".audio-time-total")?.textContent ?? "",
+          };
+        }, String(id));
+        return l && /^\d+:\d{2}$/.test(l.total) ? l : null;
+      });
+      assert.ok(layout, "audio controls row found");
+      assert.ok(layout.rowBelowWave, "controls row sits below the wave");
+      assert.ok(layout.playSmall, "play button is small, not the big circle");
+      assert.ok(layout.playInRow, "play button lives in the controls row");
+      assert.ok(layout.hasTimes, "timeline shows current and total time");
+      assert.ok(layout.hasTrack, "timeline has a progress track");
+      assert.ok(/^\d+:\d{2}$/.test(layout.current), "current time shown");
+      // The small play toggles playback.
+      await page.locator(`#cards .card[data-id="${id}"] .audio-play`).first().click();
+      await waitFor("small play shows Pause", async () => {
+        const label = await page.evaluate((cid) => document.querySelector(`#cards .card[data-id="${cid}"] button.audio-play`)?.getAttribute("aria-label") ?? "", String(id));
+        return label === "Pause audio" ? true : null;
+      });
+      // Clicking the timeline track three quarters across seeks there.
+      const track = page.locator(`#cards .card[data-id="${id}"] .audio-track`).first();
+      const tbox = await track.boundingBox();
+      assert.ok(tbox, "timeline track on screen");
+      await page.mouse.click(tbox.x + tbox.width * 0.75, tbox.y + tbox.height / 2);
+      await page.locator(`#cards .card[data-id="${id}"] .audio-play`).first().click();
+      await waitFor("timeline seek shows", async () => {
+        const n = await page.locator(`#cards .card[data-id="${id}"] .audio-wave`).first().locator("rect.played").count();
+        return n >= 68 && n <= 84 ? n : null;
+      });
+    });
+
     await check("a video card shows a poster, not a video element, until played", async () => {
       // A video card is a still image until its play button is
       // pressed: no <video> element in the DOM, so a board of
