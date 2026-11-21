@@ -107,7 +107,6 @@ export function activate(api: PluginContext): void {
     `<div class="col">${titleHtml(name, width)}<div class="sub" style="font-size:12px">${sub}</div></div>`;
   const titleCol = (name: string, width: number): string =>
     `<div class="col">${titleHtml(name, width)}</div>`;
-  const formatKB = (size_bytes: number): number => Math.round(num(size_bytes, 0) / 1024);
 
   // Markdown is a per-character regex walk, so re-parsing every note
   // on every render is the most expensive part of a rebuild for a
@@ -470,16 +469,15 @@ export function activate(api: PluginContext): void {
     title: "3D model",
     render: (item, data, plain = false) => {
       const c = chrome(item, plain);
-      const { path, size_bytes } = data as Model3DData;
+      const { path } = data as Model3DData;
       const name = path.split("/").pop() ?? path;
-      const sub = `${formatKB(size_bytes)} KB · GLB`;
       // A plain render (a preview outside the board) has no
       // viewer to mount, so it gets a static tile instead
       // of an empty canvas.
       if (plain) {
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
           <div class="model3d-tile" style="flex:1 1 auto">3D</div>
-          ${titleHtml(name, c.ww - 24)}<div class="sub" style="font-size:12px">${sub}</div></div></div>`;
+          ${titleHtml(name, c.ww - 24)}</div></div>`;
       }
       // The canvas is the viewport: drag rotates the model.
       // It is transparent — the model is drawn by the one
@@ -495,7 +493,7 @@ export function activate(api: PluginContext): void {
         <div style="position:relative;width:${c.ww - 24}px;height:${canvasH}px;flex:none">
           <canvas class="model3d clickable" data-id="${c.id}" data-path="${api.text.escapeHtml(path)}" style="width:100%;height:100%;border-radius:10px;background:var(--bg-system)"></canvas>
         </div>
-        ${titleHtml(name, c.ww - 24)}<div class="sub" style="font-size:12px">${sub}</div></div></div>`;
+        ${titleHtml(name, c.ww - 24)}</div></div>`;
     },
   });
 }
