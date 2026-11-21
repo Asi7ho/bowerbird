@@ -319,31 +319,28 @@ export function activate(api: PluginContext): void {
   });
 
   // A native design file (.psd, .ai) is one card, like a
-  // PDF: a preview of the artwork on top, the file name
-  // below it. The preview is the rendered artwork
-  // (the PSD's composite, the AI's first page), embedded
-  // alongside the source; without one — a file whose
-  // artwork could not be rendered — the card is a tile in
-  // the format's colour, like the PDF's red tile. With a
-  // preview, a small format pill rides on its top-right
-  // corner, so the artwork is never mistaken for a plain
-  // image; the tile already says the format in full, so
-  // it gets no pill.
+  // PDF: a preview of the artwork. The preview is the
+  // rendered artwork (the PSD's composite, the AI's first
+  // page), embedded alongside the source; without one — a
+  // file whose artwork could not be rendered — the card is
+  // a tile in the format's colour, like the PDF's red tile.
+  // With a preview, a small format pill rides on its
+  // bottom-right corner, so the artwork is never mistaken
+  // for a plain image; the tile already says the format in
+  // full, so it gets no pill.
   api.cards.registerBuiltin({
     kind: "FileCard",
     title: "Design file",
     render: (item, data, plain = false) => {
       const c = chrome(item, plain);
-      const { path, format, preview } = data as FileCardData;
-      const name = path.split("/").pop() ?? path;
+      const { format, preview } = data as FileCardData;
       const label = format === "psd" ? "PSD" : "AI";
       const tint = format === "psd" ? "#2E86AB" : "#FF6B35";
       const previewHtml = preview
         ? `<img src="${api.files.fileUrl(preview)}" draggable="false" alt="" style="width:100%;height:100%;object-fit:contain;display:block" />`
         : `<div class="filecard-tile" style="background:${api.text.tint(tint, 0.88)};color:${tint}">${label}</div>`;
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
-        <div style="flex:1 1 auto;min-height:0;background:var(--bg-system);border-radius:10px;overflow:hidden;position:relative">${previewHtml}${preview ? `<span class="filecard-pill" style="color:${tint}">${label}</span>` : ""}</div>
-        ${titleHtml(name, c.ww - 24)}</div></div>`;
+        <div style="flex:1 1 auto;min-height:0;background:var(--bg-system);border-radius:10px;overflow:hidden;position:relative">${previewHtml}${preview ? `<span class="filecard-pill" style="color:${tint}">${label}</span>` : ""}</div></div></div>`;
     },
   });
 
