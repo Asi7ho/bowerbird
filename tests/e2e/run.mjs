@@ -36,11 +36,12 @@ const EMPTY_BOARD = {
 // CI runners have no GPU: Chromium renders through
 // SwiftShader (software GL), so on a loaded shared runner
 // the app can take well over a minute to answer a click,
-// a key or a save. 240s keeps the suite green there
-// without hiding a genuine hang on a fast machine: on the
-// 2026-11-21 main run the same five checks each burned the
-// full 120s, so the wait was the failure, not the app.
-const READY_TIMEOUT_MS = 240000;
+// a key or a save. 120s keeps the suite green there
+// without hiding a genuine hang on a fast machine. 240s
+// was tried and did not help: the five checks that burned
+// the full wait were a real double-click race in the app,
+// now fixed, so the wait is back to 120s.
+const READY_TIMEOUT_MS = 120000;
 
 // A short spoken sentence, so the voice-note check records
 // real speech and the transcript assertion proves Whisper
