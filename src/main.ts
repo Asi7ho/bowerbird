@@ -758,6 +758,13 @@ async function init(): Promise<void> {
     },
     getAudioDuration: (path) => C.media.audioDurations.get(path),
     loadAudioDuration: (id, path) => C.media.loadAudioDuration(id, path),
+    getAudioPeaks: (path) => C.media.getAudioPeaks(path),
+    loadAudioPeaks: (id, path) => C.media.loadAudioPeaks(id, path),
+    // Seek an audio card to a time in seconds, whether or
+    // not it is playing. The board view's waveform: a click
+    // on a card that is not playing loads it paused at that
+    // time, so play starts there.
+    seekAudioTo: (id, path, time) => { C.media.seekAudioTo(id, path, time); },
     transcribeAudio: (blob) => C.media.transcribeAudio(blob),
     audioFailed: (path) => C.media.audioFailed.has(path),
     formatAudioTime: (sec) => C.media.formatAudioTime(sec),
@@ -769,9 +776,9 @@ async function init(): Promise<void> {
     // is live; playing another moves it there.
     playVideo: (id) => { C.media.playVideo(id); },
     getVideoState: () => C.media.getVideoState(),
-    // Seek the playing audio card to a time in seconds. The
-    // board view's seek slider. No-op when that card is not
-    // the one playing.
+    // Seek the playing audio card to a time in seconds.
+    // No-op when that card is not the one playing; the
+    // waveform uses seekAudioTo instead.
     seekAudio: (id, time) => {
       const s = C.media.getAudioState();
       if (s.el && s.id === id) {
