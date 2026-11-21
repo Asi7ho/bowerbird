@@ -41,8 +41,8 @@ const add = (pos, size, kind) => {
 add({ x: 100, y: 100 }, { w: 360, h: 280 }, { Image: { path: asset("welcome-bower.jpg") } });
 add({ x: 500, y: 100 }, { w: 300, h: 140 }, { UrlCard: { url: "https://example.com", title: "Example Domain", description: "A sample link card that should not show", image: null, icon: null, embed: false } });
 add({ x: 840, y: 100 }, { w: 300, h: 280 }, { PdfCard: { path: local("sample.pdf"), size_bytes: 729 } });
-add({ x: 100, y: 420 }, { w: 360, h: 234 }, { FileCard: { path: fixture("sample.psd"), size_bytes: 123456, format: "psd", preview: asset("welcome-bower.jpg") } });
-add({ x: 500, y: 420 }, { w: 360, h: 248 }, { FileCard: { path: fixture("sample.ai"), size_bytes: 98765, format: "ai", preview: asset("welcome-garden-preview.png") } });
+add({ x: 100, y: 420 }, { w: 360, h: 225 }, { FileCard: { path: fixture("sample.psd"), size_bytes: 123456, format: "psd", preview: asset("welcome-bower.jpg") } });
+add({ x: 500, y: 420 }, { w: 360, h: 240 }, { FileCard: { path: fixture("sample.ai"), size_bytes: 98765, format: "ai", preview: asset("welcome-garden-preview.png") } });
 add({ x: 900, y: 420 }, { w: 360, h: 280 }, { Video: { source: asset("welcome-video.mp4"), remote: false, size_bytes: 458653 } });
 add({ x: 100, y: 740 }, { w: 360, h: 280 }, { Model3D: { path: local("cube.glb"), size_bytes: 12345 } });
 add({ x: 500, y: 740 }, { w: 360, h: 164 }, { Audio: { path: asset("welcome-birdsong.mp3"), transcript: "The quick brown fox jumps over the lazy dog." } });
