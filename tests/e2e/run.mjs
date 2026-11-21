@@ -37,10 +37,7 @@ const EMPTY_BOARD = {
 // SwiftShader (software GL), so on a loaded shared runner
 // the app can take well over a minute to answer a click,
 // a key or a save. 120s keeps the suite green there
-// without hiding a genuine hang on a fast machine. 240s
-// was tried and did not help: the five checks that burned
-// the full wait were a real double-click race in the app,
-// now fixed, so the wait is back to 120s.
+// without hiding a genuine hang on a fast machine.
 const READY_TIMEOUT_MS = 120000;
 
 // A short spoken sentence, so the voice-note check records
