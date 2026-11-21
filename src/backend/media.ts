@@ -3,6 +3,7 @@
 // guards so a late result never writes into the new board.
 
 import { api } from "./api";
+import { peaksFromSamples } from "./audio-peaks";
 import { boardGet, type Board } from "./model";
 
 export interface MediaContext {
@@ -31,6 +32,17 @@ export interface Media {
   loadPdfPage(id: number, path: string): void;
   renderPdfPage(id: number, path: string): Promise<void>;
   loadAudioDuration(id: number, path: string): void;
+  // Waveform peaks for an audio card (100 bars, 0..1), from
+  // a real decode of the file — never fake bars. Loaded on
+  // demand like the duration, cached per path.
+  getAudioPeaks(path: string): number[] | undefined;
+  loadAudioPeaks(id: number, path: string): void;
+  // Seek an audio card to a time in seconds. Unlike the
+  // plugin API's seekAudio (playing only), this also works
+  // on a card that is not playing: it loads the file paused
+  // at that time, so pressing play starts there instead of
+  // from the top.
+  seekAudioTo(id: number, path: string, time: number): void;
   updateAudioProgress(): void;
   formatAudioTime(sec: number): string;
   toggleAudio(id: number, path: string): void;
@@ -162,19 +174,27 @@ export function createMedia(host: MediaContext): Media {
     const s = Math.floor(sec % 60);
     return `${m}:${s.toString().padStart(2, "0")}`;
   }
+  // The waveform is the progress display now: while the
+  // audio plays, the bars up to the playback position turn
+  // dark. No full re-render — the bars are already in the
+  // DOM, only their played class moves, a few times a
+  // second. A render (play/pause, track end) paints the
+  // same state from the card itself.
+  function paintWaveProgress(wave: Element, pct: number): void {
+    const bars = wave.querySelectorAll("rect[data-i]");
+    const cut = Math.floor(pct * bars.length);
+    bars.forEach((b) => {
+      const i = Number((b as HTMLElement).dataset.i);
+      b.classList.toggle("played", i < cut);
+    });
+  }
   function updateAudioProgress(): void {
     if (!audioEl || audioId === null) return;
     const dur = audioEl.duration;
     const cur = audioEl.currentTime;
-    const timeEl = host.getCardsEl().querySelector(`[data-audio-time="${audioId}"]`);
-    if (timeEl) timeEl.textContent = formatAudioTime(cur);
-    const durEl = host.getCardsEl().querySelector(`[data-audio-dur="${audioId}"]`);
-    if (durEl && isFinite(dur)) durEl.textContent = formatAudioTime(dur);
-    const seekEl = host.getCardsEl().querySelector(`[data-audio-seek="${audioId}"]`) as HTMLInputElement | null;
-    if (seekEl && isFinite(dur) && dur > 0) {
-      seekEl.style.setProperty("--seek-pct", `${Math.round((cur / dur) * 100)}%`);
-      if (document.activeElement !== seekEl) seekEl.value = String(Math.round((cur / dur) * 1000));
-    }
+    if (!isFinite(dur) || dur <= 0) return;
+    const wave = host.getCardsEl().querySelector(`[data-audio-wave="${audioId}"]`);
+    if (wave) paintWaveProgress(wave, Math.min(1, Math.max(0, cur / dur)));
   }
   const audioFailed = new Set<string>();
   // Data-URL fallbacks for files whose app-file load failed,
@@ -220,6 +240,90 @@ export function createMedia(host: MediaContext): Media {
     };
     probe.preload = "metadata";
     probe.onloadedmetadata = onAudioMetadata(probe);
+  }
+  // Waveform peaks, cached per path and decoded once: the
+  // same file on two cards shares one decode. A decode in
+  // flight is not started twice. A failed decode is not
+  // an error state — the card shows its empty track and
+  // still plays; only the waveform is missing.
+  const audioPeaks = new Map<string, number[]>();
+  const audioPeaksLoading = new Set<string>();
+  function getAudioPeaks(path: string): number[] | undefined {
+    return audioPeaks.get(path);
+  }
+  async function loadAudioPeaks(id: number, path: string): Promise<void> {
+    if (audioPeaks.has(path) || audioPeaksLoading.has(path)) return;
+    audioPeaksLoading.add(path);
+    try {
+      let bytes: ArrayBuffer;
+      try {
+        const res = await fetch(api.fileUrl(path));
+        if (!res.ok) throw new Error(`peaks fetch failed: ${res.status}`);
+        bytes = await res.arrayBuffer();
+      } catch {
+        // Same app-file fallback as the duration probe: a
+        // file that only loads as a data URL still gets a
+        // waveform.
+        const { base64 } = await api.readFileBase64(path);
+        const bin = atob(base64);
+        const arr = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+        bytes = arr.buffer;
+      }
+      const ctx = new AudioContext();
+      let decoded: AudioBuffer;
+      try {
+        decoded = await ctx.decodeAudioData(bytes);
+      } finally {
+        void ctx.close();
+      }
+      if (decoded.numberOfChannels === 0 || decoded.length === 0) return;
+      // Mix down to mono, whatever the recording's format.
+      const mono = new Float32Array(decoded.length);
+      for (let c = 0; c < decoded.numberOfChannels; c++) {
+        const ch = decoded.getChannelData(c);
+        for (let i = 0; i < decoded.length; i++) mono[i] += ch[i] / decoded.numberOfChannels;
+      }
+      audioPeaks.set(path, peaksFromSamples(mono, 100));
+      const it = boardGet(host.getBoard(), id);
+      if (it && "Audio" in it.kind && it.kind.Audio.path === path) host.requestRender();
+    } catch {
+      // No waveform; the card keeps its empty track.
+    } finally {
+      audioPeaksLoading.delete(path);
+    }
+  }
+  // A seek asked for before the audio's metadata loaded:
+  // applied on loadedmetadata instead of being lost.
+  let pendingSeek: { id: number; time: number } | null = null;
+  function applyPendingSeek(el: HTMLAudioElement, id: number): void {
+    if (pendingSeek && pendingSeek.id === id) {
+      el.currentTime = pendingSeek.time;
+      pendingSeek = null;
+    }
+  }
+  function seekAudioTo(id: number, path: string, time: number): void {
+    if (audioId === id && audioEl) {
+      if (audioEl.readyState === 0) pendingSeek = { id, time };
+      else audioEl.currentTime = time;
+      updateAudioProgress();
+      return;
+    }
+    // Not the current audio: load it paused at that time,
+    // so pressing play starts there instead of from the
+    // top. A later toggleAudio resumes this same element.
+    if (audioEl) audioEl.pause();
+    audioEl = new Audio(mediaDataUrls.get(path) ?? api.fileUrl(path));
+    audioId = id;
+    pendingSeek = { id, time };
+    audioEl.onloadedmetadata = () => {
+      if (audioEl && isFinite(audioEl.duration)) audioDurations.set(path, audioEl.duration);
+      if (audioEl) applyPendingSeek(audioEl, id);
+      updateAudioProgress();
+    };
+    audioEl.ontimeupdate = () => updateAudioProgress();
+    audioEl.onended = () => { audioId = null; host.requestRender(); };
+    host.requestRender();
   }
   async function renderPdfPage(id: number, path: string): Promise<void> {
     if (pdfRendering.has(id) || pdfFailed.has(path)) return;
@@ -303,6 +407,18 @@ export function createMedia(host: MediaContext): Media {
       host.requestRender();
       return;
     }
+    if (audioId === id && audioEl) {
+      // Paused, possibly after a waveform seek: resume
+      // this same element instead of starting a new one
+      // from the top.
+      audioEl.play().catch((err) => {
+        audioId = null;
+        host.toast(`Could not play audio: ${String(err)}`);
+        host.requestRender();
+      });
+      host.requestRender();
+      return;
+    }
     if (audioEl) audioEl.pause();
     // If the app-file probe already fell back to a data
     // URL for this file, play from that URL, not the
@@ -311,6 +427,7 @@ export function createMedia(host: MediaContext): Media {
     audioId = id;
     audioEl.onloadedmetadata = () => {
       if (audioEl && isFinite(audioEl.duration)) audioDurations.set(path, audioEl.duration);
+      if (audioEl) applyPendingSeek(audioEl, id);
       updateAudioProgress();
     };
     audioEl.ontimeupdate = () => updateAudioProgress();
@@ -335,6 +452,8 @@ export function createMedia(host: MediaContext): Media {
     mediaDataUrls.clear();
     audioDurations.clear();
     audioFailed.clear();
+    audioPeaks.clear();
+    pendingSeek = null;
     pdfSearchText.clear();
     pdfSearchIndexing.clear();
     pdfPages.clear();
@@ -370,6 +489,9 @@ export function createMedia(host: MediaContext): Media {
     loadPdfPage,
     renderPdfPage,
     loadAudioDuration,
+    getAudioPeaks,
+    loadAudioPeaks,
+    seekAudioTo,
     updateAudioProgress,
     formatAudioTime,
     toggleAudio,
