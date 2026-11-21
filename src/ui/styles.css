@@ -402,7 +402,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 .card-decorations-right .card-progress {
   color: var(--grey); white-space: nowrap;
 }
-.card button, .card .clickable, .card textarea, .card a, .card video, .card input, .card .note-body, .card .audio-transcript-text, .card .audio-wave { pointer-events: auto; }
+.card button, .card .clickable, .card textarea, .card a, .card video, .card input, .card .note-body, .card .audio-transcript-text, .card .audio-wave, .card .audio-timeline { pointer-events: auto; }
 .card .note-body { padding: 14px; line-height: 1.55; word-wrap: break-word; }
 .card .note-body p { margin: 0 0 6px; }
 .card .note-body h1, .card .note-body h2, .card .note-body h3 {
@@ -565,9 +565,10 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 }
 /* Audio is a waveform now, like the other cards' visual
    content: real peaks on a quiet grey field, the played
-   bars dark. The waveform is the seek control; the play
-   button is a white circle centred over it, like the
-   swatch pill — no purple tile, no slider, no text. */
+   bars dark. The waveform is a seek control, and so is the
+   timeline in the controls row below it — small play/pause,
+   a thin track with the times, and the transcript toggle.
+   No purple tile, no file name. */
 .card .audio-wave-wrap {
   position: relative; flex: 1 1 auto; min-height: 0;
   background: var(--bg-system); border-radius: 10px; overflow: hidden;
@@ -579,14 +580,38 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 .card .audio-wave rect { fill: #dcdce0; }
 .card .audio-wave rect.played { fill: var(--ink); }
 .card .audio-wave:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.card .audio-play {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  width: 48px; height: 48px; border-radius: 50%;
-  background: #fff; border: 1px solid var(--hairline); box-shadow: var(--shadow-sm);
-  display: flex; align-items: center; justify-content: center;
-  color: var(--ink); cursor: pointer; padding: 0;
+/* The controls row under the wave: a small quiet play/pause,
+   the timeline, and the transcript toggle. */
+.audio-controls {
+  display: flex; align-items: center; gap: 8px; flex: none;
 }
-.card .audio-play svg { width: 18px; height: 18px; flex: none; }
+.card .audio-play {
+  width: 24px; height: 24px; border-radius: 6px; flex: none;
+  background: transparent; border: 0; box-shadow: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--grey); cursor: pointer; padding: 0;
+}
+.card .audio-play:hover { color: var(--ink); }
+.card .audio-play svg { width: 16px; height: 16px; flex: none; }
+.audio-timeline {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; align-items: center; gap: 6px;
+  cursor: pointer;
+}
+.audio-timeline:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.audio-timeline .audio-time {
+  font-size: 11px; line-height: 1; color: var(--ink);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.audio-timeline .audio-time-total { color: var(--grey); }
+.audio-track {
+  flex: 1 1 auto; min-width: 0; height: 4px; border-radius: 2px;
+  background: #dcdce0; position: relative; overflow: hidden;
+}
+.audio-track-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  background: var(--ink); border-radius: 2px;
+}
 /* Voice-note transcript: the toggle is a quiet icon below
    the waveform (and above the text once grown). The text
    fills the rest of the card and scrolls, so a long note
@@ -600,6 +625,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 .audio-transcript-toggle:hover { color: var(--ink); }
 .audio-transcript-toggle svg { width: 14px; height: 14px; flex: none; }
 .card .audio-transcript-toggle { align-self: flex-start; }
+.card .audio-controls .audio-transcript-toggle { align-self: center; }
 .card .audio-transcript-text {
   flex: 1 1 auto; min-height: 0; overflow-y: auto;
   font-size: 13px; line-height: 1.45; color: var(--ink);

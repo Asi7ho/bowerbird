@@ -435,11 +435,13 @@ function navigateElements(dir: 1 | -1): void {
 
 // ---------------------------------------------------------------- input
 
-// A waveform drag-scrub in progress: the card id and file
-// path, so pointermove can keep seeking without re-hitting
-// the board. Set by the cards pointerdown below, cleared
-// on pointerup.
-let waveScrub: { id: number; path: string } | null = null;
+// An audio drag-scrub in progress: the card id, file path,
+// and the element whose width maps to the duration — the
+// waveform itself, or the timeline's track (not the whole
+// row, whose time labels flank it). Pointermove keeps
+// seeking without re-hitting the board. Set by the cards
+// pointerdown below, cleared on pointerup.
+let audioScrub: { id: number; path: string; el: Element } | null = null;
 // A drag that started on a playing video: the press is on the
 // <video> element, and the click that follows the pointerup
 // would land on its controls and toggle playback (or seek).
@@ -449,16 +451,14 @@ let dragStartedOnVideo = false;
 // Until when a click on a video is swallowed (see above): a
 // timestamp, so a genuine click a moment later still works.
 let suppressVideoClickUntil = 0;
-function seekWaveAt(e: PointerEvent): void {
-  if (!waveScrub) return;
-  const wave = S.cardsEl.querySelector(`[data-audio-wave="${waveScrub.id}"]`) as SVGElement | null;
-  if (!wave) return;
-  const r = wave.getBoundingClientRect();
+function seekAudioAt(e: PointerEvent): void {
+  if (!audioScrub) return;
+  const r = audioScrub.el.getBoundingClientRect();
   if (r.width <= 0) return;
   const frac = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
-  const dur = S.api.media.getAudioDuration(waveScrub.path) ?? S.api.media.getAudioState().duration;
+  const dur = S.api.media.getAudioDuration(audioScrub.path) ?? S.api.media.getAudioState().duration;
   if (!isFinite(dur) || dur <= 0) return;
-  S.api.media.seekAudioTo(waveScrub.id, waveScrub.path, frac * dur);
+  S.api.media.seekAudioTo(audioScrub.id, audioScrub.path, frac * dur);
 }
 
 export function attachBoardListeners(): void {
@@ -471,7 +471,7 @@ S.boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
   // reaches the controls — the click that follows a drag
   // that actually moved is swallowed by the capture-phase
   // click listener below instead.
-  if (target.closest("#toolbar, #settings-backdrop, #toast, #plugin-overlays, #search-box, #title-bar, input, canvas.model3d, [data-audio-wave]")) return;
+  if (target.closest("#toolbar, #settings-backdrop, #toast, #plugin-overlays, #search-box, #title-bar, input, canvas.model3d, [data-audio-wave], [data-audio-timeline]")) return;
   // A board click or drag must never start a native text selection
   // across the cards (bug: clicking anywhere highlighted all text).
   if (!target.closest("textarea.note-edit")) window.getSelection()?.removeAllRanges();
@@ -679,25 +679,30 @@ S.cardsEl.addEventListener("click", (e: MouseEvent) => {
   }
 });
 
-  // The waveform is the seek control: pointerdown seeks, and
-  // dragging across it scrubs. The board's own pointerdown
-  // ignores it (see the guard above), so this never drags the
-  // card. Arrow keys seek when the waveform has focus, instead
-  // of nudging the selection.
+  // The waveform and the timeline are both seek controls:
+  // pointerdown seeks, and dragging across them scrubs. The
+  // board's own pointerdown ignores them (see the guard
+  // above), so this never drags the card. Arrow keys seek
+  // when either has focus, instead of nudging the selection.
   S.cardsEl.addEventListener("pointerdown", (e: PointerEvent) => {
-    const wave = (e.target as HTMLElement).closest("[data-audio-wave]") as SVGElement | null;
-    if (!wave) return;
-    const id = Number(wave.dataset.audioWave);
+    const target = (e.target as HTMLElement).closest("[data-audio-wave], [data-audio-timeline]") as Element | null;
+    if (!target) return;
+    const id = Number((target as HTMLElement).dataset.audioWave ?? (target as HTMLElement).dataset.audioTimeline);
     const it = S.api.board.getItem(id);
     if (!it || !("Audio" in it.kind)) return;
     e.preventDefault();
-    waveScrub = { id, path: it.kind.Audio.path };
-    seekWaveAt(e);
+    // The seek range is the wave itself, or the timeline's
+    // track — not the whole row, whose time labels flank it.
+    const el = target.classList.contains("audio-timeline")
+      ? (target.querySelector(".audio-track") ?? target)
+      : target;
+    audioScrub = { id, path: it.kind.Audio.path, el };
+    seekAudioAt(e);
   });
   S.cardsEl.addEventListener("keydown", (e: KeyboardEvent) => {
-    const wave = (e.target as HTMLElement).closest("[data-audio-wave]") as SVGElement | null;
-    if (!wave || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
-    const id = Number(wave.dataset.audioWave);
+    const target = (e.target as HTMLElement).closest("[data-audio-wave], [data-audio-timeline]") as Element | null;
+    if (!target || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+    const id = Number((target as HTMLElement).dataset.audioWave ?? (target as HTMLElement).dataset.audioTimeline);
     const it = S.api.board.getItem(id);
     if (!it || !("Audio" in it.kind)) return;
     const state = S.api.media.getAudioState();
@@ -730,8 +735,8 @@ export function attachWindowListeners(): void {
   S.listenersAttached = true;
 
 window.addEventListener("pointermove", (e: PointerEvent) => {
-  if (waveScrub) {
-    seekWaveAt(e);
+  if (audioScrub) {
+    seekAudioAt(e);
     return;
   }
   const winPt: Pt = boardPoint(e.clientX, e.clientY);
@@ -896,7 +901,7 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
 });
 
 window.addEventListener("pointerup", (e: PointerEvent) => {
-  waveScrub = null;
+  audioScrub = null;
   if (S.pluginToolDown) {
     S.pluginToolDown = false;
     const pt = S.api.ui.getToolDef(S.tool);

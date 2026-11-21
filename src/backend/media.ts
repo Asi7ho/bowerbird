@@ -220,8 +220,21 @@ export function createMedia(host: MediaContext): Media {
     const dur = audioEl.duration;
     const cur = audioEl.currentTime;
     if (!isFinite(dur) || dur <= 0) return;
+    const pct = Math.min(1, Math.max(0, cur / dur));
     const wave = host.getCardsEl().querySelector(`[data-audio-wave="${audioId}"]`);
-    if (wave) paintWaveProgress(wave, Math.min(1, Math.max(0, cur / dur)));
+    if (wave) paintWaveProgress(wave, pct);
+    const tl = host.getCardsEl().querySelector(`[data-audio-timeline="${audioId}"]`);
+    if (tl) paintTimelineProgress(tl, pct, cur);
+  }
+  // The timeline is the progress display too: while the
+  // audio plays, the track fill grows and the current time
+  // advances. In place, like the wave bars — no re-render.
+  function paintTimelineProgress(tl: Element, pct: number, cur: number): void {
+    const fill = tl.querySelector(".audio-track-fill") as HTMLElement | null;
+    if (fill) fill.style.width = `${(pct * 100).toFixed(1)}%`;
+    const now = tl.querySelector(".audio-time-current") as HTMLElement | null;
+    if (now) now.textContent = formatAudioTime(cur);
+    tl.setAttribute("aria-valuenow", String(Math.round(pct * 100)));
   }
   const audioFailed = new Set<string>();
   // Data-URL fallbacks for files whose app-file load failed,

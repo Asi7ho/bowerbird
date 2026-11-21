@@ -135,8 +135,8 @@ function repaintAudioWave(api: PluginContext, id: number, path: string): void {
   wave.innerHTML = waveRects(peaks, pct);
   wave.setAttribute("aria-valuenow", String(Math.round(pct * 100)));
 }
-const AUDIO_PLAY_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
-const AUDIO_PAUSE_SVG = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>`;
+const AUDIO_PLAY_SVG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>`;
+const AUDIO_PAUSE_SVG = `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>`;
 // The transcript toggle: a quiet document icon, not a text
 // button. It reads as part of the card, like the swatch
 // pill, and darkens while the transcript is open.
@@ -433,9 +433,9 @@ export function activate(api: PluginContext): void {
       }
       // A voice recording carries its transcript under the
       // player, hidden by default. The toggle is a quiet
-      // icon now, not a text button; once the card is grown
-      // it sits above the text, and the text fills the card
-      // and scrolls, so a long note does not grow the card.
+      // icon in the controls row, not a text button; once
+      // the card is grown the text fills the card below the
+      // row and scrolls, so a long note does not grow the card.
       const expanded = text.length > 0 && c.hh > api.cards.audioHeights.transcriptHidden;
       const toggleHtml = text.length > 0
         ? `<button type="button" class="audio-transcript-toggle" data-action="toggle-transcript" data-id="${c.id}" aria-expanded="${expanded}" aria-label="Transcript" title="Transcript"${expanded ? ' style="color:var(--ink)"' : ""}>${TRANSCRIPT_SVG}</button>`
@@ -446,9 +446,17 @@ export function activate(api: PluginContext): void {
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
         <div class="audio-wave-wrap">
           ${audioWaveSvg(peaks, pct, c.id)}
-          <button type="button" class="audio-play clickable" data-action="play-audio" data-id="${c.id}" aria-label="${playing ? "Pause audio" : "Play audio"}">${playing ? AUDIO_PAUSE_SVG : AUDIO_PLAY_SVG}</button>
         </div>
-        ${toggleHtml}${transcriptHtml}
+        <div class="audio-controls">
+          <button type="button" class="audio-play clickable" data-action="play-audio" data-id="${c.id}" aria-label="${playing ? "Pause audio" : "Play audio"}">${playing ? AUDIO_PAUSE_SVG : AUDIO_PLAY_SVG}</button>
+          <div class="audio-timeline" data-audio-timeline="${c.id}" role="slider" tabindex="0" aria-label="Seek" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pct * 100)}">
+            <span class="audio-time audio-time-current">${api.media.formatAudioTime(cur)}</span>
+            <div class="audio-track"><div class="audio-track-fill" style="width:${(pct * 100).toFixed(1)}%"></div></div>
+            <span class="audio-time audio-time-total">${api.media.formatAudioTime(dur)}</span>
+          </div>
+          ${toggleHtml}
+        </div>
+        ${transcriptHtml}
       </div></div>`;
     },
   });
