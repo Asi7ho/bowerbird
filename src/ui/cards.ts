@@ -97,15 +97,6 @@ export function activate(api: PluginContext): void {
   };
   const safeColor = (v: unknown, fallback: string): string =>
     typeof v === "string" && /^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(v) ? v : fallback;
-  // The escaped, elided title line, and the columns it sits
-  // in: title+sub for the audio card's live time readout,
-  // title-only everywhere else. Shared by the media card
-  // renderers.
-  const titleHtml = (name: string, width: number): string =>
-    `<div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, width, 14, true))}</div>`;
-  const titleSubCol = (name: string, width: number, sub: string): string =>
-    `<div class="col">${titleHtml(name, width)}<div class="sub" style="font-size:12px">${sub}</div></div>`;
-
   // Markdown is a per-character regex walk, so re-parsing every note
   // on every render is the most expensive part of a rebuild for a
   // text-heavy board. Cache it per item object, invalidated by the
@@ -391,7 +382,7 @@ export function activate(api: PluginContext): void {
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
         <div style="display:flex;align-items:center;gap:12px">
           <button type="button" class="audio-tile clickable" data-action="play-audio" data-id="${c.id}" aria-label="${playing ? "Pause audio" : "Play audio"}" style="width:${tile}px;height:${tile}px;background:${api.text.tint("#6A4C93", 0.88)};color:#6a4c93;font-size:${tile === 56 ? 18 : 16}px">${playing ? "❚❚" : "▶"}</button>
-          ${titleSubCol(name, c.ww - 92, `<span data-audio-time="${c.id}">${api.media.formatAudioTime(cur)}</span> / <span data-audio-dur="${c.id}">${api.media.formatAudioTime(dur)}</span>`)}
+          <div class="sub" style="font-size:12px"><span data-audio-time="${c.id}">${api.media.formatAudioTime(cur)}</span> / <span data-audio-dur="${c.id}">${api.media.formatAudioTime(dur)}</span></div>
         </div>
         <input class="audio-seek" type="range" min="0" max="1000" value="${seekVal}" style="--seek-pct:${seekPct}%" data-audio-seek="${c.id}" aria-label="Seek">
         ${toggleHtml}${transcriptHtml}

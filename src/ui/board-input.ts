@@ -240,8 +240,7 @@ function startTextEdit(id: number, isNew = false): void {
 // never triggers board shortcuts.
 // Wire a rename input: Enter or leaving the field
 // commits, Escape cancels, and only the first of
-// commit/cancel runs. Shared by group-label and
-// voice-note renames.
+// commit/cancel runs. Used by the group-label rename.
 function wireRenameInput(input: HTMLInputElement, onCommit: () => void): void {
   input.focus();
   input.select();
@@ -274,38 +273,6 @@ function startGroupRename(group: number): void {
   });
 }
 
-// Is the click on a voice note's name? The card itself
-// has pointer-events: none (only its controls take
-// clicks), so a click on the name reaches the board as a
-// #cards target — the DOM target cannot say which part of
-// the card was clicked. The title's screen rect can.
-function audioTitleHit(id: number, clientX: number, clientY: number): boolean {
-  const titleEl = S.cardsEl.querySelector(`.card[data-id="${id}"] .col .title`) as HTMLElement | null;
-  if (!titleEl) return false;
-  const r = titleEl.getBoundingClientRect();
-  return clientX >= r.left && clientX <= r.right && clientY >= r.top && clientY <= r.bottom;
-}
-
-// Rename a voice note: double-clicking its name swaps the
-// title for an input, like a group label. Enter or
-// leaving the field commits (one undo step), Escape
-// cancels. An empty name clears the title, so the card
-// falls back to the file's name.
-function startAudioRename(id: number): void {
-  const it = S.api.board.getItem(id);
-  if (!it || !("Audio" in it.kind)) return;
-  const current = (it.kind.Audio.title?.trim() ?? "") || (it.kind.Audio.path.split("/").pop() ?? it.kind.Audio.path);
-  const cardEl = S.cardsEl.querySelector(`.card[data-id="${id}"]`) as HTMLElement | null;
-  const titleEl = cardEl?.querySelector(".col .title") as HTMLElement | null;
-  if (!titleEl) return;
-  const input = document.createElement("input");
-  input.className = "audio-rename";
-  input.value = current;
-  input.setAttribute("aria-label", "Voice note name");
-  titleEl.textContent = "";
-  titleEl.appendChild(input);
-  wireRenameInput(input, () => { S.api.board.setAudioTitle(id, input.value); });
-}
 
 export function commitEditingIfAny(): void {
   if (S.editingId === null) return;
@@ -560,11 +527,6 @@ S.boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
       const it = S.api.board.getItem(hit);
       if (it && "Plugin" in it.kind && S.api.cards.dispatchDoubleClick(it)) return;
       if (it && "Text" in it.kind) { startTextEdit(hit); return; }
-      // Double-clicking a voice note's name renames it,
-      // like a group label renames its group. Anywhere
-      // else on the card keeps its own behaviour (the tile
-      // plays, the seek seeks).
-      if (it && "Audio" in it.kind && audioTitleHit(hit, e.clientX, e.clientY)) { startAudioRename(hit); return; }
       if (it && "UrlCard" in it.kind) { openExternal(it.kind.UrlCard.url); return; }
       if (it && "PdfCard" in it.kind) { openExternal(it.kind.PdfCard.path); return; }
       if (it && "Image" in it.kind) { openExternal(it.kind.Image.path); return; }
