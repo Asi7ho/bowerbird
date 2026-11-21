@@ -985,6 +985,9 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   background: #1c1c1e;
   color: #fff; font-size: 13px; padding: 10px 14px; border-radius: 12px;
   display: none; z-index: 30; max-width: 70vw; box-shadow: var(--shadow-md);
+  /* A notification only: it never takes clicks, so it
+     cannot cover a card control underneath it. */
+  pointer-events: none;
 }
 #toast.show { display: block; }
 
