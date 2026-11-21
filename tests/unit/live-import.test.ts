@@ -3,7 +3,7 @@
 // source file, and translating a fresh import onto the group's
 // current position. Pure functions, no DOM.
 import { describe, expect, it } from "vitest";
-import { base64ToBytes, fileCardSize, findSourceGroup, groupBBox, translateImportedToAnchor } from "../../src/backend/live-import";
+import { base64ToBytes, fileCardHeightForWidth, fileCardSize, findSourceGroup, groupBBox, translateImportedToAnchor } from "../../src/backend/live-import";
 import type { Board } from "../../src/backend/model";
 
 function boardWithGroups(groups: Board["groups"]): Board {
@@ -58,16 +58,26 @@ describe("groupBBox", () => {
 describe("fileCardSize", () => {
   it.each([
     // [artwork w, h, card w, h] — 360 wide, preview height
-    // from the aspect (preview 336 wide, +70 for the title
-    // and sub), capped at 360, floored at 80.
-    [200, 120, 360, 272], // (120/200)*336 = 201.6, +70
-    [100, 100, 360, 406], // square: preview 336, +70
-    [100, 1000, 360, 430], // very tall: preview capped at 360
-    [1000, 10, 360, 150], // very wide: preview floored at 80
+    // from the aspect (preview 336 wide, +24 for the card's
+    // vertical padding), capped at 360, floored at 80.
+    [200, 120, 360, 226], // (120/200)*336 = 201.6, +24
+    [100, 100, 360, 360], // square: preview 336, +24
+    [100, 1000, 360, 384], // very tall: preview capped at 360
+    [1000, 10, 360, 104], // very wide: preview floored at 80
+    [600, 400, 360, 248], // 3:2, the welcome previews
     [0, 0, 360, 264], // missing artwork: the video card's size
     [-5, 100, 360, 264],
   ])("fileCardSize(%i, %i) is %ix%i", (w, h, cw, ch) => {
     expect(fileCardSize(w, h)).toEqual({ w: cw, h: ch });
+  });
+});
+
+describe("fileCardHeightForWidth", () => {
+  it("scales the preview with the card width, keeping the ratio", () => {
+    // A 3:2 artwork in a 360-wide card is 248 tall; the same
+    // artwork in a 540-wide card is 368 tall.
+    expect(fileCardHeightForWidth(600, 400, 360)).toBe(248);
+    expect(fileCardHeightForWidth(600, 400, 540)).toBe(368);
   });
 });
 
