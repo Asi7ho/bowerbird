@@ -876,7 +876,7 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
 }
 #settings .shortcut-reset:hover { background: var(--fill); }
 #settings .shortcut-reset svg {
-  width: 16px; height: 16px; display: block; fill: none;
+  width: 14px; height: 14px; display: block; fill: none;
   stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
 }
 /* Performance: one row, label on the left and the On/Off
