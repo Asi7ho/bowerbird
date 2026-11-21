@@ -1553,6 +1553,13 @@ function registerIpc(): void {
     // misleading "Board updated on disk" toast) right after
     // "Backup restored".
     lastSavedJson = out.json;
+    // The restore supersedes any journalled edits to the old
+    // board: the journal holds a board board.json no longer
+    // is, so the next load would offer to "restore" it and
+    // undo the restore just chosen. The old board is already
+    // preserved as a backup by restoreBackup, so clearing
+    // the journal loses nothing the restore did not keep.
+    clearRecovery(boardDir());
     return { ...out, json: resolveBoardAssetPaths(out.json, out.board_dir) };
   });
   ipcMain.handle("bowerbird:open-backups-folder", () => {
