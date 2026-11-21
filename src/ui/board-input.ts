@@ -1007,6 +1007,20 @@ export function attachWindowListeners(): void {
       if (d.moved && dragStartedOnVideo) suppressVideoClickUntil = Date.now() + 500;
       dragStartedOnVideo = false;
     }
+    // A drag that actually moved was a drag, not a click: its
+    // pointerdown must not count toward a double-click, or the
+    // next click on the same spot within 500ms opens the note
+    // editor instead of selecting — the drag's mousedown and
+    // the click are the same point, so the time check alone
+    // decides, and the gap after an undo is short. Only the
+    // select tool records lastPointerDown, so only its drags
+    // (move/resize/rotate/marquee) need clearing here. A
+    // click that never moved leaves it alone, so a real
+    // double-click (two clicks, no drag between) still works.
+    const dragMoved =
+      ((d.kind === "move" || d.kind === "resize" || d.kind === "rotate") && d.moved) ||
+      (d.kind === "marquee" && (Math.abs(world.x - d.start.x) >= 3 || Math.abs(world.y - d.start.y) >= 3));
+    if (dragMoved) S.lastPointerDown = { x: 0, y: 0, t: 0 };
     // A move/resize that actually moved is safe to rebuild once at
     // the end (it refreshes truncation and connector endpoints with
     // their final geometry). A move/resize that never moved was a
