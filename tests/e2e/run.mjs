@@ -33,7 +33,12 @@ const EMPTY_BOARD = {
 // 2-core SwiftShader CI runner it has taken over 15s, and
 // a bound that sits that close to reality flakes. 60s is
 // far above any boot or render the suite has ever seen.
-const READY_TIMEOUT_MS = 60000;
+// CI runners have no GPU: Chromium renders through
+// SwiftShader (software GL), so on a loaded shared runner
+// the app can take well over a minute to answer a click,
+// a key or a save. 120s keeps the suite green there
+// without hiding a genuine hang on a fast machine.
+const READY_TIMEOUT_MS = 120000;
 
 // A short spoken sentence, so the voice-note check records
 // real speech and the transcript assertion proves Whisper
@@ -1404,7 +1409,11 @@ async function main() {
       const boxBefore = await canvas.boundingBox();
       assert.ok(boxBefore, "model canvas on screen before the wheel");
       await page.mouse.move(boxBefore.x + boxBefore.width / 2, boxBefore.y + boxBefore.height / 2);
-      await page.mouse.wheel(0, 200);
+      // A small wheel: enough to pan the board (the card
+      // must move), but not so far that the card leaves the
+      // viewport and is culled from the DOM — a big wheel
+      // made the canvas vanish and the check below fail.
+      await page.mouse.wheel(0, 60);
       await new Promise((r) => setTimeout(r, 500));
       const boxAfter = await canvas.boundingBox();
       assert.ok(boxAfter, "model canvas on screen after the wheel");
