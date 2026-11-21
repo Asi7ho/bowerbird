@@ -19,6 +19,7 @@ import {
   zoomCamera,
 } from "../backend/model";
 import { measureNoteCardHeight } from "./text-measure";
+import { matches } from "./shortcuts";
 
 // The fallback icon for a creation action that offers
 // none of its own, shown beside the text box.
@@ -1181,7 +1182,7 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   // handler below, and this window handler stays out of its way.
   if (active && active.id === "search-input") return;
   const ctrl0 = e.ctrlKey || e.metaKey;
-  if (ctrl0 && e.key.toLowerCase() === "f") {
+  if (matches(e, "search")) {
     e.preventDefault();
     const input = document.getElementById("search-input") as HTMLInputElement | null;
     if (input) { input.focus(); input.select(); }
@@ -1233,7 +1234,7 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   // as the other board keys: Settings being open already
   // returns above, and textareas and the search box return
   // before this, so typing a comma never opens the sheet.
-  if (ctrl && e.key === ",") { S.api.ui.openSettings(); return; }
+  if (matches(e, "open-settings")) { S.api.ui.openSettings(); return; }
   if (e.key === "Escape") {
     if (S.api.ui.isSettingsOpen()) { S.api.ui.closeSettings(); return; }
     // An active search is cleared first; the next Esc clears the
@@ -1253,13 +1254,14 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   // search box is already guarded above, and this covers plugin
   // inputs like the Visual Library search. Without the guard,
   // Ctrl+Z there would undo a board change instead of the text.
-  if (e.key.toLowerCase() === "z" && ctrl && !e.shiftKey && !(active && active.tagName === "INPUT")) {
+  if (matches(e, "undo") && !(active && active.tagName === "INPUT")) {
     e.preventDefault();
     S.api.board.undo();
-  } else if (e.key.toLowerCase() === "z" && ctrl && e.shiftKey && !(active && active.tagName === "INPUT")) {
+  } else if (matches(e, "redo") && !(active && active.tagName === "INPUT")) {
     e.preventDefault();
     S.api.board.redo();
   } else if (e.key.toLowerCase() === "y" && ctrl && !(active && active.tagName === "INPUT")) {
+    // Ctrl+Y is a fixed redo alias, not a rebindable action.
     e.preventDefault();
     S.api.board.redo();
   }
@@ -1268,47 +1270,47 @@ window.addEventListener("keydown", (e: KeyboardEvent) => {
   // not always plain select. There is no L shortcut any
   // more: it used to toggle the lasso, which V now covers
   // by remembering it.
-  else if (e.key.toLowerCase() === "v" && !ctrl) setTool("select");
+  else if (matches(e, "select")) setTool("select");
   // P activates the draw tool last chosen, not always the
   // pen: a pencil stays a pencil. Before any draw tool is
   // used it is the pen, the draw button's default.
-  else if (e.key.toLowerCase() === "p" && !ctrl) setTool(S.lastDrawTool ?? "pen");
-  else if (e.key.toLowerCase() === "a" && !ctrl) setTool("connector");
+  else if (matches(e, "pen")) setTool(S.lastDrawTool ?? "pen");
+  else if (matches(e, "connector")) setTool("connector");
   // R is the one geometry shortcut: it activates the shape
   // last chosen, not always the rectangle. Before any shape
   // is used it is the rectangle, the shape button's default.
   // There is no E shortcut any more: it used to switch to
   // the ellipse, which the single R shortcut now covers by
   // remembering it.
-  else if (e.key.toLowerCase() === "r" && !ctrl) setTool(S.lastShapeTool ?? "rect");
-  else if (e.key.toLowerCase() === "x" && !ctrl) setTool("eraser");
-  else if (e.key === "[" && !ctrl) rotateSelected(-15);
-  else if (e.key === "]" && !ctrl) rotateSelected(15);
-  else if (e.key.toLowerCase() === "g" && ctrl) {
+  else if (matches(e, "shape")) setTool(S.lastShapeTool ?? "rect");
+  else if (matches(e, "eraser")) setTool("eraser");
+  else if (matches(e, "rotate-left")) rotateSelected(-15);
+  else if (matches(e, "rotate-right")) rotateSelected(15);
+  else if (matches(e, "group")) {
     e.preventDefault();
     groupSelected();
-  } else if (e.key.toLowerCase() === "u" && ctrl) {
+  } else if (matches(e, "ungroup")) {
     e.preventDefault();
     ungroupSelected();
-  } else if (e.key === "Backspace" || e.key === "Delete") {
+  } else if (matches(e, "delete")) {
     deleteSelected();
-  } else if (e.key === "+" || e.key === "=") { zoomCentre(1.2); S.api.board.save(); render(); }
-  else if (e.key === "-") { zoomCentre(1 / 1.2); S.api.board.save(); render(); }
-  else if (e.key === "0") { S.api.view.setCamera({ x: 0, y: 0, zoom: 1 }); }
-  else if (e.key.toLowerCase() === "f" && !ctrl) zoomToFit();
-  else if (e.key.toLowerCase() === "b" && ctrl) {
+  } else if (matches(e, "zoom-in")) { zoomCentre(1.2); S.api.board.save(); render(); }
+  else if (matches(e, "zoom-out")) { zoomCentre(1 / 1.2); S.api.board.save(); render(); }
+  else if (matches(e, "reset-view")) { S.api.view.setCamera({ x: 0, y: 0, zoom: 1 }); }
+  else if (matches(e, "zoom-fit")) zoomToFit();
+  else if (matches(e, "toggle-panels")) {
     // Panels toggle: the only keyboard path to the panels.
     e.preventDefault();
     document.getElementById("panels-toggle")?.click();
   }
-  else if (e.key.toLowerCase() === "t" && ctrl) {
+  else if (matches(e, "focus-toolbar")) {
     // Focus the toolbar, so its buttons are reachable by
     // keyboard: Tab then moves between them natively.
     e.preventDefault();
     const first = document.querySelector<HTMLElement>("#toolbar button");
     if (first) first.focus();
   }
-  else if (e.key === "Enter" && !ctrl) {
+  else if (matches(e, "create-edit")) {
     // Create, edit or rename from the keyboard: nothing
     // selected makes a note at the viewport centre; a
     // single text card edits it; a group selection renames

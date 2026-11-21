@@ -9,6 +9,7 @@ import { cardDecorators, cards, commands, CORE_EVENTS, createActions, listeners,
 import { applySavedPanelSettings, bindPanelDeps, deactivateMissingActivePanel, deactivatePanelIfActive, ensureResizeHandle, isPanelActive as isPanelActiveKey, registerPanel, setActivePanel, updatePanelDock, wirePanelsToggle } from "./host-panels";
 import { bindViewDeps, getActiveView, refreshActiveView, registerView, renderViewSwitcher, setActiveView } from "./host-views";
 import { bindCardDeps, domId, getCardRenderer, handlePluginCardAction, handlePluginCardDoubleClick, isPluginCard, listPluginCommands, getPluginTool, registerBuiltinCard, runPluginCommand, syncPluginToolButtons } from "./host-cards";
+import { loadOverrides } from "../ui/shortcuts";
 // getBuiltinCardHtml, getCardHtml, getCardRenderer and
 // getPluginCardSearchText moved to host-cards with the
 // card registry; re-exported here so existing imports
@@ -1425,6 +1426,11 @@ export async function initPlugins(
   try {
     const settings = await b.getAppSettings();
     applySavedPanelSettings(settings);
+    // Shortcut overrides load here, before any first-party
+    // plugin activates: the board plugin registers the
+    // keydown handler on activation, so by the time a key
+    // can fire the registry already has the saved bindings.
+    loadOverrides(settings.shortcuts);
   } catch {
     // No saved width: keep the default.
   }
