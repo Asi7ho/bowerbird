@@ -1,4 +1,6 @@
-// Pure board geometry helpers.
+// Board geometry helpers, plus the small DOM and caching pieces
+// the render loop needs beside them: svgEl2 builds SVG elements,
+// and strokePath caches a stroke's path string per item id.
 
 import type { Camera } from "bowerbird-plugin-api";
 import { centre, itemRotation, rotatePoint, smoothStrokePath } from "../backend/model";

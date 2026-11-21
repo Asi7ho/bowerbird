@@ -3,8 +3,9 @@
 This is the stable shape of a Bowerbird board on disk, written down
 so anything that can run a shell can read and write a board with the
 app closed — an agent, a script, another editor. The app follows an
-externally changed board within about two seconds (it reloads the
-board file; undo history survives, the redo chain clears).
+externally changed board within about 300 ms (the file watcher
+debounces for 300 ms, then it reloads the board file; undo history
+survives, the redo chain clears).
 
 The format is versioned by this document, not by a field in the
 file: a board the app wrote is a board the CLI and the spec describe.
@@ -17,14 +18,15 @@ The board folder is found in this order:
 1. `BOWERBIRD_BOARD_PATH` — a full path to a `board.json`. Board
    switching is disabled while it is set.
 2. `QB_BOARD_PATH` — the same, kept for the old name.
-3. Otherwise the base is `XDG_DATA_HOME` or `~/.local/share`, and
-   the folder is `<base>/bowerbird`, unless that folder has no
-   `board.json` and `<base>/quickboard` does — then the old folder
-   wins. (On macOS the base is `~/Library/Application Support`
-   via Electron's paths; on Windows it is `%APPDATA%`.)
+3. Otherwise the base is `XDG_DATA_HOME` or `~/.local/share`
+   on every platform, and the folder is `<base>/bowerbird`,
+   unless that folder has no `board.json` and
+   `<base>/quickboard` does — then the old folder wins.
 
 App settings — the current board, panel order and width, the
-corner — live in `settings.json` in the user-data folder
+corner, `dockVisible` (whether the plugin dock is visible),
+`hardwareAcceleration`, and `shortcuts` (shortcut overrides) —
+live in `settings.json` in the user-data folder
 (macOS `~/Library/Application Support/bowerbird`,
 Linux `~/.config/bowerbird`, Windows `%APPDATA%/bowerbird`).
 `currentBoard` is a board name, or absent/null for Main.
@@ -47,7 +49,8 @@ Linux `~/.config/bowerbird`, Windows `%APPDATA%/bowerbird`).
 
 A board name is sanitised to a folder name by replacing every
 character outside `[A-Za-z0-9._-]` with `_`, stripping leading dots,
-and truncating to 64 characters. The display name is the folder name
+and truncating to 64 characters. A name that sanitises to nothing
+becomes `file`. The display name is the folder name
 unless `display-name.txt` says otherwise.
 
 ## board.json
@@ -60,7 +63,7 @@ unless `display-name.txt` says otherwise.
   "next_group": 1,
   "bg": "#FFFFFF",
   "grid": "Dots",
-  "groups": { "1": { "label": "Section 1" } }
+  "groups": { "1": { "label": "Group 1" } }
 }
 ```
 
@@ -74,13 +77,22 @@ unless `display-name.txt` says otherwise.
   `max(next_id, highest item id) + 1` as the new id and set
   `next_id` to it; a writer that groups takes `next_group + 1`
   and sets `next_group` to it.
-- `groups` — the label for each group id: `{ "<groupId>": { "label": "Section 1" } }`.
-  A group is a section: grouping cards draws a labelled frame
-  around them. Absent when the board has no groups.
+- `groups` — the label for each group id: `{ "<groupId>": { "label": "Group 1" } }`.
+  A group is a labelled frame: grouping cards draws a labelled
+  frame around them. A group with no entry gets the label
+  `Group <id>`. A live-import group also carries `source` — the
+  file its cards came from: `{ "path", "kind" }`, where `kind`
+  is `svg`, `psd` or `ai` and `path` is the board-local path of
+  the file in the board's assets (with optional `size` and
+  `mtimeMs` of the file as last imported); the app re-imports
+  the file when it changes on disk. Absent when the board has
+  no groups.
 - `bg` — the canvas background colour. `grid` is `Dots`, `Lines`
-  or `None`.
+  or `Off`.
 - Unknown top-level fields are carried through load and save
-  verbatim by the app — but the CLI only writes the fields above.
+  verbatim by the app, and by the CLI too — it reads the whole
+  board and writes it back, changing only `items` and
+  `next_id`.
 
 An item:
 
@@ -98,15 +110,16 @@ An item:
 | Kind | Fields |
 | --- | --- |
 | `Text` | `text`, `bold`, `size`, `color`, `bg?` |
-| `Shape` | `shape` (`rect`, `ellipse`, `triangle`, `diamond`, `hexagon`, `star`, `arrow`), `fill` |
+| `Shape` | `shape` (`rect`, `ellipse`, `triangle`, `diamond`, `hexagon`, `star`, `arrow`), `fill`, `outline?` (true: stroked edge, no fill) |
 | `Image` | `path` |
 | `UrlCard` | `url`, `title` (null), `description` (null), `image?`, `icon?`, `embed?` |
 | `PdfCard` | `path`, `size_bytes` |
+| `FileCard` | `path`, `size_bytes`, `format` (`psd` \| `ai`), `preview?` (a rendered image of the artwork) |
 | `Swatch` | `hex` |
 | `Audio` | `path`, `title?`, `transcript?` (the on-device speech-to-text of a voice recording, when it has one) |
 | `Video` | `source`, `remote` (bool), `size_bytes`, `poster?`, `duration?` |
-| `Model3D` | `path`, `size_bytes` (a GLB file; drag on the model rotates it, wheel zooms, it turns slowly when idle) |
-| `Stroke` | `points` (`[{x, y}]`), `color`, `width`, `marker` (bool), `pressures?` |
+| `Model3D` | `path`, `size_bytes` (a `.glb`, `.obj`, `.fbx`, `.stl`, `.usdz` or `.dae` file; drag on the model rotates it, the wheel pans/zooms the board, it turns slowly when idle) |
+| `Stroke` | `points` (`[{x, y}]`), `color`, `width`, `marker` (bool), `pressures?`, `pencil?` (true: a pencil stroke, drawn with a graphite texture) |
 | `Connector` | `from`, `to` (each `{"Item": id}` or `{"Point": {"x","y"}}`), `color` |
 | `Plugin` | `plugin`, `kind`, `data` (any JSON) |
 
@@ -134,7 +147,9 @@ does not know.
 - A writer that changes a board the app has open does not need
   to tell the app: the app watches the file and reloads it.
 - Backups are the app's hourly copies of `board.json` in
-  `backups/` (newest 10 kept). A writer should not touch them.
+  `backups/` (newest 10 kept). A backup is also made before a
+  reset or a restore, so either can be undone. A writer should
+  not touch them.
 
 ## The CLI (`cli/bowerbird.mjs`)
 
@@ -144,16 +159,27 @@ Plain Node, no dependencies. Run it from the repo root:
 node cli/bowerbird.mjs <command> [options]
 ```
 
-Output is JSON on stdout by default; `--human` prints readable
-lines instead. Errors print `{"ok": false, "error": "..."}` to
-stderr. Exit codes: `0` ok, `1` usage error, `2` board or card not
-found, `3` write failed.
+or with the npm alias:
+
+```
+npm run cli -- <command> [options]
+```
+
+Output is JSON on stdout by default (`--json` is the default);
+`--human` prints readable lines instead, and `--help` (or `-h`)
+prints usage. Errors print `{"ok": false, "error": "..."}` to
+stderr. Exit codes: `0` ok, `1` usage error, `2` board not
+found, `3` write failed. No CLI command addresses a card by
+id, so exit 2 is only ever a board not found.
 
 | Command | What it does |
 | --- | --- |
 | `boards` | List boards: name, whether it is current, item count. |
 | `cards [--board NAME]` | List cards on a board: id, kind, title, position, size, group. |
-| `add-card --board NAME --text "..." [--x N] [--y N] [--w N] [--h N]` | Add a text note. `--dry-run` prints the board that would be written and writes nothing. |
+| `add-card --board NAME --text "..." [--x N] [--y N] [--w N] [--h N]` | Add a text note. `--dry-run` prints only the new item that would be added and writes nothing. |
 
 `--board` defaults to the current board (from settings.json), or
-Main when there is none. A board that does not exist is exit 2.
+Main when there is none. A board that does not exist is exit 2 —
+but only when it was named with `--board`: without `--board`, a
+missing board is treated as an empty board (a `cards` listing is
+empty; an `add-card` creates it).

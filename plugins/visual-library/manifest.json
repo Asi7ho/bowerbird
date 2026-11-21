@@ -14,7 +14,7 @@
       }
     ]
   },
-  "description": "Every card on the board, as a library.",
+  "description": "Every card on the board, as a library (strokes, connectors, shapes, 3D models and design files excluded).",
   "id": "visual-library",
   "main": "main.ts",
   "name": "Visual Library",

@@ -9,12 +9,12 @@ This is the VS Code / Obsidian shape, not a skin system: the built-in UI has no 
 - **One API.** There is a single public surface (`PluginContext`, in the `bowerbird-plugin-api` module). If the built-in UI needs something, that something is added to the API first, then the UI uses it. The core never reaches into a plugin's DOM and a plugin never reaches into the core's DOM or internals.
 - **Core renders nothing.** `index.html` is a bare mount point. The core creates no title bar, toolbar, search box, settings window or board DOM. A plugin builds each of those.
 - **First-party plugins are plugins.** The bundled UI is a set of first-party plugins in `src/ui/`. They use the same `PluginContext` as user plugins. The only difference is loading: first-party plugins are ES modules imported by the core; user plugins are ES modules loaded over the `plugin:` scheme, so they can be multiple files with relative imports.
-- **Board JSON is stable.** Moving a card kind or a UI piece into a plugin never changes the board format. Built-in kinds (`Text`, `Image`, `Swatch`, `UrlCard`, `PdfCard`, `Audio`, `Video`, `Shape`, `Stroke`, `Connector`) keep their shape in board JSON; only who renders them changes.
+- **Board JSON is stable.** Moving a card kind or a UI piece into a plugin never changes the board format. Built-in kinds (`Text`, `Image`, `Swatch`, `UrlCard`, `PdfCard`, `FileCard`, `Audio`, `Video`, `Model3D`, `Shape`, `Stroke`, `Connector`) keep their shape in board JSON; only who renders them changes.
 
 ## Layout
 
 ```
-index.html            bare mount: <div id="app"> + boot script
+index.html            bare mount: <div id="main-column"> + <div id="plugin-panels"> + boot script
 plugin-api/           the public plugin API as its own module
                       (`bowerbird-plugin-api`, types in index.d.ts).
                       Plugins import it by name and never reach
@@ -23,15 +23,23 @@ src/main.ts           core boot only: load board, create the
                       PluginHost + PluginContext factory, load
                       plugins. Renders no DOM.
 src/backend/          headless core: board model, persistence,
-                      undo, camera, events, search, media, drops,
+                      undo, search, media, drops,
                       poster capture, welcome board, card chrome.
-src/plugins/host.ts   plugin host: loads first-party (ES module)
-                      and user (plugin: scheme) plugins, builds
-                      PluginContext, enforces permissions.
-src/ui/               first-party UI plugins, one file per surface,
-                      each using only PluginContext: board, cards,
-                      toolbar, titlebar, search, settings. Plus
-                      styles.css.
+src/plugins/          plugin host, split five ways: host.ts
+                      (loading, PluginContext factory, permissions)
+                      plus host-cards.ts, host-panels.ts,
+                      host-state.ts and host-views.ts.
+src/ui/               first-party UI plugins, one surface per
+                      file except the board, each using only
+                      PluginContext: board, cards,
+                      toolbar, titlebar, search, settings. The
+                      board is split six ways — board.ts
+                      (activation and wiring only) plus
+                      board-input.ts, board-render.ts,
+                      board-state.ts, board-geometry.ts and
+                      board-drag-preview.ts — with shortcuts.ts,
+                      overlay-placement.ts, text-measure.ts and
+                      recovery-dialog.ts alongside. Plus styles.css.
 plugins/              the nine bundled plugins (AI Chat, Multiple
                       Boards, Command Palette, Hide Button, Colour
                       Palette, Presentation, Tidy Up, Visual
@@ -51,6 +59,6 @@ electron/             main process and the window.bowerbird bridge
 
 ## Known boundary
 
-The render loop and the input loop (pan, zoom, drag, resize/rotate, text edit) live in the board plugin (`src/ui/board.ts`), not in the core. The core (`src/main.ts`) is boot only: it loads the board, creates the PluginHost and the PluginContext factory, and loads the plugins. It owns the board model, persistence, the undo store, the search engine and the media module, and it renders no DOM.
+The render loop and the input loop (pan, zoom, drag, resize/rotate, text edit) live in the board plugin (`src/ui/board-render.ts` and `src/ui/board-input.ts`), not in the core; `src/ui/board.ts` itself is activation and wiring only. Groups live in the board model (`Board.groups`, one label per group id, defaulting to `Group <id>`), and the board plugin draws each group's labelled frame. The core (`src/main.ts`) is boot only: it loads the board, creates the PluginHost and the PluginContext factory, and loads the plugins. It owns the board model, persistence, the undo store, the search engine and the media module, and it renders no DOM.
 
 The board plugin uses only the public API, plus the pure board-model functions in `src/backend/model.ts` (geometry over the board data it reads through the API) and the 3D view sync in `src/backend/model3d.ts`. It reaches the core's board state through `api.board`, `api.view`, `api.ui`, `api.pen`, `api.search`, `api.media`, `api.shapes` and `api.files`. The live-drag methods on `api.board` (`moveItems`, `resizeItem`, `setItemRotation`, `removeItems`, `bringToFront`, `setTextContent`, `createGroup`, `addItemSilent`) change the live board without saving or rendering, so a drag saves once at drag end; the selection queries (`hitTest`, `marqueeSelect`, `lassoSelect`, `strokesNear`) are pure reads. The board plugin registers its controller with the plugin system (`registerBoardController` in `src/plugins/host.ts`), and the core delegates its render, selection, editing and tool calls there — the same shape as the settings UI registration. The core keeps the board element, the cards element (for the media and search modules) and the toast element from the shell; it does not keep the SVG world or grid elements.

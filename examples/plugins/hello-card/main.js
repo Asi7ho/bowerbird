@@ -127,7 +127,7 @@ export function activate(api) {
 export function deactivate() {
   // The core unregisters this plugin's tools, panels, commands,
   // views and card kinds on deactivate. Event listeners registered
-  // in activate are not removed in v1 — updatePanel guards on a
+  // in activate are not removed — updatePanel guards on a
   // missing panel element, so they become no-ops after deactivate.
-  // See PLUGIN_API.md, "What is not in v1".
+  // See PLUGIN_API.md, "What is not in the API".
 }
