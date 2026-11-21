@@ -290,7 +290,7 @@ export function activate(api: PluginContext): void {
       // selected. Selecting switches to contain, so the full
       // image is visible; deselecting goes back to cover.
       const fit = c.sel ? "contain" : "cover";
-      return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="background:var(--bg-system)"><img src="${api.files.fileUrl(path)}" data-name="${api.text.escapeHtml(name)}" data-path="${api.text.escapeHtml(path)}" draggable="false" style="width:100%;height:100%;object-fit:${fit};border-radius:12px" alt="" /></div></div>`;
+      return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner"><img src="${api.files.fileUrl(path)}" data-name="${api.text.escapeHtml(name)}" data-path="${api.text.escapeHtml(path)}" draggable="false" style="width:100%;height:100%;object-fit:${fit};border-radius:12px" alt="" /></div></div>`;
     },
   });
 
@@ -346,10 +346,10 @@ export function activate(api: PluginContext): void {
         // A short card, like the old 96px tile: just a small
         // page preview.
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px" data-pdf-wrap="${c.id}">
-          <div style="width:56px;height:${c.hh - 24}px;flex:none;background:var(--bg-system);border-radius:10px;overflow:hidden"><canvas data-pdf-canvas="${c.id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div></div></div>`;
+          <div style="width:56px;height:${c.hh - 24}px;flex:none;border-radius:10px;overflow:hidden"><canvas data-pdf-canvas="${c.id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div></div></div>`;
       }
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px" data-pdf-wrap="${c.id}">
-        <div style="flex:1 1 auto;min-height:0;background:var(--bg-system);border-radius:10px;overflow:hidden"><canvas data-pdf-canvas="${c.id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
+        <div style="flex:1 1 auto;min-height:0;border-radius:10px;overflow:hidden"><canvas data-pdf-canvas="${c.id}" style="width:100%;height:100%;object-fit:contain;display:block"></canvas></div>
         <div style="display:flex;align-items:center;justify-content:center;gap:8px"><button class="pdf-nav" data-action="pdf-prev" data-id="${c.id}" title="Previous page" aria-label="Previous page" ${pageNum <= 1 ? "disabled" : ""}>‹</button><span class="sub" data-pdf-count="${c.id}">…</span><button class="pdf-nav" data-action="pdf-next" data-id="${c.id}" title="Next page" aria-label="Next page">›</button></div></div></div>`;
     },
   });
@@ -376,7 +376,7 @@ export function activate(api: PluginContext): void {
         ? `<img src="${api.files.fileUrl(preview)}" draggable="false" alt="" style="width:100%;height:100%;object-fit:contain;display:block" />`
         : `<div class="filecard-tile" style="background:${api.text.tint(tint, 0.88)};color:${tint}">${label}</div>`;
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
-        <div style="flex:1 1 auto;min-height:0;background:var(--bg-system);border-radius:10px;overflow:hidden;position:relative">${previewHtml}${preview ? `<span class="filecard-pill" style="color:${tint}">${label}</span>` : ""}</div></div></div>`;
+        <div style="flex:1 1 auto;min-height:0;border-radius:10px;overflow:hidden;position:relative">${previewHtml}${preview ? `<span class="filecard-pill" style="color:${tint}">${label}</span>` : ""}</div></div></div>`;
     },
   });
 
