@@ -435,10 +435,27 @@ function navigateElements(dir: 1 | -1): void {
 
 // ---------------------------------------------------------------- input
 
+// A waveform drag-scrub in progress: the card id and file
+// path, so pointermove can keep seeking without re-hitting
+// the board. Set by the cards pointerdown below, cleared
+// on pointerup.
+let waveScrub: { id: number; path: string } | null = null;
+function seekWaveAt(e: PointerEvent): void {
+  if (!waveScrub) return;
+  const wave = S.cardsEl.querySelector(`[data-audio-wave="${waveScrub.id}"]`) as SVGElement | null;
+  if (!wave) return;
+  const r = wave.getBoundingClientRect();
+  if (r.width <= 0) return;
+  const frac = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+  const dur = S.api.media.getAudioDuration(waveScrub.path) ?? S.api.media.getAudioState().duration;
+  if (!isFinite(dur) || dur <= 0) return;
+  S.api.media.seekAudioTo(waveScrub.id, waveScrub.path, frac * dur);
+}
+
 export function attachBoardListeners(): void {
 S.boardEl.addEventListener("pointerdown", (e: PointerEvent) => {
   const target = e.target as HTMLElement;
-  if (target.closest("#toolbar, #settings-backdrop, #toast, #plugin-overlays, #search-box, #title-bar, video, input, canvas.model3d")) return;
+  if (target.closest("#toolbar, #settings-backdrop, #toast, #plugin-overlays, #search-box, #title-bar, video, input, canvas.model3d, [data-audio-wave]")) return;
   // A board click or drag must never start a native text selection
   // across the cards (bug: clicking anywhere highlighted all text).
   if (!target.closest("textarea.note-edit")) window.getSelection()?.removeAllRanges();
@@ -632,14 +649,36 @@ S.cardsEl.addEventListener("click", (e: MouseEvent) => {
   }
 });
 
-S.cardsEl.addEventListener("input", (e: Event) => {
-  const seek = (e.target as HTMLElement).closest("[data-audio-seek]") as HTMLInputElement | null;
-  if (!seek) return;
-  const id = Number(seek.dataset.audioSeek);
-  const state = S.api.media.getAudioState();
-  if (state.id !== id || !isFinite(state.duration) || state.duration <= 0) return;
-  S.api.media.seekAudio(id, (Number(seek.value) / 1000) * state.duration);
-});
+  // The waveform is the seek control: pointerdown seeks, and
+  // dragging across it scrubs. The board's own pointerdown
+  // ignores it (see the guard above), so this never drags the
+  // card. Arrow keys seek when the waveform has focus, instead
+  // of nudging the selection.
+  S.cardsEl.addEventListener("pointerdown", (e: PointerEvent) => {
+    const wave = (e.target as HTMLElement).closest("[data-audio-wave]") as SVGElement | null;
+    if (!wave) return;
+    const id = Number(wave.dataset.audioWave);
+    const it = S.api.board.getItem(id);
+    if (!it || !("Audio" in it.kind)) return;
+    e.preventDefault();
+    waveScrub = { id, path: it.kind.Audio.path };
+    seekWaveAt(e);
+  });
+  S.cardsEl.addEventListener("keydown", (e: KeyboardEvent) => {
+    const wave = (e.target as HTMLElement).closest("[data-audio-wave]") as SVGElement | null;
+    if (!wave || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+    const id = Number(wave.dataset.audioWave);
+    const it = S.api.board.getItem(id);
+    if (!it || !("Audio" in it.kind)) return;
+    const state = S.api.media.getAudioState();
+    const dur = S.api.media.getAudioDuration(it.kind.Audio.path) ?? state.duration;
+    if (!isFinite(dur) || dur <= 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const cur = state.id === id ? state.currentTime : 0;
+    const step = e.shiftKey ? 10 : 5;
+    S.api.media.seekAudioTo(id, it.kind.Audio.path, Math.min(dur, Math.max(0, cur + (e.key === "ArrowRight" ? step : -step))));
+  });
 }
 
 // Whether a tool id is a shape kind, from the shape table
@@ -661,6 +700,10 @@ export function attachWindowListeners(): void {
   S.listenersAttached = true;
 
 window.addEventListener("pointermove", (e: PointerEvent) => {
+  if (waveScrub) {
+    seekWaveAt(e);
+    return;
+  }
   const winPt: Pt = boardPoint(e.clientX, e.clientY);
   const world = toWorld(winPt);
   if (!S.drag) {
@@ -820,6 +863,7 @@ window.addEventListener("pointermove", (e: PointerEvent) => {
 });
 
 window.addEventListener("pointerup", (e: PointerEvent) => {
+  waveScrub = null;
   if (S.pluginToolDown) {
     S.pluginToolDown = false;
     const pt = S.api.ui.getToolDef(S.tool);
