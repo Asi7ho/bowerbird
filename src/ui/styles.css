@@ -295,17 +295,18 @@ body.platform-linux #title-bar button.win-close:hover { background: rgba(230, 57
   height: 20px; margin-left: -0.75px; background: #007aff;
 }
 
-/* Cards: white, 12px radius, soft macOS shadow. Selection is a blue
-   focus ring, the way Finder and Notes show it. */
+/* Cards carry no border and no shadow, so each one reads as part of
+   the board rather than as a framed box. The 1px border is kept
+   transparent so selecting never shifts the layout. Selection is
+   a blue focus ring only, the way Finder and Notes show it. */
 .card {
   position: absolute; background: #fff;
-  border: 1px solid var(--hairline); border-radius: 12px;
+  border: 1px solid transparent; border-radius: 12px;
   overflow: hidden; pointer-events: none;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
 }
 .card.selected {
-  border-color: rgba(0, 122, 255, 0.5);
-  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.35), var(--shadow-md);
+  box-shadow: 0 0 0 2px rgba(0, 122, 255, 0.35);
 }
 /* Shape cards carry no drop shadow: the figure is the
    shape itself, and a rectangular shadow around its box
