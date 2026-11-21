@@ -1200,6 +1200,51 @@ async function main() {
       });
     });
 
+    await check("dragging a playing video moves its card and keeps it playing", async () => {
+      // A press on the playing video is a drag, not a click:
+      // the card moves with the pointer, and the video keeps
+      // playing — the drag must not pause it or toggle its
+      // controls. The previous check left the video playing.
+      const board = readBoard();
+      const video = board.items.find((it) => "Video" in it.kind);
+      assert.ok(video, "video card on the board");
+      const id = video.id;
+      const zoom = board.camera.zoom || 1;
+      const before = await page.evaluate((cid) => {
+        const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
+        const v = card.querySelector("video");
+        const r = card.getBoundingClientRect();
+        return { x: r.x, y: r.y, cx: r.x + r.width / 2, cy: r.y + r.height / 2, t: v.currentTime, paused: v.paused, videos: document.querySelectorAll("video").length };
+      }, String(id));
+      assert.equal(before.paused, false, "video is playing before the drag");
+      await page.mouse.move(before.cx, before.cy);
+      await page.mouse.down();
+      await page.mouse.move(before.cx + 80, before.cy + 40, { steps: 12 });
+      await page.mouse.up();
+      await new Promise((r) => setTimeout(r, 500));
+      const after = await page.evaluate((cid) => {
+        const card = document.querySelector(`#cards .card[data-id="${cid}"]`);
+        const v = card.querySelector("video");
+        const r = card.getBoundingClientRect();
+        return { x: r.x, y: r.y, t: v ? v.currentTime : -1, paused: v ? v.paused : true, hasVideo: !!v, videos: document.querySelectorAll("video").length };
+      }, String(id));
+      assert.ok(Math.abs(after.x - (before.x + 80)) <= 5 && Math.abs(after.y - (before.y + 40)) <= 5, "card moved with the drag");
+      assert.equal(after.hasVideo, true, "live video element still there after the drag");
+      assert.equal(after.paused, false, "video still playing after the drag");
+      assert.ok(after.t > before.t, "video time advanced across the drag");
+      assert.equal(after.videos, 1, "exactly one video element after the drag");
+      // The move saved: the board's stored position moved by
+      // the drag in board units (the screen delta over zoom).
+      const moved = readBoard().items.find((it) => it.id === id);
+      assert.ok(Math.abs(moved.pos.x - (video.pos.x + 80 / zoom)) <= 5 && Math.abs(moved.pos.y - (video.pos.y + 40 / zoom)) <= 5, "board position moved with the drag");
+      // The drag is undone, so the card is back where the
+      // checks after this one expect it.
+      await page.keyboard.press("Control+z");
+      await new Promise((r) => setTimeout(r, 500));
+      const back = readBoard().items.find((it) => it.id === id);
+      assert.ok(Math.abs(back.pos.x - video.pos.x) <= 5 && Math.abs(back.pos.y - video.pos.y) <= 5, "card back after undoing the drag");
+    });
+
     await check("Enter toggles an audio card selected by Tab", async () => {
       // Tab cycles the selection between cards; Enter
       // activates the selected one — for audio that toggles
