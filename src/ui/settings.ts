@@ -27,40 +27,6 @@ function feedbackMailto(message: string, buildId: string, platform: string): str
   return `mailto:${FEEDBACK_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 
-// Fixed keys: not rebindable — focus and navigation (Escape,
-// Tab, Space, arrows) and the search box's own keys.
-const FIXED_SHORTCUTS: Array<[string, string]> = [
-  ["Esc", "Close settings, commit a note, or clear the selection"],
-  ["Tab", "Go to the next element"],
-  ["Shift + Tab", "Go to the previous element"],
-  ["Space", "Hold Space and drag to pan the canvas"],
-  ["Arrow keys", "Move the selection (Shift: 10 px)"],
-  ["Enter in search", "Jump to the next match"],
-  ["Shift + Enter in search", "Jump to the previous match"],
-  ["Arrow down / Ctrl + J in search", "Move to the next match"],
-  ["Arrow up / Ctrl + K in search", "Move to the previous match"],
-  ["Esc in search", "Clear the search"],
-];
-
-// Mouse and scroll gestures: not keys, so not rebindable.
-// (L and E are gone: V and R cover them by remembering.
-// The "Double-click a link card" row duplicated the Click
-// row, so only the Click row is kept.)
-const GESTURES: Array<[string, string]> = [
-  ["Ctrl / Cmd + scroll", "Zoom at the cursor"],
-  ["Scroll", "Pan the canvas"],
-  ["Double-click empty space", "New note"],
-  ["Double-click a note", "Edit it in place"],
-  ["Click a link card", "Open it in your browser"],
-  ["Double-click a PDF or picture", "Open it outside Bowerbird"],
-  ["Click a play tile", "Play audio / video"],
-  ["Drag a card corner", "Resize the card (nwse cursor on hover)"],
-  ["Click the board's corner", "Open the board again"],
-  ["Shift + click", "Add to the selection"],
-  ["Drag on empty space", "Marquee-select"],
-  ["Ctrl / Cmd + V", "Paste a link or an image as a card"],
-];
-
 // The action being rebound, if a key button is waiting for
 // the next key press. Null when not capturing.
 let capturingId: ShortcutId | null = null;
@@ -126,7 +92,9 @@ function renderShortcutsTab(): void {
     const resetBtn = document.createElement("button");
     resetBtn.className = "shortcut-reset";
     resetBtn.type = "button";
-    resetBtn.textContent = "Reset";
+    resetBtn.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1 4v6h6" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg>';
+    resetBtn.setAttribute("aria-label", `Reset ${action.label}`);
+    resetBtn.title = `Reset ${action.label}`;
     resetBtn.addEventListener("click", async () => {
       reset(action.id);
       await api!.app.setShortcuts(allOverrides());
@@ -135,18 +103,6 @@ function renderShortcutsTab(): void {
     row.append(label, keyBtn, resetBtn);
     container.appendChild(row);
   }
-  renderFixedShortcutsTable();
-}
-
-// Fixed keys, gestures and plugin shortcuts, read-only,
-// below the editable rows.
-function renderFixedShortcutsTable(): void {
-  if (!api) return;
-  const table = el<HTMLTableElement>("shortcuts-fixed-table");
-  if (!table) return;
-  const rows: Array<[string, string]> = [...FIXED_SHORTCUTS, ...GESTURES];
-  for (const s of api.ui.listShortcuts()) rows.push([s.key.toUpperCase(), `${s.title} (${s.pluginName})`]);
-  table.innerHTML = rows.map(([k, v]) => `<tr><td><kbd>${api!.text.escapeHtml(k)}</kbd></td><td>${api!.text.escapeHtml(v)}</td></tr>`).join("");
 }
 
 // The Performance section in the General tab: the hardware
@@ -548,8 +504,6 @@ export function activate(context: PluginContext): void {
           <div id="settings-section-shortcuts" class="settings-section" style="display:none">
             <h3>Keyboard shortcuts</h3>
             <div id="shortcuts-edit-list"></div>
-            <h3>Fixed keys and gestures</h3>
-            <table id="shortcuts-fixed-table"></table>
           </div>
           <div id="settings-section-plugins" class="settings-section" style="display:none">
             <div id="plugin-list"></div>
