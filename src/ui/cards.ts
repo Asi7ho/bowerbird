@@ -105,8 +105,6 @@ export function activate(api: PluginContext): void {
     `<div class="title" style="font-size:14px">${api.text.escapeHtml(api.text.elide(name, width, 14, true))}</div>`;
   const titleSubCol = (name: string, width: number, sub: string): string =>
     `<div class="col">${titleHtml(name, width)}<div class="sub" style="font-size:12px">${sub}</div></div>`;
-  const titleCol = (name: string, width: number): string =>
-    `<div class="col">${titleHtml(name, width)}</div>`;
 
   // Markdown is a per-character regex walk, so re-parsing every note
   // on every render is the most expensive part of a rebuild for a
@@ -425,11 +423,11 @@ export function activate(api: PluginContext): void {
         if (c.hh >= thumbH + 70) {
           return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
             <video controls preload="metadata" playsinline src="${src}" data-name="${api.text.escapeHtml(name)}" data-path="${api.text.escapeHtml(source)}" style="width:${c.ww - 24}px;height:${thumbH}px;object-fit:${c.sel ? "contain" : "cover"};border-radius:10px;background:#1d1d1f;pointer-events:auto"></video>
-            ${titleHtml(name, c.ww - 24)}</div></div>`;
+            </div></div>`;
         }
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px">
           <video controls preload="metadata" playsinline src="${src}" data-name="${api.text.escapeHtml(name)}" data-path="${api.text.escapeHtml(source)}" style="width:96px;height:56px;object-fit:${c.sel ? "contain" : "cover"};border-radius:10px;background:#1d1d1f;pointer-events:auto"></video>
-          ${titleCol(name, c.ww - 132)}</div></div>`;
+          </div></div>`;
       }
       // The poster, with the play button over it. No poster
       // yet — an old board, or the capture is still running —
@@ -439,20 +437,20 @@ export function activate(api: PluginContext): void {
         if (c.hh >= thumbH + 70) {
           return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
             <button type="button" class="video-thumb clickable" data-action="play-video" aria-label="Play video" data-id="${c.id}" style="width:${c.ww - 24}px;height:${thumbH}px;font-size:28px;overflow:hidden"><img src="${posterUrl}" alt=""><span class="video-play">▶</span></button>
-            ${titleHtml(name, c.ww - 24)}</div></div>`;
+            </div></div>`;
         }
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px">
           <button type="button" class="video-thumb clickable" data-action="play-video" aria-label="Play video" data-id="${c.id}" style="width:96px;height:56px;font-size:20px;overflow:hidden"><img src="${posterUrl}" alt=""><span class="video-play">▶</span></button>
-          ${titleCol(name, c.ww - 132)}</div></div>`;
+          </div></div>`;
       }
       if (c.hh >= thumbH + 70) {
         return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner" style="padding:12px;display:flex;flex-direction:column;gap:8px">
           <button type="button" class="video-thumb clickable" data-action="play-video" aria-label="Play video" data-id="${c.id}" style="width:${c.ww - 24}px;height:${thumbH}px;font-size:28px">▶</button>
-          ${titleHtml(name, c.ww - 24)}</div></div>`;
+          </div></div>`;
       }
       return `<div class="${c.cls}" data-id="${c.id}" style="${c.style}"><div class="inner row" style="padding:12px">
         <button type="button" class="video-thumb clickable" data-action="play-video" aria-label="Play video" data-id="${c.id}" style="width:96px;height:56px;font-size:20px">▶</button>
-        ${titleCol(name, c.ww - 132)}</div></div>`;
+        </div></div>`;
     },
   });
 
