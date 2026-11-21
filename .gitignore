@@ -9,3 +9,4 @@ dist-win/
 dist-linux/
 Bowerbird-*.tar.gz
 tests/e2e/artifacts/
+scripts/cards-shot.png
