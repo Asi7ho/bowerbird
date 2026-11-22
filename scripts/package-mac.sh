@@ -98,6 +98,20 @@ cat > "$APP/Contents/Resources/app/package.json" <<EOF
 }
 EOF
 
+# Runtime node_modules: the compiled main process needs
+# jszip (board export) and @xenova/transformers (Whisper
+# transcription, CLIP/AST context search) at runtime — tsc
+# keeps them as requires, it does not bundle them. Without
+# them the packaged app fails with MODULE_NOT_FOUND the
+# first time export or transcription is used. Only the
+# pruned runtime closure is copied (~40 MB), not all of
+# node_modules. The target platform's native binaries must
+# be installed (they are, when this runs on a Mac); on a
+# cross-platform build the helper warns and skips the copy.
+node scripts/copy-runtime-deps.mjs \
+  --app-dir "$APP/Contents/Resources/app" \
+  --target "darwin-$ARCH"
+
 # 4. Icon: .icns, plus the Info.plist that points at it.
 if [ "$(uname)" = "Darwin" ] && command -v iconutil >/dev/null 2>&1; then
   iconutil -c icns assets/icon.iconset -o "$APP/Contents/Resources/Bowerbird.icns"

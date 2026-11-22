@@ -90,6 +90,18 @@ cat > "$OUT/resources/app/package.json" <<EOF
 }
 EOF
 
+# Runtime node_modules: the compiled main process needs
+# jszip (board export) and @xenova/transformers (Whisper
+# transcription, CLIP/AST context search) at runtime — tsc
+# keeps them as requires, it does not bundle them. Without
+# them the packaged app fails with MODULE_NOT_FOUND the
+# first time export or transcription is used. Only the
+# pruned runtime closure is copied (~40 MB), not all of
+# node_modules.
+node scripts/copy-runtime-deps.mjs \
+  --app-dir "$OUT/resources/app" \
+  --target "win32-$ARCH"
+
 # 4. Icon: replace the Electron icon on the exe with the app's own.
 # rcedit is a Windows exe, so this only runs on Windows; on any
 # other OS the script warns and leaves the default icon.
