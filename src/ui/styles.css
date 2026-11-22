@@ -1431,8 +1431,9 @@ body.platform-linux #title-bar button.win-close:hover {
 }
 
 /* Vertical toolbar, left side: a frosted macOS material bar, centred
-   vertically, 12px from the edge. The bar itself is the window drag
-   region; every control inside opts out of dragging. The pen palette
+   vertically, 12px from the edge. The bar is NOT a window drag
+   region — dragging the floating pill must not move the window;
+   only the title bar drags it. The pen palette
    is NOT in the toolbar's flow: when it appeared inside the bar, the
    bar grew and its centred position shifted every button by ~100px,
    so a click meant for Select landed on Arrow and created a
@@ -1465,7 +1466,8 @@ body.platform-linux #title-bar button.win-close:hover {
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 16px;
   box-shadow: var(--shadow-md);
-  -webkit-app-region: drag;
+  /* No drag region: the floating pill used to move the whole
+     window when dragged; only the title bar drags it. */
 }
 
 #toolbar .seg {
@@ -1918,11 +1920,20 @@ body.platform-linux #title-bar button.win-close:hover {
   min-width: 0;
   overflow: auto;
   padding-left: 24px;
-  scrollbar-width: none;
+  /* A thin scrollbar, not a hidden one: the pane scrolls (the
+     feedback textarea is cut off with Send below the fold),
+     and a hidden scrollbar gave no indication of that. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
 }
 
 #settings-content::-webkit-scrollbar {
-  display: none;
+  width: 8px;
+}
+
+#settings-content::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 4px;
 }
 
 #settings-tabs {
@@ -2589,7 +2600,12 @@ body.platform-linux #title-bar button.win-close:hover {
 }
 
 #plugin-panels::-webkit-scrollbar {
-  display: none;
+  width: 8px;
+}
+
+#plugin-panels::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 4px;
 }
 
 /* The dock resize handle: a thin strip on the dock's left edge,
@@ -2648,11 +2664,19 @@ body.platform-linux #title-bar button.win-close:hover {
   border-radius: 9px;
   padding: 2px;
   overflow-x: auto;
-  scrollbar-width: none;
+  /* Thin, like the Settings pane: the tab strip scrolls, and
+     a hidden scrollbar gave no indication of that. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
 }
 
 .plugin-tabs-list::-webkit-scrollbar {
-  display: none;
+  height: 8px;
+}
+
+.plugin-tabs-list::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.18);
+  border-radius: 4px;
 }
 
 .plugin-tab {
