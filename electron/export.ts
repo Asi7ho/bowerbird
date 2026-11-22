@@ -178,6 +178,13 @@ function addDirToZip(zip: JSZip, src: string, prefix: string): void {
   }
 }
 
+// A ZIP is loaded whole into memory before it is read:
+// refuse an absurdly large file first, so a crafted export
+// cannot OOM the main process. 2 GB is far above any real
+// export (the largest files inside it, the media, are
+// written to disk one entry at a time).
+export const MAX_IMPORT_ZIP_BYTES = 2 * 1024 * 1024 * 1024;
+
 export function createExport(deps: ExportDeps): {
   buildFullExportZip: () => Promise<Buffer>;
   importExport: (sourcePath: string) => Promise<ExportResult>;
@@ -485,6 +492,7 @@ export function createExport(deps: ExportDeps): {
       return importSingleBoard(null, sourcePath);
     }
     if (path.extname(sourcePath).toLowerCase() !== ".zip") throw new Error("pick a .zip export, or the folder it unzips to");
+    if (stat.size > MAX_IMPORT_ZIP_BYTES) throw new Error("that export is too large to import (over 2 GB)");
     const zip = await JSZip.loadAsync(fs.readFileSync(sourcePath));
     if (zip.file("bowerbird-export.json") || Object.keys(zip.files).some((n) => n.startsWith("boards/"))) {
       return importFullExport(zip);
