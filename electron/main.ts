@@ -1706,6 +1706,14 @@ function registerIpc(): void {
       : path.join(process.env.HOME || ".", ".local", "share");
     const folder = path.join(base, "bowerbird", "plugins", id);
     if (fs.existsSync(folder)) throw new Error(`a plugin called ${id} already exists`);
+    // The folder check only covers the user plugins folder:
+    // an id held by a bundled plugin (or a user plugin in
+    // the override dir) would install fine and shadow it on
+    // the next launch — listPlugins is first-wins, user
+    // before bundled — so reject any id already listed. The
+    // routing gate relies on the palette id belonging only
+    // to the bundled palette.
+    if (listPlugins().some((p) => p.id === id)) throw new Error(`a plugin called ${id} is already installed`);
     const styles = typeof styleCode === "string" && styleCode.trim() ? ["style.css"] : [];
     const manifest = {
       apiVersion: "2",
