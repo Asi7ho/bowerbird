@@ -119,3 +119,8 @@
   font-size: 12px;
   color: var(--grey);
 }
+/* Pressed state, like the core search rows: a row darkens
+   on press, one step past its hover fill. */
+.cmd-row:not(.cmd-empty):active {
+  background: rgba(0, 0, 0, 0.06);
+}

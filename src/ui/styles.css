@@ -2998,3 +2998,77 @@ body.platform-linux #title-bar button.win-close:hover {
 #plugin-panels.dock-resizing {
   transition: none;
 }
+
+/* Pressed states: buttons that only had a hover state now
+   darken on press, so a click reads as a click. Each rule
+   mirrors its :hover background one step darker; dim buttons
+   stay flat, as on hover. */
+#title-bar button:active {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+#title-bar button.dim:active {
+  background: transparent;
+}
+
+#toolbar button.dim:active {
+  background: transparent;
+}
+
+#settings-tabs button:active {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+#settings .close:active {
+  background: rgba(0, 0, 0, 0.16);
+}
+
+#settings .shortcut-reset:active,
+#settings #btn-hardware-accel:active,
+#settings #btn-restart:active,
+#settings #btn-feedback:active,
+#settings #btn-export-data:active,
+#settings #btn-import-data:active,
+#settings .backup-row button:active,
+#settings .plugin-row button:active,
+#settings .canvas-opt button:active {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+#settings #btn-factory-reset:active,
+#settings #plugins-reset:active {
+  background: rgba(230, 57, 70, 0.12);
+}
+
+.plugin-tab:active {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.plugin-tabs-close:active {
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.plugin-panel-body button:active {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.search-result:active {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+#search-clear:active {
+  background: rgba(0, 0, 0, 0.16);
+}
+
+#view-switcher button:active {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+#recovery-dialog .recovery-restore:active {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+#recovery-dialog .recovery-discard:active {
+  background: rgba(0, 0, 0, 0.08);
+  color: var(--ink);
+}
