@@ -3,6 +3,7 @@
 // the public API.
 
 import type { PluginContext, PluginManifest } from "../plugins/host";
+import { displayBinding } from "./shortcuts";
 
 export const manifest: PluginManifest = {
   id: "core-titlebar",
@@ -41,8 +42,8 @@ export function activate(api: PluginContext): void {
       </div>
       <span id="title-bar-name">Bowerbird</span>
       <div id="title-bar-undo">
-        <button id="btn-undo" title="Undo (Ctrl / Cmd + Z)" aria-label="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5 3.5 8.5 7 12" /><path d="M3.5 8.5H13a5.5 5.5 0 0 1 0 11H10" /></svg></button>
-        <button id="btn-redo" title="Redo (Ctrl / Cmd + Shift + Z)" aria-label="Redo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 5l3.5 3.5L17 12" /><path d="M20.5 8.5H11a5.5 5.5 0 0 0 0 11h3" /></svg></button>
+        <button id="btn-undo" title="Undo (${displayBinding("ctrl+z")})" aria-label="Undo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5 3.5 8.5 7 12" /><path d="M3.5 8.5H13a5.5 5.5 0 0 1 0 11H10" /></svg></button>
+        <button id="btn-redo" title="Redo (${displayBinding("ctrl+shift+z")})" aria-label="Redo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 5l3.5 3.5L17 12" /><path d="M20.5 8.5H11a5.5 5.5 0 0 0 0 11h3" /></svg></button>
       </div>
       <span id="saved-label" class="saved-label">Saved</span>
     </div>

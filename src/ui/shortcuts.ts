@@ -198,10 +198,32 @@ export function matches(e: KeyboardEvent, id: ShortcutId): boolean {
 }
 
 // Show a binding the way the old table did: "Ctrl / Cmd + Z",
-// "Delete / Backspace", "+ / =", "V".
+// "Delete / Backspace", "+ / =", "V". On macOS the bindings
+// render as glyphs (⌘ ⇧ ⌥), the way macOS menus show them;
+// elsewhere they stay as words. "ctrl" in a binding means
+// Cmd on a Mac (matchesEvent accepts either modifier), so it
+// renders as ⌘ there.
+const IS_MAC = typeof navigator !== "undefined"
+  && (/Mac/.test(navigator.platform ?? "")
+    || (navigator as unknown as { userAgentData?: { platform?: string } }).userAgentData?.platform === "macOS");
 export function displayBinding(b: string): string {
   const parsed = parseBinding(b);
   if (!parsed) return b;
+  if (IS_MAC) {
+    // macOS menu order: Option, Shift, Command, then the key,
+    // run together with no separator.
+    const parts: string[] = [];
+    if (parsed.alt) parts.push("⌥");
+    if (parsed.shift) parts.push("⇧");
+    if (parsed.ctrl) parts.push("⌘");
+    let key = parsed.key;
+    if (key === "+") key = "+";
+    else if (key === "delete") key = "⌫";
+    else if (key === " ") key = "Space";
+    else key = key.toUpperCase();
+    parts.push(key);
+    return parts.join("");
+  }
   const parts: string[] = [];
   if (parsed.ctrl) parts.push("Ctrl / Cmd");
   if (parsed.alt) parts.push("Alt");
