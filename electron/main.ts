@@ -64,6 +64,10 @@ let currentBoard: string | null = null;
 let panelOrder: string[] = [];
 let panelWidth = 290;
 let dockVisible = true;
+// The main window's last geometry, restored on launch when it
+// still fits on a connected display.
+let windowBounds: { x: number; y: number; width: number; height: number } | null = null;
+let windowMaximised = false;
 // Hardware acceleration (GPU rasterization) is on unless the
 // user turns it off in Settings. Shortcut overrides are the
 // actions that differ from their defaults, as action id to
@@ -85,6 +89,8 @@ function loadAppSettings(): void {
     hardwareAcceleration = s.hardwareAcceleration;
     shortcuts = s.shortcuts;
     currentBoard = s.currentBoard;
+    windowBounds = s.windowBounds;
+    windowMaximised = s.windowMaximised;
   } catch {
     // No settings file yet: keep the default.
   }
@@ -98,6 +104,7 @@ function saveAppSettings(): void {
     fs.writeFileSync(tmp, serialiseAppSettings({
       corner: cornerReveal, panelOrder, panelWidth, dockVisible,
       hardwareAcceleration, shortcuts, currentBoard,
+      windowBounds, windowMaximised,
     }));
     fs.renameSync(tmp, file);
   } catch {
@@ -586,9 +593,18 @@ function createWindow(): void {
   const defaultHeight = Math.max(sizeOverride ? Number(sizeOverride[2]) : 850, 720);
   const defaultX = wa0.x + Math.round((wa0.width - defaultWidth) / 2);
   const defaultY = wa0.y + Math.round((wa0.height - defaultHeight) / 2);
+  // A saved geometry from the last run wins over the default,
+  // when it still intersects a connected display's work area
+  // (a monitor unplugged since must not strand the window
+  // off-screen). The screenshot override still wins over both.
+  const restored = sizeOverride ? null : windowBoundsOnScreen();
+  const initialWidth = restored ? restored.width : defaultWidth;
+  const initialHeight = restored ? restored.height : defaultHeight;
+  const initialX = restored ? restored.x : defaultX;
+  const initialY = restored ? restored.y : defaultY;
   win = new BaseWindow({
-    width: defaultWidth,
-    height: defaultHeight,
+    width: initialWidth,
+    height: initialHeight,
     minWidth: 1100,
     minHeight: 720,
     frame: false,
@@ -636,6 +652,7 @@ function createWindow(): void {
       return;
     }
     boardView.setBounds({ x: 0, y: 0, width: b.width, height: b.height });
+    saveWindowBoundsSoon();
   });
   // Focus changes reach the renderer, so the title bar can grey
   // the traffic lights when the window is inactive, as macOS
@@ -647,16 +664,59 @@ function createWindow(): void {
   };
   win.on("focus", () => sendFocus(true));
   win.on("blur", () => sendFocus(false));
+  // A move also changes the saved geometry, not just a resize.
+  win.on("move", () => saveWindowBoundsSoon());
+  // Close saves synchronously: the debounced save above may
+  // not have fired yet, and the app is going away.
+  win.on("close", () => saveWindowBoundsNow());
   win.on("closed", () => {
     win = null;
     boardView = null;
   });
   win.setBounds({
-    x: defaultX,
-    y: defaultY,
-    width: defaultWidth,
-    height: defaultHeight,
+    x: initialX,
+    y: initialY,
+    width: initialWidth,
+    height: initialHeight,
   });
+  // A maximised window restores maximised, on top of its saved
+  // (unmaximised) bounds.
+  if (!sizeOverride && restored && windowMaximised) win.maximize();
+}
+
+// Saved window geometry, for restore on launch: the bounds only
+// count when they still intersect a connected display's work
+// area, so a monitor unplugged since does not strand the window
+// off-screen. The size is clamped to the 1100x720 minimum.
+function windowBoundsOnScreen(): { x: number; y: number; width: number; height: number } | null {
+  if (!windowBounds) return null;
+  const b = windowBounds;
+  const w = Math.max(b.width, 1100);
+  const h = Math.max(b.height, 720);
+  const onScreen = screen.getAllDisplays().some((d) => {
+    const wa = d.workArea;
+    return b.x < wa.x + wa.width && b.x + w > wa.x && b.y < wa.y + wa.height && b.y + h > wa.y;
+  });
+  if (!onScreen) return null;
+  return { x: b.x, y: b.y, width: w, height: h };
+}
+
+// Record the window's geometry for the next launch. The
+// maximised flag is saved on its own: a maximised window's
+// bounds are the full display, not the size to restore.
+let windowBoundsSaveTimer: ReturnType<typeof setTimeout> | null = null;
+function saveWindowBoundsNow(): void {
+  if (!win || win.isDestroyed()) return;
+  windowMaximised = win.isMaximized();
+  if (!win.isMaximized() && !win.isFullScreen()) {
+    const b = win.getBounds();
+    windowBounds = { x: b.x, y: b.y, width: b.width, height: b.height };
+  }
+  saveAppSettings();
+}
+function saveWindowBoundsSoon(): void {
+  if (windowBoundsSaveTimer) clearTimeout(windowBoundsSaveTimer);
+  windowBoundsSaveTimer = setTimeout(() => saveWindowBoundsNow(), 500);
 }
 
 // ---------------------------------------------------------------- plugins

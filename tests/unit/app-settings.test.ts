@@ -31,6 +31,15 @@ describe("parseAppSettings", () => {
     expect(s.corner).toBe("top-right");
     expect(parseAppSettings({ corner: "nowhere" }).corner).toBe("bottom-left");
   });
+  it("loads saved window bounds and drops bad ones", () => {
+    const s = parseAppSettings({ windowBounds: { x: 100, y: 50, width: 1400, height: 900 }, windowMaximised: true });
+    expect(s.windowBounds).toEqual({ x: 100, y: 50, width: 1400, height: 900 });
+    expect(s.windowMaximised).toBe(true);
+    expect(parseAppSettings({ windowBounds: { x: 0, y: 0, width: 10, height: 10 } }).windowBounds).toBeNull();
+    expect(parseAppSettings({ windowBounds: { x: "a", y: 0, width: 1400, height: 900 } }).windowBounds).toBeNull();
+    expect(parseAppSettings({}).windowBounds).toBeNull();
+    expect(parseAppSettings({}).windowMaximised).toBe(false);
+  });
 });
 
 describe("cleanShortcuts", () => {
@@ -50,5 +59,11 @@ describe("serialiseAppSettings", () => {
     const back = parseAppSettings(JSON.parse(serialiseAppSettings(s)));
     expect(back.hardwareAcceleration).toBe(false);
     expect(back.shortcuts).toEqual({ select: "s" });
+  });
+  it("round-trips saved window bounds", () => {
+    const s = parseAppSettings({ windowBounds: { x: 100, y: 50, width: 1400, height: 900 }, windowMaximised: true });
+    const back = parseAppSettings(JSON.parse(serialiseAppSettings(s)));
+    expect(back.windowBounds).toEqual({ x: 100, y: 50, width: 1400, height: 900 });
+    expect(back.windowMaximised).toBe(true);
   });
 });
