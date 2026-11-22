@@ -347,6 +347,7 @@ export interface PluginBridge {
   fullscreen: () => Promise<boolean>;
   maximise: () => Promise<boolean>;
   windowState: () => Promise<{ maximised: boolean; fullscreen: boolean }>;
+  onWindowFocus: (cb: (focused: boolean) => void) => void;
   moveWindow: (dx: number, dy: number) => void;
   getAppSettings: () => Promise<{ corner: string; panelOrder?: string[]; panelWidth?: number; dockVisible?: boolean; shortcuts?: Record<string, string>; hardwareAcceleration?: boolean }>;
   setPanelWidth: (width: number) => Promise<number>;
@@ -836,6 +837,10 @@ export interface PluginContext {
     // the title bar can show the right icon (enter/exit
     // full screen, maximise/restore).
     getWindowState: () => Promise<{ maximised: boolean; fullscreen: boolean }>;
+    // Window focus changes, so the title bar can grey the
+    // traffic lights when the window is inactive, as macOS
+    // does natively.
+    onFocusChange: (cb: (focused: boolean) => void) => void;
     move: (dx: number, dy: number) => void;
     getCorner: () => Promise<string>;
     setCorner: (corner: string) => Promise<string>;

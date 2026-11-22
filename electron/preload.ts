@@ -69,6 +69,7 @@ contextBridge.exposeInMainWorld("bowerbird", {
   fullscreen: () => ipcRenderer.invoke("bowerbird:fullscreen"),
   maximise: () => ipcRenderer.invoke("bowerbird:maximise"),
   windowState: () => ipcRenderer.invoke("bowerbird:window-state"),
+  onWindowFocus: (cb: (focused: boolean) => void) => { ipcRenderer.on("bowerbird:window-focus", (_event, focused: boolean) => cb(focused)); },
   // app-file://localhost + path, NOT app-file:// + path:
   // Chromium lowercases the hostname of a standard
   // scheme, so app-file:///Users/x became app-file://users/x

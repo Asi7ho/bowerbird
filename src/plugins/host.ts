@@ -555,6 +555,10 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
         require("window");
         return bridge!.windowState();
       },
+      onFocusChange: (cb: (focused: boolean) => void) => {
+        require("window");
+        bridge!.onWindowFocus(cb);
+      },
       move: (dx: number, dy: number) => {
         require("window");
         bridge!.moveWindow(dx, dy);

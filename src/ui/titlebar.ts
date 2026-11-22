@@ -104,7 +104,16 @@ export function activate(api: PluginContext): void {
   bar.querySelector<HTMLButtonElement>("#win-minimise")?.addEventListener("click", () => {
     api.window.minimise().catch(() => undefined);
   });
-  winFullscreen?.addEventListener("click", async () => {
+  winFullscreen?.addEventListener("click", async (e) => {
+    // Option-click the green button maximises instead of going
+    // full screen, as macOS does natively.
+    if (e.altKey) {
+      try {
+        const maximised = await api.window.maximise();
+        winMaximise?.classList.toggle("is-maximised", maximised);
+      } catch { /* state sync on resize will correct the icon */ }
+      return;
+    }
     try {
       const fullscreen = await api.window.fullscreen();
       winFullscreen?.classList.toggle("is-fullscreen", fullscreen);
@@ -115,6 +124,19 @@ export function activate(api: PluginContext): void {
       const maximised = await api.window.maximise();
       winMaximise?.classList.toggle("is-maximised", maximised);
     } catch { /* state sync on resize will correct the icon */ }
+  });
+  // Double-click the title bar toggles maximise, as macOS does
+  // natively — but only on the bar itself, never on a button,
+  // the search box or the undo controls inside it.
+  bar.addEventListener("dblclick", (e) => {
+    if ((e.target as HTMLElement).closest("button, input, #search-box")) return;
+    void api.window.maximise().then((maximised) => {
+      winMaximise?.classList.toggle("is-maximised", maximised);
+    }).catch(() => undefined);
+  });
+  // Inactive window: grey the traffic lights, as macOS does.
+  api.window.onFocusChange((focused) => {
+    document.body.classList.toggle("window-inactive", !focused);
   });
   // A maximise or full screen done outside the buttons (an
   // OS shortcut, a snap) still has to flip the icon, so

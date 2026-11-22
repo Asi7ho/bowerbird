@@ -291,6 +291,18 @@ body.platform-darwin #title-bar button.win-fullscreen:hover {
   background: #28c840;
 }
 
+/* Inactive window: macOS greys the traffic lights and hides
+   their hover icons until the window is focused again. */
+body.window-inactive.platform-darwin #title-bar button.win-close,
+body.window-inactive.platform-darwin #title-bar button.win-minimise,
+body.window-inactive.platform-darwin #title-bar button.win-fullscreen {
+  background: #d7d7d7;
+}
+
+body.window-inactive.platform-darwin #window-controls:hover svg {
+  opacity: 0;
+}
+
 body.platform-darwin #title-bar button.win-maximise {
   display: none;
 }

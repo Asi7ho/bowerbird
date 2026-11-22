@@ -82,6 +82,9 @@ interface BowerbirdAPI {
   fullscreen(): Promise<boolean>;
   maximise(): Promise<boolean>;
   windowState(): Promise<{ maximised: boolean; fullscreen: boolean }>;
+  // Called when the window gains or loses focus, so the title
+  // bar can grey the traffic lights while it is inactive.
+  onWindowFocus(cb: (focused: boolean) => void): void;
   fileUrl(path: string): string;
   listPlugins(): Promise<PluginManifest[]>;
   readPluginFile(pluginId: string, relativePath: string): Promise<string>;

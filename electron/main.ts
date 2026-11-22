@@ -637,6 +637,16 @@ function createWindow(): void {
     }
     boardView.setBounds({ x: 0, y: 0, width: b.width, height: b.height });
   });
+  // Focus changes reach the renderer, so the title bar can grey
+  // the traffic lights when the window is inactive, as macOS
+  // does natively. A destroyed view just drops the message.
+  const sendFocus = (focused: boolean): void => {
+    if (boardView && !boardView.webContents.isDestroyed()) {
+      boardView.webContents.send("bowerbird:window-focus", focused);
+    }
+  };
+  win.on("focus", () => sendFocus(true));
+  win.on("blur", () => sendFocus(false));
   win.on("closed", () => {
     win = null;
     boardView = null;
