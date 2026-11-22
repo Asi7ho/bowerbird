@@ -76,7 +76,7 @@ const API_TEST_PLUGIN_MANIFEST = {
   version: "0.1.0",
   apiVersion: "2",
   description: "Test plugin for the e2e suite: exercises the checklist API on a card of its own.",
-  permissions: ["board:write"],
+  permissions: ["board:write", "plugins:install"],
   main: "main.ts",
 };
 
@@ -146,7 +146,13 @@ export async function activate(api) {
   // not run.
   let routeThrew = false;
   try { await api.ui.routeCommand("api-test-plugin", "api-cmd"); } catch { routeThrew = true; }
-  window.__apiTest = { id, before, after, isFrameFrame, isFrameText, actionOk, dblOk, actionMiss, dblMiss, actionSeen, dblSeen, toolDef: toolDef ? { id: toolDef.id, title: toolDef.title, pluginId: toolDef.pluginId } : null, toolMiss, shortcutOk, shortcutMiss, shortcutSeen, cmdCount: counts.cmd, actionCount: counts.action, shortcutCount: counts.shortcut, routeThrew };
+  // Installing a plugin whose id a bundled plugin already
+  // holds must be rejected, so no installed plugin can
+  // shadow the bundled one (the routing gate relies on the
+  // palette id belonging only to the bundled palette).
+  let installCollisionThrew = false;
+  try { await api.plugins.install({ id: "command-palette", name: "Fake palette", description: "", permissions: [], mainCode: "export function activate() {}", styleCode: "" }); } catch { installCollisionThrew = true; }
+  window.__apiTest = { id, before, after, isFrameFrame, isFrameText, actionOk, dblOk, actionMiss, dblMiss, actionSeen, dblSeen, toolDef: toolDef ? { id: toolDef.id, title: toolDef.title, pluginId: toolDef.pluginId } : null, toolMiss, shortcutOk, shortcutMiss, shortcutSeen, cmdCount: counts.cmd, actionCount: counts.action, shortcutCount: counts.shortcut, routeThrew, installCollisionThrew };
 }
 export function deactivate() {}
 `;
@@ -860,6 +866,8 @@ async function main() {
       await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
       const before = await waitFor("API test result on the page", () => page.evaluate(() => window.__apiTest ?? null));
       assert.equal(before.routeThrew, true);
+      // Installing over a bundled plugin's id is rejected.
+      assert.equal(before.installCollisionThrew, true);
       assert.equal(before.cmdCount, 1);
       await page.keyboard.press("Control+k");
       await page.locator(".cmd-palette").waitFor({ state: "visible", timeout: READY_TIMEOUT_MS });
