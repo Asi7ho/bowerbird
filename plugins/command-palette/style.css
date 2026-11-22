@@ -14,6 +14,18 @@
   z-index: 100;
 }
 
+/* The palette opens with a short fade/scale, like the core
+   Settings sheet, instead of popping instantly. The backdrop
+   fades; the dialog fades and scales in. Keyframes are shared
+   names with the core stylesheet (same definitions). */
+@keyframes fade-in {
+  from { opacity: 0; }
+}
+
+@keyframes sheet-in {
+  from { opacity: 0; transform: scale(0.97) translateY(4px); }
+}
+
 .cmd-palette-backdrop {
   position: absolute;
   inset: 0;
@@ -24,6 +36,7 @@
   align-items: flex-start;
   justify-content: center;
   padding-top: 80px;
+  animation: fade-in 0.18s ease;
 }
 
 .cmd-palette {
@@ -33,6 +46,7 @@
   border-radius: 16px;
   box-shadow: var(--shadow-lg);
   overflow: hidden;
+  animation: sheet-in 0.18s ease;
 }
 
 .cmd-input {

@@ -2582,6 +2582,10 @@ body.platform-linux #title-bar button.win-close:hover {
   overflow: hidden;
   pointer-events: none;
   z-index: 10;
+  /* Open/close animates the width; a drag resize sets it
+     directly (see .dock-resizing below), so the drag never
+     lags a frame behind the pointer. */
+  transition: width 0.18s ease;
 }
 
 #plugin-panels::-webkit-scrollbar {
@@ -2913,4 +2917,60 @@ body.platform-linux #title-bar button.win-close:hover {
    "Disable anyway" is a deliberate second click, not a toggle. */
 #settings .plugin-row button.armed {
   color: #e63946;
+}
+/* Motion: UI changes animate instead of popping instantly.
+   Short (~150-180 ms) ease-ins, end states identical — this
+   is behaviour, not a restyle. display:none elements cannot
+   transition, so the show/hide surfaces animate in with a
+   keyframe that runs when they become visible; the exit is
+   still instant. The dock width is a real transition (its
+   width is set inline), disabled while its resize handle is
+   being dragged. */
+@keyframes fade-in {
+  from { opacity: 0; }
+}
+
+@keyframes sheet-in {
+  from { opacity: 0; transform: scale(0.97) translateY(4px); }
+}
+
+@keyframes flyout-in {
+  from { opacity: 0; transform: scale(0.97); }
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(4px); }
+}
+
+/* Settings sheet: backdrop fades, sheet fades and scales in. */
+#settings-backdrop.open {
+  animation: fade-in 0.18s ease;
+}
+
+#settings-backdrop.open #settings {
+  animation: sheet-in 0.18s ease;
+}
+
+/* Toolbar flyouts (shape/draw/select pickers, pen palette)
+   and the note-colours bar: fade and scale from the anchor. */
+#toolbar .palette,
+.note-colour-bar {
+  animation: flyout-in 0.15s ease;
+  transform-origin: left center;
+}
+
+/* Toast: fades and rises in. */
+#toast.show {
+  animation: toast-in 0.18s ease;
+}
+
+/* Search results: fade in when the list appears. */
+#search-results {
+  animation: fade-in 0.15s ease;
+}
+
+/* Plugin dock: no width transition while dragging its
+   resize handle, or the dock lags the pointer. */
+#plugin-panels.dock-resizing {
+  transition: none;
 }

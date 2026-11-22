@@ -94,6 +94,10 @@ export function ensureResizeHandle(): void {
   handle.addEventListener("mousedown", (e) => {
     e.preventDefault();
     e.stopPropagation();
+    // While dragging, the dock width follows the pointer
+    // directly: the width transition is off, or the dock
+    // lags a frame behind the drag.
+    shell.panelsEl?.classList.add("dock-resizing");
     const startX = e.clientX;
     const startWidth = panelWidth;
     const onMove = (ev: MouseEvent) => {
@@ -105,6 +109,7 @@ export function ensureResizeHandle(): void {
     const onUp = () => {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
+      shell.panelsEl?.classList.remove("dock-resizing");
       void deps?.getBridge()?.setPanelWidth(panelWidth);
     };
     window.addEventListener("mousemove", onMove);
