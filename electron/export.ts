@@ -19,6 +19,23 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import JSZip from "jszip";
 
+// A ZIP entry name is attacker-controlled, and joining it
+// under a destination with `..` would escape the board or
+// plugin folder and write anywhere the user can write
+// (including into the plugins folder, whose code runs on
+// the next launch). Resolve the target and require it to
+// stay inside its destination; a `..` that stays inside is
+// harmless. JSZip happens to canonicalise `..` out of entry
+// names on load today, so this is defence in depth: the
+// containment holds even if the unzipper ever changes.
+export function joinInside(dest: string, rel: string): string {
+  const target = path.resolve(dest, rel);
+  if (target !== dest && !target.startsWith(dest + path.sep)) {
+    throw new Error("that export contains a file outside its folder");
+  }
+  return target;
+}
+
 export interface ExportDeps {
   baseDir: () => string;
   userDataDir: () => string;
@@ -320,8 +337,8 @@ export function createExport(deps: ExportDeps): {
         }
         installedBoards.set(boardName, dest);
       }
-      fs.mkdirSync(path.dirname(path.join(dest, rel)), { recursive: true });
-      fs.writeFileSync(path.join(dest, rel), await entry.async("nodebuffer"));
+      fs.mkdirSync(path.dirname(joinInside(dest, rel)), { recursive: true });
+      fs.writeFileSync(joinInside(dest, rel), await entry.async("nodebuffer"));
       if (rel === "board.json") {
         const boardJson = await entry.async("string");
         const out = { json: resolveBoardAssetPaths(boardJson, dest), board_path: path.join(dest, "board.json"), board_dir: dest };
@@ -356,8 +373,8 @@ export function createExport(deps: ExportDeps): {
       const rel = rest.slice(slash + 1);
       if (existingPlugins.has(id)) continue;
       const dest = path.join(pluginsRoot, id);
-      fs.mkdirSync(path.dirname(path.join(dest, rel)), { recursive: true });
-      fs.writeFileSync(path.join(dest, rel), await entry.async("nodebuffer"));
+      fs.mkdirSync(path.dirname(joinInside(dest, rel)), { recursive: true });
+      fs.writeFileSync(joinInside(dest, rel), await entry.async("nodebuffer"));
     }
     // App state files, restored as they were.
     for (const stateName of ["settings.json", "plugins.json", "plugin-storage.json", "secure-storage.json"]) {

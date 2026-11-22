@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { createExport, resolveBoardAssetPaths } from "../../electron/export";
+import { createExport, joinInside, resolveBoardAssetPaths } from "../../electron/export";
 
 function sanitise(name: string): string {
   let out = name.replace(/[^A-Za-z0-9._-]/g, "_").replace(/^\.+/, "");
@@ -306,5 +306,111 @@ describe("full export and import round-trip", () => {
     fs.mkdirSync(emptyFolder);
     await expect(importExport(emptyFolder)).rejects.toThrow("no board.json");
     fs.rmSync(root, { recursive: true, force: true });
+  });
+});
+
+describe("import keeps entries inside their folder", () => {
+  // The guard itself, tested directly: the import path
+  // goes through JSZip, which canonicalises `..` out of
+  // entry names on load, so no traversal name reaches the
+  // writer today — but the containment must hold even if
+  // the unzipper ever changes, so the guard is tested on
+  // its own terms.
+  it("joinInside allows paths inside the destination", () => {
+    expect(joinInside("/base/boards/Main", "assets/photo.png")).toBe(
+      path.join("/base/boards/Main", "assets/photo.png"),
+    );
+    // A `..` that stays inside is harmless.
+    expect(joinInside("/base/boards/Main", "assets/../board.json")).toBe(
+      path.join("/base/boards/Main", "board.json"),
+    );
+  });
+
+  it("joinInside rejects paths that climb out", () => {
+    expect(() => joinInside("/base/boards/Main", "assets/../../pwned.txt")).toThrow("outside its folder");
+    expect(() => joinInside("/base/plugins/evil", "../../evil.js")).toThrow("outside its folder");
+    expect(() => joinInside("/base/boards/Main", "/etc/passwd")).toThrow("outside its folder");
+  });
+
+  // End to end: a hand-made ZIP carrying traversal names.
+  // Built byte by byte, not with JSZip: JSZip canonicalises
+  // `..` out of entry names on write, so a JSZip-made ZIP
+  // cannot carry the attack at all — a hand-made ZIP can.
+  const CRC_TABLE: number[] = (() => {
+    const table: number[] = [];
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      table[n] = c >>> 0;
+    }
+    return table;
+  })();
+  function crc32(data: Buffer): number {
+    let c = 0xffffffff;
+    for (const b of data) c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8);
+    return (c ^ 0xffffffff) >>> 0;
+  }
+  function storedZip(entries: Array<[string, string]>): Buffer {
+    const chunks: Buffer[] = [];
+    const central: Buffer[] = [];
+    let offset = 0;
+    for (const [name, content] of entries) {
+      const data = Buffer.from(content, "utf8");
+      const nameBuf = Buffer.from(name, "utf8");
+      const crc = crc32(data);
+      const local = Buffer.alloc(30);
+      local.writeUInt32LE(0x04034b50, 0);
+      local.writeUInt16LE(20, 4);
+      local.writeUInt16LE(0, 8);
+      local.writeUInt32LE(crc, 14);
+      local.writeUInt32LE(data.length, 18);
+      local.writeUInt32LE(data.length, 22);
+      local.writeUInt16LE(nameBuf.length, 26);
+      chunks.push(local, nameBuf, data);
+      const dir = Buffer.alloc(46);
+      dir.writeUInt32LE(0x02014b50, 0);
+      dir.writeUInt16LE(20, 4);
+      dir.writeUInt16LE(20, 6);
+      dir.writeUInt16LE(0, 10);
+      dir.writeUInt32LE(crc, 16);
+      dir.writeUInt32LE(data.length, 20);
+      dir.writeUInt32LE(data.length, 24);
+      dir.writeUInt16LE(nameBuf.length, 28);
+      dir.writeUInt32LE(offset, 42);
+      central.push(dir, nameBuf);
+      offset += local.length + nameBuf.length + data.length;
+    }
+    const cdSize = central.reduce((n, b) => n + b.length, 0);
+    const end = Buffer.alloc(22);
+    end.writeUInt32LE(0x06054b50, 0);
+    end.writeUInt16LE(entries.length, 8);
+    end.writeUInt16LE(entries.length, 10);
+    end.writeUInt32LE(cdSize, 12);
+    end.writeUInt32LE(offset, 16);
+    return Buffer.concat([...chunks, ...central, end]);
+  }
+
+  it("imports a ZIP with traversal entry names without writing outside", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "bowerbird-export-"));
+    const zipPath = path.join(root, "crafted.zip");
+    fs.writeFileSync(zipPath, storedZip([
+      ["bowerbird-export.json", JSON.stringify({ version: 1, kind: "bowerbird-data", currentBoard: "Main" })],
+      ["boards/Main/assets/../../pwned.txt", "pwned"],
+      ["plugins/evil/../../evil.js", "evil"],
+      ["boards/Main/board.json", boardJson("/nowhere")],
+    ]));
+    const fresh = fs.mkdtempSync(path.join(os.tmpdir(), "bowerbird-fresh-"));
+    const { importExport } = makeExport(path.join(fresh, "base"), path.join(fresh, "userData"), null);
+    const out = await importExport(zipPath);
+    // The board itself still imports.
+    expect(out.board_dir).toBe(path.join(fresh, "base"));
+    // Nothing escaped: neither file is beside the base, in
+    // it, or in the plugins folder.
+    expect(fs.existsSync(path.join(fresh, "pwned.txt"))).toBe(false);
+    expect(fs.existsSync(path.join(fresh, "base", "pwned.txt"))).toBe(false);
+    expect(fs.existsSync(path.join(fresh, "base", "evil.js"))).toBe(false);
+    expect(fs.existsSync(path.join(fresh, "base", "plugins", "evil.js"))).toBe(false);
+    fs.rmSync(root, { recursive: true, force: true });
+    fs.rmSync(fresh, { recursive: true, force: true });
   });
 });
