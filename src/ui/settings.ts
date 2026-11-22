@@ -442,6 +442,11 @@ function setSettings(open: boolean): void {
     renderPluginSettingsSections();
     renderPluginSettings();
     setSettingsTab("general");
+    // Focus lands inside the dialog on open, so the Tab trap
+    // below engages at once: without it focus stays on <body>
+    // and the first Tab falls through to the board behind the
+    // modal. The close button is the first control in the sheet.
+    el<HTMLButtonElement>("settings-close")?.focus();
   }
   api.board.render();
 }
