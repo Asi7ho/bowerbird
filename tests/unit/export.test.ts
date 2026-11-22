@@ -9,7 +9,7 @@ import { describe, expect, it } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { createExport, joinInside, resolveBoardAssetPaths } from "../../electron/export";
+import { createExport, joinInside, MAX_IMPORT_ZIP_BYTES, resolveBoardAssetPaths } from "../../electron/export";
 
 function sanitise(name: string): string {
   let out = name.replace(/[^A-Za-z0-9._-]/g, "_").replace(/^\.+/, "");
@@ -412,5 +412,19 @@ describe("import keeps entries inside their folder", () => {
     expect(fs.existsSync(path.join(fresh, "base", "plugins", "evil.js"))).toBe(false);
     fs.rmSync(root, { recursive: true, force: true });
     fs.rmSync(fresh, { recursive: true, force: true });
+  });
+});
+
+describe("import refuses an oversized ZIP", () => {
+  it("rejects a ZIP over the cap before reading it", async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "bowerbird-export-"));
+    // Sparse: the size is reported but no blocks are used.
+    const big = path.join(root, "big.zip");
+    const fd = fs.openSync(big, "w");
+    fs.ftruncateSync(fd, MAX_IMPORT_ZIP_BYTES + 1);
+    fs.closeSync(fd);
+    const { importExport } = makeExport(path.join(root, "base"), path.join(root, "userData"), null);
+    await expect(importExport(big)).rejects.toThrow("too large");
+    fs.rmSync(root, { recursive: true, force: true });
   });
 });
