@@ -763,6 +763,14 @@ function openExternal(target: string): void {
 // ---------------------------------------------------------------- mouse
 
 
+// The rotate handle's cursor: a curved arrow, not a grab —
+// grabbing is what the handle does, rotating is what it is
+// for. A data-URI SVG (no asset, no network); grab is the
+// fallback if the image cursor is rejected. The CSS handle
+// rules cannot do this: the handles are pointer-events:none,
+// so the cursor comes from the board hit-test below.
+const ROTATE_CURSOR = `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='23 4 23 10 17 10'/%3E%3Cpath d='M20.49 15a9 9 0 1 1-2.12-9.36L23 10'/%3E%3C/svg%3E") 12 12, grab`;
+
 export function attachWindowListeners(): void {
   if (S.listenersAttached) return;
   S.listenersAttached = true;
@@ -794,7 +802,7 @@ export function attachWindowListeners(): void {
           } else if (S.spaceDown) {
             S.boardEl.style.cursor = "grab";
           } else if (selected.length === 1 && rotateHit(selected[0], w)) {
-            S.boardEl.style.cursor = "grab";
+            S.boardEl.style.cursor = ROTATE_CURSOR;
           } else if (selected.length === 1 && cornerHit(selected[0], w)) {
             S.boardEl.style.cursor = "nwse-resize";
           } else if (S.api.board.hitTest(w) !== null) {
