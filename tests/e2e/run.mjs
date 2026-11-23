@@ -226,10 +226,10 @@ export async function activate(api) {
   // not run.
   let routeThrew = false;
   try { await api.ui.routeCommand("api-test-plugin", "api-cmd"); } catch { routeThrew = true; }
-  // Installing a plugin whose id a bundled plugin already
+  // Installing a plugin whose id a core plugin already
   // holds must be rejected, so no installed plugin can
-  // shadow the bundled one (the routing gate relies on the
-  // palette id belonging only to the bundled palette).
+  // shadow the core one (the routing gate relies on the
+  // palette id belonging only to the palette).
   let installCollisionThrew = false;
   try { await api.plugins.install({ id: "command-palette", name: "Fake palette", description: "", permissions: [], mainCode: "export function activate() {}", styleCode: "" }); } catch { installCollisionThrew = true; }
   window.__apiTest = { id, before, after, isFrameFrame, isFrameText, actionOk, dblOk, actionMiss, dblMiss, actionSeen, dblSeen, toolDef: toolDef ? { id: toolDef.id, title: toolDef.title, pluginId: toolDef.pluginId } : null, toolMiss, shortcutOk, shortcutMiss, shortcutSeen, cmdCount: counts.cmd, actionCount: counts.action, shortcutCount: counts.shortcut, routeThrew, installCollisionThrew };
@@ -664,8 +664,9 @@ async function main() {
       assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("perm-test-plugin", false)), false);
     });
 
-    await check("a bundled plugin enables and its panel opens", async () => {
-      assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("command-palette", true)), true);
+    await check("the command palette opens from startup", async () => {
+      // The palette is a core plugin now, always on: no
+      // enabling step, Ctrl/Cmd+K opens it straight away.
       await page.reload();
       await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
       await page.keyboard.press("Control+k");
@@ -1046,8 +1047,8 @@ async function main() {
     });
 
     await check("the palette routes a plugin command to its plugin", async () => {
-      // The palette is already enabled (bundled plugin check)
-      // and the api-test-plugin is enabled (checklist check).
+      // The palette is a core plugin, always on, and the
+      // api-test-plugin is enabled (checklist check).
       // Reload so both are active, then open the palette,
       // filter to the api command and run it: the palette
       // routes the pick to the host, which runs it as the
