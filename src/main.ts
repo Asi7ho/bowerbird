@@ -448,7 +448,8 @@ async function init(): Promise<void> {
         healBoardItem(it, measureNoteCardHeight);
       }
     } else {
-      C.board = welcomeBoard(C.boardDir, loaded.pdf_size_bytes, loaded.video_size_bytes ?? 0, loaded.model_size_bytes ?? 0, loaded.psd_size_bytes ?? 0, loaded.ai_size_bytes ?? 0);
+      const pdfPage = await C.media.probePdfSize(`${C.boardDir}/sample.pdf`);
+      C.board = welcomeBoard(C.boardDir, loaded.pdf_size_bytes, loaded.video_size_bytes ?? 0, loaded.model_size_bytes ?? 0, loaded.psd_size_bytes ?? 0, loaded.ai_size_bytes ?? 0, pdfPage);
       healLayers(C.board);
       C.undoStore.save();
     }
@@ -492,7 +493,8 @@ async function init(): Promise<void> {
     } catch { /* a failed heal must never block startup */ }
   } catch (err) {
     toast(`Could not load the board: ${String(err)}`);
-    C.board = welcomeBoard(C.boardDir, 0, 0, 0, 0, 0);
+    const pdfPage = await C.media.probePdfSize(`${C.boardDir}/sample.pdf`);
+    C.board = welcomeBoard(C.boardDir, 0, 0, 0, 0, 0, pdfPage);
   }
   // The loaded board is the first undo baseline: nothing before
   // it is undoable, and the first saved change pushes it as step 1.
