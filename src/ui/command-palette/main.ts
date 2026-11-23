@@ -25,10 +25,8 @@ export function activate(api: PluginContext): void {
     render: (container) => initOverlay(container),
   });
   // No command is registered for opening the palette:
-  // it opens with Cmd/Ctrl+K, and a Settings Run button
-  // for it was just a second, redundant way in — the
-  // palette is the place commands are run from, not a
-  // command to run from Settings.
+  // it opens with Cmd/Ctrl+K. The palette is the place
+  // commands are run from, not a command to run itself.
   window.addEventListener("keydown", onKeyDown, true);
 }
 
