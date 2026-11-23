@@ -2924,12 +2924,15 @@ async function main() {
       const tmp2 = `${boardPath}.tmp`;
       fs.writeFileSync(tmp2, JSON.stringify(board));
       fs.renameSync(tmp2, boardPath);
-      // The live-follow watcher picks the edit up in ~300ms;
-      // fit afterwards so the new card is on screen and
-      // renders, which is what triggers the heal.
-      await new Promise((r) => setTimeout(r, 2000));
-      await page.keyboard.press("f");
-      await page.locator(`#cards .card[data-id="${id}"]`).first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // The live-follow watcher picks the edit up in ~300ms,
+      // but F in a loop: if F runs before the reload, the
+      // new card is not in the fit yet, so fit again.
+      let rendered = false;
+      for (let i = 0; i < 6 && !rendered; i++) {
+        await page.keyboard.press("f");
+        rendered = await page.locator(`#cards .card[data-id="${id}"]`).first().waitFor({ timeout: 5000 }).then(() => true).catch(() => false);
+      }
+      assert.ok(rendered, "heal card renders after fit");
       const healed = await waitFor("pdf card healed in board.json", () => {
         const found = readBoard().items.find((it) => it.id === id);
         return found && found.size.h === 361 ? found : null;
