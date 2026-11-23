@@ -14,11 +14,11 @@ import {
 export type Tool = string;
 export const ACCENT = "#007AFF";
 
-// The eraser's reach, in world units: a stroke is erased
-// when the eraser circle overlaps it. 12 is big enough
-// that a sweep feels forgiving, small enough to pick one
-// stroke out of a cluster.
-export const ERASER_RADIUS = 12;
+// The eraser's reach, in world units, lives with the
+// eraser tool (see drawing-tools.ts); the board input
+// reads it here for the eraser ring, so the ring and the
+// erase agree.
+export { ERASER_RADIUS } from "./drawing-tools";
 
 // The board's mutable state, gathered into one object so the
 // file can split (board-state / render / input) without every
