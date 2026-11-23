@@ -277,6 +277,15 @@ export interface PluginPreviewStrokeOptions {
   pencil?: boolean;
 }
 
+// How a drag tool's live shape preview looks. All fields
+// are optional: color defaults to the pen colour, outline
+// to false (filled). An outline shape previews as a stroke
+// only, a filled shape as a fill.
+export interface PluginPreviewShapeOptions {
+  color?: string;
+  outline?: boolean;
+}
+
 // A creation action: an alternative to typing when the user
 // double-clicks. The core opens the text box as always, with
 // the action's icon beside it; clicking the icon runs the
@@ -676,6 +685,16 @@ export interface PluginContext {
     // finished stroke calls addItem on pointerup instead, so
     // the stroke becomes one undo step.
     previewStroke: (points: Pt[], pressures?: number[], opts?: PluginPreviewStrokeOptions) => void;
+    // Draw a drag tool's live shape preview in the preview
+    // layer above the cards, without touching the board: the
+    // shape in its drag box, filled in the pen colour (or
+    // `opts.color`) or outlined when `opts.outline` is set.
+    // The preview is drag-time only — the next full render
+    // wipes it, and the core clears it when the tool's drag
+    // ends or cancels — so it never lands in board JSON. A
+    // tool that commits the finished shape calls addItem on
+    // pointerup instead, so the shape becomes one undo step.
+    previewShape: (shape: string, x0: number, y0: number, w: number, h: number, opts?: PluginPreviewShapeOptions) => void;
     // Hit-test: the top item id at a world point, or null.
     // A frame is a container, not content: a card inside a
     // frame wins over the frame itself, so cards inside a
@@ -1425,5 +1444,10 @@ export interface BoardController {
   // calls this through api.board.previewStroke; the board
   // view owns the preview layer, so only it can draw there.
   previewStroke: (points: Pt[], pressures: number[], opts?: PluginPreviewStrokeOptions) => void;
+  // Draw a plugin drag tool's live shape preview, in the
+  // same layer. The core calls this through
+  // api.board.previewShape; the board view owns the preview
+  // layer, so only it can draw there.
+  previewShape: (shape: string, x0: number, y0: number, w: number, h: number, opts?: PluginPreviewShapeOptions) => void;
 }
 
