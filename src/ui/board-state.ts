@@ -4,13 +4,14 @@
 
 import type { PluginContext } from "../plugins/host";
 import {
-  Anchor, Board, Item, Pt, ShapeKind,
+  Board, Item, Pt,
   elementPoint, elementSize, screenToWorld, worldToScreen,
 } from "../backend/model";
 
-// Core tools are select/pen/connector/eraser. Plugin tools are strings of
-// the form "plugin:<pluginId>:<toolId>" (see src/plugins/host.ts); the
-// type stays open so a plugin tool is a valid Tool.
+// The core tool is select. The drawing tools are plugin
+// tools, strings of the form "plugin:<pluginId>:<toolId>"
+// (see src/plugins/host.ts and src/ui/drawing-tools.ts);
+// the type stays open so a plugin tool is a valid Tool.
 export type Tool = string;
 export const ACCENT = "#007AFF";
 
@@ -31,12 +32,8 @@ export { ERASER_RADIUS } from "./drawing-tools";
 type DragState = null
   | { kind: "pan"; last: Pt }
   | { kind: "move"; lastWorld: Pt; moved: boolean }
-  | { kind: "stroke"; points: Pt[]; pressures: number[]; width: number; marker: boolean; pencil: boolean }
   | { kind: "lasso"; points: Pt[] }
-  | { kind: "erase"; erased: boolean }
-  | { kind: "connector"; from: Anchor; current: Pt }
   | { kind: "marquee"; start: Pt; current: Pt }
-  | { kind: "shape"; shape: ShapeKind; start: Pt; current: Pt }
   | { kind: "rotate"; id: number; origRot: number; moved: boolean }
   | { kind: "resize"; id: number; startWorld: Pt; origW: number; origH: number; moved: boolean }
   // A plugin tool's drag: the tool's full id
