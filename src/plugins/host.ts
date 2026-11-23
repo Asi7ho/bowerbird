@@ -3,8 +3,8 @@
 // views and commands live in host-state.ts; this module imports
 // them.
 
-import type { Anchor, ArrangeOptions, Board, BoardController, Camera, Item, Kind, PluginBridge, PluginBuiltinCardDef, PluginCardDecoratorDef, PluginCardDef, PluginCommandDef, PluginContext, PluginCreateActionDef, PluginHost, PluginManifest, PluginOverlayDef, PluginPanelDef, PluginSettingsSectionDef, PluginShortcutDef, PluginToolDef, PluginViewDef, Pt, SettingsUI, ShellElements, Size } from "bowerbird-plugin-api";
-export type { Anchor, ArrangeOptions, Board, BoardController, Camera, Item, Kind, PluginBridge, PluginBuiltinCardDef, PluginCardDecoratorDef, PluginCardDef, PluginCommandDef, PluginContext, PluginCreateActionDef, PluginHost, PluginManifest, PluginOverlayDef, PluginPanelDef, PluginSettingsSectionDef, PluginShortcutDef, PluginToolDef, PluginViewDef, Pt, SettingsUI, ShellElements, Size };
+import type { Anchor, ArrangeOptions, Board, BoardController, Camera, Item, Kind, Layer, PluginBridge, PluginBuiltinCardDef, PluginCardDecoratorDef, PluginCardDef, PluginCommandDef, PluginContext, PluginCreateActionDef, PluginHost, PluginManifest, PluginOverlayDef, PluginPanelDef, PluginSettingsSectionDef, PluginShortcutDef, PluginToolDef, PluginViewDef, Pt, SettingsUI, ShellElements, Size } from "bowerbird-plugin-api";
+export type { Anchor, ArrangeOptions, Board, BoardController, Camera, Item, Kind, Layer, PluginBridge, PluginBuiltinCardDef, PluginCardDecoratorDef, PluginCardDef, PluginCommandDef, PluginContext, PluginCreateActionDef, PluginHost, PluginManifest, PluginOverlayDef, PluginPanelDef, PluginSettingsSectionDef, PluginShortcutDef, PluginToolDef, PluginViewDef, Pt, SettingsUI, ShellElements, Size };
 import { anchorPoint, arrangeItems, AUDIO_H, AUDIO_TRANSCRIPT_HIDDEN_H, AUDIO_TRANSCRIPT_SHOWN_H, boardGet, centre, checklistProgress, clippedEnds, domainOf, elide, escapeHtml, fitCamera, itemBounds, itemRotation, parseHex, rectCrossing, rectFromPoints, renderMarkdownHtml, rotatePoint, segmentIntersectsRect, select, setChecklistDone, tileColorFor, tint, toggleTaskLine } from "../backend/model";
 import { cardDecorators, cards, commands, CORE_EVENTS, createActions, listeners, loaded, overlays, panels, settingsSections, shell, shortcuts, tools, views } from "./host-state";
 import { applySavedPanelSettings, bindPanelDeps, deactivateMissingActivePanel, deactivatePanelIfActive, ensureResizeHandle, isPanelActive as isPanelActiveKey, registerPanel, setActivePanel, updatePanelDock, wirePanelsToggle } from "./host-panels";
@@ -369,10 +369,10 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
           size
         );
       },
-      updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown }) => {
+      updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }) => {
         require("board:write");
         // A plugin may only rewrite its own plugin card data. Core
-        // pos/size/group edits are allowed for any card, because
+        // pos/size/group/layer edits are allowed for any card, because
         // moving a card is not editing its content.
         if (patch.data !== undefined) {
           const it = host!.getBoard().items.find((i) => i.id === id);
@@ -383,7 +383,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
         const ok = host!.updateItem(id, patch);
         return ok;
       },
-      updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; data?: unknown }>) => {
+      updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }>) => {
         require("board:write");
         // Same data rule as updateItem, per patch: a plugin
         // may only rewrite its own plugin card data.
@@ -400,6 +400,53 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
       moveItem: (id: number, toIndex: number) => {
         require("board:write");
         return host!.moveItem(id, toIndex);
+      },
+      // Layers: list, create, rename, reorder, hide/show,
+      // lock/unlock, delete, and move an item onto one. Each
+      // is one undo step. A layer write is a board write,
+      // like any other board mutation.
+      getLayers: () => host!.getLayers(),
+      createLayer: (name?: string) => {
+        require("board:write");
+        return host!.createLayer(name);
+      },
+      renameLayer: (id: string, name: string) => {
+        require("board:write");
+        return host!.renameLayer(id, name);
+      },
+      moveLayer: (id: string, toIndex: number) => {
+        require("board:write");
+        return host!.moveLayer(id, toIndex);
+      },
+      setLayerVisible: (id: string, visible: boolean) => {
+        require("board:write");
+        return host!.setLayerVisible(id, visible);
+      },
+      setLayerLocked: (id: string, locked: boolean) => {
+        require("board:write");
+        return host!.setLayerLocked(id, locked);
+      },
+      deleteLayer: (id: string) => {
+        require("board:write");
+        return host!.deleteLayer(id);
+      },
+      getItemLayer: (id: number) => host!.getItemLayer(id),
+      setItemLayer: (id: number, layerId: string) => {
+        require("board:write");
+        return host!.setItemLayer(id, layerId);
+      },
+      // Per-board plugin data, namespaced by plugin id: the
+      // host passes this plugin's id, so a plugin reads and
+      // writes only its own entry — there is no call that
+      // names another plugin's namespace.
+      getExtension: () => host!.getExtension(pluginId),
+      setExtension: (data: unknown) => {
+        require("board:write");
+        host!.setExtension(pluginId, data);
+      },
+      removeExtension: () => {
+        require("board:write");
+        return host!.removeExtension(pluginId);
       },
       removeItem: (id: number) => {
         require("board:write");

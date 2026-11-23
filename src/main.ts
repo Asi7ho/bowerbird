@@ -23,10 +23,12 @@ import * as coreToolbar from "./ui/toolbar";
 import { measureNoteCardHeight } from "./ui/text-measure";
 import { showRecoveryOffer } from "./ui/recovery-dialog";
 import {
-  Board, Camera, Item, Pt, ShapeKind, Size,
-  boardGet, centre, clampZoom, elementPoint, elementSize,
-  healDuplicateIds, hitTest, itemsCentre, lassoSelect, marquee, moveSelection,
-  resizeItem, screenToWorld, select, strokesWithin, zoomCamera,
+  Board, Camera, Item, Layer, Pt, ShapeKind, Size,
+  boardGet, centre, clampZoom, createLayer, defaultLayer, deleteLayer, elementPoint, elementSize,
+  getBoardExtension, healDuplicateIds, healLayers, hitTest, isItemLocked, itemLayerId, itemsCentre,
+  lassoSelect, layerById, marquee, moveLayer, moveSelection, removeBoardExtension, renameLayer,
+  resizeItem, screenToWorld, select, setBoardExtension, setItemLayer, setLayerLocked,
+  setLayerVisible, strokesWithin, zoomCamera,
 } from "./backend/model";
 import { welcomeBoard } from "./backend/welcome";
 import {
@@ -228,13 +230,14 @@ function zoomCentre(factor: number): void {
   const s = boardSize();
   zoomAt({ x: s.x / 2, y: s.y / 2 }, factor);
 }
-// Apply one item patch: position, size, group, and — for
+// Apply one item patch: position, size, group, layer, and — for
 // plugin cards only — data. Shared by updateItem and
 // updateItems.
-function applyPatch(it: Item, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown }): void {
+function applyPatch(it: Item, patch: { pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }): void {
   if (patch.pos) it.pos = patch.pos;
   if (patch.size) it.size = patch.size;
   if (patch.group !== undefined) it.group = patch.group;
+  if (patch.layer !== undefined) it.layer = patch.layer;
   if (patch.data !== undefined && "Plugin" in it.kind) it.kind.Plugin.data = patch.data;
 }
 // Render one card as HTML, or null when it has none.
@@ -310,7 +313,11 @@ function bringToFront(ids: number[]): void {
   // reorder its slides. Frames also render as transparent
   // borders, so staying behind later cards is correct
   // visually, not just for order.
-  const nonFrames = ids.filter((id) => !isFrameCard(boardGet(C.board, id)));
+  const nonFrames = ids.filter((id) => {
+    const it = boardGet(C.board, id);
+    // A locked layer does not re-stack either.
+    return it && !isFrameCard(it) && !isItemLocked(C.board, it);
+  });
   const front = C.board.items.filter((it) => nonFrames.includes(it.id));
   const rest = C.board.items.filter((it) => !nonFrames.includes(it.id));
   C.board.items = [...rest, ...front];
@@ -402,6 +409,7 @@ async function init(): Promise<void> {
       // Same heal as loadBoardFromJson: startup parses the
       // board inline and never calls it.
       healDuplicateIds(C.board);
+      healLayers(C.board);
       for (const it of C.board.items) {
         if ("UrlCard" in it.kind) {
           // Old boards may carry embed:true from the embedded-page era;
@@ -413,6 +421,7 @@ async function init(): Promise<void> {
       }
     } else {
       C.board = welcomeBoard(C.boardDir, loaded.pdf_size_bytes, loaded.video_size_bytes ?? 0, loaded.model_size_bytes ?? 0, loaded.psd_size_bytes ?? 0, loaded.ai_size_bytes ?? 0);
+      healLayers(C.board);
       C.undoStore.save();
     }
     // Self-heal for welcome media: if a welcome item points
@@ -513,6 +522,12 @@ async function init(): Promise<void> {
     updateItem: (id, patch) => {
       const it = boardGet(C.board, id);
       if (!it) return false;
+      // A locked layer does not edit: the patch is refused
+      // whole, so a locked card never moves halfway. A layer
+      // that does not exist is refused the same way, so a
+      // patch can never strand an item on a missing layer.
+      if (isItemLocked(C.board, it)) return false;
+      if (patch.layer !== undefined && !layerById(C.board, patch.layer)) return false;
       applyPatch(it, patch);
       syncGroupLabels(C.board);
       C.undoStore.save(); boardRender();
@@ -527,6 +542,8 @@ async function init(): Promise<void> {
       for (const { id, ...patch } of patches) {
         const it = boardGet(C.board, id);
         if (!it) continue;
+        if (isItemLocked(C.board, it)) continue;
+        if (patch.layer !== undefined && !layerById(C.board, patch.layer)) continue;
         applyPatch(it, patch);
         changed = true;
       }
@@ -542,6 +559,7 @@ async function init(): Promise<void> {
       // other board change, so it is undoable.
       const from = C.board.items.findIndex((it) => it.id === id);
       if (from < 0) return false;
+      if (isItemLocked(C.board, C.board.items[from])) return false;
       const [it] = C.board.items.splice(from, 1);
       const clamped = Math.max(0, Math.min(toIndex, C.board.items.length));
       C.board.items.splice(clamped, 0, it);
@@ -549,6 +567,8 @@ async function init(): Promise<void> {
       return true;
     },
     removeItem: (id) => {
+      const it = boardGet(C.board, id);
+      if (it && isItemLocked(C.board, it)) return false;
       const before = C.board.items.length;
       C.board.items = C.board.items.filter((it) => it.id !== id);
       if (C.board.items.length === before) return false;
@@ -556,6 +576,62 @@ async function init(): Promise<void> {
       syncGroupLabels(C.board);
       C.undoStore.save(); boardRender();
       return true;
+    },
+    // Layers and per-board plugin data (see model.ts): each
+    // layer change saves and renders, so it is one undo step.
+    getLayers: () => JSON.parse(JSON.stringify(C.board.layers ?? [defaultLayer()])) as Layer[],
+    createLayer: (name?: string) => {
+      const layer = createLayer(C.board, name);
+      C.undoStore.save(); boardRender();
+      return JSON.parse(JSON.stringify(layer)) as Layer;
+    },
+    renameLayer: (id, name) => {
+      const ok = renameLayer(C.board, id, name);
+      if (ok) { C.undoStore.save(); boardRender(); }
+      return ok;
+    },
+    moveLayer: (id, toIndex) => {
+      const ok = moveLayer(C.board, id, toIndex);
+      if (ok) { C.undoStore.save(); boardRender(); }
+      return ok;
+    },
+    setLayerVisible: (id, visible) => {
+      const ok = setLayerVisible(C.board, id, visible);
+      if (ok) { C.undoStore.save(); boardRender(); }
+      return ok;
+    },
+    setLayerLocked: (id, locked) => {
+      const ok = setLayerLocked(C.board, id, locked);
+      if (ok) { C.undoStore.save(); boardRender(); }
+      return ok;
+    },
+    deleteLayer: (id) => {
+      const ok = deleteLayer(C.board, id);
+      if (ok) { C.undoStore.save(); boardRender(); }
+      return ok;
+    },
+    getItemLayer: (id) => {
+      const it = boardGet(C.board, id);
+      return it ? itemLayerId(it) : null;
+    },
+    setItemLayer: (id, layerId) => {
+      const it = boardGet(C.board, id);
+      if (!it || isItemLocked(C.board, it)) return false;
+      const ok = setItemLayer(C.board, id, layerId);
+      if (ok) { C.undoStore.save(); boardRender(); }
+      return ok;
+    },
+    getExtension: (pluginId) => getBoardExtension(C.board, pluginId),
+    setExtension: (pluginId, data) => {
+      // Throws when the data is not JSON: the write never
+      // lands half-broken.
+      setBoardExtension(C.board, pluginId, data);
+      C.undoStore.save(); boardRender();
+    },
+    removeExtension: (pluginId) => {
+      const ok = removeBoardExtension(C.board, pluginId);
+      if (ok) { C.undoStore.save(); boardRender(); }
+      return ok;
     },
     renderBoardCard: (id) => renderCardHtml(id, true),
     // The same card as it appears on the board: real
@@ -578,11 +654,17 @@ async function init(): Promise<void> {
     resizeItem: (id: number, w: number, h: number) => { resizeItem(C.board, id, w, h); emitPluginEvent("items-moved"); },
     setItemRotation: (id: number, rot: number) => {
       const it = boardGet(C.board, id);
-      if (it) it.rotation = rot;
+      if (it && !isItemLocked(C.board, it)) it.rotation = rot;
     },
     removeItems: (ids: number[]) => {
-      C.board.items = C.board.items.filter((it) => !ids.includes(it.id));
-      C.selected = C.selected.filter((s) => !ids.includes(s));
+      // A locked layer does not delete: its ids are dropped
+      // from the removal, and the rest go as before.
+      const kept = ids.filter((id) => {
+        const it = boardGet(C.board, id);
+        return !it || !isItemLocked(C.board, it);
+      });
+      C.board.items = C.board.items.filter((it) => !kept.includes(it.id));
+      C.selected = C.selected.filter((s) => !kept.includes(s));
       syncGroupLabels(C.board);
     },
     bringToFront: (ids: number[]) => { bringToFront(ids); },
@@ -592,6 +674,7 @@ async function init(): Promise<void> {
     setTextContent: (id: number, text: string) => {
       const it = boardGet(C.board, id);
       if (!it || !("Text" in it.kind)) return false;
+      if (isItemLocked(C.board, it)) return false;
       it.kind.Text.text = text;
       // The card keeps room for its bottom row (checklist
       // progress) below the text, so the row never covers
@@ -623,6 +706,7 @@ async function init(): Promise<void> {
     setAudioTitle: (id: number, title: string) => {
       const it = boardGet(C.board, id);
       if (!it || !("Audio" in it.kind)) return false;
+      if (isItemLocked(C.board, it)) return false;
       const trimmed = title.trim();
       const current = it.kind.Audio.title ?? "";
       if (trimmed === current) return false;
@@ -635,10 +719,16 @@ async function init(): Promise<void> {
     // board's next_group, so a later group can never collide
     // with it. One save, one undo step.
     createGroup: (ids: number[]) => {
-      if (ids.length < 2) return null;
+      // Locked cards do not group: they are left out, and
+      // fewer than two left means no group.
+      const unlocked = ids.filter((id) => {
+        const it = boardGet(C.board, id);
+        return it && !isItemLocked(C.board, it);
+      });
+      if (unlocked.length < 2) return null;
       C.board.next_group += 1;
       const g = C.board.next_group;
-      for (const it of C.board.items) if (ids.includes(it.id)) it.group = g;
+      for (const it of C.board.items) if (unlocked.includes(it.id)) it.group = g;
       C.board.groups = C.board.groups ?? {};
       C.board.groups[g] = { label: `Group ${g}` };
       C.undoStore.save(); boardRender();
@@ -671,7 +761,7 @@ async function init(): Promise<void> {
     setNoteBackground: (ids: number[], hex: string) => {
       for (const id of ids) {
         const it = boardGet(C.board, id);
-        if (it && "Text" in it.kind) it.kind.Text.bg = hex;
+        if (it && "Text" in it.kind && !isItemLocked(C.board, it)) it.kind.Text.bg = hex;
       }
       C.undoStore.save(); boardRender();
     },

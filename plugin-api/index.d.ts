@@ -465,10 +465,33 @@ export interface PluginHost {
   // cards — adds them all here, so undoing it takes one undo,
   // not one per card. addItem saves after every item.
   addItems: (items: Array<{ kind: Kind; pos: Pt; size: Size }>) => number[];
-  updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown }) => boolean;
-  updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; data?: unknown }>) => boolean;
+  updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }) => boolean;
+  updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }>) => boolean;
   moveItem: (id: number, toIndex: number) => boolean;
   removeItem: (id: number) => boolean;
+  // Layers: list, create, rename, reorder, hide/show,
+  // lock/unlock and delete them, and move an item onto one.
+  // Every one saves and renders, so each is one undo step.
+  // Deleting a layer moves its items to the default layer;
+  // the default layer cannot be deleted. setItemLayer
+  // refuses a layer that does not exist.
+  getLayers: () => Layer[];
+  createLayer: (name?: string) => Layer;
+  renameLayer: (id: string, name: string) => boolean;
+  moveLayer: (id: string, toIndex: number) => boolean;
+  setLayerVisible: (id: string, visible: boolean) => boolean;
+  setLayerLocked: (id: string, locked: boolean) => boolean;
+  deleteLayer: (id: string) => boolean;
+  getItemLayer: (id: number) => string | null;
+  setItemLayer: (id: number, layerId: string) => boolean;
+  // Per-board plugin data, namespaced by plugin id: a
+  // plugin reads and writes only its own entry — the host
+  // passes the calling plugin's id, so there is no call
+  // that names another plugin. Data must be JSON.
+  // setExtension saves, so the write is one undo step.
+  getExtension: (pluginId: string) => unknown;
+  setExtension: (pluginId: string, data: unknown) => void;
+  removeExtension: (pluginId: string) => boolean;
   renderBoardCard: (id: number) => string | null;
   // Render a board item exactly as the board renders it, at
   // its real position and with its selection and editing
@@ -816,10 +839,41 @@ export interface PluginContext {
     // the new connector's id, or null when either card does
     // not exist.
     connect: (fromId: number, toId: number, options?: { color?: string }) => number | null;
-    updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; data?: unknown }) => boolean;
-    updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; data?: unknown }>) => boolean;
+    updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }) => boolean;
+    updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }>) => boolean;
     moveItem: (id: number, toIndex: number) => boolean;
     removeItem: (id: number) => boolean;
+    // Layers (see Layer): list them, create one, rename,
+    // reorder, hide/show, lock/unlock, delete one, and move
+    // an item onto one. Every one is a board write (one undo
+    // step). Layers paint bottom-to-top in list order; a
+    // hidden layer's items are not drawn and cannot be hit,
+    // marqueed or erased; a locked layer's items do not move,
+    // resize, rotate or edit. Deleting a layer moves its
+    // items to the default layer ("default"), which cannot
+    // be deleted. New items land on the default layer; an
+    // item's layer can also be set with updateItem(s) and its
+    // `layer` patch field.
+    getLayers: () => Layer[];
+    createLayer: (name?: string) => Layer;
+    renameLayer: (id: string, name: string) => boolean;
+    moveLayer: (id: string, toIndex: number) => boolean;
+    setLayerVisible: (id: string, visible: boolean) => boolean;
+    setLayerLocked: (id: string, locked: boolean) => boolean;
+    deleteLayer: (id: string) => boolean;
+    getItemLayer: (id: number) => string | null;
+    setItemLayer: (id: number, layerId: string) => boolean;
+    // Per-board plugin data, namespaced by plugin id:
+    // getExtension reads this plugin's entry, setExtension
+    // writes it (one undo step), removeExtension deletes
+    // it. The data must be JSON. A plugin can never read or
+    // write another plugin's entry — there is no call that
+    // names one. Unlike storage, this travels with the board:
+    // it is saved in board JSON, undone with the board, and
+    // deleted with it.
+    getExtension: () => unknown;
+    setExtension: (data: unknown) => void;
+    removeExtension: () => boolean;
     save: () => void;
     // Save the board to disk without creating an undo step,
     // for changes the user did not make as edits: a pan's
