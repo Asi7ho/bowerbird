@@ -20,12 +20,13 @@ import * as coreSearch from "./ui/search";
 import * as coreSettings from "./ui/settings";
 import * as coreTitlebar from "./ui/titlebar";
 import * as coreToolbar from "./ui/toolbar";
+import { S } from "./ui/board-state";
 import { measureNoteCardHeight } from "./ui/text-measure";
 import { showRecoveryOffer } from "./ui/recovery-dialog";
 import {
   Board, Camera, Item, Layer, Pt, ShapeKind, Size,
   boardGet, centre, clampZoom, createLayer, defaultLayer, deleteLayer, elementPoint, elementSize,
-  getBoardExtension, healDuplicateIds, healLayers, hitTest, isItemLocked, itemLayerId, itemsCentre,
+  getBoardExtension, healDuplicateIds, healLayers, hitTest, isItemLocked, isItemVisible, itemLayerId, itemsCentre,
   lassoSelect, layerById, marquee, moveLayer, moveSelection, removeBoardExtension, renameLayer,
   resizeItem, screenToWorld, select, setBoardExtension, setItemLayer, setLayerLocked,
   setLayerVisible, strokesWithin, zoomCamera,
@@ -115,7 +116,9 @@ C.media = createMedia({
 
 // Search owns the MiniSearch index and the local-ML context
 // index (see src/search.ts). Jumping to a match selects it,
-// centres the camera on it, and saves (the camera moved).
+// centres the camera on it, and saves (the camera moved). A
+// match on a hidden layer is ghosted dimmed instead — the
+// layer stays hidden, and the card is not selected.
 C.search = createBoardSearch({
   getBoard: () => C.board,
   getBoardGeneration: () => C.boardGeneration,
@@ -123,13 +126,22 @@ C.search = createBoardSearch({
   media: C.media,
   getCardsEl: () => C.cardsEl,
   onJumpTo: (target) => {
-    C.selected = select(C.board, [], target.id, false);
     let c: Pt;
-    if (target.group !== null) {
-      const members = C.board.items.filter((it) => it.group === target.group);
-      c = itemsCentre(C.board, members) ?? centre(target);
-    } else {
+    if (!isItemVisible(C.board, target)) {
+      // A hidden layer's card stays hidden: centre on it
+      // and ghost it dimmed, instead of selecting a card
+      // the user cannot see.
+      S.searchGhost = { board: C.board, id: target.id };
       c = centre(target);
+    } else {
+      S.searchGhost = null;
+      C.selected = select(C.board, [], target.id, false);
+      if (target.group !== null) {
+        const members = C.board.items.filter((it) => it.group === target.group);
+        c = itemsCentre(C.board, members) ?? centre(target);
+      } else {
+        c = centre(target);
+      }
     }
     const bs = boardSize();
     C.board.camera.x = c.x - bs.x / 2 / C.board.camera.zoom;
@@ -200,6 +212,15 @@ function boardSize(): Pt {
 }
 function boardPoint(clientX: number, clientY: number): Pt {
   return elementPoint(C.boardEl, clientX, clientY);
+}
+// The search ghost ends when its card becomes visible
+// again — unhiding (or deleting) its layer un-ghosts it —
+// or when the card itself is gone.
+function clearSearchGhostIfVisible(): void {
+  const g = S.searchGhost;
+  if (g === null || g.board !== C.board) return;
+  const it = boardGet(C.board, g.id);
+  if (it === undefined || isItemVisible(C.board, it)) S.searchGhost = null;
 }
 // Reload the board from disk, like a same-board restore —
 // the undo stack survives (loadBoardFromJson keeps it for
@@ -603,7 +624,7 @@ async function init(): Promise<void> {
     },
     setLayerVisible: (id, visible) => {
       const ok = setLayerVisible(C.board, id, visible);
-      if (ok) { C.undoStore.save(); boardRender(); }
+      if (ok) { clearSearchGhostIfVisible(); C.undoStore.save(); boardRender(); }
       return ok;
     },
     setLayerLocked: (id, locked) => {
@@ -613,7 +634,7 @@ async function init(): Promise<void> {
     },
     deleteLayer: (id) => {
       const ok = deleteLayer(C.board, id);
-      if (ok) { C.undoStore.save(); boardRender(); }
+      if (ok) { clearSearchGhostIfVisible(); C.undoStore.save(); boardRender(); }
       return ok;
     },
     getItemLayer: (id) => {

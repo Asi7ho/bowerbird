@@ -10,7 +10,7 @@ import {
 import { groupBounds, isRotatable, rotateHandleWorld, svgEl2 } from "./board-geometry";
 import { rectsOverlap } from "./overlay-placement";
 import {
-  Board, GRID, Item, isItemVisible, sortItemsByLayer,
+  Board, boardGet, GRID, Item, isItemVisible, sortItemsByLayer,
 } from "../backend/model";
 import { syncModel3DViews } from "../backend/model3d";
 import {
@@ -87,6 +87,16 @@ function isVisibleItem(item: Item, v: { x0: number; y0: number; x1: number; y1: 
   return p.x < v.x1 && p.x + s.w > v.x0 && p.y < v.y1 && p.y + s.h > v.y0;
 }
 
+// The search jump's ghost: the card the user jumped to on
+// a hidden layer, shown dimmed until the layer is unhidden
+// or another jump replaces it. Board-identity makes it
+// self-validating across board switches; the visibility
+// check keeps it from ghosting a card an undo unhid.
+function isSearchGhost(board: Board, item: Item): boolean {
+  const g = S.searchGhost;
+  return g !== null && g.board === board && g.id === item.id && !isItemVisible(board, item);
+}
+
 // A numeric hash, not a joined string: this runs on
 // every wheel tick, and the old version allocated a
 // comma-joined string over all visible ids (plus the
@@ -111,6 +121,10 @@ function visibleKey(): number {
   mix(0x9e3779b9);
   for (const id of S.api.board.getSelected()) mix(id);
   mix(S.editingId ?? -1);
+  // A search ghost is content too: the same visible set
+  // with and without one builds different DOM.
+  const g = S.searchGhost;
+  if (g !== null && g.board === b) mix(g.id);
   return h;
 }
 
@@ -330,7 +344,7 @@ export function render(): void {
   interface NodePlan { item: Item; handle: PluginCardNode; isNew: boolean }
   const nodePlan = new Map<number, NodePlan>();
   for (const item of board.items) {
-    if (!isItemVisible(board, item)) continue;
+    if (!isItemVisible(board, item) && !isSearchGhost(board, item)) continue;
     if ("Connector" in item.kind) continue;
     if (S.editingId === item.id) continue;
     if (!isVisibleItem(item, v)) continue;
@@ -362,10 +376,10 @@ export function render(): void {
   unmountCardNodesExcept(new Set(nodePlan.keys()));
   let html = "";
   // Layers paint bottom-to-top, board order within a layer;
-  // a hidden layer's items are not built at all, so they
-  // are not in the DOM to be hit, selected or searched.
+  // a hidden layer's items are not built at all — except
+  // the search ghost, the jumped-to card shown dimmed.
   for (const item of sortItemsByLayer(board, board.items)) {
-    if (!isItemVisible(board, item)) continue;
+    if (!isItemVisible(board, item) && !isSearchGhost(board, item)) continue;
     if ("Connector" in item.kind) continue;
     if (S.editingId === item.id) continue;
     // A rotated stroke's extent can exceed its unrotated
@@ -414,11 +428,23 @@ export function render(): void {
   // on a plain click, which does not re-render.
   {
     const selected = S.api.board.getSelected();
+    // The ghost's id, resolved once: the lookup guards the
+    // undo case, where a layer can become visible without
+    // going through setLayerVisible.
+    let ghostId = -1;
+    const g = S.searchGhost;
+    if (g !== null && g.board === board) {
+      const it = boardGet(board, g.id);
+      if (it !== undefined && isSearchGhost(board, it)) ghostId = g.id;
+    }
     for (const child of Array.from(S.cardsEl.children)) {
       const el = child as HTMLElement;
       if (!el.classList.contains("card")) continue;
       el.setAttribute("role", "option");
       el.setAttribute("aria-selected", String(selected.includes(Number(el.dataset.id))));
+      // A ghost is the jumped-to card on a hidden layer:
+      // dimmed as a cue only, never selectable.
+      el.classList.toggle("search-ghost", Number(el.dataset.id) === ghostId);
     }
   }
   applyStacking();

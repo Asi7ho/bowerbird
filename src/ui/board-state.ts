@@ -82,6 +82,11 @@ interface BoardState {
   // Key of the card/stroke content currently built in the DOM. Camera
   // moves that leave this key unchanged must not rebuild anything.
   lastContentKey: number;
+  // The search jump's ghost: a card on a hidden layer the
+  // user jumped to, shown dimmed as a cue only. The layer
+  // stays hidden; the ghost ends when the layer is unhidden
+  // or another jump replaces it.
+  searchGhost: { board: Board; id: number } | null;
   // Lasso is not a tool of its own — it is a mode of Select,
   // toggled by L, with no toolbar button.
   lassoMode: boolean;
@@ -144,6 +149,7 @@ export const S: BoardState = {
   cachedBoard: null,
   cardEls: new Map(),
   lastContentKey: 0,
+  searchGhost: null,
   lassoMode: false,
   tool: "select",
   lastDrawTool: null,
