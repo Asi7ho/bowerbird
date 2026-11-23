@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import type { PluginContext } from "bowerbird-plugin-api";
 import { applyColour } from "../../plugins/colours/apply";
-import { hexToHsl, hslToHex, isHex, normaliseHex } from "../../plugins/colours/color";
+import { hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, normaliseHex, rgbToHex } from "../../plugins/colours/color";
 import {
   addColour,
   createPalette,
@@ -45,6 +45,33 @@ describe("hslToHex and hexToHsl", () => {
     expect(hslToHex(red.h, red.s, red.l)).toBe("#E63946");
     const grey = hexToHsl("#1A1A1A");
     expect(hslToHex(grey.h, grey.s, grey.l)).toBe("#1A1A1A");
+  });
+});
+
+describe("hexToRgb and rgbToHex", () => {
+  it("converts the primaries and round-trips real colours", () => {
+    expect(hexToRgb("#FF0000")).toEqual({ r: 255, g: 0, b: 0 });
+    expect(hexToRgb("#00FF00")).toEqual({ r: 0, g: 255, b: 0 });
+    expect(hexToRgb("#0000FF")).toEqual({ r: 0, g: 0, b: 255 });
+    expect(rgbToHex(255, 0, 0)).toBe("#FF0000");
+    expect(rgbToHex(0, 128, 255)).toBe("#0080FF");
+    const c = hexToRgb("#E63946");
+    expect(rgbToHex(c.r, c.g, c.b)).toBe("#E63946");
+  });
+});
+
+describe("hexToHsv and hsvToHex", () => {
+  it("converts the primaries and round-trips real colours", () => {
+    expect(hexToHsv("#FF0000")).toEqual({ h: 0, s: 100, v: 100 });
+    expect(hexToHsv("#00FF00")).toEqual({ h: 120, s: 100, v: 100 });
+    expect(hexToHsv("#0000FF")).toEqual({ h: 240, s: 100, v: 100 });
+    expect(hexToHsv("#808080")).toEqual({ h: 0, s: 0, v: expect.closeTo(50.2, 1) });
+    expect(hsvToHex(0, 100, 100)).toBe("#FF0000");
+    expect(hsvToHex(211, 100, 100)).toBe("#007BFF");
+    const red = hexToHsv("#E63946");
+    expect(hsvToHex(red.h, red.s, red.v)).toBe("#E63946");
+    const grey = hexToHsv("#1A1A1A");
+    expect(hsvToHex(grey.h, grey.s, grey.v)).toBe("#1A1A1A");
   });
 });
 
