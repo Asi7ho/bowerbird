@@ -3644,8 +3644,9 @@ async function main() {
       });
       assert.equal(swatch.kind.Swatch.hex, "#E63946");
       // Disable the plugin: the panel goes away, the board
-      // keeps its colours.
-      assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("colours", false)), true);
+      // keeps its colours. setPluginEnabled returns the new
+      // state, so disabling returns false.
+      assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("colours", false)), false);
       await page.reload();
       await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
       assert.equal(await page.locator('.plugin-tab[aria-label="Colour Library"]').count(), 0);
