@@ -10,7 +10,7 @@ import {
 import { groupBounds, isRotatable, rotateHandleWorld, svgEl2 } from "./board-geometry";
 import { rectsOverlap } from "./overlay-placement";
 import {
-  Board, GRID, Item,
+  Board, GRID, Item, isItemVisible, sortItemsByLayer,
 } from "../backend/model";
 import { syncModel3DViews } from "../backend/model3d";
 
@@ -166,6 +166,8 @@ function renderConnectors(board: Board): void {
   const selected = S.api.board.getSelected();
   const v = visibleRect();
   for (const item of items) {
+    // A hidden layer's connectors are not drawn either.
+    if (!isItemVisible(board, item)) continue;
     if (!isVisibleItem(item, v)) continue;
     if ("Connector" in item.kind) {
       const ends = S.api.geometry.clippedEnds(item.kind.Connector.from, item.kind.Connector.to);
@@ -216,6 +218,10 @@ function renderGroupFrames(board: Board): void {
   const byGroup = new Map<number, Item[]>();
   for (const it of board.items) {
     if (it.group === null) continue;
+    // A hidden layer's members do not count towards a
+    // frame: a group whose members are all hidden draws
+    // no frame at all.
+    if (!isItemVisible(board, it)) continue;
     const list = byGroup.get(it.group);
     if (list) list.push(it);
     else byGroup.set(it.group, [it]);
@@ -307,7 +313,11 @@ export function render(): void {
   if (editingEl) { S.suppressEditCommit = true; S.boardEl.appendChild(editingEl); }
   const v = visibleRect();
   let html = "";
-  for (const item of board.items) {
+  // Layers paint bottom-to-top, board order within a layer;
+  // a hidden layer's items are not built at all, so they
+  // are not in the DOM to be hit, selected or searched.
+  for (const item of sortItemsByLayer(board, board.items)) {
+    if (!isItemVisible(board, item)) continue;
     if ("Connector" in item.kind) continue;
     if (S.editingId === item.id) continue;
     // A rotated stroke's extent can exceed its unrotated

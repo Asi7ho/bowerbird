@@ -185,6 +185,12 @@ export function eraserSplitItems(stroke: StrokeProps, at: Pt, radius: number): P
 // ---------------------------------------------------------------- activation
 
 export function activate(api: PluginContext): void {
+  // New items land on the default layer: when that layer is
+  // locked, a tool's drag commits nothing instead of drawing
+  // onto a layer that does not edit. The preview still shows
+  // while dragging; only the commit is dropped.
+  const defaultLayerLocked = (): boolean =>
+    api.board.getLayers().find((l) => l.id === "default")?.locked ?? false;
   // One stroke tool per kind: pen, pencil, highlighter.
   // The pencil draws thinner than the pen; the highlighter
   // is a wide translucent marker, so it records no pressure
@@ -223,7 +229,7 @@ export function activate(api: PluginContext): void {
         const item = buildStrokeItem(points, pressures, api.pen.getColor(), width, marker, pencil);
         points = [];
         pressures = [];
-        if (item) api.board.addItem(item.kind, item.pos, item.size);
+        if (item && !defaultLayerLocked()) api.board.addItem(item.kind, item.pos, item.size);
       },
       onPointerCancel: () => {
         points = [];
@@ -248,9 +254,15 @@ export function activate(api: PluginContext): void {
     const ids = api.board.strokesNear(world, ERASER_RADIUS);
     if (ids.length === 0) return false;
     let changed = false;
+    // A locked layer does not erase: its strokes stay whole.
+    // (removeItems refuses locked items too, but without this
+    // the split pieces would still be added, duplicating the
+    // stroke the eraser could not remove.)
+    const layers = api.board.getLayers();
     for (const id of ids) {
       const it = api.board.getItem(id);
       if (!it || !("Stroke" in it.kind)) continue;
+      if (layers.find((l) => l.id === (it.layer ?? "default"))?.locked) continue;
       const pieces = eraserSplitItems(it.kind.Stroke, world, ERASER_RADIUS);
       api.board.removeItems([id]);
       for (const piece of pieces) api.board.addItemSilent(piece.kind, piece.pos, piece.size);
@@ -318,7 +330,7 @@ export function activate(api: PluginContext): void {
       // its centre comes from toItem — no second lookup.
       const bPt = "Point" in toAnchor ? toAnchor.Point : (toItem ? api.geometry.centre(toItem) : { x: 0, y: 0 });
       const item = buildConnectorItem(f, toAnchor, a, bPt, api.pen.getColor());
-      if (item) api.board.addItem(item.kind, item.pos, item.size);
+      if (item && !defaultLayerLocked()) api.board.addItem(item.kind, item.pos, item.size);
     },
     onPointerCancel: () => {
       from = null;
@@ -349,7 +361,7 @@ export function activate(api: PluginContext): void {
         const s = start;
         start = null;
         const item = buildShapeItem(kind, s, world, api.pen.getColor(), api.shapes.getOutline());
-        if (item) api.board.addItem(item.kind, item.pos, item.size);
+        if (item && !defaultLayerLocked()) api.board.addItem(item.kind, item.pos, item.size);
       },
       onPointerCancel: () => {
         start = null;
