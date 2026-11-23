@@ -96,23 +96,23 @@
   font-size: 13px;
 }
 
-/* The eyedropper, at the end of the preview row: an icon
-   button only, not a second colour square — the preview
-   swatch already shows the picked colour, and clicking
-   the icon samples straight from the screen. Prefixed,
-   so it beats the core .plugin-panel-body button rule
-   on border, radius and padding, like the preview. */
+/* The eyedropper, next to the preview swatch: same 48px
+   height as the swatch, same 12px radius, and a solid
+   filled glyph — a thin outline at 20px read as a squiggle
+   and was rejected twice, so the treatment changed, not
+   just the paths. Prefixed, so it beats the core
+   .plugin-panel-body button rule on border, radius and
+   padding, like the preview. */
 .plugin-panel-body .col-picker-btn {
   flex: none;
-  margin-left: auto;
-  width: 32px;
-  height: 32px;
+  width: 48px;
+  height: 48px;
   padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--hairline);
-  border-radius: 9px;
+  border-radius: 12px;
   background: #fff;
 }
 
@@ -121,13 +121,10 @@
 }
 
 .plugin-panel-body .col-picker-btn svg {
-  width: 20px;
-  height: 20px;
-  fill: none;
-  stroke: var(--ink);
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  width: 28px;
+  height: 28px;
+  fill: var(--ink);
+  stroke: none;
 }
 
 /* The mode dropdown, above the tweak controls: the app's

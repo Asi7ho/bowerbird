@@ -246,7 +246,9 @@ const ICON_CHEVRON_DOWN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="
 const ICON_TRASH = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M10 11v6M14 11v6" /></svg>';
 const ICON_CLOSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>';
 const ICON_PLUS = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>';
-const ICON_PICKER = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="17" cy="6" r="3" /><path d="M14.9 8.1 7 15.2" /><path d="M6.5 15.8c0 0-2.7 3-2.7 4.2a2.7 2.7 0 0 0 5.4 0C9.2 18.8 6.5 15.8 6.5 15.8Z" /></svg>';
+// The eyedropper is the one filled icon: solid ink, so it
+// reads at small size where the thin outline did not.
+const ICON_PICKER = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="17" cy="6" r="3.6" /><path d="M13.8 6.8 16.2 9.2 10.2 15.2 6.4 17.6 7.8 12.8Z" /><path d="M4.6 17.7C3.1 19.5 2.5 20.4 2.5 21.3a2.1 2.1 0 0 0 4.2 0C6.7 20.4 6.1 19.5 4.6 17.7Z" /></svg>';
 
 function iconButton(label: string, title: string, svg: string): HTMLButtonElement {
   const b = document.createElement("button");
@@ -496,9 +498,6 @@ export function renderPanel(container: HTMLElement): void {
   });
   attachPlaceDrag(a, pickedSwatch);
   previewRow.appendChild(pickedSwatch);
-  pickedHexEl = document.createElement("div");
-  pickedHexEl.className = "col-hex";
-  previewRow.appendChild(pickedHexEl);
   const pickerBtn = document.createElement("button");
   pickerBtn.type = "button";
   pickerBtn.className = "col-picker-btn";
@@ -507,6 +506,9 @@ export function renderPanel(container: HTMLElement): void {
   pickerBtn.innerHTML = ICON_PICKER;
   pickerBtn.addEventListener("click", () => void pickWithEyeDropper());
   previewRow.appendChild(pickerBtn);
+  pickedHexEl = document.createElement("div");
+  pickedHexEl.className = "col-hex";
+  previewRow.appendChild(pickedHexEl);
   pickerSection.appendChild(previewRow);
   // The mode dropdown, above the tweak controls: HSL,
   // RGB, HSV or Hex — one picked colour, four editors.
