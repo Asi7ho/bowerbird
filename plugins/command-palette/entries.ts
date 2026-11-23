@@ -91,11 +91,12 @@ export function buildEntries(api: PluginContext): Entry[] {
     });
   }
 
-  // Tools: the core tools, then any plugin tools.
+  // Tools: select is the one core tool; the drawing tools
+  // are plugin tools now, so listTools() below surfaces
+  // them (with the drawing plugin's name) instead of a
+  // hardcoded list going stale.
   const coreTools = [
     { id: "select", title: "Select" },
-    { id: "pen", title: "Pen" },
-    { id: "connector", title: "Arrow" },
   ];
   for (const t of coreTools) {
     out.push({ title: "Use " + t.title + " tool", hint: "Tool", run: () => api.ui.setTool(t.id) });
