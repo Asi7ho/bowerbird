@@ -2,6 +2,8 @@
 // (plugins/colours/store.ts) and its hex helper
 // (plugins/colours/color.ts): pure data, no DOM, no API.
 import { describe, expect, it } from "vitest";
+import type { PluginContext } from "bowerbird-plugin-api";
+import { applyColour } from "../../plugins/colours/apply";
 import { isHex, normaliseHex } from "../../plugins/colours/color";
 import {
   addColour,
@@ -75,5 +77,52 @@ describe("palette store", () => {
     expect(addColour(before, 9, "#00FF00")).toBe(before);
     expect(removeColour(added, 0, 0).palettes[0].colors).toEqual(["#00FF00"]);
     expect(removeColour(added, 0, 9)).toBe(added);
+  });
+});
+
+describe("applyColour", () => {
+  function strokeItem(id: number, color = "#1A1A1A") {
+    return { id, pos: { x: 0, y: 0 }, size: { w: 100, h: 20 }, group: null, kind: { Stroke: { points: [{ x: 0, y: 0 }], color, width: 3, marker: false } } };
+  }
+  function swatchItem(id: number, hex = "#1A1A1A") {
+    return { id, pos: { x: 0, y: 0 }, size: { w: 120, h: 120 }, group: null, kind: { Swatch: { hex } } };
+  }
+  function textItem(id: number) {
+    return { id, pos: { x: 0, y: 0 }, size: { w: 260, h: 48 }, group: null, kind: { Text: { text: "Note", bold: false, size: 16, color: "#1A1A1A" } } };
+  }
+  function makeApi(selected: number[], items: unknown[], updateResult = true) {
+    const calls: unknown[] = [];
+    let pen: string | null = null;
+    let toast: string | null = null;
+    const api = {
+      board: {
+        getSelected: () => selected,
+        getItems: () => items,
+        updateItems: (patches: unknown) => { calls.push(patches); return updateResult; },
+      },
+      pen: { setColor: (hex: string) => { pen = hex; return true; } },
+      ui: { toast: (msg: string) => { toast = msg; } },
+    };
+    return { api: api as unknown as PluginContext, calls, pen: () => pen, toast: () => toast };
+  }
+  it("sets the pen when nothing colourable is selected", () => {
+    const f = makeApi([3], [textItem(3)]);
+    applyColour(f.api, "#FF0000");
+    expect(f.pen()).toBe("#FF0000");
+    expect(f.calls).toEqual([]);
+    expect(f.toast()).toBeNull();
+  });
+  it("recolours selected strokes and swatches in one call", () => {
+    const f = makeApi([1, 2, 3], [strokeItem(1), swatchItem(2), textItem(3)]);
+    applyColour(f.api, "#00FF00");
+    expect(f.pen()).toBeNull();
+    expect(f.calls).toEqual([[{ id: 1, data: { color: "#00FF00" } }, { id: 2, data: { hex: "#00FF00" } }]]);
+    expect(f.toast()).toBeNull();
+  });
+  it("toasts when the recolour is refused", () => {
+    const f = makeApi([1], [strokeItem(1)], false);
+    applyColour(f.api, "#00FF00");
+    expect(f.toast()).toBe("Layer is locked");
+    expect(f.pen()).toBeNull();
   });
 });

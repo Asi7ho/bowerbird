@@ -232,7 +232,22 @@ export async function activate(api) {
   // palette id belonging only to the palette).
   let installCollisionThrew = false;
   try { await api.plugins.install({ id: "command-palette", name: "Fake palette", description: "", permissions: [], mainCode: "export function activate() {}", styleCode: "" }); } catch { installCollisionThrew = true; }
-  window.__apiTest = { id, before, after, isFrameFrame, isFrameText, actionOk, dblOk, actionMiss, dblMiss, actionSeen, dblSeen, toolDef: toolDef ? { id: toolDef.id, title: toolDef.title, pluginId: toolDef.pluginId } : null, toolMiss, shortcutOk, shortcutMiss, shortcutSeen, cmdCount: counts.cmd, actionCount: counts.action, shortcutCount: counts.shortcut, routeThrew, installCollisionThrew };
+  // Colour data patches: a colour patch on a stroke is
+  // allowed, anything else on a core card throws. Recolour
+  // the first stroke on the board, then put its colour
+  // back, so the board is unchanged when activate ends.
+  const firstStroke = api.board.getItems().find((it) => "Stroke" in it.kind);
+  const firstStrokeColor = firstStroke ? firstStroke.kind.Stroke.color : null;
+  const recolourOk = firstStroke ? api.board.updateItem(firstStroke.id, { data: { color: "#ff0000" } }) : false;
+  const recoloured = firstStroke ? api.board.getItem(firstStroke.id).kind.Stroke.color : null;
+  if (firstStroke && firstStrokeColor) api.board.updateItem(firstStroke.id, { data: { color: firstStrokeColor } });
+  let badPatchThrew = false;
+  try { api.board.updateItem(firstStroke.id, { data: { width: 9 } }); } catch { badPatchThrew = true; }
+  let badHexThrew = false;
+  try { api.board.updateItem(firstStroke.id, { data: { color: "red" } }); } catch { badHexThrew = true; }
+  let textPatchThrew = false;
+  try { api.board.updateItem(id, { data: { color: "#FF0000" } }); } catch { textPatchThrew = true; }
+  window.__apiTest = { id, before, after, isFrameFrame, isFrameText, actionOk, dblOk, actionMiss, dblMiss, actionSeen, dblSeen, toolDef: toolDef ? { id: toolDef.id, title: toolDef.title, pluginId: toolDef.pluginId } : null, toolMiss, shortcutOk, shortcutMiss, shortcutSeen, cmdCount: counts.cmd, actionCount: counts.action, shortcutCount: counts.shortcut, routeThrew, installCollisionThrew, recolourOk, recoloured, badPatchThrew, badHexThrew, textPatchThrew };
 }
 export function deactivate() {}
 `;
@@ -1063,6 +1078,14 @@ async function main() {
       // Installing over a bundled plugin's id is rejected.
       assert.equal(before.installCollisionThrew, true);
       assert.equal(before.cmdCount, 1);
+      // Colour data patches: a colour patch recolours a
+      // stroke; a non-colour patch, a bad hex, and a colour
+      // patch on a text card all throw.
+      assert.equal(before.recolourOk, true);
+      assert.equal(before.recoloured, "#FF0000");
+      assert.equal(before.badPatchThrew, true);
+      assert.equal(before.badHexThrew, true);
+      assert.equal(before.textPatchThrew, true);
       await page.keyboard.press("Control+k");
       await page.locator(".cmd-palette").waitFor({ state: "visible", timeout: READY_TIMEOUT_MS });
       await page.keyboard.type("API test command");
@@ -3525,6 +3548,116 @@ async function main() {
           BOWERBIRD_PLUGINS_DIR: pluginsDir,
         },
       });
+
+    await check("Colour Library creates a palette and it survives a reload", async () => {
+      // Bundled, opt-in: enable it, then reload so it activates.
+      assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("colours", true)), true);
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
+      // First run seeds one palette from the pen colour.
+      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      assert.deepEqual(await page.locator(".col-palette-name").allTextContents(), ["Palette 1"]);
+      // A new palette, then a colour in it from the hex input.
+      await page.locator(".col-create-row .col-btn", { hasText: "New palette" }).click();
+      await waitFor("second palette", async () => (await page.locator(".col-palette-name").count()) === 2 ? true : null);
+      await page.locator(".col-hex-input").fill("#E63946");
+      await page.locator(".col-palette").nth(1).locator(".col-add-row .col-btn").click();
+      await waitFor("colour in the new palette", async () =>
+        (await page.locator(".col-palette").nth(1).locator(".col-tile").count()) === 1 ? true : null,
+      );
+      // The save is debounced: wait it out, then reload and
+      // prove the palette is still there.
+      await new Promise((r) => setTimeout(r, 600));
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
+      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      assert.deepEqual(await page.locator(".col-palette-name").allTextContents(), ["Palette 1", "Palette 2"]);
+      const hexes = await page.locator(".col-palette").nth(1).locator(".col-tile")
+        .evaluateAll((els) => els.map((el) => el.dataset.hex));
+      assert.deepEqual(hexes, ["#E63946"]);
+    });
+
+    await check("clicking a colour sets the pen, and recolours a selected stroke", async () => {
+      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // Click the red tile with nothing selected: the pen
+      // takes the colour. Draw a stroke to prove it.
+      await page.locator(".col-palette").nth(1).locator(".col-tile").first().click();
+      await page.keyboard.press("p");
+      await page.mouse.move(300, 800);
+      await page.mouse.down();
+      await page.mouse.move(500, 800, { steps: 20 });
+      await page.mouse.up();
+      const stroke = await waitFor("red stroke in board.json", () => {
+        const found = strokes().filter((it) => it.kind.Stroke.color === "#E63946");
+        return found.length >= 1 ? found[found.length - 1] : null;
+      });
+      // Select it — it is the topmost card on its own line —
+      // then click the picked colour: the stroke itself
+      // changes, and one undo puts it back.
+      await page.keyboard.press("v");
+      await page.mouse.click(400, 800);
+      await page.locator(".col-hex-input").fill("#007AFF");
+      await page.locator(".col-picked").click();
+      await waitFor("stroke recoloured blue", () =>
+        strokes().find((it) => it.id === stroke.id)?.kind.Stroke.color === "#007AFF" ? true : null,
+      );
+      await page.keyboard.press("Control+z");
+      await waitFor("undo restores the red stroke", () =>
+        strokes().find((it) => it.id === stroke.id)?.kind.Stroke.color === "#E63946" ? true : null,
+      );
+    });
+
+    await check("recolouring a locked layer is refused", async () => {
+      const stroke = strokes().find((it) => it.kind.Stroke.color === "#E63946");
+      assert.ok(stroke);
+      try {
+        await page.evaluate(() => window.__ciLayers.setLocked("default", true));
+        await page.keyboard.press("v");
+        await page.mouse.click(400, 800);
+        await page.locator(".col-palette").nth(1).locator(".col-tile").first().click();
+        // The toast is the refusal: it shows for 4s, so
+        // assert it while it is up.
+        await waitFor("locked-layer toast", async () => {
+          const toast = (await page.locator("#toast").textContent()) ?? "";
+          return toast === "Layer is locked" ? true : null;
+        });
+        assert.equal(strokes().find((it) => it.id === stroke.id).kind.Stroke.color, "#E63946");
+      } finally {
+        await page.evaluate(() => window.__ciLayers.setLocked("default", false)).catch(() => undefined);
+      }
+    });
+
+    await check("placing a colour tile drops a swatch, and the library survives disable and re-enable", async () => {
+      const tile = page.locator(".col-palette").nth(1).locator(".col-tile").first();
+      const box = await tile.boundingBox();
+      assert.ok(box);
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(700, 500, { steps: 10 });
+      await page.mouse.up();
+      const swatch = await waitFor("swatch in board.json", () => {
+        const found = readBoard().items.filter((it) => "Swatch" in it.kind && it.kind.Swatch.hex === "#E63946");
+        return found.length >= 1 ? found[found.length - 1] : null;
+      });
+      assert.equal(swatch.kind.Swatch.hex, "#E63946");
+      // Disable the plugin: the panel goes away, the board
+      // keeps its colours.
+      assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("colours", false)), true);
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
+      assert.equal(await page.locator('.plugin-tab[aria-label="Colour Library"]').count(), 0);
+      assert.ok(readBoard().items.some((it) => it.id === swatch.id));
+      // Re-enable: the palettes are still there.
+      assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("colours", true)), true);
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
+      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      assert.deepEqual(await page.locator(".col-palette-name").allTextContents(), ["Palette 1", "Palette 2"]);
+    });
 
     await check("a version restores from the Boards panel history", async () => {
       // Enable the Boards plugin (bundled, opt-in) and open its panel.
