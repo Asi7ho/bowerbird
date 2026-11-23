@@ -4,7 +4,7 @@
 // mutation without hunting for it.
 
 import { api } from "./api";
-import { boardGet, type Board, type GroupEntry, type Item } from "./model";
+import { boardGet, type Board, type GroupEntry, type Item, type Layer } from "./model";
 import { emitPluginEvent } from "../plugins/host";
 
 interface UndoState {
@@ -12,6 +12,11 @@ interface UndoState {
   next_id: number;
   next_group: number;
   groups: Record<number, GroupEntry>;
+  // Layers and per-board plugin data: a layer change or an
+  // extension write is a board change like any other, so it
+  // is snapshotted, keyed and restored with the rest.
+  layers: Layer[];
+  extensions: Record<string, unknown>;
   bg: string;
   grid: Board["grid"];
   selected: number[];
@@ -75,7 +80,7 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
   // of a snapshot (same fields, same order), without
   // stringifying the items a second time.
   function contentKeyFor(itemsJson: string): string {
-    return `{"items":${itemsJson},"next_id":${ctx.getBoard().next_id},"next_group":${ctx.getBoard().next_group},"groups":${JSON.stringify(ctx.getBoard().groups ?? {})},"bg":${JSON.stringify(ctx.getBoard().bg)},"grid":${JSON.stringify(ctx.getBoard().grid)}}`;
+    return `{"items":${itemsJson},"next_id":${ctx.getBoard().next_id},"next_group":${ctx.getBoard().next_group},"groups":${JSON.stringify(ctx.getBoard().groups ?? {})},"layers":${JSON.stringify(ctx.getBoard().layers ?? [])},"extensions":${JSON.stringify(ctx.getBoard().extensions ?? {})},"bg":${JSON.stringify(ctx.getBoard().bg)},"grid":${JSON.stringify(ctx.getBoard().grid)}}`;
   }
   function save(): { itemsJson: string; contentKey: string } {
     // One serialisation of the items, shared by the undo
@@ -218,8 +223,8 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
   // is why PLUGIN_API.md no longer says plugin actions have no undo.
   //
   // What a snapshot holds, and what it does not:
-  // - Items, next_id, next_group, group labels, bg and grid:
-  //   restored on undo.
+  // - Items, next_id, next_group, group labels, layers,
+  //   per-board plugin data, bg and grid: restored on undo.
   // - Camera: not stored, so panning and zooming never create an
   //   undo step, and undoing never jumps the view.
   // - Selection at the time of the change: restored, so undoing a
@@ -257,6 +262,8 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
       next_id: ctx.getBoard().next_id,
       next_group: ctx.getBoard().next_group,
       groups: JSON.parse(JSON.stringify(ctx.getBoard().groups ?? {})) as Record<number, GroupEntry>,
+      layers: JSON.parse(JSON.stringify(ctx.getBoard().layers ?? [])) as Layer[],
+      extensions: JSON.parse(JSON.stringify(ctx.getBoard().extensions ?? {})) as Record<string, unknown>,
       bg: ctx.getBoard().bg,
       grid: ctx.getBoard().grid,
       selected: [...ctx.getSelected()],
@@ -272,6 +279,8 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
       next_id: ctx.getBoard().next_id,
       next_group: ctx.getBoard().next_group,
       groups: JSON.parse(JSON.stringify(ctx.getBoard().groups ?? {})) as Record<number, GroupEntry>,
+      layers: JSON.parse(JSON.stringify(ctx.getBoard().layers ?? [])) as Layer[],
+      extensions: JSON.parse(JSON.stringify(ctx.getBoard().extensions ?? {})) as Record<string, unknown>,
       bg: ctx.getBoard().bg,
       grid: ctx.getBoard().grid,
       selected: [...ctx.getSelected()],
@@ -281,7 +290,9 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
   function contentKey(s: UndoState): string {
     // Selection is restored by undo, but a selection change alone
     // is not a board change, so it is not part of the key.
-    return JSON.stringify({ items: s.items, next_id: s.next_id, next_group: s.next_group, groups: s.groups ?? {}, bg: s.bg, grid: s.grid });
+    // The field order matches contentKeyFor: the two keys for
+    // the same board must be identical strings.
+    return JSON.stringify({ items: s.items, next_id: s.next_id, next_group: s.next_group, groups: s.groups ?? {}, layers: s.layers ?? [], extensions: s.extensions ?? {}, bg: s.bg, grid: s.grid });
   }
 
   function updateUndoButtons(): void {
@@ -351,6 +362,19 @@ export function createUndoStore(ctx: UndoContext): UndoStore {
       ctx.getBoard().groups = JSON.parse(JSON.stringify(s.groups)) as Record<number, GroupEntry>;
     } else {
       delete ctx.getBoard().groups;
+    }
+    // Layers and extensions restore like groups: an empty
+    // value deletes the field, so a board that never had
+    // layers keeps its old shape on disk after an undo.
+    if ((s.layers ?? []).length > 0) {
+      ctx.getBoard().layers = JSON.parse(JSON.stringify(s.layers)) as Layer[];
+    } else {
+      delete ctx.getBoard().layers;
+    }
+    if (Object.keys(s.extensions ?? {}).length > 0) {
+      ctx.getBoard().extensions = JSON.parse(JSON.stringify(s.extensions)) as Record<string, unknown>;
+    } else {
+      delete ctx.getBoard().extensions;
     }
     ctx.getBoard().bg = s.bg;
     ctx.getBoard().grid = s.grid;

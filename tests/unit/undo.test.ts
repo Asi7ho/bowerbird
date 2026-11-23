@@ -142,6 +142,57 @@ describe("createUndoStore", () => {
     expect(board.items).toHaveLength(0);
   });
 
+  it("undoes and redoes a layer change", () => {
+    board.items.push(textItem(1, "hello"));
+    board.next_id = 2;
+    store.save();
+    expect(store.canUndo()).toBe(false);
+    board.layers = [
+      { id: "default", name: "Default", visible: true, locked: false },
+      { id: "layer-1", name: "Ink", visible: true, locked: false },
+    ];
+    board.items[0].layer = "layer-1";
+    store.save();
+    expect(store.canUndo()).toBe(true);
+    expect(store.undo()).toBe(true);
+    expect(board.layers).toBeUndefined();
+    expect(board.items[0].layer).toBeUndefined();
+    expect(store.canRedo()).toBe(true);
+    expect(store.redo()).toBe(true);
+    expect(board.layers?.map((l) => l.id)).toEqual(["default", "layer-1"]);
+    expect(board.items[0].layer).toBe("layer-1");
+  });
+
+  it("undoes and redoes an extensions change", () => {
+    store.save();
+    board.extensions = { anim: { frames: 3, fps: 12 } };
+    store.save();
+    expect(store.canUndo()).toBe(true);
+    expect(store.undo()).toBe(true);
+    expect(board.extensions).toBeUndefined();
+    expect(store.canRedo()).toBe(true);
+    expect(store.redo()).toBe(true);
+    expect(board.extensions).toEqual({ anim: { frames: 3, fps: 12 } });
+  });
+
+  it("a layer visibility change is an undo step", () => {
+    board.layers = [{ id: "default", name: "Default", visible: true, locked: false }];
+    store.save();
+    board.layers = [{ id: "default", name: "Default", visible: false, locked: false }];
+    store.save();
+    expect(store.canUndo()).toBe(true);
+    expect(store.undo()).toBe(true);
+    expect(board.layers?.[0].visible).toBe(true);
+  });
+
+  it("re-setting identical layers creates no undo step", () => {
+    board.layers = [{ id: "default", name: "Default", visible: true, locked: false }];
+    store.save();
+    board.layers = [{ id: "default", name: "Default", visible: true, locked: false }];
+    store.save();
+    expect(store.canUndo()).toBe(false);
+  });
+
   it("a no-op save writes nothing and creates no undo step", () => {
     store.save();
     expect(saveBoard).toHaveBeenCalledTimes(1);
