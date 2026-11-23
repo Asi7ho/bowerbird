@@ -1923,10 +1923,6 @@ body.platform-linux #title-bar button.win-close:hover {
   color: var(--grey);
 }
 
-.cmd-row.cmd-empty.active {
-  background: transparent;
-}
-
 .cmd-title {
   font-weight: 600;
   overflow: hidden;
