@@ -964,11 +964,15 @@ async function main() {
       });
       const mid = await page.evaluate(() => window.__dragTool);
       assert.equal(mid.downs.length, 1);
-      assert.equal(mid.downs[0].pressure, 0.7);
+      // Pressure travels as a float32 through the pointer
+      // event, so it is 0.699999988079071, not 0.7: compare
+      // with a tolerance, not strictly.
+      const close = (got, want) => Math.abs(got - want) < 1e-6;
+      assert.ok(close(mid.downs[0].pressure, 0.7));
       assert.equal(mid.downs[0].pointerType, "pen");
       assert.ok(mid.moves.length >= 3);
       assert.ok(mid.moves.every((m) => m.pointerType === "pen"));
-      assert.deepEqual(mid.moves.map((m) => m.pressure), [0.8, 0.6, 0.9]);
+      assert.ok(mid.moves.map((m) => m.pressure).every((p, i) => close(p, [0.8, 0.6, 0.9][i])));
       // The preview is live before the pointer comes up, and
       // nothing has landed on the board yet.
       assert.ok(await page.evaluate(() => window.__dragToolMidPreview) > 0, "live stroke preview should be drawn mid-drag");
@@ -982,7 +986,8 @@ async function main() {
         return found.length === strokesBefore + 1 ? found[found.length - 1] : null;
       });
       assert.ok(after.kind.Stroke.points.length >= 4);
-      assert.deepEqual(after.kind.Stroke.pressures, [0.7, 0.8, 0.6, 0.9, 0]);
+      assert.equal(after.kind.Stroke.pressures.length, 5);
+      assert.ok(after.kind.Stroke.pressures.every((p, i) => close(p, [0.7, 0.8, 0.6, 0.9, 0][i])));
       // The drag ended, so the preview is gone, the tool
       // heard exactly one pointerup, and nothing cancelled.
       assert.equal(await page.evaluate(() => document.querySelector("#live-stroke")?.innerHTML.length ?? 0), 0);
