@@ -2955,6 +2955,61 @@ async function main() {
       assert.deepEqual(healed.size, { w: 260, h: 361 }, "welcome-size PDF card heals to its page ratio");
     });
 
+    await check("a PDF re-exported over the old file follows the new page size", async () => {
+      // The page-size cache used to be keyed by path only:
+      // replacing the file at the same path kept the old
+      // ratio and old rendered pages. A fresh name, so the
+      // drop check's landscape PDF at assets/sample.pdf
+      // cannot leak in through the cache.
+      const assetsDir = path.join(tmp, "assets");
+      fs.mkdirSync(assetsDir, { recursive: true });
+      const pdfPath = path.join(assetsDir, "sample-reexport.pdf");
+      fs.copyFileSync(path.join(repoRoot, "assets", "sample.pdf"), pdfPath);
+      const board = readBoard();
+      const id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
+      board.items.push({ id, pos: { x: 2600, y: 2000 }, size: { w: 260, h: 361 }, group: null, kind: { PdfCard: { path: pdfPath, size_bytes: 729 } } });
+      board.next_id = id;
+      await page.evaluate(() => { const t = document.querySelector("#toast"); if (t) t.textContent = ""; });
+      const tmp2 = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp2, JSON.stringify(board));
+      fs.renameSync(tmp2, boardPath);
+      await waitFor("live-follow reload of the re-export card", async () => {
+        const toast = (await page.locator("#toast").textContent()) ?? "";
+        return toast.includes("Board updated on disk") ? true : null;
+      });
+      let rendered = false;
+      for (let i = 0; i < 6 && !rendered; i++) {
+        await page.keyboard.press("f");
+        rendered = await page.locator(`#cards .card[data-id="${id}"]`).first().waitFor({ timeout: 5000 }).then(() => true).catch(() => false);
+      }
+      assert.ok(rendered, "re-export card renders after fit");
+      // The Letter page must have rendered (canvas 1224
+      // wide at scale 2) before the file is replaced: the
+      // probe shares the document load and finishes first,
+      // so the Letter dims are cached and the replacement
+      // below has an old ratio to heal from.
+      await waitFor("re-export card renders its Letter page", async () => {
+        const w = await page.locator(`[data-pdf-canvas="${id}"]`).evaluate((el) => (el instanceof HTMLCanvasElement ? el.width : 0)).catch(() => 0);
+        return w === 1224 ? true : null;
+      });
+      // Replace the file at the same path with the landscape
+      // fixture (200x100pt): the card must follow to 260x174.
+      fs.copyFileSync(path.join(repoRoot, "tests/e2e/fixtures", "sample.pdf"), pdfPath);
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: 120000 });
+      let renderedAgain = false;
+      for (let i = 0; i < 6 && !renderedAgain; i++) {
+        await page.keyboard.press("f");
+        renderedAgain = await page.locator(`#cards .card[data-id="${id}"]`).first().waitFor({ timeout: 5000 }).then(() => true).catch(() => false);
+      }
+      assert.ok(renderedAgain, "re-export card renders after reload");
+      const after = await waitFor("pdf card follows the replaced file", () => {
+        const found = readBoard().items.find((it) => it.id === id);
+        return found && found.size.h === 174 ? found : null;
+      });
+      assert.deepEqual(after.size, { w: 260, h: 174 }, "re-exported PDF card follows the new page ratio");
+    });
+
 
     // Shapes are hit on their visible geometry, not their
     // box (PR #10): a click on a shape's empty corner must
