@@ -66,7 +66,23 @@ function updateEraserRing(clientX: number, clientY: number, show: boolean): void
 
 // ---------------------------------------------------------------- editing
 
+// Whether an item's layer is locked: a locked layer does
+// not edit, so its notes never open for typing and no note
+// is created on it. Reads the board copy: double-clicks
+// are rare, not a hot path.
+function isLocked(id: number): boolean {
+  const item = S.api.board.getItem(id);
+  if (!item) return false;
+  const board = S.api.board.get();
+  return board.layers?.find((l) => l.id === (item.layer ?? "default"))?.locked ?? false;
+}
+
 function createTextNoteAt(world: Pt): void {
+  // A new note lands on the default layer: when that layer
+  // is locked, double-clicking empty space creates nothing
+  // instead of a note that could never be typed into.
+  const board = S.api.board.get();
+  if (board.layers?.find((l) => l.id === "default")?.locked) return;
   const id = S.api.board.addItemSilent({ Text: { text: "", bold: false, size: 16, color: "#1A1A1A" } }, world, { w: 260, h: 48 });
   // No save here: the commit saves the typed text, or
   // removes the note if it is empty, so an empty note
@@ -77,6 +93,8 @@ function createTextNoteAt(world: Pt): void {
 function startTextEdit(id: number, isNew = false): void {
   const item = S.api.board.getItem(id);
   if (!item || !("Text" in item.kind)) return;
+  // A locked layer does not edit.
+  if (isLocked(id)) return;
   // Render first, then mark the note as editing: render() skips
   // the editing note, so setting editingId before it would
   // leave a brand-new note with no card in the DOM to edit —
