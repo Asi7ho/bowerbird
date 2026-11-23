@@ -9,7 +9,7 @@ import {
   type Tool,
 } from "./board-state";
 import { isRotatable, membersBounds, normAngle, rotateAngleFor, rotateHandleWorld } from "./board-geometry";
-import { dragPreview, updateDraggedCards, updateLassoPreview, updateLiveStroke, clearLiveStroke } from "./board-drag-preview";
+import { dragPreview, updateDraggedCards, updateLassoPreview, updateLiveStroke, clearLiveStroke, clearShapePreview } from "./board-drag-preview";
 import { NEUTRAL_PLUGIN_POINTER_EVENT, beginPluginDrag, cancelPluginDrag, endPluginDrag, hasPluginDragCallbacks, movePluginDrag, toPluginPointerEvent } from "./plugin-tool-drag";
 import {
   applyCamera, applyStacking, refreshContentIfVisibleChanged, render, renderSvgOnly, updateResizeHandle, updateSelection,
@@ -298,6 +298,7 @@ function cancelPluginDragIfActive(): void {
     try { cancelPluginDrag(pt, d, NEUTRAL_PLUGIN_POINTER_EVENT); } catch (e) { S.api.ui.toast(`Plugin tool failed: ${String(e)}`); }
   }
   clearLiveStroke();
+  clearShapePreview();
 }
 
 export function setTool(t: Tool): void {
@@ -957,6 +958,7 @@ export function attachWindowListeners(): void {
         try { endPluginDrag(pt, toWorld(boardPoint(e.clientX, e.clientY)), toPluginPointerEvent(e)); } catch (err) { S.api.ui.toast(`Plugin tool failed: ${String(err)}`); }
       }
       clearLiveStroke();
+      clearShapePreview();
       return;
     }
     if (S.pluginToolDown) {
@@ -1115,6 +1117,7 @@ export function attachWindowListeners(): void {
       try { cancelPluginDrag(pt, d, toPluginPointerEvent(e)); } catch (err) { S.api.ui.toast(`Plugin tool failed: ${String(err)}`); }
     }
     clearLiveStroke();
+    clearShapePreview();
   });
 
   // The ring must not freeze at the edge when the pointer

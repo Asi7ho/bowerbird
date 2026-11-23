@@ -6,7 +6,7 @@
 
 import type { PluginContext, PluginManifest } from "../plugins/host";
 import { S } from "./board-state";
-import { clearLiveStroke, updateLiveStroke } from "./board-drag-preview";
+import { clearLiveStroke, updateLiveStroke, updateShapePreview } from "./board-drag-preview";
 import { render, updateSelection } from "./board-render";
 import {
   attachBoardListeners, attachWindowListeners, commitEditingIfAny, deleteSelected, getSelectMode, groupSelected, setSelectMode, setTool, ungroupSelected,
@@ -123,6 +123,12 @@ export function activate(a: PluginContext): void {
     previewStroke: (points, pressures, opts) => {
       if (points.length === 0) { clearLiveStroke(); return; }
       updateLiveStroke(points, pressures, opts?.width ?? 3, opts?.marker ?? false, opts?.pencil ?? false, opts?.color);
+    },
+    // The live shape preview for a plugin drag tool: the
+    // same path the shape tool draws through, so a plugin
+    // shape previews exactly like a core one.
+    previewShape: (shape, x0, y0, w, h, opts) => {
+      updateShapePreview(shape, x0, y0, w, h, opts?.color ?? S.api.pen.getColor(), opts?.outline ?? false);
     },
   });
 

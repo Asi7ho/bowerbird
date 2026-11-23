@@ -75,6 +75,44 @@ export function updateLiveStroke(points: Pt[], pressures: number[], width: numbe
 export function clearLiveStroke(): void {
   S.worldEl.querySelector("#live-stroke")?.remove();
 }
+// The live shape, drawn while a shape tool drags. A
+// filled shape previews as a fill, an outline shape as a
+// stroke, in the pen colour — the same shape the drag
+// commits on release. It lives in the preview layer above
+// #cards, so the cards cannot cover it mid-drag.
+export function updateShapePreview(shape: string, x0: number, y0: number, w: number, h: number, color: string, outline: boolean): void {
+  // An outline shape previews as a stroke, not a fill.
+  const fillAttr = outline ? "none" : color;
+  const strokeAttr = outline ? color : "none";
+  if (shape === "rect") {
+    const el = dragPreview("shape-preview", "rect", true);
+    el.setAttribute("x", String(x0)); el.setAttribute("y", String(y0));
+    el.setAttribute("width", String(w)); el.setAttribute("height", String(h));
+    el.setAttribute("rx", "12");
+    el.setAttribute("fill", fillAttr); el.setAttribute("fill-opacity", outline ? "1" : "0.85");
+    el.setAttribute("stroke", strokeAttr); el.setAttribute("stroke-width", outline ? "4" : "0");
+  } else if (shape === "ellipse") {
+    const el = dragPreview("shape-preview", "ellipse", true);
+    el.setAttribute("cx", String(x0 + w / 2)); el.setAttribute("cy", String(y0 + h / 2));
+    el.setAttribute("rx", String(w / 2)); el.setAttribute("ry", String(h / 2));
+    el.setAttribute("fill", fillAttr); el.setAttribute("fill-opacity", outline ? "1" : "0.85");
+    el.setAttribute("stroke", strokeAttr); el.setAttribute("stroke-width", outline ? "4" : "0");
+  } else {
+    const el = dragPreview("shape-preview", "polygon", true);
+    el.setAttribute("points", S.api.shapes.previewPoints(shape, x0, y0, w, h));
+    el.setAttribute("fill", fillAttr); el.setAttribute("fill-opacity", outline ? "1" : "0.85");
+    el.setAttribute("stroke", strokeAttr); el.setAttribute("stroke-width", outline ? "4" : "0");
+    el.setAttribute("stroke-linejoin", "round");
+  }
+}
+// Remove the live shape preview node outright, so a drag
+// that ends without a commit — a shape too small to place,
+// or a cancelled drag — leaves no preview behind. A render
+// wipes it too, but a drag end that commits nothing renders
+// nothing, so the explicit clear is what ends the preview.
+export function clearShapePreview(): void {
+  S.previewWorldEl.querySelector("#shape-preview")?.remove();
+}
 // The lasso loop, drawn live while dragging. The path is
 // closed (the Z joins the last point back to the first),
 // so the fill shows the region the loop will select.
