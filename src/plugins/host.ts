@@ -120,11 +120,9 @@ export function boardDeleteSelected(): boolean {
 export function boardPreviewStroke(points: Pt[], pressures: number[], opts?: { width?: number; color?: string; marker?: boolean; pencil?: boolean }): void {
   boardController?.previewStroke(points, pressures, opts);
 }
-// The live shape preview for a drag tool: the shape in its
-// drag box, filled or outlined, in the preview layer above
-// the cards. The core clears it when the drag ends or
-// cancels, and the next full render wipes it, so it never
-// lands in board JSON.
+// The live shape preview for a drag tool, in the preview
+// layer above the cards. The core clears it when the drag
+// ends, so it never lands in board JSON.
 export function boardPreviewShape(shape: string, x0: number, y0: number, w: number, h: number, opts?: { color?: string; outline?: boolean }): void {
   boardController?.previewShape(shape, x0, y0, w, h, opts);
 }
@@ -278,20 +276,14 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
       // cards from this; a plugin embedding a card elsewhere
       // uses renderCard instead.
       renderNodeCardChromeAt: (id: number) => host!.renderNodeCardChromeAt(id),
-      // The live preview stroke for a drag tool. It only
-      // draws in the preview layer — no board write, no
-      // save, no undo step — so a plugin can call it on
-      // every pointermove. Delegates to the board view,
-      // which owns the preview layer; a no-op until the
-      // board plugin registers its controller.
+      // The live preview stroke for a drag tool: preview layer
+      // only — no board write, no save, no undo step — so a
+      // plugin can call it on every pointermove.
       previewStroke: (points: Pt[], pressures?: number[], opts?: { width?: number; color?: string; marker?: boolean; pencil?: boolean }) =>
         boardPreviewStroke(points, pressures ?? [], opts),
-      // The live shape preview for a drag tool. It only
-      // draws in the preview layer — no board write, no
-      // save, no undo step — so a shape tool can call it on
-      // every pointermove. Delegates to the board view,
-      // which owns the preview layer; a no-op until the
-      // board plugin registers its controller.
+      // The live shape preview for a drag tool: preview layer
+      // only — no board write, no save, no undo step — so a
+      // shape tool can call it on every pointermove.
       previewShape: (shape: string, x0: number, y0: number, w: number, h: number, opts?: { color?: string; outline?: boolean }) =>
         boardPreviewShape(shape, x0, y0, w, h, opts),
       hitTest: (world: Pt) => host!.hitTest(world),
