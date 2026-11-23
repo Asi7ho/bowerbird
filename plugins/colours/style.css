@@ -4,8 +4,10 @@
    swatch shows its hex pill. */
 /* Panel mode: the panel fills the full height of the flush
    dock, sharing it with any other open panel. The panel
-   body itself scrolls: the palettes scroll together in the
-   body, all reachable. */
+   body itself scrolls: the wheel is too tall to fix at the
+   top and still leave room for palettes when another panel
+   is open, so wheel, sliders and palettes scroll together
+   in the body, all reachable. */
 .plugin-panel[data-panel="colours"] {
   flex: 1 1 auto;
   display: flex;
@@ -22,14 +24,59 @@
   overflow-x: hidden;
 }
 
-.col-picked-row {
+.col-picker-section {
   flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
   padding-bottom: 12px;
   margin-bottom: 12px;
   border-bottom: 1px solid var(--separator);
+}
+
+.col-wheel-wrap {
+  position: relative;
+  width: 180px;
+  height: 180px;
+  margin: 4px auto 12px;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+/* Hairline border defines the wheel edge on white, where
+   light hues (yellow, light green) would otherwise blend
+   into the panel — the same hairline board cards use. */
+.col-wheel {
+  display: block;
+  border-radius: 50%;
+  border: 1px solid var(--hairline);
+}
+
+.col-marker {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  /* Small-handle shadow, as the board's resize handle:
+     crisp, not the large floating shadow of a card. */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), inset 0 0 0 1px var(--separator);
+  pointer-events: none;
+}
+
+.col-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.col-picked {
+  flex: none;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-sm);
+  padding: 0;
 }
 
 /* Prefixed, so this beats the core .plugin-panel-body
@@ -38,42 +85,18 @@
    or preview rule loses border and radius to the core
    9px/separator button, even when its own radius is 12px. */
 .plugin-panel-body .col-picked {
-  flex: none;
-  width: 32px;
-  height: 32px;
   border: 1px solid var(--hairline);
   border-radius: 12px;
   box-shadow: var(--shadow-sm);
   padding: 0;
 }
 
-.col-hex-label {
-  flex: none;
-  font-size: 13px;
+.col-hex {
   font-weight: 600;
-  color: var(--grey);
-}
-
-.col-hex-input,
-.col-rename {
-  flex: 1 1 auto;
-  min-width: 0;
-  border: 1px solid var(--separator);
-  border-radius: 9px;
-  background: #fff;
-  padding: 6px 8px;
   font-size: 13px;
-  font-family: inherit;
-  color: var(--ink);
 }
 
-.col-hex-input:focus,
-.col-rename:focus {
-  outline: none;
-  border-color: var(--accent);
-}
-
-/* The eyedropper, at the end of the picked row: an icon
+/* The eyedropper, at the end of the preview row: an icon
    button only, not a second colour square — the preview
    swatch already shows the picked colour, and clicking
    the icon samples straight from the screen. Prefixed,
@@ -93,35 +116,141 @@
   background: #fff;
 }
 
+.plugin-panel-body .col-picker-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
 .plugin-panel-body .col-picker-btn svg {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   fill: none;
   stroke: var(--ink);
-  stroke-width: 1.5;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.col-slider-row {
+  margin-bottom: 8px;
+}
+
+.col-slider-row:last-child {
+  margin-bottom: 0;
+}
+
+.col-slider-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 4px;
+}
+
+.col-slider-label {
+  font-weight: 600;
+}
+
+.col-slider-value {
+  color: var(--grey);
+}
+
+/* Slider, in app style — not the browser default. Track is
+   the core fill grey, thumb is a white circle with a
+   hairline border and a soft shadow, like the toolbar
+   swatches, search clear button and Settings close button:
+   white circular controls on a quiet background. */
+.col-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  cursor: pointer;
+  height: 20px;
+  background: transparent;
+  outline: none;
+}
+
+.col-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fill);
+}
+
+.col-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-sm);
+}
+
+.col-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fill);
+}
+
+.col-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-sm);
+}
+
+.col-slider:hover::-webkit-slider-thumb,
+.col-slider:hover::-moz-range-thumb {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
 }
 
 .col-create-row {
   flex: none;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
   padding-bottom: 12px;
   margin-bottom: 12px;
   border-bottom: 1px solid var(--separator);
+}
+
+/* The one primary action: icon plus label, on the core
+   panel button style (white, separator border, 9px
+   radius) — the icon is the same stroke style as the
+   toolbar icons. */
+.plugin-panel-body .col-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.plugin-panel-body .col-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .col-palettes {
   flex: none;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  /* 15px on the right is the scrollbar's own lane, not tile
+     space: an overlay scrollbar would otherwise float over
+     the last tile's right edge, and a classic scrollbar
+     would sit hard against it. */
+  padding-right: 15px;
 }
 
+/* Palettes are plain sections, not boxes: the name is
+   plain text, the tiles a row below it. */
 .col-palette {
-  border: 1px solid var(--hairline);
-  border-radius: 12px;
-  padding: 10px;
+  margin-bottom: 16px;
 }
 
 .col-palette-head {
@@ -142,8 +271,26 @@
   cursor: default;
 }
 
+.col-rename {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid var(--separator);
+  border-radius: 9px;
+  background: #fff;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ink);
+}
+
+.col-rename:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 /* Prefixed, so these beat the core .plugin-panel-body
-   button rule on border, radius and padding. */
+   button rule on border, radius and padding. Icons are
+   the toolbar's stroke style, at 16px. */
 .plugin-panel-body .col-icon-btn {
   flex: none;
   width: 24px;
@@ -155,8 +302,17 @@
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
-  font-size: 13px;
   color: var(--grey);
+}
+
+.plugin-panel-body .col-icon-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .plugin-panel-body .col-icon-btn:hover:not(:disabled) {
@@ -169,16 +325,19 @@
   cursor: default;
 }
 
+/* Tiles are fixed 40px squares that wrap: a lone colour
+   in a palette is one small tile, never a stretched row. */
 .col-tiles {
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .col-tile-wrap {
   position: relative;
-  flex: 1 1 auto;
-  min-width: 0;
-  aspect-ratio: 1;
+  flex: none;
+  width: 40px;
+  height: 40px;
 }
 
 /* Prefixed, so this beats the core .plugin-panel-body
@@ -191,7 +350,7 @@
   padding: 0;
 }
 
-.col-tile:hover .col-tile {
+.col-tile:hover {
   filter: brightness(0.96);
 }
 
@@ -214,11 +373,19 @@
   border: 1px solid var(--hairline);
   border-radius: 50%;
   background: #fff;
-  font-size: 12px;
-  line-height: 1;
   color: var(--grey);
   opacity: 0;
   box-shadow: var(--shadow-sm);
+}
+
+.plugin-panel-body .col-tile-x svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .col-tile-wrap:hover .col-tile-x {
@@ -230,9 +397,35 @@
   color: var(--ink);
 }
 
-.col-add-row {
+/* The + tile adds the picked colour: same size as a
+   tile, dashed outline, at the end of the row. */
+.plugin-panel-body .col-add-tile {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  padding: 0;
   display: flex;
-  margin-top: 8px;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--separator);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--grey);
+}
+
+.plugin-panel-body .col-add-tile svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.plugin-panel-body .col-add-tile:hover {
+  background: var(--fill);
+  color: var(--ink);
 }
 
 /* Drag ghost: a board-size swatch, following the cursor. */
