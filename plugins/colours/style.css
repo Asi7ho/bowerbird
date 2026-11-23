@@ -1,0 +1,247 @@
+/* Colour Library panel styles, scoped to .col-* classes and to this
+   plugin's panel. Tiles are just colours: no text on a tile,
+   the hex is in the title on hover, and the placed board
+   swatch shows its hex pill. */
+/* Panel mode: the panel fills the full height of the flush
+   dock, sharing it with any other open panel. The panel
+   body itself scrolls: the palettes scroll together in the
+   body, all reachable. */
+.plugin-panel[data-panel="colours"] {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.plugin-panel[data-panel="colours"] .plugin-panel-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.col-picked-row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--separator);
+}
+
+/* Prefixed, so this beats the core .plugin-panel-body
+   button rule (class + element beats a lone class) on
+   border, radius and padding alike — an unprefixed tile
+   or preview rule loses border and radius to the core
+   9px/separator button, even when its own radius is 12px. */
+.plugin-panel-body .col-picked {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  box-shadow: var(--shadow-sm);
+  padding: 0;
+}
+
+.col-hex-label {
+  flex: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--grey);
+}
+
+.col-hex-input,
+.col-rename {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid var(--separator);
+  border-radius: 9px;
+  background: #fff;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ink);
+}
+
+.col-hex-input:focus,
+.col-rename:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* The eyedropper, at the end of the picked row: an icon
+   button only, not a second colour square — the preview
+   swatch already shows the picked colour, and clicking
+   the icon samples straight from the screen. Prefixed,
+   so it beats the core .plugin-panel-body button rule
+   on border, radius and padding, like the preview. */
+.plugin-panel-body .col-picker-btn {
+  flex: none;
+  margin-left: auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  background: #fff;
+}
+
+.plugin-panel-body .col-picker-btn svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.5;
+}
+
+.col-create-row {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--separator);
+}
+
+.col-palettes {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.col-palette {
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.col-palette-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.col-palette-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
+/* Prefixed, so these beat the core .plugin-panel-body
+   button rule on border, radius and padding. */
+.plugin-panel-body .col-icon-btn {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 13px;
+  color: var(--grey);
+}
+
+.plugin-panel-body .col-icon-btn:hover:not(:disabled) {
+  background: var(--fill);
+  color: var(--ink);
+}
+
+.plugin-panel-body .col-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.col-tiles {
+  display: flex;
+  gap: 6px;
+}
+
+.col-tile-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  aspect-ratio: 1;
+}
+
+/* Prefixed, so this beats the core .plugin-panel-body
+   button rule on border, radius and padding. */
+.plugin-panel-body .col-tile {
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  padding: 0;
+}
+
+.col-tile:hover .col-tile {
+  filter: brightness(0.96);
+}
+
+.col-tile:active {
+  transform: scale(0.97);
+}
+
+/* Prefixed, so this beats the core .plugin-panel-body
+   button rule on border, radius and padding. */
+.plugin-panel-body .col-tile-x {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+  background: #fff;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--grey);
+  opacity: 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.col-tile-wrap:hover .col-tile-x {
+  opacity: 1;
+}
+
+.plugin-panel-body .col-tile-x:hover {
+  background: var(--fill);
+  color: var(--ink);
+}
+
+.col-add-row {
+  display: flex;
+  margin-top: 8px;
+}
+
+/* Drag ghost: a board-size swatch, following the cursor. */
+.col-ghost {
+  position: fixed;
+  z-index: 100;
+  pointer-events: none;
+  width: 120px;
+  height: 120px;
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+}

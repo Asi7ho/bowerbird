@@ -1,0 +1,1 @@
+{"apiVersion":"2","contributions":{"panels":[{"id":"colours","title":"Colour Library"}]},"description":"Save named colour palettes, apply them to the pen or to selected strokes, and place swatches.","id":"colours","main":"main.ts","name":"Colour Library","permissions":["board:write","storage"],"styles":["style.css"],"version":"1.0.0"}
