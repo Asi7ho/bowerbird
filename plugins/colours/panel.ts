@@ -196,7 +196,7 @@ function iconButton(label: string, title: string, svg: string): HTMLButtonElemen
 
 // One slider row: a label, its value, and the range
 // input below, in the old Palette panel's slider style.
-function sliderRow(label: string, max: number, initial: number, onInput: (v: number) => void): { row: HTMLDivElement; input: HTMLInputElement; value: HTMLSpanElement } {
+function sliderRow(label: string, cls: string, max: number, initial: number, onInput: (v: number) => void): { row: HTMLDivElement; input: HTMLInputElement; value: HTMLSpanElement } {
   const row = document.createElement("div");
   row.className = "col-slider-row";
   const head = document.createElement("div");
@@ -210,7 +210,7 @@ function sliderRow(label: string, max: number, initial: number, onInput: (v: num
   head.appendChild(value);
   row.appendChild(head);
   const input = document.createElement("input");
-  input.className = "col-slider";
+  input.className = `col-slider ${cls}`;
   input.type = "range";
   input.min = "0";
   input.max = String(max);
@@ -348,15 +348,15 @@ export function renderPanel(container: HTMLElement): void {
   pickerBtn.addEventListener("click", () => void pickWithEyeDropper());
   previewRow.appendChild(pickerBtn);
   pickerSection.appendChild(previewRow);
-  const hue = sliderRow("Hue", 360, base.h, (v) => setBase({ h: v }));
+  const hue = sliderRow("Hue", "col-slider-hue", 360, base.h, (v) => setBase({ h: v }));
   hueInput = hue.input;
   hueValue = hue.value;
   pickerSection.appendChild(hue.row);
-  const sat = sliderRow("Saturation", 100, base.s, (v) => setBase({ s: v }));
+  const sat = sliderRow("Saturation", "col-slider-sat", 100, base.s, (v) => setBase({ s: v }));
   satInput = sat.input;
   satValue = sat.value;
   pickerSection.appendChild(sat.row);
-  const light = sliderRow("Lightness", 100, base.l, (v) => setBase({ l: v }));
+  const light = sliderRow("Lightness", "col-slider-light", 100, base.l, (v) => setBase({ l: v }));
   lightInput = light.input;
   lightValue = light.value;
   pickerSection.appendChild(light.row);
