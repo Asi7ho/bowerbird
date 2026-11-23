@@ -9,7 +9,8 @@ import {
   type Tool,
 } from "./board-state";
 import { isRotatable, membersBounds, normAngle, rotateAngleFor, rotateHandleWorld } from "./board-geometry";
-import { dragPreview, updateDraggedCards, updateLassoPreview, updateLiveStroke } from "./board-drag-preview";
+import { dragPreview, updateDraggedCards, updateLassoPreview, updateLiveStroke, clearLiveStroke } from "./board-drag-preview";
+import { NEUTRAL_PLUGIN_POINTER_EVENT, beginPluginDrag, cancelPluginDrag, endPluginDrag, hasPluginDragCallbacks, movePluginDrag, toPluginPointerEvent } from "./plugin-tool-drag";
 import {
   applyCamera, applyStacking, refreshContentIfVisibleChanged, render, renderSvgOnly, updateResizeHandle, updateSelection,
 } from "./board-render";
@@ -283,6 +284,22 @@ export function commitEditingIfAny(): void {
 
 // ---------------------------------------------------------------- tools
 
+// End an active plugin drag as a cancel: report it to the
+// tool at its last point, clear the preview, drop the state.
+// Used by Escape and by setTool, which have no pointer
+// behind the cancel. A core drag is untouched: only a
+// plugin drag can be cancelled this way.
+function cancelPluginDragIfActive(): void {
+  if (S.drag?.kind !== "plugin") return;
+  const d = S.drag;
+  S.drag = null;
+  const pt = S.api.ui.getToolDef(d.fullId);
+  if (pt) {
+    try { cancelPluginDrag(pt, d, NEUTRAL_PLUGIN_POINTER_EVENT); } catch (e) { S.api.ui.toast(`Plugin tool failed: ${String(e)}`); }
+  }
+  clearLiveStroke();
+}
+
 export function setTool(t: Tool): void {
   S.tool = t;
   // The draw tools share one toolbar button and one
@@ -298,6 +315,10 @@ export function setTool(t: Tool): void {
   // selection mode last chosen (select or lasso) — so V
   // activates the lasso if that was last used.
   S.lassoMode = t === "select" && S.lastSelectMode === "lasso";
+  // Switching tools mid-drag cancels a plugin drag: the
+  // tool hears onPointerCancel, so it can drop the stroke
+  // it was building instead of leaving it armed.
+  cancelPluginDragIfActive();
   S.drag = null;
   updateEraserRing(0, 0, false);
   // The toolbar plugin follows the tool through the "tool"
@@ -490,6 +511,18 @@ export function attachBoardListeners(): void {
     if (S.api.view.getView() !== "board" && target.closest("#plugin-view")) return;
     if (S.tool.startsWith("plugin:")) {
       const pt = S.api.ui.getToolDef(S.tool);
+      // A drag tool owns the gesture from this press: the
+      // core routes every pointermove to it until pointerup
+      // or cancel, and no core drag runs. A tool with no
+      // drag callbacks keeps the old click behaviour below.
+      if (pt && hasPluginDragCallbacks(pt)) {
+        try {
+          S.drag = beginPluginDrag(pt, S.tool, world, toPluginPointerEvent(e));
+        } catch (err) {
+          S.api.ui.toast(`Plugin tool failed: ${String(err)}`);
+        }
+        return;
+      }
       if (pt?.onMouseDown) {
         try { pt.onMouseDown(world); } catch (e) { S.api.ui.toast(`Plugin tool failed: ${String(e)}`); }
         S.pluginToolDown = true;
@@ -758,7 +791,7 @@ export function attachWindowListeners(): void {
           const selected = S.api.board.getSelected();
           if (S.api.ui.isSettingsOpen() || S.editingId !== null) {
             S.boardEl.style.cursor = "default";
-          } else if (S.tool === "pen" || S.tool === "pencil" || S.tool === "highlighter" || S.tool === "connector" || isShapeTool(S.tool) || (S.tool === "select" && S.lassoMode)) {
+          } else if (S.tool === "pen" || S.tool === "pencil" || S.tool === "highlighter" || S.tool === "connector" || isShapeTool(S.tool) || S.tool.startsWith("plugin:") || (S.tool === "select" && S.lassoMode)) {
             S.boardEl.style.cursor = "crosshair";
           } else if (S.tool === "eraser") {
             // The ring is the cursor while erasing.
@@ -786,7 +819,12 @@ export function attachWindowListeners(): void {
       return;
     }
     S.boardEl.style.cursor = S.drag.kind === "resize" ? "nwse-resize" : S.drag.kind === "rotate" ? "grabbing" : S.drag.kind === "pan" ? "grabbing" : S.drag.kind === "move" ? "move" : S.drag.kind === "erase" ? "none" : "default";
-    if (S.drag.kind === "pan") {
+    if (S.drag.kind === "plugin") {
+      const pt = S.api.ui.getToolDef(S.drag.fullId);
+      if (pt) {
+        try { S.drag = movePluginDrag(pt, S.drag, world, toPluginPointerEvent(e)); } catch (err) { S.api.ui.toast(`Plugin tool failed: ${String(err)}`); }
+      }
+    } else if (S.drag.kind === "pan") {
       const cam = S.api.view.getCamera();
       S.api.view.setCameraSilent({
         x: cam.x - (winPt.x - S.drag.last.x) / cam.zoom,
@@ -907,6 +945,20 @@ export function attachWindowListeners(): void {
 
   window.addEventListener("pointerup", (e: PointerEvent) => {
     audioScrub = null;
+    // A plugin drag ends here: the tool hears onPointerUp
+    // at the release point and commits what it drew, then
+    // the preview clears — even when the tool committed
+    // nothing and no render follows to wipe it.
+    if (S.drag?.kind === "plugin") {
+      const d = S.drag;
+      S.drag = null;
+      const pt = S.api.ui.getToolDef(d.fullId);
+      if (pt) {
+        try { endPluginDrag(pt, toWorld(boardPoint(e.clientX, e.clientY)), toPluginPointerEvent(e)); } catch (err) { S.api.ui.toast(`Plugin tool failed: ${String(err)}`); }
+      }
+      clearLiveStroke();
+      return;
+    }
     if (S.pluginToolDown) {
       S.pluginToolDown = false;
       const pt = S.api.ui.getToolDef(S.tool);
@@ -1045,6 +1097,24 @@ export function attachWindowListeners(): void {
     // stays stale. The toolbar and resize handle update here
     // too, for the same reason. A lasso drag ends the same way.
     if (d.kind === "marquee" || d.kind === "lasso") updateSelection();
+  });
+
+  // A pointercancel ends a plugin drag the way a pointerup
+  // ends it, except the tool hears about it as a cancel, at
+  // the drag's last point — the cancel carries no fresh
+  // position of its own. Core drags keep their existing
+  // behaviour (no pointercancel handler): this only ends
+  // plugin drags, so a tool mid-stroke never stays armed
+  // after the pointer is taken away.
+  window.addEventListener("pointercancel", (e: PointerEvent) => {
+    if (S.drag?.kind !== "plugin") return;
+    const d = S.drag;
+    S.drag = null;
+    const pt = S.api.ui.getToolDef(d.fullId);
+    if (pt) {
+      try { cancelPluginDrag(pt, d, toPluginPointerEvent(e)); } catch (err) { S.api.ui.toast(`Plugin tool failed: ${String(err)}`); }
+    }
+    clearLiveStroke();
   });
 
   // The ring must not freeze at the edge when the pointer
@@ -1306,6 +1376,11 @@ export function attachWindowListeners(): void {
     // before this, so typing a comma never opens the sheet.
     if (matches(e, "open-settings")) { S.api.ui.openSettings(); return; }
     if (e.key === "Escape") {
+      // A plugin drag cancels first: Escape ends the drag
+      // the tool is in, so it can drop the stroke it was
+      // building, instead of only clearing the selection
+      // under it.
+      cancelPluginDragIfActive();
       if (S.api.ui.isSettingsOpen()) { S.api.ui.closeSettings(); return; }
       // An active search is cleared first; the next Esc clears the
       // selection, as before. Searching must not eat the selection
