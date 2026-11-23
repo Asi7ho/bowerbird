@@ -994,6 +994,10 @@ async function main() {
       const done = await page.evaluate(() => window.__dragTool);
       assert.equal(done.ups.length, 1);
       assert.equal(done.cancels.length, 0);
+      // Leave the select tool active, as the other tool
+      // checks do: a brush left active would own the next
+      // check's clicks instead of the tool it expects.
+      await page.keyboard.press("v");
     });
 
     await check("a voice note records and lands as an audio card", async () => {
