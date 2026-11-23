@@ -1,9 +1,7 @@
 // Unit tests for the DOM-node card renderer path
-// (src/plugins/host-cards.ts): registration, lifecycle
-// dispatch, the update state key, fallback to the
-// HTML-string path, and unmount cleanup. Pure registry
-// logic, no DOM, no Electron — the nodes here are opaque
-// objects, the way the registry holds them.
+// (src/plugins/host-cards.ts): registration, lifecycle,
+// update key, string fallback, unmount cleanup. Pure
+// registry logic — no DOM, no Electron.
 import { afterEach, describe, expect, it } from "vitest";
 import {
   cardNodeStateKey,
