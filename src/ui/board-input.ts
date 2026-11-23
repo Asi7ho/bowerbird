@@ -270,11 +270,9 @@ export function commitEditingIfAny(): void {
 
 // ---------------------------------------------------------------- tools
 
-// End an active plugin drag as a cancel: report it to the
-// tool at its last point, clear the preview, drop the state.
-// Used by Escape and by setTool, which have no pointer
-// behind the cancel. A core drag is untouched: only a
-// plugin drag can be cancelled this way.
+// End an active plugin drag as a cancel: report it to
+// the tool at its last point, clear the preview, drop
+// the state. Only a plugin drag can be cancelled here.
 function cancelPluginDragIfActive(): void {
   if (S.drag?.kind !== "plugin") return;
   const d = S.drag;
@@ -959,12 +957,9 @@ export function attachWindowListeners(): void {
   });
 
   // A pointercancel ends a plugin drag the way a pointerup
-  // ends it, except the tool hears about it as a cancel, at
-  // the drag's last point — the cancel carries no fresh
-  // position of its own. Core drags keep their existing
-  // behaviour (no pointercancel handler): this only ends
-  // plugin drags, so a tool mid-stroke never stays armed
-  // after the pointer is taken away.
+  // does, except the tool hears it as a cancel, at the
+  // drag's last point — the cancel carries no fresh position.
+  // Core drags keep their behaviour.
   window.addEventListener("pointercancel", (e: PointerEvent) => {
     if (S.drag?.kind !== "plugin") return;
     const d = S.drag;

@@ -36,12 +36,9 @@ type DragState = null
   | { kind: "marquee"; start: Pt; current: Pt }
   | { kind: "rotate"; id: number; origRot: number; moved: boolean }
   | { kind: "resize"; id: number; startWorld: Pt; origW: number; origH: number; moved: boolean }
-  // A plugin tool's drag: the tool's full id
-  // ("plugin:<pluginId>:<toolId>") owns the gesture, and
-  // `last` is the most recent world point, so a cancel
-  // (pointercancel, Escape, tool switch) can report where
-  // the drag ended. The tool itself keeps its own points;
-  // the core only routes the events.
+  // A plugin tool's drag: the tool's full id owns the
+  // gesture, and `last` is the most recent world point,
+  // so a cancel can report where the drag ended.
   | { kind: "plugin"; fullId: string; last: Pt };
 
 export type { DragState };

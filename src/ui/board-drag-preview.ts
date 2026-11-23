@@ -67,19 +67,16 @@ export function updateLiveStroke(points: Pt[], pressures: number[], width: numbe
     el.appendChild(svgEl2("path", { d: smoothStrokePath(points), fill: "none", stroke, "stroke-width": String(width), "stroke-linecap": "round", "stroke-linejoin": "round", opacity }));
   }
 }
-// Remove the live stroke node outright, so a drag that ends
-// without a commit — a plugin drag cancelled, or one that
-// drew nothing — leaves no preview behind. A render wipes
-// it too, but a drag end that commits nothing renders
-// nothing, so the explicit clear is what ends the preview.
+// Remove the live stroke node outright: a drag that ends
+// without a commit renders nothing, so only this explicit
+// clear ends the preview.
 export function clearLiveStroke(): void {
   S.worldEl.querySelector("#live-stroke")?.remove();
 }
-// The live shape, drawn while a shape tool drags. A
-// filled shape previews as a fill, an outline shape as a
-// stroke, in the pen colour — the same shape the drag
-// commits on release. It lives in the preview layer above
-// #cards, so the cards cannot cover it mid-drag.
+// The live shape, drawn while a shape tool drags, in the
+// pen colour — the same shape the drag commits on release.
+// It lives in the preview layer above #cards, so cards
+// cannot cover it mid-drag.
 export function updateShapePreview(shape: string, x0: number, y0: number, w: number, h: number, color: string, outline: boolean): void {
   // An outline shape previews as a stroke, not a fill.
   const fillAttr = outline ? "none" : color;
@@ -105,11 +102,9 @@ export function updateShapePreview(shape: string, x0: number, y0: number, w: num
     el.setAttribute("stroke-linejoin", "round");
   }
 }
-// Remove the live shape preview node outright, so a drag
-// that ends without a commit — a shape too small to place,
-// or a cancelled drag — leaves no preview behind. A render
-// wipes it too, but a drag end that commits nothing renders
-// nothing, so the explicit clear is what ends the preview.
+// Remove the live shape preview node outright: a drag
+// that ends without a commit renders nothing, so only
+// this explicit clear ends the preview.
 export function clearShapePreview(): void {
   S.previewWorldEl.querySelector("#shape-preview")?.remove();
 }

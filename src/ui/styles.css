@@ -2518,10 +2518,7 @@ body.platform-linux #title-bar button.win-close:hover {
   opacity: 0.35;
 }
 
-/* A search ghost: the jumped-to card on a hidden layer,
-   dimmed as a cue only. It takes no clicks at all — the
-   !important covers the video element's inline
-   pointer-events:auto, which no plain rule can beat. */
+/* Search ghost: dimmed cue only. !important beats the video's inline pointer-events:auto. */
 .card.search-ghost {
   opacity: 0.35;
   pointer-events: none !important;
