@@ -234,6 +234,60 @@ export function activate(api) {
 export function deactivate() {}
 `;
 
+const DRAG_TEST_PLUGIN_MANIFEST = {
+  id: "drag-test-plugin",
+  name: "Drag Test Plugin",
+  version: "0.1.0",
+  apiVersion: "2",
+  description: "Test plugin for the e2e suite: registers a drag tool that previews its stroke live and commits it on pointerup.",
+  permissions: ["board:write"],
+  main: "main.ts",
+};
+
+// A brush-shaped drag tool: it records every drag callback
+// on the window, previews the stroke live through
+// board.previewStroke, and commits one Stroke on pointerup.
+// The e2e check drives it with synthetic pointer events.
+const DRAG_TEST_PLUGIN_MAIN = `
+export function activate(api) {
+  const events = { downs: [], moves: [], ups: [], cancels: [] };
+  window.__dragTool = events;
+  let points = [];
+  let pressures = [];
+  api.ui.registerTool({
+    id: "brush",
+    title: "Drag test brush",
+    onPointerDown: (world, ev) => {
+      events.downs.push({ x: world.x, y: world.y, pressure: ev.pressure, pointerType: ev.pointerType });
+      points = [world];
+      pressures = [ev.pressure];
+    },
+    onPointerMove: (world, ev) => {
+      events.moves.push({ x: world.x, y: world.y, pressure: ev.pressure, pointerType: ev.pointerType });
+      points.push(world);
+      pressures.push(ev.pressure);
+      api.board.previewStroke(points, pressures);
+    },
+    onPointerUp: (world, ev) => {
+      events.ups.push({ x: world.x, y: world.y, pressure: ev.pressure, pointerType: ev.pointerType });
+      points.push(world);
+      pressures.push(ev.pressure);
+      const xs = points.map((p) => p.x);
+      const ys = points.map((p) => p.y);
+      const pos = { x: Math.min.apply(null, xs), y: Math.min.apply(null, ys) };
+      const size = { w: Math.max(1, Math.max.apply(null, xs) - pos.x), h: Math.max(1, Math.max.apply(null, ys) - pos.y) };
+      api.board.addItem({ Stroke: { points, color: api.pen.getColor(), width: 3, marker: false, pressures } }, pos, size);
+    },
+    onPointerCancel: (world, ev) => {
+      events.cancels.push({ x: world.x, y: world.y, pressure: ev.pressure, pointerType: ev.pointerType });
+      points = [];
+      pressures = [];
+    },
+  });
+}
+export function deactivate() {}
+`;
+
 function fail(message) {
   throw new Error(message);
 }
@@ -292,6 +346,8 @@ async function main() {
   fs.mkdirSync(permTestPluginDir, { recursive: true });
   const isoTestPluginDir = path.join(pluginsDir, "isolation-test-plugin");
   fs.mkdirSync(isoTestPluginDir, { recursive: true });
+  const dragTestPluginDir = path.join(pluginsDir, "drag-test-plugin");
+  fs.mkdirSync(dragTestPluginDir, { recursive: true });
   fs.writeFileSync(boardPath, JSON.stringify(EMPTY_BOARD));
   fs.writeFileSync(path.join(testPluginDir, "manifest.json"), JSON.stringify(TEST_PLUGIN_MANIFEST, null, 2));
   fs.writeFileSync(path.join(testPluginDir, "main.ts"), TEST_PLUGIN_MAIN);
@@ -301,6 +357,8 @@ async function main() {
   fs.writeFileSync(path.join(permTestPluginDir, "main.ts"), PERM_TEST_PLUGIN_MAIN);
   fs.writeFileSync(path.join(isoTestPluginDir, "manifest.json"), JSON.stringify(ISOLATION_TEST_PLUGIN_MANIFEST, null, 2));
   fs.writeFileSync(path.join(isoTestPluginDir, "main.ts"), ISOLATION_TEST_PLUGIN_MAIN);
+  fs.writeFileSync(path.join(dragTestPluginDir, "manifest.json"), JSON.stringify(DRAG_TEST_PLUGIN_MANIFEST, null, 2));
+  fs.writeFileSync(path.join(dragTestPluginDir, "main.ts"), DRAG_TEST_PLUGIN_MAIN);
 
   const readBoard = () => JSON.parse(fs.readFileSync(boardPath, "utf8"));
   const strokes = () => readBoard().items.filter((it) => "Stroke" in it.kind);
@@ -878,6 +936,59 @@ async function main() {
         const ran = await page.evaluate(() => window.__apiCmdRan ?? 0);
         return ran === 2 ? true : null;
       });
+    });
+
+    await check("a plugin drag tool draws with pressure and previews live", async () => {
+      // The drag-test plugin is off by default and only this
+      // check enables it, so its tool button cannot disturb
+      // the earlier checks.
+      assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("drag-test-plugin", true)), true);
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
+      await waitFor("drag test plugin active", () => page.evaluate(() => window.__dragTool ?? null));
+      // Select the tool the way a user does: its toolbar button.
+      await page.locator("#tool-plugin-drag-test-plugin-brush").click();
+      const strokesBefore = strokes().length;
+      // Synthetic pointer events with a stylus pressure the
+      // mouse cannot produce: the tool must see exactly it.
+      await page.evaluate(() => {
+        const board = document.querySelector("#board");
+        const fire = (type, x, y, pressure) => {
+          board.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, buttons: type === "pointerup" ? 0 : 1, pointerType: "pen", pointerId: 7, pressure, isPrimary: true }));
+        };
+        fire("pointerdown", 400, 300, 0.7);
+        fire("pointermove", 440, 300, 0.8);
+        fire("pointermove", 480, 310, 0.6);
+        fire("pointermove", 520, 320, 0.9);
+        window.__dragToolMidPreview = document.querySelector("#live-stroke") ? document.querySelector("#live-stroke").innerHTML.length : 0;
+      });
+      const mid = await page.evaluate(() => window.__dragTool);
+      assert.equal(mid.downs.length, 1);
+      assert.equal(mid.downs[0].pressure, 0.7);
+      assert.equal(mid.downs[0].pointerType, "pen");
+      assert.ok(mid.moves.length >= 3);
+      assert.ok(mid.moves.every((m) => m.pointerType === "pen"));
+      assert.deepEqual(mid.moves.map((m) => m.pressure), [0.8, 0.6, 0.9]);
+      // The preview is live before the pointer comes up, and
+      // nothing has landed on the board yet.
+      assert.ok(await page.evaluate(() => window.__dragToolMidPreview) > 0, "live stroke preview should be drawn mid-drag");
+      assert.equal(strokes().length, strokesBefore);
+      await page.evaluate(() => {
+        const board = document.querySelector("#board");
+        board.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, cancelable: true, clientX: 520, clientY: 320, button: 0, buttons: 0, pointerType: "pen", pointerId: 7, pressure: 0, isPrimary: true }));
+      });
+      const after = await waitFor("drag tool stroke in board.json", () => {
+        const found = strokes();
+        return found.length === strokesBefore + 1 ? found[found.length - 1] : null;
+      });
+      assert.ok(after.kind.Stroke.points.length >= 4);
+      assert.deepEqual(after.kind.Stroke.pressures, [0.7, 0.8, 0.6, 0.9, 0]);
+      // The drag ended, so the preview is gone, the tool
+      // heard exactly one pointerup, and nothing cancelled.
+      assert.equal(await page.evaluate(() => document.querySelector("#live-stroke")?.innerHTML.length ?? 0), 0);
+      const done = await page.evaluate(() => window.__dragTool);
+      assert.equal(done.ups.length, 1);
+      assert.equal(done.cancels.length, 0);
     });
 
     await check("a voice note records and lands as an audio card", async () => {
