@@ -674,10 +674,7 @@ export function healDuplicateIds(board: Board): void {
 }
 
 // ---------------------------------------------------------------- layers
-//
-// Layers are the paint order, visibility and lock of a
-// board's items. See Layer in plugin-api/index.d.ts for
-// the shape and the string-id choice.
+// Paint order, visibility and lock of a board's items.
 
 export const DEFAULT_LAYER_ID = "default";
 export const DEFAULT_LAYER_NAME = "Default";
@@ -731,14 +728,10 @@ export function sortItemsByLayer(board: Board, items: Item[]): Item[] {
   return [...items].sort((a, b) => layerIndex(board, itemLayerId(a)) - layerIndex(board, itemLayerId(b)));
 }
 
-// Layers and per-board plugin data, healed on load: a board
-// written before layers existed has neither field, and a
-// hand-edited board can name a layer that is not there.
-// The heal runs in memory only — the file gains the fields
-// on the next save, never on load. Every item ends on a
-// layer that exists (the default when it named none or an
-// unknown one), the default layer is always first, and
-// extensions is always an object.
+// Layers and per-board plugin data, healed on load —
+// in memory only. Every item ends on a layer that exists,
+// the default layer is always first, and extensions is
+// always an object.
 export function healLayers(board: Board): void {
   const layers = Array.isArray(board.layers) ? board.layers : [];
   const seen = new Set<string>();
@@ -839,13 +832,9 @@ export function setItemLayer(board: Board, id: number, layerId: string): boolean
 }
 
 // ---------------------------------------------------------------- per-board plugin data
-//
-// Namespaced by plugin id. The namespace is the ownership
-// rule: a plugin reads and writes only its own entry, and
-// the host passes its own id — there is no call that names
-// another plugin. Data must be JSON: a value that cannot
-// survive a round trip (a circular object, undefined, a
-// function) is rejected rather than saved half-broken.
+// Namespaced by plugin id: a plugin reads and writes only
+// its own entry. Data must be JSON — a value that cannot
+// survive a round trip is rejected, not saved half-broken.
 
 export function getBoardExtension(board: Board, pluginId: string): unknown {
   const ext = board.extensions?.[pluginId];
