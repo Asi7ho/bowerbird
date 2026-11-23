@@ -13,6 +13,11 @@ import {
   Board, GRID, Item, isItemVisible, sortItemsByLayer,
 } from "../backend/model";
 import { syncModel3DViews } from "../backend/model3d";
+import {
+  cardNodeStateKey, createCardNode, getMountedCardNode, hasNodeRenderer,
+  mountCardNode, unmountCardNode, unmountCardNodesExcept, updateMountedCardNode,
+} from "../plugins/host-cards";
+import type { PluginCardNode } from "bowerbird-plugin-api";
 
 // ---------------------------------------------------------------- rendering
 
@@ -312,6 +317,49 @@ export function render(): void {
   const editingSel = editingTa && editingWasFocused ? [editingTa.selectionStart, editingTa.selectionEnd] as const : null;
   if (editingEl) { S.suppressEditCommit = true; S.boardEl.appendChild(editingEl); }
   const v = visibleRect();
+  // DOM-node cards: plan which items render as nodes this
+  // pass, before the HTML string is built. A kept node's live
+  // node is detached now, so the innerHTML rebuild below does
+  // not destroy it; a node whose card left the rendered set
+  // (deleted, culled, hidden layer, board switch, plugin
+  // disabled) is unmounted now, while it is still attached,
+  // so its unmount can clean up listeners on the node itself.
+  // A new node is built here too — a `renderNode` that returns
+  // null hides the card, and one that throws falls back to
+  // the HTML-string path for that card.
+  interface NodePlan { item: Item; handle: PluginCardNode; isNew: boolean }
+  const nodePlan = new Map<number, NodePlan>();
+  for (const item of board.items) {
+    if (!isItemVisible(board, item)) continue;
+    if ("Connector" in item.kind) continue;
+    if (S.editingId === item.id) continue;
+    if (!isVisibleItem(item, v)) continue;
+    if (!hasNodeRenderer(item)) continue;
+    const mounted = getMountedCardNode(item.id);
+    if (mounted) {
+      // Detach the live node before the rebuild destroys its
+      // chrome: the node itself survives, with its listeners,
+      // canvas and WebGL context intact.
+      mounted.handle.node.parentNode?.removeChild(mounted.handle.node);
+      nodePlan.set(item.id, { item, handle: mounted.handle, isNew: false });
+      continue;
+    }
+    let handle: PluginCardNode | null;
+    try {
+      handle = createCardNode(item);
+    } catch {
+      // A throwing node renderer falls back to the HTML
+      // string, so the card still shows.
+      continue;
+    }
+    if (handle === null) continue;
+    nodePlan.set(item.id, { item, handle, isNew: true });
+  }
+  // Unmount every mounted node that is not rendered as a node
+  // this pass. This is the only unmount path for delete, cull,
+  // hide, board switch and plugin disable: the render loop is
+  // the single place card DOM is built.
+  unmountCardNodesExcept(new Set(nodePlan.keys()));
   let html = "";
   // Layers paint bottom-to-top, board order within a layer;
   // a hidden layer's items are not built at all, so they
@@ -325,9 +373,41 @@ export function render(): void {
     // it at the viewport edge: rotated strokes are always
     // built. The count is small, so this costs nothing.
     if (!isVisibleItem(item, v) && !("Stroke" in item.kind && S.api.geometry.itemRotation(item) !== 0)) continue;
+    // A node card's chrome is an empty shell here; its live
+    // node is inserted after the rebuild, below.
+    if (nodePlan.has(item.id)) {
+      html += S.api.board.renderNodeCardChromeAt(item.id) ?? "";
+      continue;
+    }
     html += S.api.board.renderCardAt(item.id) ?? "";
   }
   S.cardsEl.innerHTML = html;
+  // Insert the planned nodes into their fresh chrome. The
+  // chrome is rebuilt every render; the node is not — it moves
+  // from its old chrome into the new one, keeping its listeners,
+  // canvas and WebGL context. A node whose chrome is missing, or
+  // whose update hides it, is unmounted, so nothing is left
+  // mounted without DOM. This runs before the video restore
+  // below, so a video inside a node card is found there too.
+  for (const [id, planned] of nodePlan) {
+    const inner = S.cardsEl.querySelector(`[data-id="${id}"] .inner`);
+    if (!inner) {
+      if (planned.isNew) {
+        try { planned.handle.unmount?.(); } catch { /* never inserted: nothing to clean up in the DOM */ }
+      } else unmountCardNode(id);
+      continue;
+    }
+    inner.appendChild(planned.handle.node);
+    if (planned.isNew) {
+      mountCardNode(id, planned.handle, cardNodeStateKey(planned.item));
+    } else if (!updateMountedCardNode(id, planned.item)) {
+      // update hid the card: unmount while the node is still
+      // attached, then remove its chrome and decorations.
+      unmountCardNode(id);
+      S.cardsEl.querySelector(`[data-id="${id}"]`)?.remove();
+      S.cardsEl.querySelectorAll(`[data-for="${id}"]`).forEach((el) => el.remove());
+    }
+  }
   // Cards are options in the board's listbox: give them the
   // role and the selected state here, since render rebuilds
   // them. updateSelectionInner keeps aria-selected in sync
