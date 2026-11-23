@@ -54,9 +54,10 @@ export interface Media {
   // A page flip uses the cached document, so it refreshes
   // first instead of trusting a possibly replaced file.
   refreshPdf(path: string): Promise<void>;
-  // Heal a PdfCard saved at a stale fixed size (see
-  // loadPdfCardSize): measure its first page and resize the
-  // card to the ratio of the page when it is still wrong.
+  // Heal a PdfCard saved at a stale size, or whose file was
+  // replaced (see loadPdfCardSize): measure its first page
+  // and resize the card to the ratio of the page when it is
+  // still wrong.
   loadPdfCardSize(path: string): void;
   // Heal a UrlCard saved at the stale fixed size (see
   // loadLinkCardSize): measure its preview image and resize
@@ -530,29 +531,6 @@ export function createMedia(host: MediaContext): Media {
       host.requestRender();
     }
   }
-  // A PDF re-exported over the old file at the same path:
-  // its cards sit at the old page's ratio, which is
-  // neither stale fixed size, so the fixed-size heal
-  // leaves them. A card still at the old ratio follows the
-  // new one, keeping its width; a card the user resized
-  // by hand does not match the old ratio, so it stays.
-  function healPdfCardsReplacedPage(path: string, oldDims: { w: number; h: number }, newDims: { w: number; h: number }): void {
-    let changed = false;
-    for (const it of host.getBoard().items) {
-      if (!("PdfCard" in it.kind) || it.kind.PdfCard.path !== path) continue;
-      const oldH = pdfCardHeightForWidth(oldDims.w, oldDims.h, it.size.w);
-      if (Math.abs(it.size.h - oldH) > 2) continue;
-      const correctH = pdfCardHeightForWidth(newDims.w, newDims.h, it.size.w);
-      if (it.size.h !== correctH) {
-        it.size.h = correctH;
-        changed = true;
-      }
-    }
-    if (changed) {
-      host.saveWithoutUndo();
-      host.requestRender();
-    }
-  }
   // Heal a Video card saved at the stale 16:9 height: videos
   // used to land at 360x203 whatever their ratio, so a 4:3
   // clip sat in a 16:9 card. When the poster loads, measure
@@ -653,10 +631,6 @@ export function createMedia(host: MediaContext): Media {
   // to its page at drop time. Null when the file cannot be
   // read, so the caller falls back to the old default.
   async function probePdfSize(path: string): Promise<{ w: number; h: number } | null> {
-    // The dims before the load: getPdfDoc drops them when
-    // the file was replaced, and the cards sitting at the
-    // old ratio follow the new one (see below).
-    const oldDims = pdfPageSize.get(path) ?? null;
     try {
       const doc = await getPdfDoc(path);
       const cached = pdfPageSize.get(path);
@@ -666,24 +640,23 @@ export function createMedia(host: MediaContext): Media {
       if (viewport.width <= 0 || viewport.height <= 0) return null;
       const dims = { w: viewport.width, h: viewport.height };
       pdfPageSize.set(path, dims);
-      if (oldDims && (Math.abs(oldDims.w - dims.w) > 1 || Math.abs(oldDims.h - dims.h) > 1)) {
-        healPdfCardsReplacedPage(path, oldDims, dims);
-      }
       return dims;
     } catch {
       return null;
     }
   }
-  // Heal a PdfCard saved at a stale fixed size: PDFs used
-  // to land at 260x360 whatever the page, so a landscape
-  // page sat in a portrait card, and the welcome board
-  // seeded its card at 260x96. When the first page loads,
-  // measure it; if the card is still at either stale size,
+  // Heal a PdfCard saved at a stale fixed size, or whose
+  // file was replaced: PDFs used to land at 260x360
+  // whatever the page, so a landscape page sat in a
+  // portrait card, and the welcome board seeded its card
+  // at 260x96. When the first page loads, measure it; if
+  // the card is still at either stale size, or the file it
+  // points at is no longer the size it was sized from,
   // resize it to the ratio of the page and save (no undo
   // step — this is a heal, not an action). A card the user
   // resized by hand is left alone: its size will match
-  // neither stale size. Called from the PdfCard renderer,
-  // like loadPdfPage.
+  // neither stale size, and its file is unchanged. Called
+  // from the PdfCard renderer, like loadPdfPage.
   function loadPdfCardSize(path: string): void {
     // One funnel: probePdfSize serves cached dims when the
     // file is unchanged and re-measures when it was
@@ -697,21 +670,36 @@ export function createMedia(host: MediaContext): Media {
     });
   }
   // Resize every PdfCard showing this file that is still at
-  // a stale fixed size to the ratio of its first page.
-  // Several cards can show one PDF, so the heal runs over
-  // all of them, not just the one that asked.
+  // a stale fixed size, or whose file was replaced, to the
+  // ratio of its first page. Several cards can show one
+  // PDF, so the heal runs over all of them, not just the
+  // one that asked.
   function healPdfCardsWithPage(path: string, pageW: number, pageH: number): void {
     let changed = false;
     for (const it of host.getBoard().items) {
       if (!("PdfCard" in it.kind) || it.kind.PdfCard.path !== path) continue;
       // Stale sizes: the old drop default (260x360) and the
       // old welcome seed (260x96). Anything else is a size
-      // the user chose, so it stays.
+      // the user chose, so it stays — unless the file
+      // itself was replaced: the card stores the size of
+      // the file it was sized from, so a different size now
+      // means the ratio it was sized from is gone. That
+      // rule is the one that survives a reload: the cached
+      // old dims are gone with the renderer, but the card's
+      // own size_bytes is still in board.json.
       const staleH = Math.abs(it.size.h - 360) <= 2 || Math.abs(it.size.h - 96) <= 2;
-      if (Math.abs(it.size.w - 260) > 2 || !staleH) continue;
+      const stale = Math.abs(it.size.w - 260) <= 2 && staleH;
+      const stat = pdfStats.get(path);
+      const bytes = it.kind.PdfCard.size_bytes;
+      const replaced = stat !== undefined && typeof bytes === "number" && bytes !== stat.size;
+      if (!stale && !replaced) continue;
       const correctH = pdfCardHeightForWidth(pageW, pageH, it.size.w);
       if (it.size.h !== correctH) {
         it.size.h = correctH;
+        changed = true;
+      }
+      if (replaced && stat) {
+        it.kind.PdfCard.size_bytes = stat.size;
         changed = true;
       }
     }
