@@ -53,7 +53,7 @@ const TEST_PLUGIN_MANIFEST = {
   description: "Test plugin for the e2e suite: registers a card kind and adds one on activate.",
   permissions: ["board:write"],
   main: "main.ts",
-  contributions: { cards: [{ kind: "CI", title: "CI card" }] },
+  contributions: { cards: [{ kind: "CI", title: "CI card" }, { kind: "CINode", title: "CI node card" }] },
 };
 
 // A minimal TypeScript plugin: the app compiles it in-app with
@@ -66,6 +66,78 @@ export function activate(api) {
     render: (_item, data) => '<div style="padding:12px"><div style="font-size:14px">CI plugin card</div><div style="font-size:13px">' + String((data && data.text) || "") + "</div></div>",
   });
   api.board.addPluginCard("CI", { text: "from activate" }, { x: 100, y: 100 }, { w: 260, h: 96 });
+  // A DOM-node card: a canvas that paints on every update, a
+  // label, and a requestAnimationFrame loop that counts frames
+  // until unmount cancels it — the proof that a removed card
+  // leaves nothing running. Its state lives on window.__ciNode
+  // so the e2e suite can drive it (update its data, hide it)
+  // and read its lifecycle counts.
+  const state = {
+    cardId: 0, mounts: 0, updates: 0, unmounts: 0, frames: 0,
+    setText: (text) => { api.board.updateItem(state.cardId, { data: { text: text, hidden: false } }); },
+    setHidden: (hidden) => {
+      const cur = api.board.getItem(state.cardId);
+      const text = cur && cur.kind.Plugin ? cur.kind.Plugin.data.text : "node card";
+      api.board.updateItem(state.cardId, { data: { text: text, hidden: hidden } });
+    },
+  };
+  window.__ciNode = state;
+  api.cards.register({
+    kind: "CINode",
+    title: "CI node card",
+    render: (_item, data) => '<div style="padding:12px"><div style="font-size:14px">CI node card</div><div style="font-size:13px">' + String((data && data.text) || "") + "</div></div>",
+    renderNode: (_item, data) => {
+      state.mounts++;
+      const root = document.createElement("div");
+      root.style.padding = "12px";
+      const label = document.createElement("div");
+      label.className = "ci-node-label";
+      label.style.fontSize = "14px";
+      const canvas = document.createElement("canvas");
+      canvas.className = "ci-node-canvas";
+      canvas.width = 236;
+      canvas.height = 40;
+      canvas.dataset.mountId = "m" + String(state.mounts);
+      root.appendChild(label);
+      root.appendChild(canvas);
+      let raf = 0;
+      let alive = true;
+      const paint = (d) => {
+        const text = String((d && d.text) || "");
+        label.textContent = "CI node card: " + text;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.fillStyle = "#3b82f6";
+          ctx.fillRect(0, 0, 236, 40);
+          ctx.fillStyle = "#ffffff";
+          ctx.font = "16px sans-serif";
+          ctx.fillText(text, 8, 26);
+        }
+      };
+      const tick = () => {
+        if (!alive) return;
+        state.frames++;
+        raf = requestAnimationFrame(tick);
+      };
+      paint(data);
+      raf = requestAnimationFrame(tick);
+      return {
+        node: root,
+        update: (_item2, next) => {
+          state.updates++;
+          if (next && next.hidden) return false;
+          paint(next);
+          return true;
+        },
+        unmount: () => {
+          state.unmounts++;
+          alive = false;
+          cancelAnimationFrame(raf);
+        },
+      };
+    },
+  });
+  state.cardId = api.board.addPluginCard("CINode", { text: "node card", hidden: false }, { x: 400, y: 100 }, { w: 260, h: 96 });
 }
 export function deactivate() {}
 `;
@@ -506,6 +578,64 @@ async function main() {
       assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("ci-test-plugin", true)), true);
       await page.reload();
       await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
+      await page.locator("text=CI plugin card").first().waitFor({ timeout: READY_TIMEOUT_MS });
+    });
+
+    await check("a DOM-node plugin card mounts, updates and unmounts", async () => {
+      // The plugin check above enabled ci-test-plugin and
+      // reloaded: one HTML-string CI card and one DOM-node
+      // CINode card are on the board. Both must render — the
+      // string card exactly as before, the node card with its
+      // live canvas — and the node card's mount must have run
+      // once, with its animation loop ticking.
+      await page.locator("text=CI plugin card").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      await page.locator(".ci-node-canvas").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      await waitFor("node card loop ticking", async () => {
+        const s = await page.evaluate(() => window.__ciNode);
+        return s && s.mounts === 1 && s.frames > 0 ? s : null;
+      });
+      // Update the card's data: the label and canvas repaint
+      // in place — the mount count stays 1 and the same canvas
+      // element (same mount id) is still there, so the card
+      // DOM was not rebuilt.
+      const mountId = await page.locator(".ci-node-canvas").first().evaluate((el) => el.dataset.mountId);
+      await page.evaluate(() => window.__ciNode.setText("node updated"));
+      await page.locator("text=CI node card: node updated").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      const afterUpdate = await page.evaluate(() => window.__ciNode);
+      assert.equal(afterUpdate.mounts, 1);
+      assert.ok(afterUpdate.updates >= 1, `expected an update call, got ${afterUpdate.updates}`);
+      assert.equal(await page.locator(".ci-node-canvas").first().evaluate((el) => el.dataset.mountId), mountId);
+      // Hide the card through its data: update returns false,
+      // the core removes the chrome and unmounts — and the
+      // animation loop stops, so nothing leaks.
+      await page.evaluate(() => window.__ciNode.setHidden(true));
+      await waitFor("node card hidden", async () => {
+        const n = await page.locator(".ci-node-canvas").count();
+        return n === 0 ? true : null;
+      });
+      const afterHide = await page.evaluate(() => window.__ciNode);
+      assert.equal(afterHide.unmounts, 1);
+      const framesAtHide = afterHide.frames;
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      assert.equal((await page.evaluate(() => window.__ciNode)).frames, framesAtHide, "frames kept ticking after unmount");
+      // Show it again: it mounts fresh, with a new canvas.
+      await page.evaluate(() => window.__ciNode.setHidden(false));
+      await page.locator(".ci-node-canvas").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      assert.equal((await page.evaluate(() => window.__ciNode)).mounts, 2);
+      // Select it and delete it from the board: deleting must
+      // unmount it too, and the item must leave board.json —
+      // while the HTML-string CI card next to it still renders.
+      const box = await page.locator(".ci-node-canvas").first().boundingBox();
+      assert.ok(box, "node card canvas has a box");
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await page.keyboard.press("Delete");
+      await waitFor("node card deleted and unmounted", async () => {
+        const s = await page.evaluate(() => window.__ciNode);
+        return s.unmounts === 2 && (await page.locator(".ci-node-canvas").count()) === 0 ? true : null;
+      });
+      await waitFor("deleted node card gone from board.json", () =>
+        readBoard().items.every((it) => !("Plugin" in it.kind) || it.kind.Plugin.kind !== "CINode") ? true : null,
+      );
       await page.locator("text=CI plugin card").first().waitFor({ timeout: READY_TIMEOUT_MS });
     });
 
