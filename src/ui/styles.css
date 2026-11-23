@@ -2518,6 +2518,18 @@ body.platform-linux #title-bar button.win-close:hover {
   opacity: 0.35;
 }
 
+/* A search ghost: the jumped-to card on a hidden layer,
+   dimmed as a cue only. It takes no clicks at all — the
+   !important covers the video element's inline
+   pointer-events:auto, which no plain rule can beat. */
+.card.search-ghost {
+  opacity: 0.35;
+  pointer-events: none !important;
+}
+.card.search-ghost * {
+  pointer-events: none !important;
+}
+
 /* Plugin overlays (see PLUGIN_API.md): a full-board layer that
    takes no clicks itself, so board clicks pass through everywhere
    except on a plugin's own controls, which set pointer-events:
