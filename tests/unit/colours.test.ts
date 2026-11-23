@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import type { PluginContext } from "bowerbird-plugin-api";
 import { applyColour } from "../../plugins/colours/apply";
-import { isHex, normaliseHex } from "../../plugins/colours/color";
+import { hexToHsl, hslToHex, isHex, normaliseHex } from "../../plugins/colours/color";
 import {
   addColour,
   createPalette,
@@ -28,6 +28,23 @@ describe("normaliseHex", () => {
     expect(normaliseHex("")).toBeNull();
     expect(isHex("#ABCDEF")).toBe(true);
     expect(isHex("blue")).toBe(false);
+  });
+});
+
+describe("hslToHex and hexToHsl", () => {
+  it("converts the primaries and round-trips real colours", () => {
+    expect(hslToHex(0, 100, 50)).toBe("#FF0000");
+    expect(hslToHex(120, 100, 50)).toBe("#00FF00");
+    expect(hslToHex(240, 100, 50)).toBe("#0000FF");
+    expect(hslToHex(0, 0, 50)).toBe("#808080");
+    // Integer sliders quantise: 211° is one step off the
+    // pen's blue, which is 211.29° from hexToHsl.
+    expect(hslToHex(211, 100, 50)).toBe("#007BFF");
+    expect(hexToHsl("#007AFF")).toEqual({ h: expect.closeTo(211.29, 2), s: 100, l: 50 });
+    const red = hexToHsl("#E63946");
+    expect(hslToHex(red.h, red.s, red.l)).toBe("#E63946");
+    const grey = hexToHsl("#1A1A1A");
+    expect(hslToHex(grey.h, grey.s, grey.l)).toBe("#1A1A1A");
   });
 });
 
