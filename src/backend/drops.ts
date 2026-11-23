@@ -6,7 +6,7 @@ import { isPdfCompatible, renderAiPreview } from "./ai-import";
 import type { ImportedItem } from "./import-types";
 import { base64ToBytes, fileCardSize, findSourceGroup, groupBBox, linkCardSize, pdfCardSize, translateImportedToAnchor, videoCardSize } from "./live-import";
 import { MODEL3D_EXTENSIONS } from "./model3d";
-import { boardGet, domainOf, estimateTextHeight, normaliseHex, type Board, type Item, type Kind, type Pt, type Size } from "./model";
+import { boardGet, DEFAULT_LAYER_ID, domainOf, estimateTextHeight, layerById, normaliseHex, type Board, type Item, type Kind, type Pt, type Size } from "./model";
 import { ensureVideoPoster } from "./poster";
 import { parsePsd, renderPsdPreview } from "./psd-import";
 import { parseSvgToItems } from "./svg-import";
@@ -40,6 +40,12 @@ export interface Drops {
 }
 
 export function createDrops(ctx: DropsContext): Drops {
+  // Drops land on the default layer, so a locked default
+  // layer refuses the whole drop before any file is read.
+  function defaultLayerLocked(board: Board): boolean {
+    return layerById(board, DEFAULT_LAYER_ID)?.locked ?? false;
+  }
+
   // ---------------------------------------------------------------- drops
 
   // Stored files (pdf, audio, video, model3d) all embed as
@@ -101,6 +107,7 @@ export function createDrops(ctx: DropsContext): Drops {
   }
 
   async function addUrlAt(at: Pt, url: string): Promise<void> {
+    if (defaultLayerLocked(ctx.getBoard())) { ctx.toast("Default layer is locked"); return; }
     const isVideo = (() => {
       const host = domainOf(url.toLowerCase());
       if (["youtube.com", "youtu.be", "vimeo.com"].includes(host)) return true;
@@ -263,6 +270,7 @@ export function createDrops(ctx: DropsContext): Drops {
     // first, so items already added are kept — the import
     // just stops there, and says so.
     const board = ctx.getBoard();
+    if (defaultLayerLocked(board)) { ctx.toast("Default layer is locked"); return; }
     const sameBoard = (): boolean => ctx.getBoard() === board;
     // Files arrive as File objects, not paths: text is read
     // with the File API and media is embedded as bytes, so
