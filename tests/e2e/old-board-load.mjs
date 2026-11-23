@@ -1,20 +1,7 @@
-// Old-board load proof for the layers + per-board plugin data
-// item: boots the production build in Electron with a board.json
-// written in the OLD format (no `layer` on any item, no
-// `layers` and no `extensions` on the board), and proves it
-// opens unchanged — all items present and visible, the file
-// byte-identical after load — then proves the new API works
-// on it live: default-layer heal, layer create/move/hide,
-// undo/redo of a layer change, and the extensions namespace
-// rule (two plugins, each seeing only its own entry).
-// Enabling a plugin only takes effect on reload (like the
-// main suite), so each plugin is enabled, the page reloaded,
-// and the proof plugin stores its result in its own
-// extension — which survives the reload — and skips re-running
-// on later activations.
-// Run after `npm run build`: `node tests/e2e/old-board-load.mjs`
-// (under xvfb-run on Linux, with TMPDIR pointed at the
-// perf-measure tmp dir, like the main suite).
+// Old-board load proof: a board.json in the OLD format (no
+// `layer`, `layers` or `extensions`) opens unchanged —
+// file byte-identical — then the new API is exercised live
+// on it: layer heal/create/move/hide, undo/redo, extensions.
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -53,11 +40,8 @@ const PLUGIN_A_MANIFEST = {
   main: "main.ts",
 };
 
-// Every step runs synchronously in activate (the host saves
-// and renders synchronously). The result is stored in this
-// plugin's own extension, so it survives the reload that
-// enabling requires — and a later activation sees the marker
-// and does not run the steps a second time.
+// The result lives in this plugin's own extension, so it
+// survives the reload and later activations skip re-running.
 const PLUGIN_A_MAIN = `
 export function activate(api) {
   const existing = api.board.getExtension();

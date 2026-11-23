@@ -1,9 +1,7 @@
 // Unit tests for the plugin drag-tool routing
-// (src/ui/plugin-tool-drag.ts): which tools are drag tools,
-// how a PointerEvent becomes a PluginPointerEvent, and the
-// down -> move -> up/cancel transitions over the plugin
-// drag state. The DOM half (board-input.ts routing) is
-// covered by the e2e drag-tool check instead.
+// (src/ui/plugin-tool-drag.ts): drag-tool detection,
+// event conversion, down -> move -> up/cancel. The DOM
+// half is covered by the e2e drag-tool check instead.
 import { describe, expect, it } from "vitest";
 import {
   NEUTRAL_PLUGIN_POINTER_EVENT,

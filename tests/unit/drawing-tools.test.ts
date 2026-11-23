@@ -1,12 +1,7 @@
 // Unit tests for the drawing plugin's pure logic
-// (src/ui/drawing-tools.ts): the tool ids the board and
-// the toolbar route on, and the commit math for each tool
-// — a stroke, a shape and a connector each become one
-// item (or null when the drag was too small to place), and
-// an eraser pass becomes the replacement pieces for the
-// strokes it touched. The gesture halves (pointer
-// callbacks, previews) run against the live board, so the
-// e2e checks cover them instead.
+// (src/ui/drawing-tools.ts): tool ids and the commit math
+// for each tool. Gestures run against the live board, so
+// the e2e checks cover them instead.
 import { describe, expect, it } from "vitest";
 import {
   CONNECTOR_TOOL_ID,

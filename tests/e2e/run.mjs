@@ -66,12 +66,9 @@ export function activate(api) {
     render: (_item, data) => '<div style="padding:12px"><div style="font-size:14px">CI plugin card</div><div style="font-size:13px">' + String((data && data.text) || "") + "</div></div>",
   });
   api.board.addPluginCard("CI", { text: "from activate" }, { x: 100, y: 100 }, { w: 260, h: 96 });
-  // A DOM-node card: a canvas that paints on every update, a
-  // label, and a requestAnimationFrame loop that counts frames
-  // until unmount cancels it — the proof that a removed card
-  // leaves nothing running. Its state lives on window.__ciNode
-  // so the e2e suite can drive it (update its data, hide it)
-  // and read its lifecycle counts.
+  // A DOM-node card: a canvas painting on every update, with
+  // a frame-counting loop until unmount cancels it — proof a
+  // removed card leaves nothing running. State on window.__ciNode.
   const state = {
     cardId: 0, mounts: 0, updates: 0, unmounts: 0, frames: 0,
     setText: (text) => { api.board.updateItem(state.cardId, { data: { text: text, hidden: false } }); },
@@ -593,12 +590,9 @@ async function main() {
     });
 
     await check("a DOM-node plugin card mounts, updates and unmounts", async () => {
-      // The plugin check above enabled ci-test-plugin and
-      // reloaded: one HTML-string CI card and one DOM-node
-      // CINode card are on the board. Both must render — the
-      // string card exactly as before, the node card with its
-      // live canvas — and the node card's mount must have run
-      // once, with its animation loop ticking.
+      // Both CI cards must render: the string card exactly as
+      // before, the node card with its live canvas, mounted
+      // once, its animation loop ticking.
       await page.locator("text=CI plugin card").first().waitFor({ timeout: READY_TIMEOUT_MS });
       await page.locator(".ci-node-canvas").first().waitFor({ timeout: READY_TIMEOUT_MS });
       await waitFor("node card loop ticking", async () => {
