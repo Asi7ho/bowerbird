@@ -15,11 +15,10 @@ interface CardContext {
 
 export interface CardRenderer {
   cardHtml(item: Item, plain?: boolean): string;
-  // The card chrome for a DOM-node card: the outer div with
-  // position, size, rotation, selection ring and decorations,
-  // with an empty `.inner` for the plugin's node. Null when
-  // the item is not a plugin card with a `renderNode`
-  // renderer — the caller falls back to the HTML string.
+// The card chrome for a DOM-node card: the outer div with
+// position, size, rotation, ring and decorations, and an
+// empty `.inner` for the plugin's node. Null when the item
+// has no `renderNode` renderer.
   cardNodeChromeHtml(item: Item): string | null;
   shapeMeta(kind: ShapeKind): { label: string; key: string; svg: string };
   shapeLabel(kind: ShapeKind): string;
@@ -64,13 +63,10 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
     const n = Number(v);
     return Number.isFinite(n) ? n : fallback;
   };
-  // Decorations sit inside the card, at its bottom edge:
-  // checklist progress as plain text at the bottom right,
-  // and any decoration a plugin registered, at the bottom
-  // left or right. They are siblings in the same layer —
-  // never inside the card's own HTML, which belongs to
-  // the renderer. A card being edited renders nothing,
-  // so it gets none.
+// Decorations sit inside the card at its bottom edge,
+// as siblings in the same layer — never inside the card's
+// own HTML, which belongs to the renderer. A card being
+// edited renders nothing, so it gets none.
   const decorationsFor = (item: Item, id: number, x: number, y: number, w: number, h: number): string => {
     const { left, right } = getCardDecorations(item);
     // Checklist progress is core, not a decorator: a Text
@@ -84,12 +80,10 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
     if (rightHtml) out += `<div class="card-decorations card-decorations-right" data-for="${id}" style="left:${x + w - 8}px;top:${top}px;transform:translateX(-100%)">${rightHtml}</div>`;
     return out;
   };
-  // The card chrome — outer div, position, size, rotation,
-  // selection ring, decorations — around the given inner
-  // HTML. The HTML-string path and the DOM-node path share
-  // it, so a node card looks exactly like a string card.
-  // A null inner hides the card entirely: the core renders
-  // nothing for it, not even the frame border.
+// The card chrome — outer div, position, size, rotation,
+// ring, decorations — around the given inner HTML. The
+// HTML-string and DOM-node paths share it, so a node card
+// looks exactly like a string card.
   function cardChrome(item: Item, plain: boolean, inner: string | null): string {
     if (inner === null) return "";
     const id = num(item.id, 0);

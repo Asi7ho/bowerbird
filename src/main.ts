@@ -960,10 +960,8 @@ async function init(): Promise<void> {
     // from the shell after this call.
     { manifest: coreBoard.manifest, module: coreBoard },
     // Drawing tools before the toolbar: their registerTool
-    // calls land while the toolbar has not yet set its tools
-    // element, so no second set of buttons is created — the
-    // toolbar owns the buttons and flyouts for these tools,
-    // and this plugin owns the gestures.
+    // calls land first, so no second set of buttons is made —
+    // the toolbar owns the buttons, this plugin the gestures.
     { manifest: coreDraw.manifest, module: coreDraw },
     { manifest: coreSettings.manifest, module: coreSettings },
     { manifest: coreCards.manifest, module: coreCards },
