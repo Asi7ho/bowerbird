@@ -268,6 +268,11 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
       // builds the card DOM from this; a plugin embedding a card
       // elsewhere uses renderCard instead.
       renderCardAt: (id: number) => host!.renderBoardCardAt(id),
+      // The card chrome for a DOM-node card (empty `.inner`
+      // for the plugin's node). The board view builds node
+      // cards from this; a plugin embedding a card elsewhere
+      // uses renderCard instead.
+      renderNodeCardChromeAt: (id: number) => host!.renderNodeCardChromeAt(id),
       // The live preview stroke for a drag tool. It only
       // draws in the preview layer — no board write, no
       // save, no undo step — so a plugin can call it on
