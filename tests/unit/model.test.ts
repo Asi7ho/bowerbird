@@ -4,10 +4,12 @@
 import { describe, expect, it } from "vitest";
 import {
   anchorPoint,
+  applyColourDataPatch,
   arrangeItems,
   checklistProgress,
   clampZoom,
   clippedEnds,
+  colourDataPatch,
   domainOf,
   escapeHtml,
   estimateTextHeight,
@@ -690,5 +692,44 @@ describe("geometry helpers", () => {
     expect(parseInline("a `code` b")).toEqual([{ text: "a " }, { text: "code", code: true }, { text: " b" }]);
     expect(parseInline("2*3*4")).toEqual([{ text: "2*3*4" }]);
     expect(parseInline("a *b* c")).toEqual([{ text: "a " }, { text: "b", italic: true }, { text: " c" }]);
+  });
+});
+
+describe("colour data patches", () => {
+  function stroke(id: number): Item {
+    return {
+      id, pos: { x: 0, y: 0 }, size: { w: 100, h: 20 }, group: null,
+      kind: { Stroke: { points: [{ x: 0, y: 0 }], color: "#1A1A1A", width: 3, marker: false } },
+    };
+  }
+  function swatch(id: number): Item {
+    return {
+      id, pos: { x: 0, y: 0 }, size: { w: 120, h: 120 }, group: null,
+      kind: { Swatch: { hex: "#1A1A1A" } },
+    };
+  }
+  it("accepts { color } on a stroke and { hex } on a swatch, normalised", () => {
+    expect(colourDataPatch(stroke(1), { color: "#f00" })).toEqual({ color: "#FF0000" });
+    expect(colourDataPatch(swatch(2), { hex: "#00ff00" })).toEqual({ hex: "#00FF00" });
+  });
+  it("refuses any other key, a bad hex, or a non-colour card", () => {
+    expect(colourDataPatch(stroke(1), { width: 5 })).toBeNull();
+    expect(colourDataPatch(stroke(1), { color: "#FF0000", width: 5 })).toBeNull();
+    expect(colourDataPatch(stroke(1), { color: "red" })).toBeNull();
+    expect(colourDataPatch(stroke(1), { hex: "#FF0000" })).toBeNull();
+    expect(colourDataPatch(swatch(2), { color: "#FF0000" })).toBeNull();
+    expect(colourDataPatch(textCard(3, 0, 0), { color: "#FF0000" })).toBeNull();
+    expect(colourDataPatch(stroke(1), null)).toBeNull();
+    expect(colourDataPatch(stroke(1), ["#FF0000"])).toBeNull();
+  });
+  it("applyColourDataPatch recolours the card and leaves the rest alone", () => {
+    const s = stroke(1);
+    expect(applyColourDataPatch(s, { color: "#0000ff" })).toBe(true);
+    expect((s.kind as { Stroke: { color: string } }).Stroke.color).toBe("#0000FF");
+    const w = swatch(2);
+    expect(applyColourDataPatch(w, { hex: "#0000ff" })).toBe(true);
+    expect((w.kind as { Swatch: { hex: string } }).Swatch.hex).toBe("#0000FF");
+    expect(applyColourDataPatch(s, { width: 5 })).toBe(false);
+    expect((s.kind as { Stroke: { color: string } }).Stroke.color).toBe("#0000FF");
   });
 });

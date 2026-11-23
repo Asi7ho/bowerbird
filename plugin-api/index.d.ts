@@ -456,6 +456,10 @@ export interface PluginHost {
   // cards — adds them all here, so undoing it takes one undo,
   // not one per card. addItem saves after every item.
   addItems: (items: Array<{ kind: Kind; pos: Pt; size: Size }>) => number[];
+  // data rewrites the plugin's own card — except a colour
+  // patch: { color } on a stroke, { hex } on a swatch.
+  // Anything else on a core card throws. One undo step;
+  // false when the card is missing or its layer is locked.
   updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }) => boolean;
   updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }>) => boolean;
   moveItem: (id: number, toIndex: number) => boolean;
@@ -823,6 +827,10 @@ export interface PluginContext {
     // the new connector's id, or null when either card does
     // not exist.
     connect: (fromId: number, toId: number, options?: { color?: string }) => number | null;
+    // data rewrites the plugin's own card — except a colour
+    // patch: { color } on a stroke, { hex } on a swatch.
+    // Anything else on a core card throws. One undo step;
+    // false when the card is missing or its layer is locked.
     updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }) => boolean;
     updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }>) => boolean;
     moveItem: (id: number, toIndex: number) => boolean;

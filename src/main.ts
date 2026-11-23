@@ -26,7 +26,7 @@ import { measureNoteCardHeight } from "./ui/text-measure";
 import { showRecoveryOffer } from "./ui/recovery-dialog";
 import {
   Board, Camera, Item, Layer, Pt, ShapeKind, Size,
-  boardGet, centre, clampZoom, createLayer, defaultLayer, deleteLayer, elementPoint, elementSize,
+  applyColourDataPatch, boardGet, centre, clampZoom, createLayer, defaultLayer, deleteLayer, elementPoint, elementSize,
   getBoardExtension, healDuplicateIds, healLayers, hitTest, isItemLocked, isItemVisible, itemLayerId, itemsCentre,
   lassoSelect, layerById, marquee, moveLayer, moveSelection, removeBoardExtension, renameLayer,
   resizeItem, screenToWorld, select, setBoardExtension, setItemLayer, setLayerLocked,
@@ -252,15 +252,16 @@ function zoomCentre(factor: number): void {
   const s = boardSize();
   zoomAt({ x: s.x / 2, y: s.y / 2 }, factor);
 }
-// Apply one item patch: position, size, group, layer, and — for
-// plugin cards only — data. Shared by updateItem and
-// updateItems.
+// Apply one item patch: position, size, group, layer, and data —
+// for plugin cards only, plus a colour patch on a stroke or a
+// swatch. Shared by updateItem and updateItems.
 function applyPatch(it: Item, patch: { pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }): void {
   if (patch.pos) it.pos = patch.pos;
   if (patch.size) it.size = patch.size;
   if (patch.group !== undefined) it.group = patch.group;
   if (patch.layer !== undefined) it.layer = patch.layer;
   if (patch.data !== undefined && "Plugin" in it.kind) it.kind.Plugin.data = patch.data;
+  else if (patch.data !== undefined) applyColourDataPatch(it, patch.data);
 }
 // Render one card as HTML, or null when it has none.
 // plain renders at the origin (for embedding in a panel

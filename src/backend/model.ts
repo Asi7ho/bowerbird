@@ -951,6 +951,42 @@ export function normaliseHex(hex: string): string | null {
   return "#" + rgb.map((c) => c.toString(16).padStart(2, "0").toUpperCase()).join("");
 }
 
+// A colour data patch: the one `data` edit a plugin may make
+// on a core card. A stroke takes { color }, a swatch takes
+// { hex }; anything else is not a colour patch. The hex is
+// normalised, so "#f00" and "#FF0000" mean the same colour.
+export function colourDataPatch(item: Item, data: unknown): { color: string } | { hex: string } | null {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const keys = Object.keys(data);
+  if ("Stroke" in item.kind) {
+    if (keys.length !== 1 || keys[0] !== "color") return null;
+    const value = (data as { color?: unknown }).color;
+    if (typeof value !== "string") return null;
+    const hex = normaliseHex(value);
+    return hex ? { color: hex } : null;
+  }
+  if ("Swatch" in item.kind) {
+    if (keys.length !== 1 || keys[0] !== "hex") return null;
+    const value = (data as { hex?: unknown }).hex;
+    if (typeof value !== "string") return null;
+    const hex = normaliseHex(value);
+    return hex ? { hex } : null;
+  }
+  return null;
+}
+
+// Apply a colour data patch to a core card. False when the
+// patch is not a colour patch for this card, so the caller
+// knows nothing changed.
+export function applyColourDataPatch(item: Item, data: unknown): boolean {
+  const patch = colourDataPatch(item, data);
+  if (!patch) return false;
+  if ("color" in patch && "Stroke" in item.kind) item.kind.Stroke.color = patch.color;
+  else if ("hex" in patch && "Swatch" in item.kind) item.kind.Swatch.hex = patch.hex;
+  else return false;
+  return true;
+}
+
 // Markdown lives in markdown.ts; re-exported here so existing
 // imports from "./model" keep working.
 export { CARD_DECORATIONS_H, checklistProgress, escapeHtml, estimateTextHeight, parseInline, parseMarkdown, renderMarkdownHtml, setChecklistDone, toggleTaskLine } from "./markdown";
