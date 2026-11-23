@@ -541,24 +541,25 @@ export function renderPanel(container: HTMLElement): void {
   pickerSection.appendChild(controlsEl);
   container.appendChild(pickerSection);
   renderControls();
-  palettesEl = document.createElement("div");
-  palettesEl.className = "col-palettes";
-  container.appendChild(palettesEl);
-  // The one primary action, at the bottom of the panel,
-  // under the palettes — not above them.
-  const createRow = document.createElement("div");
-  createRow.className = "col-create-row";
-  const newBtn = document.createElement("button");
-  newBtn.type = "button";
-  newBtn.className = "col-btn";
-  newBtn.innerHTML = `${ICON_PLUS}<span>New palette</span>`;
-  newBtn.setAttribute("aria-label", "New palette");
+  // The palettes head their own section: "Saved Palettes"
+  // with a + button at the right end, instead of a
+  // separate button under the list.
+  const palettesHead = document.createElement("div");
+  palettesHead.className = "col-palettes-head";
+  const palettesTitle = document.createElement("span");
+  palettesTitle.className = "col-palettes-title";
+  palettesTitle.textContent = "Saved Palettes";
+  palettesHead.appendChild(palettesTitle);
+  const newBtn = iconButton("New palette", "New palette", ICON_PLUS);
   // A new palette starts from the picked colour: the
   // picked colour already follows the pen on open, so a
   // separate "from pen" action would add nothing.
   newBtn.addEventListener("click", () => updateStore(createPalette(store, [pickedHex()]).store));
-  createRow.appendChild(newBtn);
-  container.appendChild(createRow);
+  palettesHead.appendChild(newBtn);
+  container.appendChild(palettesHead);
+  palettesEl = document.createElement("div");
+  palettesEl.className = "col-palettes";
+  container.appendChild(palettesEl);
   renderPalettes();
   updatePicked();
 }

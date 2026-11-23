@@ -272,32 +272,22 @@
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
 }
 
-.col-create-row {
+/* The palettes section head: "Saved Palettes" with a +
+   button at the right end. The + is the same icon
+   button as the palette head's chevrons and trash. */
+.col-palettes-head {
   flex: none;
   display: flex;
-  padding-top: 12px;
-  margin-top: 12px;
-  border-top: 1px solid var(--separator);
-}
-
-/* The one primary action: icon plus label, on the core
-   panel button style (white, separator border, 9px
-   radius) — the icon is the same stroke style as the
-   toolbar icons. */
-.plugin-panel-body .col-btn {
-  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  margin-bottom: 8px;
+  padding-right: 15px;
 }
 
-.plugin-panel-body .col-btn svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.col-palettes-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .col-palettes {

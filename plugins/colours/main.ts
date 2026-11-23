@@ -48,7 +48,7 @@ export async function activate(api: PluginContext): Promise<void> {
   apiRef.ui.registerPanel({
     id: "colours",
     title: "Colour Library",
-    icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2" fill="#FF3B30"/><rect x="13" y="3" width="8" height="8" rx="2" fill="#FFCC00"/><rect x="3" y="13" width="8" height="8" rx="2" fill="#34C759"/><rect x="13" y="13" width="8" height="8" rx="2" fill="#007AFF"/></svg>',
+    icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12 22 12A10 10 0 0 1 17 20.7Z" fill="#FF3B30"/><path d="M12 12 17 20.7A10 10 0 0 1 7 20.7Z" fill="#FFCC00"/><path d="M12 12 7 20.7A10 10 0 0 1 2 12Z" fill="#34C759"/><path d="M12 12 2 12A10 10 0 0 1 7 3.3Z" fill="#64D2FF"/><path d="M12 12 7 3.3A10 10 0 0 1 17 3.3Z" fill="#007AFF"/><path d="M12 12 17 3.3A10 10 0 0 1 22 12Z" fill="#AF52DE"/><circle cx="12" cy="12" r="3" fill="#fff"/></svg>',
     render: (container) => renderPanel(container),
   });
 }

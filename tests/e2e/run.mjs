@@ -3575,7 +3575,7 @@ async function main() {
       await page.locator(".col-slider-light").fill("56");
       pickedRed = (await page.locator(".col-hex").textContent()) ?? "";
       assert.ok(/^#[0-9A-F]{6}$/.test(pickedRed));
-      await page.locator(".col-create-row .col-btn", { hasText: "New palette" }).click();
+      await page.locator('.col-palettes-head [aria-label="New palette"]').click();
       await waitFor("second palette", async () => (await page.locator(".col-palette-name").count()) === 2 ? true : null);
       await waitFor("colour in the new palette", async () =>
         (await page.locator(".col-palette").nth(1).locator(".col-tile").count()) === 1 ? true : null,
