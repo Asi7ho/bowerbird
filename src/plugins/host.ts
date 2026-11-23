@@ -17,6 +17,11 @@ import { loadOverrides } from "../ui/shortcuts";
 // from this module (src/backend/cards.ts,
 // src/backend/search.ts, src/main.ts) keep working.
 export { getBuiltinCardHtml, getCardHtml, getCardRenderer, getPluginCardSearchText } from "./host-cards";
+export {
+  cardNodeStateKey, createCardNode, getMountedCardNode, hasNodeRenderer,
+  mountCardNode, unmountAllCardNodes, unmountCardNode, unmountCardNodesExcept,
+  updateMountedCardNode,
+} from "./host-cards";
 // getCardDecorations moved to host-state with the cardDecorators
 // registry; re-exported here so existing imports from this
 // module (src/backend/cards.ts) keep working.
