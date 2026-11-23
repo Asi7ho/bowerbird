@@ -1,10 +1,6 @@
 // Plugin tool drags: the pure half of the drag-tool API.
-// The input loop (board-input.ts) owns the DOM events and
-// the error toasts; this module owns the routing decisions,
-// so they are testable without a board: which tools are drag
-// tools, how a PointerEvent becomes a PluginPointerEvent,
-// and the down -> move -> up/cancel transitions over the
-// plugin variant of DragState (see board-state.ts).
+// The input loop owns the DOM events; this module owns the
+// routing decisions, so they are testable without a board.
 
 import type { PluginPointerEvent, PluginToolDef, Pt } from "bowerbird-plugin-api";
 import type { DragState } from "./board-state";
