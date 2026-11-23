@@ -105,14 +105,15 @@
    padding, like the preview. */
 .plugin-panel-body .col-picker-btn {
   flex: none;
-  width: 48px;
-  height: 48px;
+  margin-left: auto;
+  width: 32px;
+  height: 32px;
   padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   border: 1px solid var(--hairline);
-  border-radius: 12px;
+  border-radius: 9px;
   background: #fff;
 }
 
@@ -121,10 +122,13 @@
 }
 
 .plugin-panel-body .col-picker-btn svg {
-  width: 28px;
-  height: 28px;
-  fill: var(--ink);
-  stroke: none;
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* The mode control, a segmented row: the Settings
