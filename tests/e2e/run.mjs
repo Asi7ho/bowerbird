@@ -3569,7 +3569,7 @@ async function main() {
       // lightness 56. The picked hex is read back, not
       // assumed — integer sliders quantise, so it is one
       // step off #E63946.
-      await page.locator(".col-mode-select").selectOption("hsl");
+      await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
       await page.locator(".col-slider-hue").fill("355");
       await page.locator(".col-slider-sat").fill("78");
       await page.locator(".col-slider-light").fill("56");
@@ -3639,7 +3639,7 @@ async function main() {
       // puts it back.
       await page.keyboard.press("v");
       await page.mouse.click(400, 800);
-      await page.locator(".col-mode-select").selectOption("hsl");
+      await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
       await page.locator(".col-slider-hue").fill("211");
       await page.locator(".col-slider-sat").fill("100");
       await page.locator(".col-slider-light").fill("50");
@@ -3710,13 +3710,13 @@ async function main() {
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       // Pick a red in HSL, read it back, then switch modes:
       // the picked colour must not move.
-      await page.locator(".col-mode-select").selectOption("hsl");
+      await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
       await page.locator(".col-slider-hue").fill("355");
       await page.locator(".col-slider-sat").fill("78");
       await page.locator(".col-slider-light").fill("56");
       const picked = (await page.locator(".col-hex").textContent()) ?? "";
       assert.ok(/^#[0-9A-F]{6}$/.test(picked));
-      await page.locator(".col-mode-select").selectOption("rgb");
+      await page.locator('.col-mode-seg-btn[data-mode="rgb"]').click();
       assert.equal(await page.locator(".col-hex").textContent(), picked);
       // The RGB sliders show the same colour, channel by
       // channel: the hex is parsed in the test, not the panel.
@@ -3731,9 +3731,9 @@ async function main() {
       const moved = (await page.locator(".col-hex").textContent()) ?? "";
       assert.notEqual(moved, picked);
       // HSV and Hex show the same colour too.
-      await page.locator(".col-mode-select").selectOption("hsv");
+      await page.locator('.col-mode-seg-btn[data-mode="hsv"]').click();
       assert.equal(await page.locator(".col-hex").textContent(), moved);
-      await page.locator(".col-mode-select").selectOption("hex");
+      await page.locator('.col-mode-seg-btn[data-mode="hex"]').click();
       assert.equal(await page.locator(".col-hex-input").inputValue(), moved);
       // A bad hex is ignored; a good one applies.
       await page.locator(".col-hex-input").fill("notacolor");
@@ -3743,16 +3743,16 @@ async function main() {
       await page.keyboard.press("Enter");
       assert.equal(await page.locator(".col-hex").textContent(), "#00FF00");
       // The mode survives a reload: leave it on RGB, reload,
-      // and the dropdown still says RGB.
-      await page.locator(".col-mode-select").selectOption("rgb");
+      // and the segmented control still says RGB.
+      await page.locator('.col-mode-seg-btn[data-mode="rgb"]').click();
       await page.reload();
       await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
       await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
-      assert.equal(await page.locator(".col-mode-select").inputValue(), "rgb");
+      assert.ok(await page.locator('.col-mode-seg-btn[data-mode="rgb"]').evaluate((el) => el.classList.contains("active")));
       // Leave HSL selected, so later checks find the HSL
       // sliders where they expect them.
-      await page.locator(".col-mode-select").selectOption("hsl");
+      await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
     });
 
     await check("a version restores from the Boards panel history", async () => {

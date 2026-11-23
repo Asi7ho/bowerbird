@@ -48,7 +48,7 @@ export function parsePickerMode(value: unknown): PickerMode {
 }
 
 let mode: PickerMode = "hsl";
-let modeSelect: HTMLSelectElement | null = null;
+let modeSegButtons: Partial<Record<PickerMode, HTMLButtonElement>> = {};
 let controlsEl: HTMLDivElement | null = null;
 let palettesEl: HTMLDivElement | null = null;
 let wheel: WheelHandle | null = null;
@@ -95,7 +95,7 @@ export function initPanel(a: PluginContext, initial: ColourStore, initialMode: P
 export function clearPanel(): void {
   api = null;
   store = emptyStore();
-  modeSelect = null;
+  modeSegButtons = {};
   controlsEl = null;
   palettesEl = null;
   wheel = null;
@@ -510,27 +510,35 @@ export function renderPanel(container: HTMLElement): void {
   pickedHexEl.className = "col-hex";
   previewRow.appendChild(pickedHexEl);
   pickerSection.appendChild(previewRow);
-  // The mode dropdown, above the tweak controls: HSL,
-  // RGB, HSV or Hex — one picked colour, four editors.
-  const modeRow = document.createElement("div");
-  modeRow.className = "col-mode-row";
-  modeSelect = document.createElement("select");
-  modeSelect.className = "col-mode-select";
-  modeSelect.setAttribute("aria-label", "Colour mode");
+  // The mode control, a segmented row: HSL, RGB, HSV or
+  // Hex — one picked colour, four editors.
+  const modeSeg = document.createElement("div");
+  modeSeg.className = "col-mode-seg";
+  modeSeg.setAttribute("role", "group");
+  modeSeg.setAttribute("aria-label", "Colour mode");
   for (const [value, label] of [["hsl", "HSL"], ["rgb", "RGB"], ["hsv", "HSV"], ["hex", "Hex"]] as const) {
-    const option = document.createElement("option");
-    option.value = value;
-    option.textContent = label;
-    modeSelect.appendChild(option);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "col-mode-seg-btn" + (value === mode ? " active" : "");
+    btn.dataset.mode = value;
+    btn.textContent = label;
+    btn.setAttribute("aria-label", `${label} mode`);
+    btn.setAttribute("aria-pressed", String(value === mode));
+    btn.addEventListener("click", () => {
+      if (mode === value) return;
+      mode = value;
+      for (const [m, b] of Object.entries(modeSegButtons)) {
+        const active = m === value;
+        b.classList.toggle("active", active);
+        b.setAttribute("aria-pressed", String(active));
+      }
+      renderControls();
+      saveMode();
+    });
+    modeSegButtons[value] = btn;
+    modeSeg.appendChild(btn);
   }
-  modeSelect.value = mode;
-  modeSelect.addEventListener("change", () => {
-    mode = parsePickerMode(modeSelect?.value);
-    renderControls();
-    saveMode();
-  });
-  modeRow.appendChild(modeSelect);
-  pickerSection.appendChild(modeRow);
+  pickerSection.appendChild(modeSeg);
   controlsEl = document.createElement("div");
   controlsEl.className = "col-controls";
   pickerSection.appendChild(controlsEl);
