@@ -102,7 +102,7 @@ export interface PlacedItem {
 // A finished stroke: the points as drawn, in the pen
 // colour, at the tool's width. A drag of one point is not
 // a stroke — the old core path only committed two or more.
-export function buildPlacedItem(points: Pt[], pressures: number[], color: string, width: number, marker: boolean, pencil: boolean): PlacedItem | null {
+export function buildStrokeItem(points: Pt[], pressures: number[], color: string, width: number, marker: boolean, pencil: boolean): PlacedItem | null {
   if (points.length < 2) return null;
   const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
   const pos = { x: Math.min(...xs), y: Math.min(...ys) };
@@ -220,7 +220,7 @@ export function activate(api: PluginContext): void {
         }
       },
       onPointerUp: () => {
-        const item = buildPlacedItem(points, pressures, api.pen.getColor(), width, marker, pencil);
+        const item = buildStrokeItem(points, pressures, api.pen.getColor(), width, marker, pencil);
         points = [];
         pressures = [];
         if (item) api.board.addItem(item.kind, item.pos, item.size);
