@@ -193,6 +193,29 @@ export interface PluginManifest {
   };
 }
 
+// A DOM-node card: the plugin owns a live DOM node inside the
+// card chrome instead of an HTML string. `renderNode` is called
+// once when the card's DOM is created; the returned node is
+// inserted into the chrome exactly where the HTML string would
+// go (same position, size, rotation, decorations and selection
+// ring). `update` is called when the item or its data changes,
+// instead of rebuilding the card DOM — the plugin patches its
+// own node in place. Returning false from `update` hides the
+// card entirely, the way returning null from `render` does, and
+// the card mounts again from `renderNode` when it should show.
+// `unmount` is called when the card leaves the board (deleted,
+// culled out of view, hidden layer, board switch, plugin
+// disabled), so the plugin can release listeners, animation
+// frames and WebGL contexts; a removed card must not keep
+// timers or listeners alive. `unmount` runs while the node is
+// still attached to the board, so it can clean up listeners
+// on the node itself.
+export interface PluginCardNode {
+  node: Node;
+  update?: (item: Item, data: unknown) => boolean | void;
+  unmount?: () => void;
+}
+
 export interface PluginCardDef {
   kind: string;
   title: string;
@@ -204,6 +227,15 @@ export interface PluginCardDef {
   // the context it belongs to (for example, a slide frame
   // only while its panel is open).
   render: (item: Item, data: unknown) => string | null;
+  // Optional DOM-node renderer: when present, the board mounts
+  // the returned node instead of the HTML string from `render`.
+  // Use it when the card owns a <canvas>, a WebGL view, or
+  // interactive controls that must survive across renders;
+  // use `render` for static content. `render` stays required:
+  // plain contexts (slides, the library, export) have no live
+  // DOM and always use the HTML string, and a `renderNode`
+  // that throws falls back to `render` for that card.
+  renderNode?: (item: Item, data: unknown) => PluginCardNode | null;
   onDoubleClick?: (item: Item, data: unknown) => void;
   onAction?: (action: string, item: Item, data: unknown) => void;
   searchText?: (data: unknown) => string;
@@ -503,6 +535,14 @@ export interface PluginHost {
   // selected image shows whole. Strokes and connectors
   // render as null: the board draws those as SVG itself.
   renderBoardCardAt: (id: number) => string | null;
+  // The card chrome for a DOM-node card: the outer div with
+  // position, size, rotation, selection ring and decorations,
+  // with an empty `.inner` for the plugin's node. The board
+  // view builds node cards from this; a plugin embedding a
+  // card elsewhere uses renderBoardCard instead. Null when
+  // the item is not a plugin card with a `renderNode`
+  // renderer.
+  renderNodeCardChromeAt: (id: number) => string | null;
   // Hit-test: the top item id at a world point, or null.
   // Frames lose to the cards inside them (see hitTest).
   hitTest: (world: Pt) => number | null;
@@ -731,6 +771,13 @@ export interface PluginContext {
     // for embedding a card in a panel or view), this is
     // the card as it appears on the board.
     renderCardAt: (id: number) => string | null;
+    // The card chrome for a DOM-node card: the outer div with
+    // position, size, rotation, selection ring and decorations,
+    // with an empty `.inner` for the plugin's node. The board
+    // view builds node cards from this; a plugin embedding a
+    // card elsewhere uses renderCard instead. Null when the
+    // item is not a plugin card with a `renderNode` renderer.
+    renderNodeCardChromeAt: (id: number) => string | null;
     // Draw a drag tool's live preview stroke in the preview
     // layer above the cards, without touching the board: the
     // points are world points, the pressures (when given)

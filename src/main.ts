@@ -250,6 +250,12 @@ function renderCardHtml(id: number, plain: boolean): string | null {
   const html = C.cards.cardHtml(plain ? { ...it, pos: { x: 0, y: 0 } } : it, plain);
   return html === "" ? null : html;
 }
+function renderNodeCardChromeHtml(id: number): string | null {
+  const it = boardGet(C.board, id);
+  if (!it) return null;
+  if ("Connector" in it.kind) return null;
+  return C.cards.cardNodeChromeHtml(it);
+}
 // Validate and apply a camera, clamping the zoom. The
 // floor is 0.01, not 0.1: fit (F) must be able to reach a
 // very wide board. Shared by setCamera (which also saves
@@ -638,6 +644,7 @@ async function init(): Promise<void> {
     // position, selection state and editing exclusion.
     // The board view builds the card DOM from this.
     renderBoardCardAt: (id) => renderCardHtml(id, false),
+    renderNodeCardChromeAt: (id) => renderNodeCardChromeHtml(id),
     hitTest: (world: Pt) => hitTestWithFrames(C.board, world),
     // Selection queries for the board view's drags. Pure
     // reads over the live board, no save, no render.

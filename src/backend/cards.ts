@@ -15,6 +15,12 @@ interface CardContext {
 
 export interface CardRenderer {
   cardHtml(item: Item, plain?: boolean): string;
+  // The card chrome for a DOM-node card: the outer div with
+  // position, size, rotation, selection ring and decorations,
+  // with an empty `.inner` for the plugin's node. Null when
+  // the item is not a plugin card with a `renderNode`
+  // renderer — the caller falls back to the HTML string.
+  cardNodeChromeHtml(item: Item): string | null;
   shapeMeta(kind: ShapeKind): { label: string; key: string; svg: string };
   shapeLabel(kind: ShapeKind): string;
   shapePreviewPoints(kind: ShapeKind, x0: number, y0: number, w: number, h: number): string;
@@ -51,6 +57,56 @@ export function shapePreviewPoints(kind: ShapeKind, x0: number, y0: number, w: n
 }
 
 export function createCardRenderer(ctx: CardContext): CardRenderer {
+  // Numbers are forced through Number() (a string like
+  // `0" onmouseover="…` becomes NaN, then the fallback,
+  // instead of breaking out of the style attribute).
+  const num = (v: unknown, fallback: number): number => {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : fallback;
+  };
+  // Decorations sit inside the card, at its bottom edge:
+  // checklist progress as plain text at the bottom right,
+  // and any decoration a plugin registered, at the bottom
+  // left or right. They are siblings in the same layer —
+  // never inside the card's own HTML, which belongs to
+  // the renderer. A card being edited renders nothing,
+  // so it gets none.
+  const decorationsFor = (item: Item, id: number, x: number, y: number, w: number, h: number): string => {
+    const { left, right } = getCardDecorations(item);
+    // Checklist progress is core, not a decorator: a Text
+    // card with task lines shows n/m at the bottom right,
+    // next to any right-side decoration.
+    const progress = "Text" in item.kind ? checklistProgress(item.kind.Text.text) : null;
+    const rightHtml = right + (progress ? `<span class="card-progress">${progress.done}/${progress.total}</span>` : "");
+    const top = Math.max(y + 4, y + h - 36);
+    let out = "";
+    if (left) out += `<div class="card-decorations" data-for="${id}" style="left:${x + 8}px;top:${top}px;width:${Math.max(w - 16, 0)}px">${left}</div>`;
+    if (rightHtml) out += `<div class="card-decorations card-decorations-right" data-for="${id}" style="left:${x + w - 8}px;top:${top}px;transform:translateX(-100%)">${rightHtml}</div>`;
+    return out;
+  };
+  // The card chrome — outer div, position, size, rotation,
+  // selection ring, decorations — around the given inner
+  // HTML. The HTML-string path and the DOM-node path share
+  // it, so a node card looks exactly like a string card.
+  // A null inner hides the card entirely: the core renders
+  // nothing for it, not even the frame border.
+  function cardChrome(item: Item, plain: boolean, inner: string | null): string {
+    if (inner === null) return "";
+    const id = num(item.id, 0);
+    const sel = plain ? false : ctx.isSelected(id);
+    const cls = sel ? "card selected" : "card";
+    const x = num(item.pos.x, 0), y = num(item.pos.y, 0);
+    const ww = num(item.size.w, 0), hh = num(item.size.h, 0);
+    const rot = itemRotation(item);
+    const style = `left:${x}px;top:${y}px;width:${ww}px;height:${hh}px;${rot ? `transform:rotate(${rot}deg);` : ""}`;
+    const frameCls = getCardRenderer(item)?.frame === true ? " plugin-frame" : "";
+    return `<div class="${cls}${frameCls}" data-id="${id}" style="${style}"><div class="inner">${inner}</div></div>` + decorationsFor(item, id, x, y, ww, hh);
+  }
+  function cardNodeChromeHtml(item: Item): string | null {
+    if (!("Plugin" in item.kind)) return null;
+    if (!getCardRenderer(item)?.renderNode) return null;
+    return cardChrome(item, false, "");
+  }
   function cardHtml(item: Item, plain = false): string {
     // Board JSON is untrusted input for this function: a board
     // shared by someone else, or a file dropped with a crafted
@@ -62,10 +118,6 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
     // forced through Number() (a string like `0" onmouseover="…`
     // becomes NaN, then the fallback, instead of breaking
     // out of the style attribute).
-    const num = (v: unknown, fallback: number): number => {
-      const n = Number(v);
-      return Number.isFinite(n) ? n : fallback;
-    };
     const id = num(item.id, 0);
     const sel = plain ? false : ctx.isSelected(id);
     const cls = sel ? "card selected" : "card";
@@ -79,35 +131,12 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
     const ww = num(item.size.w, 0), hh = num(item.size.h, 0);
     const rot = itemRotation(item);
     const style = `left:${x}px;top:${y}px;width:${ww}px;height:${hh}px;${rot ? `transform:rotate(${rot}deg);` : ""}`;
-    // Decorations sit inside the card, at its bottom edge:
-    // checklist progress as plain text at the bottom right,
-    // and any decoration a plugin registered, at the bottom
-    // left or right. They are siblings in the same layer —
-    // never inside the card's own HTML, which belongs to
-    // the renderer. A card being edited renders nothing,
-    // so it gets none.
-    const decorations = (x: number, y: number, w: number, h: number): string => {
-      const { left, right } = getCardDecorations(item);
-      // Checklist progress is core, not a decorator: a Text
-      // card with task lines shows n/m at the bottom right,
-      // next to any right-side decoration.
-      const progress = "Text" in item.kind ? checklistProgress(item.kind.Text.text) : null;
-      const rightHtml = right + (progress ? `<span class="card-progress">${progress.done}/${progress.total}</span>` : "");
-      const top = Math.max(y + 4, y + h - 36);
-      let out = "";
-      if (left) out += `<div class="card-decorations" data-for="${id}" style="left:${x + 8}px;top:${top}px;width:${Math.max(w - 16, 0)}px">${left}</div>`;
-      if (rightHtml) out += `<div class="card-decorations card-decorations-right" data-for="${id}" style="left:${x + w - 8}px;top:${top}px;transform:translateX(-100%)">${rightHtml}</div>`;
-      return out;
-    };
     if ("Plugin" in item.kind) {
       // A renderer returning null hides the card entirely:
       // the core renders nothing for it, not even the frame
       // border. A plugin uses this to show a card only in
       // the context it belongs to.
-      const inner = getCardHtml(item);
-      if (inner === null) return "";
-      const frameCls = getCardRenderer(item)?.frame === true ? " plugin-frame" : "";
-      return `<div class="${cls}${frameCls}" data-id="${id}" style="${style}"><div class="inner">${inner}</div></div>` + decorations(x, y, ww, hh);
+      return cardChrome(item, plain, getCardHtml(item));
     }
     // A note being edited renders nothing: the editor DOM is
     // managed separately. This check stays in the core, so a
@@ -118,13 +147,13 @@ export function createCardRenderer(ctx: CardContext): CardRenderer {
     // with no registered renderer falls through to the
     // placeholder below — the core renders no card itself.
     const builtinHtml = getBuiltinCardHtml(item, plain);
-    if (builtinHtml !== null) return builtinHtml + decorations(x, y, ww, hh);
+    if (builtinHtml !== null) return builtinHtml + decorationsFor(item, id, x, y, ww, hh);
     // No plugin registered a renderer for this kind. The
     // core renders no card itself anymore; this is a
     // placeholder so a board never shows a blank hole.
     // (The core-cards plugin provides all eight built-in
     // kinds, so this only fires when it is missing.)
-    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner" style="padding:12px"><div class="title" style="font-size:14px">Card</div><div class="sub" style="font-size:12px">No plugin provides this card kind.</div></div></div>` + decorations(x, y, ww, hh);
+    return `<div class="${cls}" data-id="${id}" style="${style}"><div class="inner" style="padding:12px"><div class="title" style="font-size:14px">Card</div><div class="sub" style="font-size:12px">No plugin provides this card kind.</div></div></div>` + decorationsFor(item, id, x, y, ww, hh);
   }
-  return { cardHtml, shapeMeta, shapeLabel, shapePreviewPoints };
+  return { cardHtml, cardNodeChromeHtml, shapeMeta, shapeLabel, shapePreviewPoints };
 }
