@@ -138,6 +138,17 @@ export function activate(api) {
     },
   });
   state.cardId = api.board.addPluginCard("CINode", { text: "node card", hidden: false }, { x: 400, y: 100 }, { w: 260, h: 96 });
+  // Layer + note helpers for the locked-drop and
+  // search-ghost checks: the app has no layers UI, so
+  // the suite drives the plugin API directly.
+  window.__ciLayers = {
+    create: (name) => api.board.createLayer(name),
+    getLayers: () => api.board.getLayers(),
+    setVisible: (id, visible) => api.board.setLayerVisible(id, visible),
+    setLocked: (id, locked) => api.board.setLayerLocked(id, locked),
+    setItemLayer: (id, layerId) => api.board.setItemLayer(id, layerId),
+    addTextNote: (text, x, y) => api.board.addItem({ Text: { text: text, bold: false, size: 16, color: "#1A1A1A" } }, { x: x, y: y }, { w: 260, h: 48 }),
+  };
 }
 export function deactivate() {}
 `;
@@ -2283,6 +2294,126 @@ async function main() {
         const count = (await page.locator("#search-count").textContent()) ?? "";
         return count === "" ? true : null;
       });
+    });
+
+    await check("dropping a file onto a locked default layer lands nothing and says so", async () => {
+      // The drop guard: a locked default layer refuses the
+      // whole drop before any file is read. Unlock at the
+      // end so the drop checks after this one still land.
+      const before = readBoard().items.length;
+      try {
+        await page.evaluate(() => window.__ciLayers.setLocked("default", true));
+        await page.evaluate(() => {
+          const dt = new DataTransfer();
+          const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAwMCAO+ip1sAAAAASUVORK5CYII="), (c) => c.charCodeAt(0));
+          dt.items.add(new File([bytes], "locked-drop.png", { type: "image/png" }));
+          document.body.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, clientX: 640, clientY: 400, dataTransfer: dt }));
+        });
+        // The toast is the refusal: it shows for 4s, so
+        // assert it while it is up, then wait it out — a
+        // slow embed would have had its whole window to
+        // land, and must still have landed nothing.
+        await waitFor("locked-layer toast", async () => {
+          const toast = (await page.locator("#toast").textContent()) ?? "";
+          return toast === "Default layer is locked" ? true : null;
+        });
+        await waitFor("locked toast gone", async () =>
+          page.evaluate(() => !document.querySelector("#toast").classList.contains("show")),
+        );
+        assert.strictEqual(readBoard().items.length, before, "no card landed on the locked layer");
+        // Unlock, drop again: the same file now lands.
+        await page.evaluate(() => window.__ciLayers.setLocked("default", false));
+        await page.evaluate(() => {
+          const dt = new DataTransfer();
+          const bytes = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8Xw8AAwMCAO+ip1sAAAAASUVORK5CYII="), (c) => c.charCodeAt(0));
+          dt.items.add(new File([bytes], "unlocked-drop.png", { type: "image/png" }));
+          document.body.dispatchEvent(new DragEvent("drop", { bubbles: true, cancelable: true, clientX: 640, clientY: 400, dataTransfer: dt }));
+        });
+        await waitFor("unlocked drop lands", () =>
+          readBoard().items.length === before + 1 ? true : null,
+        );
+      } finally {
+        await page.evaluate(() => window.__ciLayers.setLocked("default", false)).catch(() => undefined);
+      }
+    });
+
+    await check("jumping to a search result on a hidden layer ghosts the card, layer stays hidden", async () => {
+      // A note with a word nothing else has, moved onto
+      // its own layer, which is then hidden: the search
+      // must still find it, and the jump must show it
+      // dimmed without unhiding the layer.
+      await page.evaluate(() => window.__ciLayers.addTextNote("Ghost lantern", 100, 3000));
+      const ghostNote = await waitFor("ghost note in board.json", () =>
+        textCards().find((it) => it.kind.Text.text === "Ghost lantern") ?? null,
+      );
+      const layer = await page.evaluate(() => window.__ciLayers.create("Ghost layer"));
+      const layerId = layer.id;
+      try {
+        await page.evaluate(([id, lid]) => {
+          window.__ciLayers.setItemLayer(id, lid);
+          window.__ciLayers.setVisible(lid, false);
+        }, [ghostNote.id, layerId]);
+        // The note is gone from the DOM while its layer
+        // is hidden — there is nothing to jump to yet.
+        await waitFor("ghost note off the board", async () =>
+          page.evaluate((cid) => !document.querySelector(`#cards .card[data-id="${cid}"]`), String(ghostNote.id)),
+        );
+        await page.keyboard.press("Control+f");
+        await page.locator("#search-input").waitFor({ timeout: READY_TIMEOUT_MS });
+        await page.keyboard.type("Ghost lantern");
+        await waitFor("one search match", async () => {
+          const count = (await page.locator("#search-count").textContent()) ?? "";
+          return count.startsWith("1 match") ? true : null;
+        });
+        await page.keyboard.press("Enter");
+        // The jump shows the card dimmed and centred, and
+        // the layer is STILL hidden after it.
+        await waitFor("ghost card in the DOM", async () =>
+          page.evaluate((cid) => !!document.querySelector(`#cards .card[data-id="${cid}"].search-ghost`), String(ghostNote.id)),
+        );
+        const ghostState = await page.evaluate((cid) => {
+          const el = document.querySelector(`#cards .card[data-id="${cid}"]`);
+          if (!el) return null;
+          const r = el.getBoundingClientRect();
+          const boardRect = document.querySelector("#board").getBoundingClientRect();
+          return {
+            opacity: getComputedStyle(el).opacity,
+            centred: Math.abs((r.left + r.width / 2) - (boardRect.left + boardRect.width / 2)) < 200
+              && Math.abs((r.top + r.height / 2) - (boardRect.top + boardRect.height / 2)) < 200,
+          };
+        }, String(ghostNote.id));
+        assert.ok(ghostState, "ghost card on screen");
+        assert.strictEqual(ghostState.opacity, "0.35", "ghost card at low opacity");
+        assert.ok(ghostState.centred, "ghost card centred");
+        const layerAfter = readBoard().layers.find((l) => l.id === layerId);
+        assert.ok(layerAfter && layerAfter.visible === false, "layer still hidden after the jump");
+        // A click on the ghost selects nothing: it takes
+        // no clicks, so the ghost itself is never selected.
+        const box = await page.locator(`#cards .card[data-id="${ghostNote.id}"]`).boundingBox();
+        assert.ok(box, "ghost card has a box to click");
+        await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        await new Promise((r) => setTimeout(r, 300));
+        const ghostSelected = await page.evaluate((cid) =>
+          !!document.querySelector(`#cards .card[data-id="${cid}"].selected`), String(ghostNote.id));
+        assert.ok(!ghostSelected, "clicking the ghost does not select it");
+        // Unhiding the layer ends the ghost: the card is
+        // back at full opacity, a normal card again.
+        await page.evaluate((lid) => window.__ciLayers.setVisible(lid, true), layerId);
+        await waitFor("ghost cleared on unhide", async () =>
+          page.evaluate((cid) => {
+            const el = document.querySelector(`#cards .card[data-id="${cid}"]`);
+            return el && !el.classList.contains("search-ghost") && getComputedStyle(el).opacity === "1" ? true : null;
+          }, String(ghostNote.id)),
+        );
+        await page.keyboard.press("Escape");
+        await waitFor("search cleared", async () => {
+          const count = (await page.locator("#search-count").textContent()) ?? "";
+          return count === "" ? true : null;
+        });
+      } finally {
+        await page.evaluate((lid) => window.__ciLayers.setVisible(lid, true), layerId).catch(() => undefined);
+        await page.keyboard.press("Escape").catch(() => undefined);
+      }
     });
 
     await check("a backup restores the board to its snapshot", async () => {
