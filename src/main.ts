@@ -15,6 +15,7 @@ import { createUndoStore, type UndoStore } from "./backend/undo";
 import { createDrops, type Drops } from "./backend/drops";
 import * as coreBoard from "./ui/board";
 import * as coreCards from "./ui/cards";
+import * as coreDraw from "./ui/drawing-tools";
 import * as coreSearch from "./ui/search";
 import * as coreSettings from "./ui/settings";
 import * as coreTitlebar from "./ui/titlebar";
@@ -840,6 +841,12 @@ async function init(): Promise<void> {
     // inserts before it, and the core reads its elements
     // from the shell after this call.
     { manifest: coreBoard.manifest, module: coreBoard },
+    // Drawing tools before the toolbar: their registerTool
+    // calls land while the toolbar has not yet set its tools
+    // element, so no second set of buttons is created — the
+    // toolbar owns the buttons and flyouts for these tools,
+    // and this plugin owns the gestures.
+    { manifest: coreDraw.manifest, module: coreDraw },
     { manifest: coreSettings.manifest, module: coreSettings },
     { manifest: coreCards.manifest, module: coreCards },
     { manifest: coreToolbar.manifest, module: coreToolbar },
