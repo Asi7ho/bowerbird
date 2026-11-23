@@ -14,7 +14,7 @@
 // library panel. main.ts is the entry point that wires
 // them together.
 import type { PluginContext } from "bowerbird-plugin-api";
-import { clearPanel, initPanel, renderPanel } from "./panel.js";
+import { clearPanel, initPanel, parsePickerMode, renderPanel } from "./panel.js";
 import { emptyStore, parseStored } from "./store.js";
 
 let apiRef: PluginContext | null = null;
@@ -26,6 +26,7 @@ export async function activate(api: PluginContext): Promise<void> {
   // deleted are never resurrected by a restart.
   let store = emptyStore();
   let seeded = false;
+  let pickerMode = parsePickerMode(undefined);
   try {
     if (apiRef.storage) {
       const saved = await apiRef.storage.get("palettes");
@@ -34,6 +35,7 @@ export async function activate(api: PluginContext): Promise<void> {
       } else {
         store = parseStored(saved) ?? emptyStore();
       }
+      pickerMode = parsePickerMode(await apiRef.storage.get("pickerMode"));
     }
   } catch { /* a failed load seeds fresh below */ }
   if (seeded && apiRef.pen) {
@@ -42,7 +44,7 @@ export async function activate(api: PluginContext): Promise<void> {
       store = { palettes: [{ name: "Palette 1", colors: [pen.toUpperCase()] }] };
     }
   }
-  initPanel(apiRef, store);
+  initPanel(apiRef, store, pickerMode);
   apiRef.ui.registerPanel({
     id: "colours",
     title: "Colour Library",

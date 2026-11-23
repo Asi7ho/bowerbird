@@ -6,7 +6,7 @@
 // colours come from.
 import type { PluginContext } from "bowerbird-plugin-api";
 import { applyColour } from "./apply.js";
-import { hexToHsl, hslToHex, isHex, normaliseHex } from "./color.js";
+import { hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, normaliseHex, rgbToHex } from "./color.js";
 import { attachPlaceDrag } from "./place.js";
 import {
   addColour,
@@ -38,6 +38,18 @@ let store: ColourStore = emptyStore();
 // The picked colour, as HSL: the wheel and the sliders
 // all write the same three numbers, so they never drift.
 let base = hexToHsl("#007AFF");
+// The tweak mode: HSL, RGB, HSV or Hex — different
+// editors for the same picked colour, never separate
+// state. Persisted, so the panel reopens as left.
+export type PickerMode = "hsl" | "rgb" | "hsv" | "hex";
+
+export function parsePickerMode(value: unknown): PickerMode {
+  return value === "rgb" || value === "hsv" || value === "hex" ? value : "hsl";
+}
+
+let mode: PickerMode = "hsl";
+let modeSelect: HTMLSelectElement | null = null;
+let controlsEl: HTMLDivElement | null = null;
 let palettesEl: HTMLDivElement | null = null;
 let wheel: WheelHandle | null = null;
 let pickedSwatch: HTMLButtonElement | null = null;
@@ -48,6 +60,19 @@ let satInput: HTMLInputElement | null = null;
 let satValue: HTMLSpanElement | null = null;
 let lightInput: HTMLInputElement | null = null;
 let lightValue: HTMLSpanElement | null = null;
+let redInput: HTMLInputElement | null = null;
+let redValue: HTMLSpanElement | null = null;
+let greenInput: HTMLInputElement | null = null;
+let greenValue: HTMLSpanElement | null = null;
+let blueInput: HTMLInputElement | null = null;
+let blueValue: HTMLSpanElement | null = null;
+let hsvHueInput: HTMLInputElement | null = null;
+let hsvHueValue: HTMLSpanElement | null = null;
+let hsvSatInput: HTMLInputElement | null = null;
+let hsvSatValue: HTMLSpanElement | null = null;
+let hsvValInput: HTMLInputElement | null = null;
+let hsvValValue: HTMLSpanElement | null = null;
+let hexInput: HTMLInputElement | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 // The native colour-input fallback, if one is open: its
@@ -57,9 +82,10 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let eyeDropperFallback: HTMLInputElement | null = null;
 let eyeDropperFallbackOnInput: (() => void) | null = null;
 
-export function initPanel(a: PluginContext, initial: ColourStore): void {
+export function initPanel(a: PluginContext, initial: ColourStore, initialMode: PickerMode = "hsl"): void {
   api = a;
   store = initial;
+  mode = initialMode;
   if (a.pen) {
     const pen = a.pen.getColor();
     if (isHex(pen)) base = hexToHsl(pen);
@@ -69,6 +95,8 @@ export function initPanel(a: PluginContext, initial: ColourStore): void {
 export function clearPanel(): void {
   api = null;
   store = emptyStore();
+  modeSelect = null;
+  controlsEl = null;
   palettesEl = null;
   wheel = null;
   pickedSwatch = null;
@@ -79,6 +107,19 @@ export function clearPanel(): void {
   satValue = null;
   lightInput = null;
   lightValue = null;
+  redInput = null;
+  redValue = null;
+  greenInput = null;
+  greenValue = null;
+  blueInput = null;
+  blueValue = null;
+  hsvHueInput = null;
+  hsvHueValue = null;
+  hsvSatInput = null;
+  hsvSatValue = null;
+  hsvValInput = null;
+  hsvValValue = null;
+  hexInput = null;
   if (saveTimer !== null) clearTimeout(saveTimer);
   saveTimer = null;
   removeEyeDropperFallback();
@@ -109,7 +150,9 @@ function pickedHex(): string {
 }
 
 // Refresh every control that shows the picked colour:
-// the preview, its hex, the wheel marker, the sliders.
+// the preview, its hex, the wheel marker, and the
+// current mode's controls. The wheel draws in HSL, so
+// its marker is always the HSL position, in every mode.
 function updatePicked(): void {
   const hex = pickedHex();
   if (pickedSwatch) {
@@ -119,12 +162,33 @@ function updatePicked(): void {
   }
   if (pickedHexEl) pickedHexEl.textContent = hex;
   if (wheel) wheel.setMarker(base.h, base.s);
-  if (hueInput && Number(hueInput.value) !== Math.round(base.h)) hueInput.value = String(Math.round(base.h));
-  if (hueValue) hueValue.textContent = `${Math.round(base.h)}°`;
-  if (satInput && Number(satInput.value) !== Math.round(base.s)) satInput.value = String(Math.round(base.s));
-  if (satValue) satValue.textContent = `${Math.round(base.s)}%`;
-  if (lightInput && Number(lightInput.value) !== Math.round(base.l)) lightInput.value = String(Math.round(base.l));
-  if (lightValue) lightValue.textContent = `${Math.round(base.l)}%`;
+  const setSlider = (input: HTMLInputElement | null, value: HTMLSpanElement | null, v: number, text: string): void => {
+    if (input && Number(input.value) !== Math.round(v)) input.value = String(Math.round(v));
+    if (value) value.textContent = text;
+  };
+  if (mode === "hsl") {
+    setSlider(hueInput, hueValue, base.h, `${Math.round(base.h)}°`);
+    setSlider(satInput, satValue, base.s, `${Math.round(base.s)}%`);
+    setSlider(lightInput, lightValue, base.l, `${Math.round(base.l)}%`);
+  } else if (mode === "rgb") {
+    const rgb = hexToRgb(hex);
+    setSlider(redInput, redValue, rgb.r, String(rgb.r));
+    setSlider(greenInput, greenValue, rgb.g, String(rgb.g));
+    setSlider(blueInput, blueValue, rgb.b, String(rgb.b));
+  } else if (mode === "hsv") {
+    const hsv = hexToHsv(hex);
+    setSlider(hsvHueInput, hsvHueValue, hsv.h, `${Math.round(hsv.h)}°`);
+    setSlider(hsvSatInput, hsvSatValue, hsv.s, `${Math.round(hsv.s)}%`);
+    setSlider(hsvValInput, hsvValValue, hsv.v, `${Math.round(hsv.v)}%`);
+  } else if (hexInput && document.activeElement !== hexInput) {
+    hexInput.value = hex;
+  }
+}
+
+function saveMode(): void {
+  if (!api || !api.storage) return;
+  // A mode change is a rare, deliberate act: no debounce.
+  void api.storage.set("pickerMode", mode).catch(() => { /* storage is a convenience, not a mode */ });
 }
 
 function setBase(patch: Partial<typeof base>): void {
@@ -223,6 +287,102 @@ function sliderRow(label: string, cls: string, max: number, initial: number, onI
   input.addEventListener("input", () => onInput(Number(input.value)));
   row.appendChild(input);
   return { row, input, value };
+}
+
+// The tweak controls for the current mode, rebuilt on
+// every mode switch: one mode's controls exist at a time,
+// so a selector never matches a stale row. Every mode
+// edits the same picked colour, through hex.
+function renderControls(): void {
+  const host = controlsEl;
+  if (!host) return;
+  host.innerHTML = "";
+  hueInput = hueValue = satInput = satValue = lightInput = lightValue = null;
+  redInput = redValue = greenInput = greenValue = blueInput = blueValue = null;
+  hsvHueInput = hsvHueValue = hsvSatInput = hsvSatValue = hsvValInput = hsvValValue = null;
+  hexInput = null;
+  if (mode === "hsl") {
+    const hue = sliderRow("Hue", "col-slider-hue", 360, base.h, (v) => setBase({ h: v }));
+    hueInput = hue.input;
+    hueValue = hue.value;
+    host.appendChild(hue.row);
+    const sat = sliderRow("Saturation", "col-slider-sat", 100, base.s, (v) => setBase({ s: v }));
+    satInput = sat.input;
+    satValue = sat.value;
+    host.appendChild(sat.row);
+    const light = sliderRow("Lightness", "col-slider-light", 100, base.l, (v) => setBase({ l: v }));
+    lightInput = light.input;
+    lightValue = light.value;
+    host.appendChild(light.row);
+  } else if (mode === "rgb") {
+    const rgb = hexToRgb(pickedHex());
+    const red = sliderRow("Red", "col-slider-red", 255, rgb.r, (v) => {
+      const cur = hexToRgb(pickedHex());
+      setPickedHex(rgbToHex(v, cur.g, cur.b));
+    });
+    redInput = red.input;
+    redValue = red.value;
+    host.appendChild(red.row);
+    const green = sliderRow("Green", "col-slider-green", 255, rgb.g, (v) => {
+      const cur = hexToRgb(pickedHex());
+      setPickedHex(rgbToHex(cur.r, v, cur.b));
+    });
+    greenInput = green.input;
+    greenValue = green.value;
+    host.appendChild(green.row);
+    const blue = sliderRow("Blue", "col-slider-blue", 255, rgb.b, (v) => {
+      const cur = hexToRgb(pickedHex());
+      setPickedHex(rgbToHex(cur.r, cur.g, v));
+    });
+    blueInput = blue.input;
+    blueValue = blue.value;
+    host.appendChild(blue.row);
+  } else if (mode === "hsv") {
+    const hsv = hexToHsv(pickedHex());
+    const hue = sliderRow("Hue", "col-slider-hsv-hue", 360, hsv.h, (v) => {
+      const cur = hexToHsv(pickedHex());
+      setPickedHex(hsvToHex(v, cur.s, cur.v));
+    });
+    hsvHueInput = hue.input;
+    hsvHueValue = hue.value;
+    host.appendChild(hue.row);
+    const sat = sliderRow("Saturation", "col-slider-hsv-sat", 100, hsv.s, (v) => {
+      const cur = hexToHsv(pickedHex());
+      setPickedHex(hsvToHex(cur.h, v, cur.v));
+    });
+    hsvSatInput = sat.input;
+    hsvSatValue = sat.value;
+    host.appendChild(sat.row);
+    const val = sliderRow("Value", "col-slider-hsv-val", 100, hsv.v, (v) => {
+      const cur = hexToHsv(pickedHex());
+      setPickedHex(hsvToHex(cur.h, cur.s, v));
+    });
+    hsvValInput = val.input;
+    hsvValValue = val.value;
+    host.appendChild(val.row);
+  } else {
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "col-hex-input";
+    input.spellcheck = false;
+    input.value = pickedHex();
+    input.setAttribute("aria-label", "Hex colour");
+    input.addEventListener("keydown", (e) => e.stopPropagation());
+    const commit = (): void => {
+      // A bad hex is ignored, not applied: the field
+      // falls back to the last good colour.
+      if (normaliseHex(input.value)) setPickedHex(input.value);
+      else input.value = pickedHex();
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") commit();
+      if (e.key === "Escape") input.value = pickedHex();
+    });
+    input.addEventListener("blur", () => commit());
+    hexInput = input;
+    host.appendChild(input);
+  }
+  updatePicked();
 }
 
 function renderPalettes(): void {
@@ -348,19 +508,32 @@ export function renderPanel(container: HTMLElement): void {
   pickerBtn.addEventListener("click", () => void pickWithEyeDropper());
   previewRow.appendChild(pickerBtn);
   pickerSection.appendChild(previewRow);
-  const hue = sliderRow("Hue", "col-slider-hue", 360, base.h, (v) => setBase({ h: v }));
-  hueInput = hue.input;
-  hueValue = hue.value;
-  pickerSection.appendChild(hue.row);
-  const sat = sliderRow("Saturation", "col-slider-sat", 100, base.s, (v) => setBase({ s: v }));
-  satInput = sat.input;
-  satValue = sat.value;
-  pickerSection.appendChild(sat.row);
-  const light = sliderRow("Lightness", "col-slider-light", 100, base.l, (v) => setBase({ l: v }));
-  lightInput = light.input;
-  lightValue = light.value;
-  pickerSection.appendChild(light.row);
+  // The mode dropdown, above the tweak controls: HSL,
+  // RGB, HSV or Hex — one picked colour, four editors.
+  const modeRow = document.createElement("div");
+  modeRow.className = "col-mode-row";
+  modeSelect = document.createElement("select");
+  modeSelect.className = "col-mode-select";
+  modeSelect.setAttribute("aria-label", "Colour mode");
+  for (const [value, label] of [["hsl", "HSL"], ["rgb", "RGB"], ["hsv", "HSV"], ["hex", "Hex"]] as const) {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    modeSelect.appendChild(option);
+  }
+  modeSelect.value = mode;
+  modeSelect.addEventListener("change", () => {
+    mode = parsePickerMode(modeSelect?.value);
+    renderControls();
+    saveMode();
+  });
+  modeRow.appendChild(modeSelect);
+  pickerSection.appendChild(modeRow);
+  controlsEl = document.createElement("div");
+  controlsEl.className = "col-controls";
+  pickerSection.appendChild(controlsEl);
   container.appendChild(pickerSection);
+  renderControls();
   const createRow = document.createElement("div");
   createRow.className = "col-create-row";
   const newBtn = document.createElement("button");
