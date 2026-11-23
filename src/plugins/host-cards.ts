@@ -28,16 +28,9 @@ export function getCardRenderer(item: Item): PluginCardDef | null {
 }
 
 // ---------------------------------------------------------------- DOM-node card lifecycle
-//
-// A card with a `renderNode` renderer owns a live DOM node
-// inside the card chrome. The board render loop keeps the
-// mounted nodes here, keyed by item id: it mounts a node
-// once, detaches and re-inserts it across renders (the node
-// itself is never rebuilt), calls `update` only when the
-// item or its data changed, and unmounts it when the card
-// leaves the rendered set — deleted, culled, hidden layer,
-// board switch, plugin disabled. The registry holds the
-// node opaquely; only the board render loop touches the DOM.
+// Mounted nodes, keyed by item id. Only the render loop
+// touches the DOM: it mounts once and unmounts when the
+// card leaves the rendered set.
 
 export interface MountedCardNode {
   id: number;
@@ -51,23 +44,19 @@ export function hasNodeRenderer(item: Item): boolean {
   return getCardRenderer(item)?.renderNode !== undefined;
 }
 
-// Build a card's node handle. Null when the card has no node
-// renderer, or when `renderNode` returns null (hide the card,
-// the way `render` returning null hides it). A throw propagates:
-// the board render loop falls back to the HTML-string path for
-// that card, so a broken node renderer degrades to the string
-// card instead of a blank hole.
+// Build a card's node handle. Null when the card has no
+// node renderer, or `renderNode` returns null. A throw
+// propagates: the render loop falls back to the HTML
+// string for that card instead of a blank hole.
 export function createCardNode(item: Item): PluginCardNode | null {
   const def = getCardRenderer(item);
   if (!def?.renderNode || !isPluginCard(item)) return null;
   return def.renderNode(item, item.kind.Plugin.data);
 }
 
-// What `update` watches: position, size, rotation and the
-// plugin's data. A string compare per node card per render is
-// cheap — node cards are few — and it keeps `update` from
-// firing on renders where nothing about the card changed
-// (a pan, a selection change, another card's edit).
+// What `update` watches: position, size, rotation and
+// the plugin's data, compared as a string per node card
+// per render — cheap, since node cards are few.
 export function cardNodeStateKey(item: Item): string {
   const data = isPluginCard(item) ? item.kind.Plugin.data : null;
   return JSON.stringify([item.pos, item.size, item.rotation ?? 0, data]);
@@ -81,12 +70,10 @@ export function mountCardNode(id: number, handle: PluginCardNode, stateKey: stri
   mountedCardNodes.set(id, { id, handle, lastState: stateKey });
 }
 
-// Call `update` when the card changed since its mount (or its
-// last update). Returns false when `update` asked to hide the
-// card — the caller removes the chrome and unmounts. A throwing
-// update keeps the card showing with its last good node: the
-// node is still in the DOM, and surfacing the throw on every
-// render would spam the user for a stale card.
+// Call `update` when the card changed since its mount.
+// False hides the card. A throwing update keeps the card
+// showing with its last good node instead of spamming
+// the user on every render.
 export function updateMountedCardNode(id: number, item: Item): boolean {
   const mounted = mountedCardNodes.get(id);
   if (!mounted || !mounted.handle.update) return true;
@@ -101,11 +88,9 @@ export function updateMountedCardNode(id: number, item: Item): boolean {
   }
 }
 
-// Unmount one card: drop it from the registry first, so a
-// re-entrant unmount cannot run twice, then let the plugin
-// release its listeners, animation frames and contexts. A
-// throwing unmount must not break the render that asked for
-// it — the card is already gone from the registry.
+// Unmount one card: drop it from the registry first, so
+// a re-entrant unmount cannot run twice. A throwing
+// unmount must not break the render that asked for it.
 export function unmountCardNode(id: number): void {
   const mounted = mountedCardNodes.get(id);
   if (!mounted) return;
