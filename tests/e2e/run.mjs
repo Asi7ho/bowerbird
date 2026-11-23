@@ -2909,6 +2909,34 @@ async function main() {
       assert.deepEqual(card.size, { w: 260, h: 174 }, "dropped PDF lands at its page ratio");
     });
 
+    await check("a PDF card at the old welcome size heals to its page ratio", async () => {
+      // The welcome board used to seed its PDF card at
+      // 260x96; existing boards still carry that size, so
+      // the heal must fix it on load. The Letter sample is
+      // 612x792pt, so the card heals to 260x361.
+      const assetsDir = path.join(tmp, "assets");
+      fs.mkdirSync(assetsDir, { recursive: true });
+      fs.copyFileSync(path.join(repoRoot, "assets", "sample.pdf"), path.join(assetsDir, "sample.pdf"));
+      const board = readBoard();
+      const id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
+      board.items.push({ id, pos: { x: 2000, y: 2000 }, size: { w: 260, h: 96 }, group: null, kind: { PdfCard: { path: path.join(assetsDir, "sample.pdf"), size_bytes: 0 } } });
+      board.next_id = id;
+      const tmp2 = `${boardPath}.tmp`;
+      fs.writeFileSync(tmp2, JSON.stringify(board));
+      fs.renameSync(tmp2, boardPath);
+      // The live-follow watcher picks the edit up in ~300ms;
+      // fit afterwards so the new card is on screen and
+      // renders, which is what triggers the heal.
+      await new Promise((r) => setTimeout(r, 2000));
+      await page.keyboard.press("f");
+      await page.locator(`#cards .card[data-id="${id}"]`).first().waitFor({ timeout: READY_TIMEOUT_MS });
+      const healed = await waitFor("pdf card healed in board.json", () => {
+        const found = readBoard().items.find((it) => it.id === id);
+        return found && found.size.h === 361 ? found : null;
+      });
+      assert.deepEqual(healed.size, { w: 260, h: 361 }, "welcome-size PDF card heals to its page ratio");
+    });
+
 
     // Shapes are hit on their visible geometry, not their
     // box (PR #10): a click on a shape's empty corner must
