@@ -534,6 +534,11 @@ export function renderPanel(container: HTMLElement): void {
   pickerSection.appendChild(controlsEl);
   container.appendChild(pickerSection);
   renderControls();
+  palettesEl = document.createElement("div");
+  palettesEl.className = "col-palettes";
+  container.appendChild(palettesEl);
+  // The one primary action, at the bottom of the panel,
+  // under the palettes — not above them.
   const createRow = document.createElement("div");
   createRow.className = "col-create-row";
   const newBtn = document.createElement("button");
@@ -547,9 +552,6 @@ export function renderPanel(container: HTMLElement): void {
   newBtn.addEventListener("click", () => updateStore(createPalette(store, [pickedHex()]).store));
   createRow.appendChild(newBtn);
   container.appendChild(createRow);
-  palettesEl = document.createElement("div");
-  palettesEl.className = "col-palettes";
-  container.appendChild(palettesEl);
   renderPalettes();
   updatePicked();
 }

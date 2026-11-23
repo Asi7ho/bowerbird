@@ -257,9 +257,9 @@
 .col-create-row {
   flex: none;
   display: flex;
-  padding-bottom: 12px;
-  margin-bottom: 12px;
-  border-bottom: 1px solid var(--separator);
+  padding-top: 12px;
+  margin-top: 12px;
+  border-top: 1px solid var(--separator);
 }
 
 /* The one primary action: icon plus label, on the core
