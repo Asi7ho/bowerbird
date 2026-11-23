@@ -246,7 +246,7 @@ const ICON_CHEVRON_DOWN = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="
 const ICON_TRASH = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /><path d="M10 11v6M14 11v6" /></svg>';
 const ICON_CLOSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" /></svg>';
 const ICON_PLUS = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>';
-const ICON_PICKER = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 4.5 19.5 9.5 9 20H4v-5L14.5 4.5Z" /><path d="M13 6l5 5" /><path d="M18 3l3 3" /></svg>';
+const ICON_PICKER = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="17" cy="6" r="3" /><path d="M14.9 8.1 7 15.2" /><path d="M6.5 15.8c0 0-2.7 3-2.7 4.2a2.7 2.7 0 0 0 5.4 0C9.2 18.8 6.5 15.8 6.5 15.8Z" /></svg>';
 
 function iconButton(label: string, title: string, svg: string): HTMLButtonElement {
   const b = document.createElement("button");
