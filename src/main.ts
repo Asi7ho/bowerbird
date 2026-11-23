@@ -15,7 +15,7 @@ import { createUndoStore, type UndoStore } from "./backend/undo";
 import { createDrops, type Drops } from "./backend/drops";
 import * as coreBoard from "./ui/board";
 import * as coreCards from "./ui/cards";
-import * as corePalette from "./ui/command-palette/main";
+import * as corePalette from "./ui/command-palette";
 import * as coreDraw from "./ui/drawing-tools";
 import * as coreSearch from "./ui/search";
 import * as coreSettings from "./ui/settings";
