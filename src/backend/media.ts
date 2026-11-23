@@ -49,7 +49,7 @@ export interface Media {
   // read. Shares the document load with the renderer, so
   // probing never opens the file twice.
   probePdfSize(path: string): Promise<{ w: number; h: number } | null>;
-  // Heal a PdfCard saved at the stale fixed size (see
+  // Heal a PdfCard saved at a stale fixed size (see
   // loadPdfCardSize): measure its first page and resize the
   // card to the ratio of the page when it is still wrong.
   loadPdfCardSize(path: string): void;
@@ -592,14 +592,16 @@ export function createMedia(host: MediaContext): Media {
       return null;
     }
   }
-  // Heal a PdfCard saved at the stale fixed size: PDFs used
+  // Heal a PdfCard saved at a stale fixed size: PDFs used
   // to land at 260x360 whatever the page, so a landscape
-  // page sat in a portrait card. When the first page loads,
-  // measure it; if the card is still at 260x360, resize it
-  // to the ratio of the page and save (no undo step — this
-  // is a heal, not an action). A card the user resized by
-  // hand is left alone: its size will not match 260x360.
-  // Called from the PdfCard renderer, like loadPdfPage.
+  // page sat in a portrait card, and the welcome board
+  // seeded its card at 260x96. When the first page loads,
+  // measure it; if the card is still at either stale size,
+  // resize it to the ratio of the page and save (no undo
+  // step — this is a heal, not an action). A card the user
+  // resized by hand is left alone: its size will match
+  // neither stale size. Called from the PdfCard renderer,
+  // like loadPdfPage.
   function loadPdfCardSize(path: string): void {
     const cached = pdfPageSize.get(path);
     if (cached) {
@@ -616,14 +618,18 @@ export function createMedia(host: MediaContext): Media {
     });
   }
   // Resize every PdfCard showing this file that is still at
-  // the stale fixed size to the ratio of its first page.
+  // a stale fixed size to the ratio of its first page.
   // Several cards can show one PDF, so the heal runs over
   // all of them, not just the one that asked.
   function healPdfCardsWithPage(path: string, pageW: number, pageH: number): void {
     let changed = false;
     for (const it of host.getBoard().items) {
       if (!("PdfCard" in it.kind) || it.kind.PdfCard.path !== path) continue;
-      if (Math.abs(it.size.w - 260) > 2 || Math.abs(it.size.h - 360) > 2) continue;
+      // Stale sizes: the old drop default (260x360) and the
+      // old welcome seed (260x96). Anything else is a size
+      // the user chose, so it stays.
+      const staleH = Math.abs(it.size.h - 360) <= 2 || Math.abs(it.size.h - 96) <= 2;
+      if (Math.abs(it.size.w - 260) > 2 || !staleH) continue;
       const correctH = pdfCardHeightForWidth(pageW, pageH, it.size.w);
       if (it.size.h !== correctH) {
         it.size.h = correctH;
