@@ -87,11 +87,9 @@ function isVisibleItem(item: Item, v: { x0: number; y0: number; x1: number; y1: 
   return p.x < v.x1 && p.x + s.w > v.x0 && p.y < v.y1 && p.y + s.h > v.y0;
 }
 
-// The search jump's ghost: the card the user jumped to on
-// a hidden layer, shown dimmed until the layer is unhidden
-// or another jump replaces it. Board-identity makes it
-// self-validating across board switches; the visibility
-// check keeps it from ghosting a card an undo unhid.
+// The search jump's ghost: the card jumped to on a hidden
+// layer, shown dimmed until the layer is unhidden or
+// another jump replaces it.
 function isSearchGhost(board: Board, item: Item): boolean {
   const g = S.searchGhost;
   return g !== null && g.board === board && g.id === item.id && !isItemVisible(board, item);
@@ -331,16 +329,10 @@ export function render(): void {
   const editingSel = editingTa && editingWasFocused ? [editingTa.selectionStart, editingTa.selectionEnd] as const : null;
   if (editingEl) { S.suppressEditCommit = true; S.boardEl.appendChild(editingEl); }
   const v = visibleRect();
-  // DOM-node cards: plan which items render as nodes this
-  // pass, before the HTML string is built. A kept node's live
-  // node is detached now, so the innerHTML rebuild below does
-  // not destroy it; a node whose card left the rendered set
-  // (deleted, culled, hidden layer, board switch, plugin
-  // disabled) is unmounted now, while it is still attached,
-  // so its unmount can clean up listeners on the node itself.
-  // A new node is built here too — a `renderNode` that returns
-  // null hides the card, and one that throws falls back to
-  // the HTML-string path for that card.
+  // DOM-node cards: plan this pass's nodes before the HTML
+  // string is built. A kept node is detached now, so the
+  // rebuild does not destroy it; a node whose card left
+  // the rendered set is unmounted now, while attached.
   interface NodePlan { item: Item; handle: PluginCardNode; isNew: boolean }
   const nodePlan = new Map<number, NodePlan>();
   for (const item of board.items) {
@@ -397,12 +389,9 @@ export function render(): void {
   }
   S.cardsEl.innerHTML = html;
   // Insert the planned nodes into their fresh chrome. The
-  // chrome is rebuilt every render; the node is not — it moves
-  // from its old chrome into the new one, keeping its listeners,
-  // canvas and WebGL context. A node whose chrome is missing, or
-  // whose update hides it, is unmounted, so nothing is left
-  // mounted without DOM. This runs before the video restore
-  // below, so a video inside a node card is found there too.
+  // chrome is rebuilt every render; the node is not — it
+  // moves from its old chrome into the new one, keeping its
+  // listeners, canvas and WebGL context.
   for (const [id, planned] of nodePlan) {
     const inner = S.cardsEl.querySelector(`[data-id="${id}"] .inner`);
     if (!inner) {
