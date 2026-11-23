@@ -260,21 +260,15 @@ function iconButton(label: string, title: string, svg: string): HTMLButtonElemen
   return b;
 }
 
-// One slider row: a label, its value, and the range
-// input below, in the old Palette panel's slider style.
+// One slider row: label, slider and value on a single
+// line, in the old Palette panel's slider style.
 function sliderRow(label: string, cls: string, max: number, initial: number, onInput: (v: number) => void): { row: HTMLDivElement; input: HTMLInputElement; value: HTMLSpanElement } {
   const row = document.createElement("div");
   row.className = "col-slider-row";
-  const head = document.createElement("div");
-  head.className = "col-slider-head";
   const nameEl = document.createElement("span");
   nameEl.className = "col-slider-label";
   nameEl.textContent = label;
-  head.appendChild(nameEl);
-  const value = document.createElement("span");
-  value.className = "col-slider-value";
-  head.appendChild(value);
-  row.appendChild(head);
+  row.appendChild(nameEl);
   const input = document.createElement("input");
   input.className = `col-slider ${cls}`;
   input.type = "range";
@@ -288,6 +282,9 @@ function sliderRow(label: string, cls: string, max: number, initial: number, onI
   input.addEventListener("keydown", (e) => e.stopPropagation());
   input.addEventListener("input", () => onInput(Number(input.value)));
   row.appendChild(input);
+  const value = document.createElement("span");
+  value.className = "col-slider-value";
+  row.appendChild(value);
   return { row, input, value };
 }
 
