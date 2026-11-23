@@ -495,6 +495,9 @@ export function renderPanel(container: HTMLElement): void {
   });
   attachPlaceDrag(a, pickedSwatch);
   previewRow.appendChild(pickedSwatch);
+  pickedHexEl = document.createElement("div");
+  pickedHexEl.className = "col-hex";
+  previewRow.appendChild(pickedHexEl);
   const pickerBtn = document.createElement("button");
   pickerBtn.type = "button";
   pickerBtn.className = "col-picker-btn";
@@ -503,9 +506,6 @@ export function renderPanel(container: HTMLElement): void {
   pickerBtn.innerHTML = ICON_PICKER;
   pickerBtn.addEventListener("click", () => void pickWithEyeDropper());
   previewRow.appendChild(pickerBtn);
-  pickedHexEl = document.createElement("div");
-  pickedHexEl.className = "col-hex";
-  previewRow.appendChild(pickedHexEl);
   pickerSection.appendChild(previewRow);
   // The mode control, a segmented row: HSL, RGB, HSV or
   // Hex — one picked colour, four editors.
