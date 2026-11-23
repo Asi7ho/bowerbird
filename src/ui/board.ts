@@ -6,6 +6,7 @@
 
 import type { PluginContext, PluginManifest } from "../plugins/host";
 import { S } from "./board-state";
+import { clearLiveStroke, updateLiveStroke } from "./board-drag-preview";
 import { render, updateSelection } from "./board-render";
 import {
   attachBoardListeners, attachWindowListeners, commitEditingIfAny, deleteSelected, getSelectMode, groupSelected, setSelectMode, setTool, ungroupSelected,
@@ -116,6 +117,13 @@ export function activate(a: PluginContext): void {
     groupSelected,
     ungroupSelected,
     deleteSelected,
+    // The live preview stroke for a plugin drag tool: the
+    // same path the pen draws through, so a plugin stroke
+    // previews exactly like a core one. No points clears it.
+    previewStroke: (points, pressures, opts) => {
+      if (points.length === 0) { clearLiveStroke(); return; }
+      updateLiveStroke(points, pressures, opts?.width ?? 3, opts?.marker ?? false, opts?.pencil ?? false, opts?.color);
+    },
   });
 
   // The board's own listeners: the board DOM exists now,
