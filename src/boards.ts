@@ -12,7 +12,7 @@ import { ensureVideoPoster } from "./backend/poster";
 import {
   Board, GroupEntry, Item,
   AUDIO_TRANSCRIPT_HIDDEN_H, boardGet, CARD_DECORATIONS_H,
-  estimateTextHeight, healDuplicateIds,
+  estimateTextHeight, healDuplicateIds, healLayers,
 } from "./backend/model";
 import { welcomeBoard } from "./backend/welcome";
 import {
@@ -311,6 +311,11 @@ export async function loadBoardFromJson(ctx: BootContext, json: string, dir: str
   // first keeps it and later ones get fresh ids, so search
   // and every id lookup see a consistent board.
   healDuplicateIds(parsed);
+  // A board written before layers existed has no layers or
+  // extensions field: every item lands on the default layer
+  // and extensions starts empty, in memory only — the file
+  // gains the fields on the next save, never on load.
+  healLayers(parsed);
   // Frames never rotate: a frame carrying rotation from
   // an older board, or set while Presentation was
   // disabled, is healed on load, so what is drawn always
