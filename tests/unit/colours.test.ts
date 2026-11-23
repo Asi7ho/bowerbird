@@ -1,0 +1,79 @@
+// Unit tests for the Colour Library palette store
+// (plugins/colours/store.ts) and its hex helper
+// (plugins/colours/color.ts): pure data, no DOM, no API.
+import { describe, expect, it } from "vitest";
+import { isHex, normaliseHex } from "../../plugins/colours/color";
+import {
+  addColour,
+  createPalette,
+  deletePalette,
+  emptyStore,
+  movePalette,
+  nextPaletteName,
+  parseStored,
+  removeColour,
+  renamePalette,
+  type ColourStore,
+} from "../../plugins/colours/store";
+
+describe("normaliseHex", () => {
+  it("normalises #rgb and #rrggbb to uppercase #RRGGBB, and rejects the rest", () => {
+    expect(normaliseHex("#f00")).toBe("#FF0000");
+    expect(normaliseHex("#00ff00")).toBe("#00FF00");
+    expect(normaliseHex("FF0000")).toBe("#FF0000");
+    expect(normaliseHex("red")).toBeNull();
+    expect(normaliseHex("#GG0000")).toBeNull();
+    expect(normaliseHex("")).toBeNull();
+    expect(isHex("#ABCDEF")).toBe(true);
+    expect(isHex("blue")).toBe(false);
+  });
+});
+
+describe("palette store", () => {
+  function seeded(): ColourStore {
+    return { palettes: [{ name: "Palette 1", colors: ["#FF0000"] }, { name: "Warm", colors: [] }] };
+  }
+  it("parseStored accepts a valid shape and normalises its colours", () => {
+    expect(parseStored([{ name: "A", colors: ["#f00", "#00FF00"] }]))
+      .toEqual({ palettes: [{ name: "A", colors: ["#FF0000", "#00FF00"] }] });
+    expect(parseStored(null)).toBeNull();
+    expect(parseStored("no")).toBeNull();
+    expect(parseStored([{ name: "A", colors: ["red"] }])).toBeNull();
+    expect(parseStored([{ name: "", colors: [] }])).toBeNull();
+  });
+  it("createPalette names the next free Palette N and seeds its colours", () => {
+    const { store, index } = createPalette(seeded(), ["#0000ff", "red", "#0000FF"]);
+    expect(index).toBe(2);
+    expect(store.palettes[2]).toEqual({ name: "Palette 2", colors: ["#0000FF"] });
+    expect(seeded().palettes.length).toBe(2);
+  });
+  it("nextPaletteName skips names already taken", () => {
+    expect(nextPaletteName(emptyStore())).toBe("Palette 1");
+    expect(nextPaletteName(seeded())).toBe("Palette 2");
+  });
+  it("renamePalette trims, refuses an empty name, and leaves the input alone", () => {
+    const before = seeded();
+    expect(renamePalette(before, 1, "  Cool  ").palettes[1].name).toBe("Cool");
+    expect(renamePalette(before, 1, "   ")).toBe(before);
+    expect(renamePalette(before, 9, "Cool")).toBe(before);
+    expect(before.palettes[1].name).toBe("Warm");
+  });
+  it("deletePalette and movePalette reorder and remove, and refuse bad indexes", () => {
+    const before = seeded();
+    expect(deletePalette(before, 0).palettes.map((p) => p.name)).toEqual(["Warm"]);
+    expect(deletePalette(before, 9)).toBe(before);
+    expect(movePalette(before, 0, 1).palettes.map((p) => p.name)).toEqual(["Warm", "Palette 1"]);
+    expect(movePalette(before, 0, -1)).toBe(before);
+    expect(movePalette(before, 1, 1)).toBe(before);
+  });
+  it("addColour normalises, refuses bad hexes and duplicates; removeColour removes by index", () => {
+    const before = seeded();
+    const added = addColour(before, 0, "#00ff00");
+    expect(added.palettes[0].colors).toEqual(["#FF0000", "#00FF00"]);
+    expect(addColour(before, 0, "#FF0000")).toBe(before);
+    expect(addColour(before, 0, "red")).toBe(before);
+    expect(addColour(before, 9, "#00FF00")).toBe(before);
+    expect(removeColour(added, 0, 0).palettes[0].colors).toEqual(["#00FF00"]);
+    expect(removeColour(added, 0, 9)).toBe(added);
+  });
+});
