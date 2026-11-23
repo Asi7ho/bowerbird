@@ -65,17 +65,10 @@ export interface Item {
   layer?: string;
 }
 
-// Layers: the paint order, visibility and lock of a board's
-// items. A layer is a named band items sit on: layers paint
-// bottom-to-top in array order, and items on one layer keep
-// their board order among themselves. Layer ids are strings,
-// not numbers: layers are created and deleted at runtime, so
-// a string id needs no `next_layer` counter on the board and
-// can never collide with the numeric item and group id
-// spaces. The default layer is always present (id
-// "default", healed on load), visible and unlocked, and
-// cannot be deleted — every board keeps somewhere for its
-// items to be.
+// Layers: paint order, visibility and lock, bottom-to-top.
+// Ids are strings — no `next_layer` counter, no collision
+// with numeric item/group ids. The default layer is always
+// present and cannot be deleted.
 export interface Layer {
   id: string;
   name: string;
@@ -104,13 +97,9 @@ export interface Board {
   // Optional so old boards load unchanged: a board with no
   // layers heals to a single default layer on load.
   layers?: Layer[];
-  // Per-board plugin data, namespaced by plugin id: a
-  // plugin reads and writes only its own entry (see
-  // api.board.getExtension / setExtension). Optional so
-  // old boards load unchanged: missing means no plugin
-  // has stored board data yet. Unlike plugin storage,
-  // this travels with the board — it is saved in board
-  // JSON, undone with the board, and deleted with it.
+  // Per-board plugin data, namespaced by plugin id — each
+  // plugin sees only its own entry. It travels with the
+  // board: saved, undone and deleted with it.
   extensions?: Record<string, unknown>;
   bg: string;
   grid: "Lines" | "Dots" | "Off";
@@ -193,23 +182,10 @@ export interface PluginManifest {
   };
 }
 
-// A DOM-node card: the plugin owns a live DOM node inside the
-// card chrome instead of an HTML string. `renderNode` is called
-// once when the card's DOM is created; the returned node is
-// inserted into the chrome exactly where the HTML string would
-// go (same position, size, rotation, decorations and selection
-// ring). `update` is called when the item or its data changes,
-// instead of rebuilding the card DOM — the plugin patches its
-// own node in place. Returning false from `update` hides the
-// card entirely, the way returning null from `render` does, and
-// the card mounts again from `renderNode` when it should show.
-// `unmount` is called when the card leaves the board (deleted,
-// culled out of view, hidden layer, board switch, plugin
-// disabled), so the plugin can release listeners, animation
-// frames and WebGL contexts; a removed card must not keep
-// timers or listeners alive. `unmount` runs while the node is
-// still attached to the board, so it can clean up listeners
-// on the node itself.
+// A DOM-node card: the plugin owns a live DOM node inside
+// the card chrome. `renderNode` runs once per mount,
+// `update` patches it in place (false hides the card),
+// `unmount` releases listeners, frames and WebGL contexts.
 export interface PluginCardNode {
   node: Node;
   update?: (item: Item, data: unknown) => boolean | void;
@@ -227,14 +203,10 @@ export interface PluginCardDef {
   // the context it belongs to (for example, a slide frame
   // only while its panel is open).
   render: (item: Item, data: unknown) => string | null;
-  // Optional DOM-node renderer: when present, the board mounts
-  // the returned node instead of the HTML string from `render`.
-  // Use it when the card owns a <canvas>, a WebGL view, or
-  // interactive controls that must survive across renders;
-  // use `render` for static content. `render` stays required:
-  // plain contexts (slides, the library, export) have no live
-  // DOM and always use the HTML string, and a `renderNode`
-  // that throws falls back to `render` for that card.
+  // Optional DOM-node renderer for cards that own a <canvas>,
+  // a WebGL view, or interactive controls. `render` stays
+  // required: plain contexts have no live DOM, and a throwing
+  // `renderNode` falls back to it.
   renderNode?: (item: Item, data: unknown) => PluginCardNode | null;
   onDoubleClick?: (item: Item, data: unknown) => void;
   onAction?: (action: string, item: Item, data: unknown) => void;
@@ -296,32 +268,19 @@ export interface PluginToolDef {
   icon?: string;
   onMouseDown?: (world: Pt) => void;
   onMouseUp?: (world: Pt) => void;
-  // Drag callbacks: a tool that draws while the pointer
-  // moves — a brush, a scrubber, an orbit drag — implements
-  // these instead of (or beside) onMouseDown/onMouseUp.
-  // The core starts a plugin drag on pointerdown while the
-  // tool is active, routes every pointermove to
-  // onPointerMove, and ends the drag on pointerup
-  // (onPointerUp) or pointercancel / Escape
-  // (onPointerCancel). A tool that defines any of these owns
-  // the gesture: the core's own drags do not run while it is
-  // active. A tool that defines none of them keeps the old
-  // click behaviour (onMouseDown/onMouseUp only). When both
-  // are defined, the drag callbacks win and the click ones
-  // are not called.
+  // Drag callbacks for tools that draw while the pointer
+  // moves. The core routes every pointermove here; defining
+  // any of them makes the tool own the gesture, so the click
+  // callbacks are not called.
   onPointerDown?: (world: Pt, ev: PluginPointerEvent) => void;
   onPointerMove?: (world: Pt, ev: PluginPointerEvent) => void;
   onPointerUp?: (world: Pt, ev: PluginPointerEvent) => void;
   onPointerCancel?: (world: Pt, ev: PluginPointerEvent) => void;
 }
 
-// The pointer behind a plugin tool's drag callbacks: the
-// fields a brush needs, in world-independent form. `pressure`
-// is 0..1 (0 for a mouse, which has no pressure);
-// `tiltX`/`tiltY` are the stylus tilt in degrees, 0 when the
-// device reports none; `pointerType` is "mouse", "pen" or
-// "touch"; `buttons` is the pressed-buttons bitmask, so a
-// drag can tell a held button from a hover.
+// The pointer behind a drag callback: `pressure` is 0..1
+// (0 for a mouse), `tiltX`/`tiltY` are stylus tilt in
+// degrees, `buttons` is the pressed-buttons bitmask.
 export interface PluginPointerEvent {
   pressure: number;
   tiltX: number;
@@ -502,11 +461,9 @@ export interface PluginHost {
   moveItem: (id: number, toIndex: number) => boolean;
   removeItem: (id: number) => boolean;
   // Layers: list, create, rename, reorder, hide/show,
-  // lock/unlock and delete them, and move an item onto one.
-  // Every one saves and renders, so each is one undo step.
-  // Deleting a layer moves its items to the default layer;
-  // the default layer cannot be deleted. setItemLayer
-  // refuses a layer that does not exist.
+  // lock/unlock and delete them; every one saves, so each
+  // is one undo step. Deleting a layer moves its items to
+  // the default layer.
   getLayers: () => Layer[];
   createLayer: (name?: string) => Layer;
   renameLayer: (id: string, name: string) => boolean;
@@ -516,11 +473,9 @@ export interface PluginHost {
   deleteLayer: (id: string) => boolean;
   getItemLayer: (id: number) => string | null;
   setItemLayer: (id: number, layerId: string) => boolean;
-  // Per-board plugin data, namespaced by plugin id: a
-  // plugin reads and writes only its own entry — the host
-  // passes the calling plugin's id, so there is no call
-  // that names another plugin. Data must be JSON.
-  // setExtension saves, so the write is one undo step.
+  // Per-board plugin data, namespaced by plugin id — the
+  // host passes the caller's id, so no call names another
+  // plugin. Data must be JSON; setExtension saves.
   getExtension: (pluginId: string) => unknown;
   setExtension: (pluginId: string, data: unknown) => void;
   removeExtension: (pluginId: string) => boolean;
@@ -536,12 +491,8 @@ export interface PluginHost {
   // render as null: the board draws those as SVG itself.
   renderBoardCardAt: (id: number) => string | null;
   // The card chrome for a DOM-node card: the outer div with
-  // position, size, rotation, selection ring and decorations,
-  // with an empty `.inner` for the plugin's node. The board
-  // view builds node cards from this; a plugin embedding a
-  // card elsewhere uses renderBoardCard instead. Null when
-  // the item is not a plugin card with a `renderNode`
-  // renderer.
+  // position, size, rotation, ring and decorations, and an
+  // empty `.inner` for the plugin's node.
   renderNodeCardChromeAt: (id: number) => string | null;
   // Hit-test: the top item id at a world point, or null.
   // Frames lose to the cards inside them (see hitTest).
@@ -772,32 +723,18 @@ export interface PluginContext {
     // the card as it appears on the board.
     renderCardAt: (id: number) => string | null;
     // The card chrome for a DOM-node card: the outer div with
-    // position, size, rotation, selection ring and decorations,
-    // with an empty `.inner` for the plugin's node. The board
-    // view builds node cards from this; a plugin embedding a
-    // card elsewhere uses renderCard instead. Null when the
-    // item is not a plugin card with a `renderNode` renderer.
+    // position, size, rotation, ring and decorations, and an
+    // empty `.inner` for the plugin's node.
     renderNodeCardChromeAt: (id: number) => string | null;
     // Draw a drag tool's live preview stroke in the preview
-    // layer above the cards, without touching the board: the
-    // points are world points, the pressures (when given)
-    // vary the width the way a pen stroke does. The preview
-    // is drag-time only — the next full render wipes it, and
-    // the core clears it when the tool's drag ends or
-    // cancels — so it never lands in board JSON. A call with
-    // no points clears it at once. A tool that commits a
-    // finished stroke calls addItem on pointerup instead, so
-    // the stroke becomes one undo step.
+    // layer above the cards, without touching the board.
+    // Drag-time only: the core clears it when the drag ends,
+    // so it never lands in board JSON. No points clears it.
     previewStroke: (points: Pt[], pressures?: number[], opts?: PluginPreviewStrokeOptions) => void;
     // Draw a drag tool's live shape preview in the preview
-    // layer above the cards, without touching the board: the
-    // shape in its drag box, filled in the pen colour (or
-    // `opts.color`) or outlined when `opts.outline` is set.
-    // The preview is drag-time only — the next full render
-    // wipes it, and the core clears it when the tool's drag
-    // ends or cancels — so it never lands in board JSON. A
-    // tool that commits the finished shape calls addItem on
-    // pointerup instead, so the shape becomes one undo step.
+    // layer above the cards, without touching the board.
+    // Drag-time only: the core clears it when the drag ends,
+    // so it never lands in board JSON.
     previewShape: (shape: string, x0: number, y0: number, w: number, h: number, opts?: PluginPreviewShapeOptions) => void;
     // Hit-test: the top item id at a world point, or null.
     // A frame is a container, not content: a card inside a
@@ -890,17 +827,10 @@ export interface PluginContext {
     updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }>) => boolean;
     moveItem: (id: number, toIndex: number) => boolean;
     removeItem: (id: number) => boolean;
-    // Layers (see Layer): list them, create one, rename,
-    // reorder, hide/show, lock/unlock, delete one, and move
-    // an item onto one. Every one is a board write (one undo
-    // step). Layers paint bottom-to-top in list order; a
-    // hidden layer's items are not drawn and cannot be hit,
-    // marqueed or erased; a locked layer's items do not move,
-    // resize, rotate or edit. Deleting a layer moves its
-    // items to the default layer ("default"), which cannot
-    // be deleted. New items land on the default layer; an
-    // item's layer can also be set with updateItem(s) and its
-    // `layer` patch field.
+    // Layers: list, create, rename, reorder, hide/show,
+    // lock/unlock, delete, move an item onto one — each one
+    // undo step. Hidden layers are not drawn or hit; locked
+    // layers do not move or edit.
     getLayers: () => Layer[];
     createLayer: (name?: string) => Layer;
     renameLayer: (id: string, name: string) => boolean;
@@ -910,14 +840,10 @@ export interface PluginContext {
     deleteLayer: (id: string) => boolean;
     getItemLayer: (id: number) => string | null;
     setItemLayer: (id: number, layerId: string) => boolean;
-    // Per-board plugin data, namespaced by plugin id:
-    // getExtension reads this plugin's entry, setExtension
-    // writes it (one undo step), removeExtension deletes
-    // it. The data must be JSON. A plugin can never read or
-    // write another plugin's entry — there is no call that
-    // names one. Unlike storage, this travels with the board:
-    // it is saved in board JSON, undone with the board, and
-    // deleted with it.
+    // Per-board plugin data, namespaced by plugin id: a
+    // plugin can never read or write another plugin's entry.
+    // Unlike storage, it travels with the board: saved,
+    // undone and deleted with it. Data must be JSON.
     getExtension: () => unknown;
     setExtension: (data: unknown) => void;
     removeExtension: () => boolean;
