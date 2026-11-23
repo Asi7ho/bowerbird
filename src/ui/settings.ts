@@ -346,7 +346,7 @@ function renderPluginSettings(): void {
     row += `</div><span style="display:flex;gap:8px;flex:none">`;
     if (lp.active && hasSettings) row += `<button data-plugin-settings="${lp.id}">Settings</button>`;
     // A required plugin has no toggle: it is the foundation
-    // (board, Settings) and cannot be disabled, so there is
+    // (board, Settings, drawing tools, palette) and cannot be disabled, so there is
     // nothing to toggle. Every other plugin gets one. While
     // a disable is awaiting confirmation, the toggle reads
     // as the confirm ("Disable anyway") and is armed red,

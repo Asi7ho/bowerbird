@@ -3,8 +3,8 @@
 // from hardcoded checks in board-input, so Settings can rebind
 // them and the board follows. Escape, Tab, Space and the arrow
 // keys are not here: they are focus and navigation, not actions.
-// The command palette (Ctrl+K) is not here either: it is a
-// plugin shortcut, owned by the command-palette plugin.
+// The command palette (Ctrl+K) is not here either: the core
+// palette listens for it itself in the capture phase.
 
 export type ShortcutId =
   | "select" | "pen" | "connector" | "shape" | "eraser"

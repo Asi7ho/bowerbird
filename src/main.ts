@@ -964,6 +964,8 @@ async function init(): Promise<void> {
     // calls land first, so no second set of buttons is made —
     // the toolbar owns the buttons, this plugin the gestures.
     { manifest: coreDraw.manifest, module: coreDraw },
+    // After the board: the palette's overlay mounts into
+    // the board's overlay element.
     { manifest: corePalette.manifest, module: corePalette },
     { manifest: coreSettings.manifest, module: coreSettings },
     { manifest: coreCards.manifest, module: coreCards },
