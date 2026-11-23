@@ -458,6 +458,12 @@ async function main() {
   const readBoard = () => JSON.parse(fs.readFileSync(boardPath, "utf8"));
   const strokes = () => readBoard().items.filter((it) => "Stroke" in it.kind);
   const textCards = () => readBoard().items.filter((it) => "Text" in it.kind);
+  // The colours checks pick red and blue on the sliders and
+  // read the picked hex back: integer sliders quantise, so
+  // the hex is one step off #E63946 / #007AFF, and the later
+  // checks use the hex that was actually picked.
+  let pickedRed = "";
+  let pickedBlue = "";
 
   const results = [];
   let app;
@@ -3558,11 +3564,18 @@ async function main() {
       await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       assert.deepEqual(await page.locator(".col-palette-name").allTextContents(), ["Palette 1"]);
-      // A new palette, then a colour in it from the hex input.
+      // A new palette, then a colour in it from the sliders:
+      // hue 355, saturation 78, lightness 56 is a red. The
+      // picked hex is read back, not assumed — integer
+      // sliders quantise, so it is one step off #E63946.
       await page.locator(".col-create-row .col-btn", { hasText: "New palette" }).click();
       await waitFor("second palette", async () => (await page.locator(".col-palette-name").count()) === 2 ? true : null);
-      await page.locator(".col-hex-input").fill("#E63946");
-      await page.locator(".col-palette").nth(1).locator(".col-add-row .col-btn").click();
+      await page.locator(".col-slider-hue").fill("355");
+      await page.locator(".col-slider-sat").fill("78");
+      await page.locator(".col-slider-light").fill("56");
+      pickedRed = (await page.locator(".col-hex").textContent()) ?? "";
+      assert.ok(/^#[0-9A-F]{6}$/.test(pickedRed));
+      await page.locator(".col-palette").nth(1).locator(".col-add-tile").click();
       await waitFor("colour in the new palette", async () =>
         (await page.locator(".col-palette").nth(1).locator(".col-tile").count()) === 1 ? true : null,
       );
@@ -3576,7 +3589,21 @@ async function main() {
       assert.deepEqual(await page.locator(".col-palette-name").allTextContents(), ["Palette 1", "Palette 2"]);
       const hexes = await page.locator(".col-palette").nth(1).locator(".col-tile")
         .evaluateAll((els) => els.map((el) => el.dataset.hex));
-      assert.deepEqual(hexes, ["#E63946"]);
+      assert.deepEqual(hexes, [pickedRed]);
+    });
+
+    await check("a lone colour in a palette stays a fixed-size tile", async () => {
+      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      const tile = page.locator(".col-palette").nth(1).locator(".col-tile").first();
+      const box = await tile.boundingBox();
+      assert.ok(box);
+      assert.equal(box.width, 40);
+      assert.equal(box.height, 40);
+      // The row is far wider than the tile: the tile did
+      // not stretch to fill it.
+      const row = await page.locator(".col-palette").nth(1).locator(".col-tiles").boundingBox();
+      assert.ok(row && row.width > 120);
     });
 
     await check("clicking a colour sets the pen, and recolours a selected stroke", async () => {
@@ -3591,27 +3618,32 @@ async function main() {
       await page.mouse.move(500, 800, { steps: 20 });
       await page.mouse.up();
       const stroke = await waitFor("red stroke in board.json", () => {
-        const found = strokes().filter((it) => it.kind.Stroke.color === "#E63946");
+        const found = strokes().filter((it) => it.kind.Stroke.color === pickedRed);
         return found.length >= 1 ? found[found.length - 1] : null;
       });
       // Select it — it is the topmost card on its own line —
-      // then click the picked colour: the stroke itself
-      // changes, and one undo puts it back.
+      // then pick blue on the sliders and click the picked
+      // colour: the stroke itself changes, and one undo
+      // puts it back.
       await page.keyboard.press("v");
       await page.mouse.click(400, 800);
-      await page.locator(".col-hex-input").fill("#007AFF");
+      await page.locator(".col-slider-hue").fill("211");
+      await page.locator(".col-slider-sat").fill("100");
+      await page.locator(".col-slider-light").fill("50");
+      pickedBlue = (await page.locator(".col-hex").textContent()) ?? "";
+      assert.ok(/^#[0-9A-F]{6}$/.test(pickedBlue));
       await page.locator(".col-picked").click();
       await waitFor("stroke recoloured blue", () =>
-        strokes().find((it) => it.id === stroke.id)?.kind.Stroke.color === "#007AFF" ? true : null,
+        strokes().find((it) => it.id === stroke.id)?.kind.Stroke.color === pickedBlue ? true : null,
       );
       await page.keyboard.press("Control+z");
       await waitFor("undo restores the red stroke", () =>
-        strokes().find((it) => it.id === stroke.id)?.kind.Stroke.color === "#E63946" ? true : null,
+        strokes().find((it) => it.id === stroke.id)?.kind.Stroke.color === pickedRed ? true : null,
       );
     });
 
     await check("recolouring a locked layer is refused", async () => {
-      const stroke = strokes().find((it) => it.kind.Stroke.color === "#E63946");
+      const stroke = strokes().find((it) => it.kind.Stroke.color === pickedRed);
       assert.ok(stroke);
       try {
         await page.evaluate(() => window.__ciLayers.setLocked("default", true));
@@ -3624,7 +3656,7 @@ async function main() {
           const toast = (await page.locator("#toast").textContent()) ?? "";
           return toast === "Layer is locked" ? true : null;
         });
-        assert.equal(strokes().find((it) => it.id === stroke.id).kind.Stroke.color, "#E63946");
+        assert.equal(strokes().find((it) => it.id === stroke.id).kind.Stroke.color, pickedRed);
       } finally {
         await page.evaluate(() => window.__ciLayers.setLocked("default", false)).catch(() => undefined);
       }
@@ -3639,10 +3671,10 @@ async function main() {
       await page.mouse.move(700, 500, { steps: 10 });
       await page.mouse.up();
       const swatch = await waitFor("swatch in board.json", () => {
-        const found = readBoard().items.filter((it) => "Swatch" in it.kind && it.kind.Swatch.hex === "#E63946");
+        const found = readBoard().items.filter((it) => "Swatch" in it.kind && it.kind.Swatch.hex === pickedRed);
         return found.length >= 1 ? found[found.length - 1] : null;
       });
-      assert.equal(swatch.kind.Swatch.hex, "#E63946");
+      assert.equal(swatch.kind.Swatch.hex, pickedRed);
       // Disable the plugin: the panel goes away, the board
       // keeps its colours. setPluginEnabled returns the new
       // state, so disabling returns false.
