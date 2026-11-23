@@ -31,8 +31,9 @@ src/plugins/          plugin host, split five ways: host.ts
                       host-state.ts and host-views.ts.
 src/ui/               first-party UI plugins, one surface per
                       file except the board, each using only
-                      PluginContext: board, cards,
-                      toolbar, titlebar, search, settings. The
+                      PluginContext: board, cards, command
+                      palette, drawing tools, toolbar,
+                      titlebar, search, settings. The
                       board is split six ways — board.ts
                       (activation and wiring only) plus
                       board-input.ts, board-render.ts,
@@ -40,8 +41,8 @@ src/ui/               first-party UI plugins, one surface per
                       board-drag-preview.ts — with shortcuts.ts,
                       overlay-placement.ts, text-measure.ts and
                       recovery-dialog.ts alongside. Plus styles.css.
-plugins/              the nine bundled plugins (AI Chat, Multiple
-                      Boards, Command Palette, Hide Button, Colour
+plugins/              the eight bundled plugins (AI Chat, Multiple
+                      Boards, Hide Button, Colour
                       Palette, Presentation, Tidy Up, Visual
                       Library, Voice Notes). Same API, opt-in, written in
                       TypeScript.
@@ -55,7 +56,7 @@ electron/             main process and the window.bowerbird bridge
 
 - **User plugins** (in `plugins/` or installed): loaded as ES modules over the `plugin:` scheme. `apiVersion` is checked, permissions are enforced. A plugin is written in TypeScript and compiled in the app when it loads — there is no build step (see PLUGIN_API.md).
 - **First-party plugins** (in `src/ui/`): ES modules imported by the core at boot, then `activate(api)` with the same `PluginContext` a user plugin gets, under a manifest that declares the same permissions. They are *not* given a back door: if a first-party plugin needs something, that something goes in the API.
-- **Required plugins.** The board and Settings are `required: true` and cannot be disabled: disabling the board removed the toolbar and the Settings window with it, so the app soft-locked with no way back. A required plugin is always enabled, whatever the enabled map says, so a stale `false` in plugins.json self-heals on the next boot. The other core plugins stay disableable — that is how a replacement UI plugin takes over.
+- **Required plugins.** The board, Settings, drawing tools and command palette are `required: true` and cannot be disabled: disabling the board removed the toolbar and the Settings window with it, so the app soft-locked with no way back. A required plugin is always enabled, whatever the enabled map says, so a stale `false` in plugins.json self-heals on the next boot. The other core plugins stay disableable — that is how a replacement UI plugin takes over.
 
 ## Known boundary
 

@@ -15,6 +15,7 @@ import { createUndoStore, type UndoStore } from "./backend/undo";
 import { createDrops, type Drops } from "./backend/drops";
 import * as coreBoard from "./ui/board";
 import * as coreCards from "./ui/cards";
+import * as corePalette from "./ui/command-palette/main";
 import * as coreDraw from "./ui/drawing-tools";
 import * as coreSearch from "./ui/search";
 import * as coreSettings from "./ui/settings";
@@ -963,6 +964,7 @@ async function init(): Promise<void> {
     // calls land first, so no second set of buttons is made —
     // the toolbar owns the buttons, this plugin the gestures.
     { manifest: coreDraw.manifest, module: coreDraw },
+    { manifest: corePalette.manifest, module: corePalette },
     { manifest: coreSettings.manifest, module: coreSettings },
     { manifest: coreCards.manifest, module: coreCards },
     { manifest: coreToolbar.manifest, module: coreToolbar },

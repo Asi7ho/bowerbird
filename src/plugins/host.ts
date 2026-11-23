@@ -711,9 +711,8 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
       // could not do itself. Only the palette may route: any
       // other plugin calling this is trying to trigger
       // another plugin's command, which isolation forbids.
-      // The id is safe to check: the bundled palette is
-      // loaded from the app's own plugins directory, its
-      // manifest is always in `loaded` (even when disabled),
+      // The id is safe to check: the palette is a first-party
+      // core plugin, so its manifest is always in `loaded`,
       // and installing a plugin with a duplicate id is
       // rejected, so no other plugin can hold this id.
       routeCommand: async (pid: string, cid: string) => {
