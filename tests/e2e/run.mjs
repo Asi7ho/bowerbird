@@ -3564,20 +3564,30 @@ async function main() {
       await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       assert.deepEqual(await page.locator(".col-palette-name").allTextContents(), ["Palette 1"]);
-      // A new palette, then a colour in it from the sliders:
-      // hue 355, saturation 78, lightness 56 is a red. The
-      // picked hex is read back, not assumed — integer
-      // sliders quantise, so it is one step off #E63946.
-      await page.locator(".col-create-row .col-btn", { hasText: "New palette" }).click();
-      await waitFor("second palette", async () => (await page.locator(".col-palette-name").count()) === 2 ? true : null);
+      // A new palette starts from the picked colour, so set
+      // the sliders to a red first: hue 355, saturation 78,
+      // lightness 56. The picked hex is read back, not
+      // assumed — integer sliders quantise, so it is one
+      // step off #E63946.
       await page.locator(".col-slider-hue").fill("355");
       await page.locator(".col-slider-sat").fill("78");
       await page.locator(".col-slider-light").fill("56");
       pickedRed = (await page.locator(".col-hex").textContent()) ?? "";
       assert.ok(/^#[0-9A-F]{6}$/.test(pickedRed));
-      await page.locator(".col-palette").nth(1).locator(".col-add-tile").click();
+      await page.locator(".col-create-row .col-btn", { hasText: "New palette" }).click();
+      await waitFor("second palette", async () => (await page.locator(".col-palette-name").count()) === 2 ? true : null);
       await waitFor("colour in the new palette", async () =>
         (await page.locator(".col-palette").nth(1).locator(".col-tile").count()) === 1 ? true : null,
+      );
+      // The + tile adds a second colour: pick blue, add it.
+      await page.locator(".col-slider-hue").fill("211");
+      await page.locator(".col-slider-sat").fill("100");
+      await page.locator(".col-slider-light").fill("50");
+      pickedBlue = (await page.locator(".col-hex").textContent()) ?? "";
+      assert.ok(/^#[0-9A-F]{6}$/.test(pickedBlue));
+      await page.locator(".col-palette").nth(1).locator(".col-add-tile").click();
+      await waitFor("second colour in the new palette", async () =>
+        (await page.locator(".col-palette").nth(1).locator(".col-tile").count()) === 2 ? true : null,
       );
       // The save is debounced: wait it out, then reload and
       // prove the palette is still there.
@@ -3589,20 +3599,21 @@ async function main() {
       assert.deepEqual(await page.locator(".col-palette-name").allTextContents(), ["Palette 1", "Palette 2"]);
       const hexes = await page.locator(".col-palette").nth(1).locator(".col-tile")
         .evaluateAll((els) => els.map((el) => el.dataset.hex));
-      assert.deepEqual(hexes, [pickedRed]);
+      assert.deepEqual(hexes, [pickedRed, pickedBlue]);
     });
 
     await check("a lone colour in a palette stays a fixed-size tile", async () => {
       await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
-      const tile = page.locator(".col-palette").nth(1).locator(".col-tile").first();
+      // Palette 1 holds one colour, the seeded pen colour.
+      const tile = page.locator(".col-palette").first().locator(".col-tile").first();
       const box = await tile.boundingBox();
       assert.ok(box);
       assert.equal(box.width, 40);
       assert.equal(box.height, 40);
       // The row is far wider than the tile: the tile did
       // not stretch to fill it.
-      const row = await page.locator(".col-palette").nth(1).locator(".col-tiles").boundingBox();
+      const row = await page.locator(".col-palette").first().locator(".col-tiles").boundingBox();
       assert.ok(row && row.width > 120);
     });
 
