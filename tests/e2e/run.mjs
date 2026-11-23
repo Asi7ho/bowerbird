@@ -2914,19 +2914,34 @@ async function main() {
       // 260x96; existing boards still carry that size, so
       // the heal must fix it on load. The Letter sample is
       // 612x792pt, so the card heals to 260x361.
+      // The file goes to a fresh name: the drop check just
+      // landed a landscape PDF at assets/sample.pdf, and
+      // the page-size cache is keyed by path — reusing
+      // that name would heal against the landscape ratio.
       const assetsDir = path.join(tmp, "assets");
       fs.mkdirSync(assetsDir, { recursive: true });
-      fs.copyFileSync(path.join(repoRoot, "assets", "sample.pdf"), path.join(assetsDir, "sample.pdf"));
+      const pdfPath = path.join(assetsDir, "sample-letter.pdf");
+      fs.copyFileSync(path.join(repoRoot, "assets", "sample.pdf"), pdfPath);
       const board = readBoard();
       const id = Math.max(board.next_id, ...board.items.map((it) => it.id)) + 1;
-      board.items.push({ id, pos: { x: 2000, y: 2000 }, size: { w: 260, h: 96 }, group: null, kind: { PdfCard: { path: path.join(assetsDir, "sample.pdf"), size_bytes: 0 } } });
+      board.items.push({ id, pos: { x: 2000, y: 2000 }, size: { w: 260, h: 96 }, group: null, kind: { PdfCard: { path: pdfPath, size_bytes: 729 } } });
       board.next_id = id;
+      // Clear the toast first, so the reload toast below is
+      // unmistakably the live-follow reload of this write.
+      await page.evaluate(() => { const t = document.querySelector("#toast"); if (t) t.textContent = ""; });
       const tmp2 = `${boardPath}.tmp`;
       fs.writeFileSync(tmp2, JSON.stringify(board));
       fs.renameSync(tmp2, boardPath);
-      // The live-follow watcher picks the edit up in ~300ms,
-      // but F in a loop: if F runs before the reload, the
-      // new card is not in the fit yet, so fit again.
+      // Wait for the live-follow reload before pressing F:
+      // an F before it saves the old board, the guard
+      // refuses it, and the refusal journals a recovery
+      // that blocks the Boards check later.
+      await waitFor("live-follow reload of the heal card", async () => {
+        const toast = (await page.locator("#toast").textContent()) ?? "";
+        return toast.includes("Board updated on disk") ? true : null;
+      });
+      // Fit in a loop, in case the first fit lands before
+      // the new card is in the view: fit again.
       let rendered = false;
       for (let i = 0; i < 6 && !rendered; i++) {
         await page.keyboard.press("f");
