@@ -112,6 +112,9 @@ export function boardUngroupSelected(): boolean {
 export function boardDeleteSelected(): boolean {
   return boardController?.deleteSelected() ?? false;
 }
+export function boardPreviewStroke(points: Pt[], pressures: number[], opts?: { width?: number; color?: string; marker?: boolean; pencil?: boolean }): void {
+  boardController?.previewStroke(points, pressures, opts);
+}
 
 // ---------------------------------------------------------------- panels
 //
@@ -257,6 +260,14 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
       // builds the card DOM from this; a plugin embedding a card
       // elsewhere uses renderCard instead.
       renderCardAt: (id: number) => host!.renderBoardCardAt(id),
+      // The live preview stroke for a drag tool. It only
+      // draws in the preview layer — no board write, no
+      // save, no undo step — so a plugin can call it on
+      // every pointermove. Delegates to the board view,
+      // which owns the preview layer; a no-op until the
+      // board plugin registers its controller.
+      previewStroke: (points: Pt[], pressures?: number[], opts?: { width?: number; color?: string; marker?: boolean; pencil?: boolean }) =>
+        boardPreviewStroke(points, pressures ?? [], opts),
       hitTest: (world: Pt) => host!.hitTest(world),
       marqueeSelect: (a: Pt, b: Pt) => host!.marqueeSelect(a, b),
       lassoSelect: (points: Pt[]) => host!.lassoSelect(points),

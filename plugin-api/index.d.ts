@@ -230,6 +230,51 @@ export interface PluginToolDef {
   icon?: string;
   onMouseDown?: (world: Pt) => void;
   onMouseUp?: (world: Pt) => void;
+  // Drag callbacks: a tool that draws while the pointer
+  // moves — a brush, a scrubber, an orbit drag — implements
+  // these instead of (or beside) onMouseDown/onMouseUp.
+  // The core starts a plugin drag on pointerdown while the
+  // tool is active, routes every pointermove to
+  // onPointerMove, and ends the drag on pointerup
+  // (onPointerUp) or pointercancel / Escape
+  // (onPointerCancel). A tool that defines any of these owns
+  // the gesture: the core's own drags do not run while it is
+  // active. A tool that defines none of them keeps the old
+  // click behaviour (onMouseDown/onMouseUp only). When both
+  // are defined, the drag callbacks win and the click ones
+  // are not called.
+  onPointerDown?: (world: Pt, ev: PluginPointerEvent) => void;
+  onPointerMove?: (world: Pt, ev: PluginPointerEvent) => void;
+  onPointerUp?: (world: Pt, ev: PluginPointerEvent) => void;
+  onPointerCancel?: (world: Pt, ev: PluginPointerEvent) => void;
+}
+
+// The pointer behind a plugin tool's drag callbacks: the
+// fields a brush needs, in world-independent form. `pressure`
+// is 0..1 (0 for a mouse, which has no pressure);
+// `tiltX`/`tiltY` are the stylus tilt in degrees, 0 when the
+// device reports none; `pointerType` is "mouse", "pen" or
+// "touch"; `buttons` is the pressed-buttons bitmask, so a
+// drag can tell a held button from a hover.
+export interface PluginPointerEvent {
+  pressure: number;
+  tiltX: number;
+  tiltY: number;
+  pointerType: string;
+  pointerId: number;
+  buttons: number;
+  isPrimary: boolean;
+}
+
+// How a drag tool's live preview stroke looks. All fields
+// are optional: width defaults to 3, color to the pen
+// colour, marker to false (opaque), pencil to false (no
+// graphite texture).
+export interface PluginPreviewStrokeOptions {
+  width?: number;
+  color?: string;
+  marker?: boolean;
+  pencil?: boolean;
 }
 
 // A creation action: an alternative to typing when the user
@@ -620,6 +665,17 @@ export interface PluginContext {
     // for embedding a card in a panel or view), this is
     // the card as it appears on the board.
     renderCardAt: (id: number) => string | null;
+    // Draw a drag tool's live preview stroke in the preview
+    // layer above the cards, without touching the board: the
+    // points are world points, the pressures (when given)
+    // vary the width the way a pen stroke does. The preview
+    // is drag-time only — the next full render wipes it, and
+    // the core clears it when the tool's drag ends or
+    // cancels — so it never lands in board JSON. A call with
+    // no points clears it at once. A tool that commits a
+    // finished stroke calls addItem on pointerup instead, so
+    // the stroke becomes one undo step.
+    previewStroke: (points: Pt[], pressures?: number[], opts?: PluginPreviewStrokeOptions) => void;
     // Hit-test: the top item id at a world point, or null.
     // A frame is a container, not content: a card inside a
     // frame wins over the frame itself, so cards inside a
@@ -1365,5 +1421,9 @@ export interface BoardController {
   groupSelected: () => boolean;
   ungroupSelected: () => boolean;
   deleteSelected: () => boolean;
+  // Draw a plugin drag tool's live preview stroke. The core
+  // calls this through api.board.previewStroke; the board
+  // view owns the preview layer, so only it can draw there.
+  previewStroke: (points: Pt[], pressures: number[], opts?: PluginPreviewStrokeOptions) => void;
 }
 

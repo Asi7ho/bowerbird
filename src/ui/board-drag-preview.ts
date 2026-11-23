@@ -33,9 +33,10 @@ export function dragPreview(id: string, tag: string, toPreview = false): SVGElem
 // tool's base width: the pencil draws thinner than the pen,
 // the highlighter much wider. A marker (highlighter) draws
 // translucent, like the stored stroke.
-export function updateLiveStroke(points: Pt[], pressures: number[], width: number, marker: boolean, pencil = false): void {
+export function updateLiveStroke(points: Pt[], pressures: number[], width: number, marker: boolean, pencil = false, color?: string): void {
   const el = dragPreview("live-stroke", "g");
   while (el.firstChild) el.removeChild(el.firstChild);
+  const stroke = color ?? S.api.pen.getColor();
   // A pencil stroke shows its graphite texture while it
   // is being drawn, not only once it is committed.
   if (pencil) el.setAttribute("filter", "url(#pencil-texture)");
@@ -60,11 +61,19 @@ export function updateLiveStroke(points: Pt[], pressures: number[], width: numbe
     const prs = smoothStrokePressures(pressures);
     for (let i = 0; i + 1 < pts.length; i++) {
       const w = pressureWidth(width, (prs[i] + prs[i + 1]) / 2);
-      el.appendChild(svgEl2("line", { x1: String(pts[i].x), y1: String(pts[i].y), x2: String(pts[i + 1].x), y2: String(pts[i + 1].y), stroke: S.api.pen.getColor(), "stroke-width": String(w), "stroke-linecap": "round", opacity }));
+      el.appendChild(svgEl2("line", { x1: String(pts[i].x), y1: String(pts[i].y), x2: String(pts[i + 1].x), y2: String(pts[i + 1].y), stroke, "stroke-width": String(w), "stroke-linecap": "round", opacity }));
     }
   } else {
-    el.appendChild(svgEl2("path", { d: smoothStrokePath(points), fill: "none", stroke: S.api.pen.getColor(), "stroke-width": String(width), "stroke-linecap": "round", "stroke-linejoin": "round", opacity }));
+    el.appendChild(svgEl2("path", { d: smoothStrokePath(points), fill: "none", stroke, "stroke-width": String(width), "stroke-linecap": "round", "stroke-linejoin": "round", opacity }));
   }
+}
+// Remove the live stroke node outright, so a drag that ends
+// without a commit — a plugin drag cancelled, or one that
+// drew nothing — leaves no preview behind. A render wipes
+// it too, but a drag end that commits nothing renders
+// nothing, so the explicit clear is what ends the preview.
+export function clearLiveStroke(): void {
+  S.worldEl.querySelector("#live-stroke")?.remove();
 }
 // The lasso loop, drawn live while dragging. The path is
 // closed (the Z joins the last point back to the first),
