@@ -59,6 +59,28 @@ export interface Item {
   // Cards and strokes rotate; connectors never carry it,
   // and slide frames are excluded by the rotate action.
   rotation?: number;
+  // The layer this item sits on, by layer id. Optional so
+  // old boards load unchanged: missing means the default
+  // layer ("default").
+  layer?: string;
+}
+
+// Layers: the paint order, visibility and lock of a board's
+// items. A layer is a named band items sit on: layers paint
+// bottom-to-top in array order, and items on one layer keep
+// their board order among themselves. Layer ids are strings,
+// not numbers: layers are created and deleted at runtime, so
+// a string id needs no `next_layer` counter on the board and
+// can never collide with the numeric item and group id
+// spaces. The default layer is always present (id
+// "default", healed on load), visible and unlocked, and
+// cannot be deleted — every board keeps somewhere for its
+// items to be.
+export interface Layer {
+  id: string;
+  name: string;
+  visible: boolean;
+  locked: boolean;
 }
 
 export interface Camera { x: number; y: number; zoom: number }
@@ -78,6 +100,18 @@ export interface Board {
   // the file was embedded at, never a path outside the
   // board (see the security boundaries in electron/main.ts).
   groups?: Record<number, GroupEntry>;
+  // Layers, bottom-to-top in array order (see Layer).
+  // Optional so old boards load unchanged: a board with no
+  // layers heals to a single default layer on load.
+  layers?: Layer[];
+  // Per-board plugin data, namespaced by plugin id: a
+  // plugin reads and writes only its own entry (see
+  // api.board.getExtension / setExtension). Optional so
+  // old boards load unchanged: missing means no plugin
+  // has stored board data yet. Unlike plugin storage,
+  // this travels with the board — it is saved in board
+  // JSON, undone with the board, and deleted with it.
+  extensions?: Record<string, unknown>;
   bg: string;
   grid: "Lines" | "Dots" | "Off";
 }

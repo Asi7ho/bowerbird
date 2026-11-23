@@ -2,8 +2,8 @@
 // GPUI board so existing board.json files load unchanged.
 // Markdown lives in markdown.ts.
 
-import type { Anchor, ArrangeOptions, Block, Board, Camera, GroupEntry, ImportSource, Item, Kind, Pt, Segment, ShapeKind, Size } from "bowerbird-plugin-api";
-export type { Anchor, ArrangeOptions, Block, Board, Camera, GroupEntry, ImportSource, Item, Kind, Pt, Segment, ShapeKind, Size };
+import type { Anchor, ArrangeOptions, Block, Board, Camera, GroupEntry, ImportSource, Item, Kind, Layer, Pt, Segment, ShapeKind, Size } from "bowerbird-plugin-api";
+export type { Anchor, ArrangeOptions, Block, Board, Camera, GroupEntry, ImportSource, Item, Kind, Layer, Pt, Segment, ShapeKind, Size };
 
 // Shape outline fractions, in % of the shape's box. The single
 // source of truth for a shape's geometry: cards.ts renders the
@@ -409,6 +409,9 @@ export function hitTest(board: Board, world: Pt): number | null {
     for (let i = board.items.length - 1; i >= 0; i--) {
       const it = board.items[i];
       if (!pass(it)) continue;
+      // A hidden layer is not on the board: its items
+      // cannot be clicked, dragged or selected.
+      if (!isItemVisible(board, it)) continue;
       if (itemHit(board, it, world)) return it.id;
     }
   }
@@ -539,6 +542,7 @@ export function strokesWithin(board: Board, world: Pt, radius: number): number[]
   const out: number[] = [];
   for (const it of board.items) {
     if (!("Stroke" in it.kind)) continue;
+    if (!isItemVisible(board, it)) continue;
     const tol = radius + strokeMaxWidth(it.kind.Stroke) / 2;
     const p = strokePointInFrame(it, world, tol);
     if (p !== null && strokeHitTest(it.kind.Stroke.points, p, tol)) out.push(it.id);
@@ -599,6 +603,7 @@ export function marquee(board: Board, a: Pt, b: Pt): number[] {
   const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x);
   const y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y);
   return board.items.filter((it) => {
+    if (!isItemVisible(board, it)) return false;
     const [p, s] = itemBounds(board, it);
     return p.x < x1 && p.x + s.w > x0 && p.y < y1 && p.y + s.h > y0;
   }).map((it) => it.id);
@@ -625,6 +630,7 @@ export function pointInPolygon(p: Pt, poly: Pt[]): boolean {
 export function lassoSelect(board: Board, points: Pt[]): number[] {
   if (points.length < 3) return [];
   return board.items.filter((it) => {
+    if (!isItemVisible(board, it)) return false;
     const [p, s] = itemBounds(board, it);
     if (pointInPolygon({ x: p.x + s.w / 2, y: p.y + s.h / 2 }, points)) return true;
     const corners = [
@@ -667,6 +673,203 @@ export function healDuplicateIds(board: Board): void {
   }
 }
 
+// ---------------------------------------------------------------- layers
+//
+// Layers are the paint order, visibility and lock of a
+// board's items. See Layer in plugin-api/index.d.ts for
+// the shape and the string-id choice.
+
+export const DEFAULT_LAYER_ID = "default";
+export const DEFAULT_LAYER_NAME = "Default";
+
+export function defaultLayer(): Layer {
+  return { id: DEFAULT_LAYER_ID, name: DEFAULT_LAYER_NAME, visible: true, locked: false };
+}
+
+export function layerById(board: Board, id: string): Layer | undefined {
+  return board.layers?.find((l) => l.id === id);
+}
+
+// The layer an item sits on: its `layer` field, or the
+// default when it has none (an old board, or an item added
+// before layers existed).
+export function itemLayerId(item: Item): string {
+  return item.layer ?? DEFAULT_LAYER_ID;
+}
+
+export function isLayerVisible(board: Board, layerId: string): boolean {
+  const layer = layerById(board, layerId);
+  // A layer the board does not know (a board mid-edit, or
+  // one healed before its layer existed) is visible: an
+  // item is never hidden by a missing record.
+  return layer ? layer.visible : true;
+}
+
+export function isItemVisible(board: Board, item: Item): boolean {
+  return isLayerVisible(board, itemLayerId(item));
+}
+
+export function isItemLocked(board: Board, item: Item): boolean {
+  return layerById(board, itemLayerId(item))?.locked ?? false;
+}
+
+// Paint-order index of a layer: its place in the layers
+// array. An unknown layer id paints with the default
+// layer, so it is never lost off the bottom.
+export function layerIndex(board: Board, layerId: string): number {
+  const layers = board.layers ?? [];
+  const i = layers.findIndex((l) => l.id === layerId);
+  if (i >= 0) return i;
+  const d = layers.findIndex((l) => l.id === DEFAULT_LAYER_ID);
+  return d >= 0 ? d : 0;
+}
+
+// Items in paint order: layers bottom-to-top, board order
+// within a layer. A stable sort, so items on one layer
+// keep the order they have in board.items.
+export function sortItemsByLayer(board: Board, items: Item[]): Item[] {
+  return [...items].sort((a, b) => layerIndex(board, itemLayerId(a)) - layerIndex(board, itemLayerId(b)));
+}
+
+// Layers and per-board plugin data, healed on load: a board
+// written before layers existed has neither field, and a
+// hand-edited board can name a layer that is not there.
+// The heal runs in memory only — the file gains the fields
+// on the next save, never on load. Every item ends on a
+// layer that exists (the default when it named none or an
+// unknown one), the default layer is always first, and
+// extensions is always an object.
+export function healLayers(board: Board): void {
+  const layers = Array.isArray(board.layers) ? board.layers : [];
+  const seen = new Set<string>();
+  const kept: Layer[] = [];
+  for (const l of layers) {
+    if (!l || typeof l.id !== "string" || seen.has(l.id)) continue;
+    seen.add(l.id);
+    kept.push({
+      id: l.id,
+      name: typeof l.name === "string" && l.name.trim() ? l.name : l.id,
+      visible: l.visible !== false,
+      locked: l.locked === true,
+    });
+  }
+  if (!seen.has(DEFAULT_LAYER_ID)) {
+    kept.unshift(defaultLayer());
+    seen.add(DEFAULT_LAYER_ID);
+  }
+  board.layers = kept;
+  for (const it of board.items) {
+    if (typeof it.layer !== "string" || !seen.has(it.layer)) it.layer = DEFAULT_LAYER_ID;
+  }
+  if (!board.extensions || typeof board.extensions !== "object" || Array.isArray(board.extensions)) {
+    board.extensions = {};
+  }
+}
+
+export function nextLayerId(board: Board): string {
+  let n = 0;
+  for (const l of board.layers ?? []) {
+    const m = /^layer-(\d+)$/.exec(l.id);
+    if (m) n = Math.max(n, Number(m[1]));
+  }
+  return `layer-${n + 1}`;
+}
+
+export function createLayer(board: Board, name?: string): Layer {
+  const layers = (board.layers ??= [defaultLayer()]);
+  const id = nextLayerId(board);
+  const trimmed = name?.trim();
+  const layer: Layer = { id, name: trimmed ? trimmed : `Layer ${layers.length + 1}`, visible: true, locked: false };
+  layers.push(layer);
+  return layer;
+}
+
+export function renameLayer(board: Board, id: string, name: string): boolean {
+  const layer = layerById(board, id);
+  const trimmed = name.trim();
+  if (!layer || !trimmed) return false;
+  layer.name = trimmed;
+  return true;
+}
+
+export function moveLayer(board: Board, id: string, toIndex: number): boolean {
+  const layers = board.layers ?? [];
+  const from = layers.findIndex((l) => l.id === id);
+  if (from < 0) return false;
+  const [layer] = layers.splice(from, 1);
+  const clamped = Math.max(0, Math.min(toIndex, layers.length));
+  layers.splice(clamped, 0, layer);
+  return true;
+}
+
+export function setLayerVisible(board: Board, id: string, visible: boolean): boolean {
+  const layer = layerById(board, id);
+  if (!layer) return false;
+  layer.visible = visible;
+  return true;
+}
+
+export function setLayerLocked(board: Board, id: string, locked: boolean): boolean {
+  const layer = layerById(board, id);
+  if (!layer) return false;
+  layer.locked = locked;
+  return true;
+}
+
+// Deleting a layer moves its items onto the default layer,
+// so nothing is lost with it. The default layer cannot be
+// deleted: every board keeps somewhere for its items.
+export function deleteLayer(board: Board, id: string): boolean {
+  if (id === DEFAULT_LAYER_ID) return false;
+  const layers = board.layers ?? [];
+  if (!layers.some((l) => l.id === id)) return false;
+  board.layers = layers.filter((l) => l.id !== id);
+  for (const it of board.items) {
+    if (itemLayerId(it) === id) it.layer = DEFAULT_LAYER_ID;
+  }
+  return true;
+}
+
+export function setItemLayer(board: Board, id: number, layerId: string): boolean {
+  if (!layerById(board, layerId)) return false;
+  const it = boardGet(board, id);
+  if (!it) return false;
+  it.layer = layerId;
+  return true;
+}
+
+// ---------------------------------------------------------------- per-board plugin data
+//
+// Namespaced by plugin id. The namespace is the ownership
+// rule: a plugin reads and writes only its own entry, and
+// the host passes its own id — there is no call that names
+// another plugin. Data must be JSON: a value that cannot
+// survive a round trip (a circular object, undefined, a
+// function) is rejected rather than saved half-broken.
+
+export function getBoardExtension(board: Board, pluginId: string): unknown {
+  const ext = board.extensions?.[pluginId];
+  return ext === undefined ? undefined : JSON.parse(JSON.stringify(ext)) as unknown;
+}
+
+export function setBoardExtension(board: Board, pluginId: string, data: unknown): void {
+  let copy: unknown;
+  try {
+    copy = JSON.parse(JSON.stringify(data)) as unknown;
+  } catch {
+    throw new Error(`Plugin ${pluginId} extension data must be JSON`);
+  }
+  if (copy === undefined) throw new Error(`Plugin ${pluginId} extension data must be JSON`);
+  board.extensions ??= {};
+  board.extensions[pluginId] = copy;
+}
+
+export function removeBoardExtension(board: Board, pluginId: string): boolean {
+  if (!board.extensions || !(pluginId in board.extensions)) return false;
+  delete board.extensions[pluginId];
+  return true;
+}
+
 export function select(board: Board, selected: number[], id: number, additive: boolean): number[] {
   const out = additive ? [...selected] : [];
   const it = boardGet(board, id);
@@ -687,6 +890,9 @@ export function moveSelection(board: Board, selected: number[], dx: number, dy: 
   const sel = new Set(selected);
   for (const it of board.items) {
     if (!sel.has(it.id)) continue;
+    // A locked layer does not move: a drag that catches a
+    // locked card leaves it where it is, and moves the rest.
+    if (isItemLocked(board, it)) continue;
     it.pos.x += dx; it.pos.y += dy;
     if ("Stroke" in it.kind) for (const p of it.kind.Stroke.points) { p.x += dx; p.y += dy; }
     if ("Connector" in it.kind) {
@@ -701,6 +907,8 @@ export function resizeItem(board: Board, id: number, newW: number, newH: number)
   newW = Math.max(48, newW); newH = Math.max(48, newH);
   const it = boardGet(board, id);
   if (!it) return;
+  // A locked layer does not resize.
+  if (isItemLocked(board, it)) return;
   const { x: ox, y: oy } = it.pos; const ow = it.size.w, oh = it.size.h;
   if ("Stroke" in it.kind && ow > 0 && oh > 0) {
     const sx = newW / ow, sy = newH / oh;
