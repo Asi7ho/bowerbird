@@ -1,5 +1,5 @@
 // Unit tests for the welcome board (src/backend/welcome.ts):
-// a pure function of (boardDir, pdfSize, videoSize, modelSize, psdSize, aiSize), so these
+// a pure function of (boardDir, pdfSize, videoSize, modelSize, psdSize, aiSize, pdfPage), so these
 // run in plain vitest on every push and PR.
 import { describe, expect, it } from "vitest";
 import { pdfCardSize } from "../../src/backend/live-import";
@@ -68,13 +68,21 @@ describe("welcomeBoard", () => {
     });
   });
 
-  it("sizes the PDF card at the sample page ratio", () => {
-    const board = welcomeBoard("/b", 111, 222, 333, 444, 555);
+  it("sizes the PDF card at the detected page ratio", () => {
+    const board = welcomeBoard("/b", 111, 222, 333, 444, 555, { w: 612, h: 792 });
     const pdf = board.items.find((it) => "PdfCard" in it.kind);
-    // sample.pdf is US Letter, 612x792pt: the card is the
-    // page ratio at 260 wide, not the old 260x96 tile.
+    // The detected page size drives the card: 612x792pt is
+    // 260x361 at 260 wide, not the old 260x96 tile.
     expect(pdf?.size).toEqual(pdfCardSize(612, 792));
     expect(pdf?.size).toEqual({ w: 260, h: 361 });
+  });
+
+  it("falls back to the drop default without a detected size", () => {
+    const board = welcomeBoard("/b", 111, 222, 333, 444, 555);
+    const pdf = board.items.find((it) => "PdfCard" in it.kind);
+    // No measurement (unreadable file): the drop default,
+    // which the heal fixes when the page loads.
+    expect(pdf?.size).toEqual({ w: 260, h: 360 });
   });
 
   it("groups exactly the labelled pair", () => {

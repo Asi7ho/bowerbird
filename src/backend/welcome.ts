@@ -4,7 +4,7 @@ import type { Board, Item } from "./model";
 import { estimateTextHeight } from "./model";
 import { fileCardSize, pdfCardSize } from "./live-import";
 
-export function welcomeBoard(boardDir: string, pdfSize: number, videoSize: number, modelSize: number, psdSize: number, aiSize: number): Board {
+export function welcomeBoard(boardDir: string, pdfSize: number, videoSize: number, modelSize: number, psdSize: number, aiSize: number, pdfPage?: { w: number; h: number } | null): Board {
   const b: Board = {
     items: [], camera: { x: 0, y: 0, zoom: 1 }, next_id: 0, next_group: 0,
     bg: "#FFFFFF", grid: "Dots",
@@ -23,9 +23,11 @@ export function welcomeBoard(boardDir: string, pdfSize: number, videoSize: numbe
   add({ id: next(), pos: { x: 900, y: 95 }, size: { w: 320, h: 300 }, group: null, kind: { UrlCard: { url: "https://en.wikipedia.org/wiki/Japanese_garden", title: "Japanese garden", description: "Type of traditional garden", image: "https://upload.wikimedia.org/wikipedia/commons/thumb/8/88/Saihouji-kokedera01.jpg/330px-Saihouji-kokedera01.jpg", icon: WIKI_ICON } } });
   add({ id: next(), pos: { x: 140, y: 260 }, size: { w: 120, h: 120 }, group: null, kind: { Swatch: { hex: "#2A6D09" } } });
   add({ id: next(), pos: { x: 300, y: 290 }, size: { w: 120, h: 120 }, group: null, kind: { Swatch: { hex: "#007AFF" } } });
-  // sample.pdf is US Letter, 612x792pt, so the card is
-  // 260x361 at the page ratio — not a fixed short tile.
-  add({ id: next(), pos: { x: 130, y: 430 }, size: pdfCardSize(612, 792), group: null, kind: { PdfCard: { path: `${boardDir}/sample.pdf`, size_bytes: pdfSize } } });
+  // The card is the sample's own page ratio, measured at
+  // seed time — never a literal. Without a measurement the
+  // card takes the drop default and the heal fixes it when
+  // the page loads.
+  add({ id: next(), pos: { x: 130, y: 430 }, size: pdfPage ? pdfCardSize(pdfPage.w, pdfPage.h) : { w: 260, h: 360 }, group: null, kind: { PdfCard: { path: `${boardDir}/sample.pdf`, size_bytes: pdfSize } } });
   add({ id: next(), pos: { x: 450, y: 405 }, size: { w: 300, h: 104 }, group: null, kind: { Audio: { path: `${boardDir}/welcome-birdsong.mp3` } } });
   add({ id: next(), pos: { x: 790, y: 420 }, size: { w: 360, h: 280 }, group: null, kind: { Video: { source: `${boardDir}/welcome-video.mp4`, remote: false, size_bytes: videoSize } } });
   const groupText = "Grouped — these two move together.\n\nDrag either one, and both move. Ctrl + G groups, Ctrl + U ungroups.";
