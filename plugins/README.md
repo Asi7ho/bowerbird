@@ -5,6 +5,7 @@ Plugins in this folder ship inside the app. They are listed in Settings → Plug
 - **Hide Button** (`hide/`) — the corner button that hides Bowerbird into a corner, the corner picker in Settings, and H to minimise.
 - **Visual Library** (`visual-library/`) — the library is the board: every board card except strokes, connectors, shapes, 3D model cards and design-file cards, in board order, under user-created categories (Uncategorized by default). Click to focus the original, drag to duplicate.
 - **Colour Palette** (`palette/`) — a colour wheel panel. Pick a colour and five palettes are made from it live. Click or drag to place a 120×120 swatch. Placed swatches are ordinary board Swatch items, so they survive disabling the plugin.
+- **Colour Library** (`colours/`) — named colour palettes, saved in plugin storage. Click a colour to apply it to the pen or to selected strokes and swatches, drag a tile to place a 120×120 swatch. Placed swatches are ordinary board Swatch items, so they survive disabling the plugin.
 - **Presentation** (`presentation/`) — slides are frames on the board. Draw a rectangle around cards to make a slide, then play it. Export downloads all slides as a single HTML file.
 - **Multiple Boards** (`boards/`) — multiple boards, as a panel: click a board to open it, click the current board's name to rename it, × to delete it, New board to create one.
 - **Tidy Up** (`tidy-up/`) — align and distribute the selected cards, from a panel. Cards only, 2 or more to align, 3 or more to distribute.
