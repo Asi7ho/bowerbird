@@ -1,15 +1,7 @@
-// core-draw: the built-in drawing tools — pen, pencil,
-// highlighter, eraser, connector and the shapes — as a
-// first-party plugin on the drag-tool API. It consumes only
-// the plugin API (board, pen, shapes, geometry, view) plus
-// the pure stroke geometry in src/backend/model.ts, the
-// way a third-party brush plugin would: if the pen cannot
-// be a plugin, no third-party brush can be. The toolbar
-// still owns the buttons and flyouts for these tools (see
-// toolbar.ts); this plugin owns the gestures. It activates
-// before the toolbar (see src/main.ts), so its registerTool
-// calls land before the toolbar sets its tools element and
-// no second set of buttons is created.
+// core-draw: the built-in drawing tools as a first-party
+// plugin on the drag-tool API, consuming only the plugin
+// API plus pure stroke geometry — the way a third-party
+// brush would. It activates before the toolbar.
 
 import type { Anchor, Kind, PluginContext, PluginManifest, Pt, ShapeKind, Size } from "bowerbird-plugin-api";
 import { rectFromPoints, splitStrokeByEraser, strokeMaxWidth } from "../backend/model";
@@ -86,12 +78,8 @@ const ICONS = {
 };
 
 // ---------------------------------------------------------------- pure helpers
-//
-// The commit math for each tool, kept pure so the unit
-// tests cover it without a board: a stroke, a shape and a
-// connector each become one item (or null when the drag
-// was too small to place), and an eraser pass becomes the
-// replacement pieces for the strokes it touched.
+// The commit math for each tool, kept pure so unit tests
+// cover it without a board.
 
 export interface PlacedItem {
   kind: Kind;
@@ -138,12 +126,10 @@ export function buildShapeItem(shape: ShapeKind, start: Pt, current: Pt, fill: s
   };
 }
 
-// A finished connector: the line between its two anchors,
-// in the pen colour. A connector from a card to itself is
-// a click, not a connection: it would render as a 1x1
-// invisible item that can never be selected or deleted
-// except by undo. A line shorter than 4 world units from a
-// point anchor is the same. Either places nothing.
+// A finished connector: the line between its two anchors.
+// A card-to-itself connector would be a 1x1 item that can
+// never be selected or deleted, so it places nothing —
+// as does a line under 4 world units from a point anchor.
 export function buildConnectorItem(from: Anchor, to: Anchor, a: Pt | null, b: Pt, color: string): PlacedItem | null {
   const degenerate = a !== null && "Point" in to && Math.hypot(a.x - to.Point.x, a.y - to.Point.y) < 4;
   const selfConnector = "Item" in from && "Item" in to && from.Item === to.Item;
@@ -191,13 +177,10 @@ export function activate(api: PluginContext): void {
   // while dragging; only the commit is dropped.
   const defaultLayerLocked = (): boolean =>
     api.board.getLayers().find((l) => l.id === "default")?.locked ?? false;
-  // One stroke tool per kind: pen, pencil, highlighter.
-  // The pencil draws thinner than the pen; the highlighter
-  // is a wide translucent marker, so it records no pressure
-  // and draws uniform. The pencil is a graphite texture,
-  // not just a thinner pen: the flag travels with the
-  // stroke so it keeps its texture through erasing and
-  // reloads.
+  // One stroke tool per kind. The pencil is a graphite
+  // texture, not just a thinner pen — the flag travels with
+  // the stroke so it keeps its texture through erasing and
+  // reloads. The highlighter records no pressure.
   const registerStrokeTool = (kind: "pen" | "pencil" | "highlighter"): void => {
     const width = kind === "highlighter" ? 12 : kind === "pencil" ? 2 : 3;
     const marker = kind === "highlighter";
@@ -241,14 +224,10 @@ export function activate(api: PluginContext): void {
   registerStrokeTool("pencil");
   registerStrokeTool("highlighter");
 
-  // The eraser: erase the ink the eraser touches at this
-  // point, the way a pen draws — only the part under the
-  // eraser goes, and a stroke it passes through breaks into
-  // the pieces either side. The board is not saved here:
-  // the drag saves once, on pointerup, so a whole sweep is
-  // one undo step — the new pieces are added silent, like
-  // the removed stroke was, and the board re-renders so the
-  // split pieces show at once.
+  // The eraser: only the ink under it goes, and a stroke it
+  // passes through breaks into the pieces either side. The
+  // board is not saved here — the drag saves once, on
+  // pointerup, so a whole sweep is one undo step.
   let erased = false;
   const eraseAt = (world: Pt): boolean => {
     const ids = api.board.strokesNear(world, ERASER_RADIUS);
@@ -296,11 +275,8 @@ export function activate(api: PluginContext): void {
     },
   });
 
-  // The connector: a line from the card under the press
-  // (or the press point, on empty board) to the card under
-  // the release (or the release point). The preview is a
-  // live stroke between the start anchor and the pointer,
-  // in the pen colour.
+  // The connector: a line from the press anchor to the
+  // release anchor; the preview is a live stroke between them.
   let from: Anchor | null = null;
   api.ui.registerTool({
     id: "connector",
