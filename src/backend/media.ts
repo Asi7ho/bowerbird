@@ -49,6 +49,11 @@ export interface Media {
   // read. Shares the document load with the renderer, so
   // probing never opens the file twice.
   probePdfSize(path: string): Promise<{ w: number; h: number } | null>;
+  // Re-stat the file and drop the cached PDF entries when
+  // it was replaced: the next render or probe reloads it.
+  // A page flip uses the cached document, so it refreshes
+  // first instead of trusting a possibly replaced file.
+  refreshPdf(path: string): Promise<void>;
   // Heal a PdfCard saved at a stale fixed size (see
   // loadPdfCardSize): measure its first page and resize the
   // card to the ratio of the page when it is still wrong.
@@ -144,7 +149,10 @@ export function createMedia(host: MediaContext): Media {
   // board load is never slowed by text extraction.
   const pdfSearchText = new Map<string, string>();
   const pdfSearchIndexing = new Set<string>();
-  function getPdfDoc(path: string): Promise<PdfDoc> {
+  async function getPdfDoc(path: string): Promise<PdfDoc> {
+    // A replaced file must never render from the cached
+    // document: the stat check runs before the cache read.
+    await ensurePdfFresh(path);
     let docPromise = pdfDocs.get(path);
     if (!docPromise) {
       docPromise = (async () => {
@@ -174,6 +182,10 @@ export function createMedia(host: MediaContext): Media {
     // would be for the wrong board: skip both.
     const gen = host.getBoardGeneration();
     void getPdfDoc(path).then(async (doc) => {
+      // The stat the document was loaded from: if the file
+      // is replaced mid-extraction, the text is for the old
+      // bytes and is dropped, not cached.
+      const statAtStart = pdfStats.get(path);
       try {
         const parts: string[] = [];
         const pages = Math.min(doc.numPages, 50);
@@ -184,8 +196,12 @@ export function createMedia(host: MediaContext): Media {
             if (typeof (it as { str?: unknown }).str === "string") parts.push((it as { str: string }).str);
           }
         }
-        pdfSearchText.set(path, parts.join(" "));
-        if (gen === host.getBoardGeneration()) host.bumpSearchVersion();
+        const statNow = pdfStats.get(path);
+        const replaced = statAtStart && statNow && (statAtStart.size !== statNow.size || statAtStart.mtimeMs !== statNow.mtimeMs);
+        if (!replaced) {
+          pdfSearchText.set(path, parts.join(" "));
+          if (gen === host.getBoardGeneration()) host.bumpSearchVersion();
+        }
       } catch { /* search falls back to the filename */ }
       pdfSearchIndexing.delete(path);
       if (gen !== host.getBoardGeneration()) return;
@@ -514,6 +530,29 @@ export function createMedia(host: MediaContext): Media {
       host.requestRender();
     }
   }
+  // A PDF re-exported over the old file at the same path:
+  // its cards sit at the old page's ratio, which is
+  // neither stale fixed size, so the fixed-size heal
+  // leaves them. A card still at the old ratio follows the
+  // new one, keeping its width; a card the user resized
+  // by hand does not match the old ratio, so it stays.
+  function healPdfCardsReplacedPage(path: string, oldDims: { w: number; h: number }, newDims: { w: number; h: number }): void {
+    let changed = false;
+    for (const it of host.getBoard().items) {
+      if (!("PdfCard" in it.kind) || it.kind.PdfCard.path !== path) continue;
+      const oldH = pdfCardHeightForWidth(oldDims.w, oldDims.h, it.size.w);
+      if (Math.abs(it.size.h - oldH) > 2) continue;
+      const correctH = pdfCardHeightForWidth(newDims.w, newDims.h, it.size.w);
+      if (it.size.h !== correctH) {
+        it.size.h = correctH;
+        changed = true;
+      }
+    }
+    if (changed) {
+      host.saveWithoutUndo();
+      host.requestRender();
+    }
+  }
   // Heal a Video card saved at the stale 16:9 height: videos
   // used to land at 360x203 whatever their ratio, so a 4:3
   // clip sat in a 16:9 card. When the poster loads, measure
@@ -574,19 +613,62 @@ export function createMedia(host: MediaContext): Media {
   // never opens the file twice.
   const pdfPageSize = new Map<string, { w: number; h: number }>();
   const pdfPageLoading = new Set<string>();
+  // The file stat the cached PDF entries were built from.
+  // A PDF re-exported over the old file has a new size or
+  // mtime: the cached document, page size, search text and
+  // failure flag are all for the old bytes, so they go.
+  // Only replaced when the stat actually changes, so the
+  // entry's identity is stable across no-change checks.
+  const pdfStats = new Map<string, { size: number; mtimeMs: number }>();
+  function dropPdfCaches(path: string): void {
+    pdfDocs.delete(path);
+    pdfPageSize.delete(path);
+    pdfSearchText.delete(path);
+    pdfFailed.delete(path);
+  }
+  async function ensurePdfFresh(path: string): Promise<void> {
+    let info: { exists: boolean; size: number; mtimeMs: number } | null = null;
+    try {
+      info = await api.checkFile(path);
+    } catch {
+      // A stat failure leaves the caches alone: the load
+      // below fails the same way it always did.
+      return;
+    }
+    if (!info || !info.exists) {
+      dropPdfCaches(path);
+      pdfStats.delete(path);
+      return;
+    }
+    const prev = pdfStats.get(path);
+    if (!prev || prev.size !== info.size || prev.mtimeMs !== info.mtimeMs) {
+      if (prev) dropPdfCaches(path);
+      pdfStats.set(path, { size: info.size, mtimeMs: info.mtimeMs });
+    }
+  }
+  async function refreshPdf(path: string): Promise<void> {
+    await ensurePdfFresh(path);
+  }
   // The first page's size in points, for sizing a PDF card
   // to its page at drop time. Null when the file cannot be
   // read, so the caller falls back to the old default.
   async function probePdfSize(path: string): Promise<{ w: number; h: number } | null> {
-    const cached = pdfPageSize.get(path);
-    if (cached) return cached;
+    // The dims before the load: getPdfDoc drops them when
+    // the file was replaced, and the cards sitting at the
+    // old ratio follow the new one (see below).
+    const oldDims = pdfPageSize.get(path) ?? null;
     try {
       const doc = await getPdfDoc(path);
+      const cached = pdfPageSize.get(path);
+      if (cached) return cached;
       const page = await doc.getPage(1);
       const viewport = page.getViewport({ scale: 1 });
       if (viewport.width <= 0 || viewport.height <= 0) return null;
       const dims = { w: viewport.width, h: viewport.height };
       pdfPageSize.set(path, dims);
+      if (oldDims && (Math.abs(oldDims.w - dims.w) > 1 || Math.abs(oldDims.h - dims.h) > 1)) {
+        healPdfCardsReplacedPage(path, oldDims, dims);
+      }
       return dims;
     } catch {
       return null;
@@ -603,17 +685,14 @@ export function createMedia(host: MediaContext): Media {
   // neither stale size. Called from the PdfCard renderer,
   // like loadPdfPage.
   function loadPdfCardSize(path: string): void {
-    const cached = pdfPageSize.get(path);
-    if (cached) {
-      healPdfCardsWithPage(path, cached.w, cached.h);
-      return;
-    }
+    // One funnel: probePdfSize serves cached dims when the
+    // file is unchanged and re-measures when it was
+    // replaced, so the heal below always sees fresh dims.
     if (pdfPageLoading.has(path)) return;
     pdfPageLoading.add(path);
     void probePdfSize(path).then((dims) => {
       pdfPageLoading.delete(path);
       if (!dims) return;
-      pdfPageSize.set(path, dims);
       healPdfCardsWithPage(path, dims.w, dims.h);
     });
   }
@@ -789,6 +868,7 @@ export function createMedia(host: MediaContext): Media {
     loadFileCardSize,
     loadVideoCardSize,
     probePdfSize,
+    refreshPdf,
     loadPdfCardSize,
     loadLinkCardSize,
     loadAudioDuration,

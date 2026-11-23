@@ -919,6 +919,9 @@ async function init(): Promise<void> {
     // and render it. The board view's prev/next buttons.
     // False when the document is not loaded yet.
     setPdfPage: async (id, path, page) => {
+      // The cached document may be for replaced bytes: the
+      // stat check runs before the flip trusts it.
+      await C.media.refreshPdf(path);
       const docP = C.media.getCachedPdfDoc(path);
       if (!docP) return false;
       const doc = await docP;
