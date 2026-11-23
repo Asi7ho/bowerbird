@@ -2,6 +2,7 @@
 // a pure function of (boardDir, pdfSize, videoSize, modelSize, psdSize, aiSize), so these
 // run in plain vitest on every push and PR.
 import { describe, expect, it } from "vitest";
+import { pdfCardSize } from "../../src/backend/live-import";
 import { welcomeBoard } from "../../src/backend/welcome";
 
 describe("welcomeBoard", () => {
@@ -65,6 +66,15 @@ describe("welcomeBoard", () => {
       format: "ai",
       preview: "/some/dir/welcome-heron-preview.png",
     });
+  });
+
+  it("sizes the PDF card at the sample page ratio", () => {
+    const board = welcomeBoard("/b", 111, 222, 333, 444, 555);
+    const pdf = board.items.find((it) => "PdfCard" in it.kind);
+    // sample.pdf is US Letter, 612x792pt: the card is the
+    // page ratio at 260 wide, not the old 260x96 tile.
+    expect(pdf?.size).toEqual(pdfCardSize(612, 792));
+    expect(pdf?.size).toEqual({ w: 260, h: 361 });
   });
 
   it("groups exactly the labelled pair", () => {
