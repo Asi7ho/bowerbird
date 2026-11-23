@@ -9,14 +9,15 @@ import {
   type Tool,
 } from "./board-state";
 import { isRotatable, membersBounds, normAngle, rotateAngleFor, rotateHandleWorld } from "./board-geometry";
-import { dragPreview, updateDraggedCards, updateLassoPreview, updateLiveStroke, clearLiveStroke, clearShapePreview } from "./board-drag-preview";
+import { dragPreview, updateDraggedCards, updateLassoPreview, clearLiveStroke, clearShapePreview } from "./board-drag-preview";
+import { CONNECTOR_TOOL_ID, ERASER_TOOL_ID, PEN_TOOL_ID, drawKindOf, shapeKindOf, shapeToolId } from "./drawing-tools";
 import { NEUTRAL_PLUGIN_POINTER_EVENT, beginPluginDrag, cancelPluginDrag, endPluginDrag, hasPluginDragCallbacks, movePluginDrag, toPluginPointerEvent } from "./plugin-tool-drag";
 import {
   applyCamera, applyStacking, refreshContentIfVisibleChanged, render, renderSvgOnly, updateResizeHandle, updateSelection,
 } from "./board-render";
 import {
-  Anchor, Pt, ShapeKind,
-  isInlineVideo, proportionalResize, rectFromPoints, splitStrokeByEraser, strokeMaxWidth,
+  Pt,
+  isInlineVideo, proportionalResize,
   zoomCamera,
 } from "../backend/model";
 import { measureNoteCardHeight } from "./text-measure";
@@ -61,39 +62,6 @@ function updateEraserRing(clientX: number, clientY: number, show: boolean): void
   ring.style.height = `${d}px`;
   ring.style.left = `${clientX - d / 2}px`;
   ring.style.top = `${clientY - d / 2}px`;
-}
-// Erase the ink the eraser touches at this point, the
-// way a pen draws: only the part under the eraser goes,
-// and a stroke it passes through breaks into the pieces
-// either side. Returns true when at least one stroke
-// changed. The board is not saved here: the drag saves
-// once, on mouseup, so a whole sweep is one undo step —
-// the new pieces are added silent, like the removed
-// stroke was, and the board re-renders so the split
-// pieces (cards now, not SVG paths) show at once.
-function eraseAt(world: Pt): boolean {
-  const ids = S.api.board.strokesNear(world, ERASER_RADIUS);
-  if (ids.length === 0) return false;
-  let changed = false;
-  for (const id of ids) {
-    const it = S.api.board.getItem(id);
-    if (!it || !("Stroke" in it.kind)) continue;
-    const st = it.kind.Stroke;
-    const runs = splitStrokeByEraser(st.points, st.pressures, world, ERASER_RADIUS, strokeMaxWidth(st) / 2);
-    S.api.board.removeItems([id]);
-    for (const run of runs) {
-      const xs = run.points.map((p) => p.x), ys = run.points.map((p) => p.y);
-      const pos = { x: Math.min(...xs), y: Math.min(...ys) };
-      const size = { w: Math.max(1, Math.max(...xs) - pos.x), h: Math.max(1, Math.max(...ys) - pos.y) };
-      S.api.board.addItemSilent(
-        { Stroke: { points: run.points, color: st.color, width: st.width, marker: st.marker, ...(run.pressures && run.pressures.length > 0 ? { pressures: run.pressures } : {}), ...(st.pencil ? { pencil: true } : {}) } },
-        pos, size,
-      );
-    }
-    changed = true;
-  }
-  if (changed) render();
-  return changed;
 }
 
 // ---------------------------------------------------------------- editing
@@ -306,11 +274,11 @@ export function setTool(t: Tool): void {
   // The draw tools share one toolbar button and one
   // shortcut (P): remember the draw tool last chosen, so
   // P activates that one instead of always the pen.
-  if (t === "pen" || t === "pencil" || t === "highlighter" || t === "eraser") S.lastDrawTool = t;
+  if (drawKindOf(t) !== null) S.lastDrawTool = t;
   // The geometry shapes share one toolbar button and one
   // shortcut (R): remember the shape last chosen, so R
   // activates that one instead of always the rectangle.
-  if (isShapeTool(t)) S.lastShapeTool = t;
+  if (shapeKindOf(t) !== null) S.lastShapeTool = t;
   // Lasso mode belongs to Select only: leaving Select
   // turns it off, and returning to Select restores the
   // selection mode last chosen (select or lasso) — so V
@@ -532,45 +500,8 @@ export function attachBoardListeners(): void {
       return;
     }
     if (S.spaceDown) { S.drag = { kind: "pan", last: winPt }; return; }
-    if (isShapeTool(S.tool)) {
-      S.drag = { kind: "shape", shape: S.tool as ShapeKind, start: world, current: world };
-      return;
-    }
-    if (S.tool === "pen" || S.tool === "pencil" || S.tool === "highlighter") {
-      // A stylus records its pressure per point, so the
-      // stroke can thicken and thin with the press; a mouse
-      // or finger records none, and draws a uniform stroke.
-      // The pencil draws thinner than the pen; the
-      // highlighter is a wide translucent marker, so it
-      // records no pressure and draws uniform.
-      const isHighlighter = S.tool === "highlighter";
-      S.drag = {
-        kind: "stroke",
-        points: [world],
-        pressures: e.pointerType === "pen" && !isHighlighter ? [e.pressure] : [],
-        width: isHighlighter ? 12 : S.tool === "pencil" ? 2 : 3,
-        marker: isHighlighter,
-        // The pencil is a graphite texture, not just a
-        // thinner pen: the flag travels with the stroke so
-        // it keeps its texture through erasing and reloads.
-        pencil: S.tool === "pencil",
-      };
-      return;
-    }
     if (S.tool === "select" && S.lassoMode) {
       S.drag = { kind: "lasso", points: [world] };
-      return;
-    }
-    if (S.tool === "eraser") {
-      S.drag = { kind: "erase", erased: false };
-      if (eraseAt(world)) S.drag.erased = true;
-      return;
-    }
-    if (S.tool === "connector") {
-      const hit = S.api.board.hitTest(world);
-      const hitItem = hit !== null ? S.api.board.getItem(hit) : null;
-      const anchorable = hitItem && !("Stroke" in hitItem.kind) && !("Connector" in hitItem.kind);
-      S.drag = { kind: "connector", from: hitItem && anchorable ? { Item: hitItem.id } : { Point: world }, current: world };
       return;
     }
     // Select tool.
@@ -755,13 +686,6 @@ export function attachBoardListeners(): void {
     });
 }
 
-// Whether a tool id is a shape kind, from the shape table
-// the API hands out. The toolbar's shape picker and this
-// drag check both read the same table.
-export function isShapeTool(t: string): boolean {
-  return S.api.shapes.list().some((s) => s.kind === t);
-}
-
 function openExternal(target: string): void {
   S.api.files.openExternal(target).catch((e) => S.api.ui.toast(`Could not open ${target}: ${String(e)}`));
 }
@@ -792,9 +716,9 @@ export function attachWindowListeners(): void {
           const selected = S.api.board.getSelected();
           if (S.api.ui.isSettingsOpen() || S.editingId !== null) {
             S.boardEl.style.cursor = "default";
-          } else if (S.tool === "pen" || S.tool === "pencil" || S.tool === "highlighter" || S.tool === "connector" || isShapeTool(S.tool) || S.tool.startsWith("plugin:") || (S.tool === "select" && S.lassoMode)) {
+          } else if (S.tool.startsWith("plugin:") || (S.tool === "select" && S.lassoMode)) {
             S.boardEl.style.cursor = "crosshair";
-          } else if (S.tool === "eraser") {
+          } else if (S.tool === ERASER_TOOL_ID) {
             // The ring is the cursor while erasing.
             S.boardEl.style.cursor = "none";
           } else if (S.spaceDown) {
@@ -815,16 +739,20 @@ export function attachWindowListeners(): void {
       // not lag a frame. It shows only over the board itself,
       // never over the toolbar, panels, title bar or settings.
       const overBoard = !(e.target as HTMLElement).closest("#toolbar, #settings-backdrop, #plugin-panels, #title-bar, #plugin-overlays, #plugin-view, input, textarea, select");
-      const showRing = S.tool === "eraser" && overBoard && !S.api.ui.isSettingsOpen() && S.editingId === null && S.api.view.getView() === "board";
+      const showRing = S.tool === ERASER_TOOL_ID && overBoard && !S.api.ui.isSettingsOpen() && S.editingId === null && S.api.view.getView() === "board";
       updateEraserRing(e.clientX, e.clientY, showRing);
       return;
     }
-    S.boardEl.style.cursor = S.drag.kind === "resize" ? "nwse-resize" : S.drag.kind === "rotate" ? "grabbing" : S.drag.kind === "pan" ? "grabbing" : S.drag.kind === "move" ? "move" : S.drag.kind === "erase" ? "none" : "default";
+    S.boardEl.style.cursor = S.drag.kind === "resize" ? "nwse-resize" : S.drag.kind === "rotate" ? "grabbing" : S.drag.kind === "pan" ? "grabbing" : S.drag.kind === "move" ? "move" : (S.drag.kind === "plugin" && S.drag.fullId === ERASER_TOOL_ID) ? "none" : "default";
     if (S.drag.kind === "plugin") {
-      const pt = S.api.ui.getToolDef(S.drag.fullId);
+      const fullId = S.drag.fullId;
+      const pt = S.api.ui.getToolDef(fullId);
       if (pt) {
         try { S.drag = movePluginDrag(pt, S.drag, world, toPluginPointerEvent(e)); } catch (err) { S.api.ui.toast(`Plugin tool failed: ${String(err)}`); }
       }
+      // The ring is the eraser's cursor, so it follows the
+      // pointer through the drag, not just on hover.
+      if (fullId === ERASER_TOOL_ID) updateEraserRing(e.clientX, e.clientY, true);
     } else if (S.drag.kind === "pan") {
       const cam = S.api.view.getCamera();
       S.api.view.setCameraSilent({
@@ -859,64 +787,12 @@ export function attachWindowListeners(): void {
       if (Math.hypot(world.x - S.drag.startWorld.x, world.y - S.drag.startWorld.y) > 2) S.drag.moved = true;
       updateDraggedCards([S.drag.id]);
       updateResizeHandle();
-    } else if (S.drag.kind === "stroke") {
-      const cam = S.api.view.getCamera();
-      const last = S.drag.points[S.drag.points.length - 1];
-      if (Math.hypot(world.x - last.x, world.y - last.y) > 2 / cam.zoom) {
-        S.drag.points.push(world);
-        if (e.pointerType === "pen" && !S.drag.marker) S.drag.pressures.push(e.pressure);
-        updateLiveStroke(S.drag.points, S.drag.pressures, S.drag.width, S.drag.marker, S.drag.pencil);
-      }
     } else if (S.drag.kind === "lasso") {
       const cam = S.api.view.getCamera();
       const last = S.drag.points[S.drag.points.length - 1];
       if (Math.hypot(world.x - last.x, world.y - last.y) > 2 / cam.zoom) {
         S.drag.points.push(world);
         updateLassoPreview(S.drag.points);
-      }
-    } else if (S.drag.kind === "erase") {
-      if (eraseAt(world)) S.drag.erased = true;
-      updateEraserRing(e.clientX, e.clientY, true);
-    } else if (S.drag.kind === "connector") {
-      S.drag.current = world;
-      const a = S.api.geometry.anchorPoint(S.drag.from);
-      if (a) {
-        const el = dragPreview("connector-preview", "line");
-        el.setAttribute("x1", String(a.x));
-        el.setAttribute("y1", String(a.y));
-        el.setAttribute("x2", String(world.x));
-        el.setAttribute("y2", String(world.y));
-        el.setAttribute("stroke", S.api.pen.getColor());
-        el.setAttribute("stroke-width", "2");
-      }
-    } else if (S.drag.kind === "shape") {
-      S.drag.current = world;
-      const penColor = S.api.pen.getColor();
-      const outline = S.api.shapes.getOutline();
-      const x0 = Math.min(S.drag.start.x, world.x), y0 = Math.min(S.drag.start.y, world.y);
-      const w = Math.abs(world.x - S.drag.start.x), h = Math.abs(world.y - S.drag.start.y);
-      // An outline shape previews as a stroke, not a fill.
-      const fillAttr = outline ? "none" : penColor;
-      const strokeAttr = outline ? penColor : "none";
-      if (S.drag.shape === "rect") {
-        const el = dragPreview("shape-preview", "rect", true);
-        el.setAttribute("x", String(x0)); el.setAttribute("y", String(y0));
-        el.setAttribute("width", String(w)); el.setAttribute("height", String(h));
-        el.setAttribute("rx", "12");
-        el.setAttribute("fill", fillAttr); el.setAttribute("fill-opacity", outline ? "1" : "0.85");
-        el.setAttribute("stroke", strokeAttr); el.setAttribute("stroke-width", outline ? "4" : "0");
-      } else if (S.drag.shape === "ellipse") {
-        const el = dragPreview("shape-preview", "ellipse", true);
-        el.setAttribute("cx", String(x0 + w / 2)); el.setAttribute("cy", String(y0 + h / 2));
-        el.setAttribute("rx", String(w / 2)); el.setAttribute("ry", String(h / 2));
-        el.setAttribute("fill", fillAttr); el.setAttribute("fill-opacity", outline ? "1" : "0.85");
-        el.setAttribute("stroke", strokeAttr); el.setAttribute("stroke-width", outline ? "4" : "0");
-      } else {
-        const el = dragPreview("shape-preview", "polygon", true);
-        el.setAttribute("points", S.api.shapes.previewPoints(S.drag.shape, x0, y0, w, h));
-        el.setAttribute("fill", fillAttr); el.setAttribute("fill-opacity", outline ? "1" : "0.85");
-        el.setAttribute("stroke", strokeAttr); el.setAttribute("stroke-width", outline ? "4" : "0");
-        el.setAttribute("stroke-linejoin", "round");
       }
     } else if (S.drag.kind === "rotate") {
       // The live item: this only reads it (centre, size),
@@ -973,14 +849,7 @@ export function attachWindowListeners(): void {
     const world = toWorld(boardPoint(e.clientX, e.clientY));
     const d = S.drag;
     S.drag = null;
-    if (d.kind === "stroke") {
-      if (d.points.length >= 2) {
-        const xs = d.points.map((p) => p.x), ys = d.points.map((p) => p.y);
-        const pos = { x: Math.min(...xs), y: Math.min(...ys) };
-        const size = { w: Math.max(1, Math.max(...xs) - pos.x), h: Math.max(1, Math.max(...ys) - pos.y) };
-        S.api.board.addItem({ Stroke: { points: d.points, color: S.api.pen.getColor(), width: d.width, marker: d.marker, ...(d.pressures.length > 0 ? { pressures: d.pressures } : {}), ...(d.pencil ? { pencil: true } : {}) } }, pos, size);
-      }
-    } else if (d.kind === "lasso") {
+    if (d.kind === "lasso") {
       // A click, not a loop: select what is under the cursor,
       // the way the select tool does. A real loop selects
       // everything it touches. Either way it is only a
@@ -992,36 +861,6 @@ export function attachWindowListeners(): void {
         S.api.board.setSelected(hit !== null ? [hit] : []);
       } else {
         S.api.board.setSelected(S.api.board.lassoSelect(d.points));
-      }
-    } else if (d.kind === "erase") {
-      // A sweep that erased anything is one undo step. A
-      // click that erased nothing leaves no step behind.
-      if (d.erased) S.api.board.save();
-    } else if (d.kind === "connector") {
-      const to = S.api.board.hitTest(world);
-      const toItem = to !== null ? S.api.board.getItem(to) : null;
-      const toAnchorable = toItem && !("Stroke" in toItem.kind) && !("Connector" in toItem.kind);
-      const toAnchor: Anchor = toItem && toAnchorable ? { Item: toItem.id } : { Point: world };
-      const a = S.api.geometry.anchorPoint(d.from);
-      const degenerate = a !== null && "Point" in toAnchor && Math.hypot(a.x - toAnchor.Point.x, a.y - toAnchor.Point.y) < 4;
-      // A connector from a card to itself is a click, not a connection:
-      // it renders as a 1x1 invisible item that can never be selected
-      // or deleted except by undo, and it pollutes the board JSON.
-      const selfConnector = "Item" in d.from && "Item" in toAnchor && d.from.Item === toAnchor.Item;
-      if (!degenerate && !selfConnector) {
-        const aPt = a ?? { x: 0, y: 0 };
-        // toAnchor is an Item exactly when toItem exists, so
-        // its centre comes from toItem — no second lookup.
-        const bPt = "Point" in toAnchor ? toAnchor.Point : (toItem ? S.api.geometry.centre(toItem) : { x: 0, y: 0 });
-        const { pos, size } = rectFromPoints(aPt, bPt);
-        S.api.board.addItem({ Connector: { from: d.from, to: toAnchor, color: S.api.pen.getColor() } }, pos, size);
-      }
-    } else if (d.kind === "shape") {
-      const w = Math.abs(world.x - d.start.x), h = Math.abs(world.y - d.start.y);
-      if (w >= 10 && h >= 10) {
-        const pos = { x: Math.min(d.start.x, world.x), y: Math.min(d.start.y, world.y) };
-        const outline = S.api.shapes.getOutline();
-        S.api.board.addItem({ Shape: { shape: d.shape, fill: S.api.pen.getColor(), ...(outline ? { outline: true } : {}) } }, pos, { w, h });
       }
     } else if (d.kind === "rotate") {
       // Apply the final point too: a drag's last mousemove
@@ -1085,7 +924,7 @@ export function attachWindowListeners(): void {
     // their final geometry). A move/resize that never moved was a
     // click, not a drag: rebuilding here would destroy the card
     // button just pressed, so its click would never fire.
-    if (d.kind === "stroke" || d.kind === "connector" || d.kind === "marquee" || d.kind === "shape" || d.kind === "lasso" || (d.kind === "erase" && d.erased) || (d.kind === "rotate" && d.moved)) {
+    if (d.kind === "marquee" || d.kind === "lasso" || (d.kind === "rotate" && d.moved)) {
       render();
     } else if ((d.kind === "move" || d.kind === "resize") && d.moved) {
       render();
@@ -1422,16 +1261,16 @@ export function attachWindowListeners(): void {
     // P activates the draw tool last chosen, not always the
     // pen: a pencil stays a pencil. Before any draw tool is
     // used it is the pen, the draw button's default.
-    else if (matches(e, "pen")) setTool(S.lastDrawTool ?? "pen");
-    else if (matches(e, "connector")) setTool("connector");
+    else if (matches(e, "pen")) setTool(S.lastDrawTool ?? PEN_TOOL_ID);
+    else if (matches(e, "connector")) setTool(CONNECTOR_TOOL_ID);
     // R is the one geometry shortcut: it activates the shape
     // last chosen, not always the rectangle. Before any shape
     // is used it is the rectangle, the shape button's default.
     // There is no E shortcut any more: it used to switch to
     // the ellipse, which the single R shortcut now covers by
     // remembering it.
-    else if (matches(e, "shape")) setTool(S.lastShapeTool ?? "rect");
-    else if (matches(e, "eraser")) setTool("eraser");
+    else if (matches(e, "shape")) setTool(S.lastShapeTool ?? shapeToolId("rect"));
+    else if (matches(e, "eraser")) setTool(ERASER_TOOL_ID);
     else if (matches(e, "rotate-left")) rotateSelected(-15);
     else if (matches(e, "rotate-right")) rotateSelected(15);
     else if (matches(e, "group")) {

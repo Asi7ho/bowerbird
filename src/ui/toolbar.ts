@@ -4,6 +4,7 @@
 
 import type { PluginContext, PluginManifest } from "../plugins/host";
 import { placeNoteBar } from "./overlay-placement";
+import { CONNECTOR_TOOL_ID, drawKindOf, drawToolId, isDrawToolId, isShapeToolId, shapeKindOf, shapeToolId, type DrawKind } from "./drawing-tools";
 
 export const manifest: PluginManifest = {
   apiVersion: "2",
@@ -105,10 +106,10 @@ export function activate(api: PluginContext): void {
     pickerOpen = "draw";
     colorBarOpen = false;
     const cur = api.ui.getTool();
-    const isDraw = DRAW_TOOLS.some((d) => d.id === cur);
-    api.ui.setTool(isDraw ? cur : drawBtn.dataset.draw ?? "pen");
+    const isDraw = isDrawToolId(cur);
+    api.ui.setTool(isDraw ? cur : drawToolId((drawBtn.dataset.draw as DrawKind | undefined) ?? "pen"));
   });
-  const connectorBtn = toolButton("tool-connector", "Arrow (A)", "Arrow", ICONS.connector, () => api.ui.setTool("connector"));
+  const connectorBtn = toolButton("tool-connector", "Arrow (A)", "Arrow", ICONS.connector, () => api.ui.setTool(CONNECTOR_TOOL_ID));
   // The shape button shows the shape last chosen, and the
   // flyout beside the toolbar chooses between all shapes.
   // Its icon and title follow the current shape.
@@ -117,8 +118,8 @@ export function activate(api: PluginContext): void {
     const cur = api.ui.getTool();
     // Clicking the shape button (re)activates the last shape.
     const shapes = api.shapes.list();
-    const isShape = shapes.some((s) => s.kind === cur);
-    api.ui.setTool(isShape ? cur : shapes[0]?.kind ?? "rect");
+    const isShape = isShapeToolId(cur);
+    api.ui.setTool(isShape ? cur : shapeToolId(shapes[0]?.kind ?? "rect"));
   });
 
   // The plugin system adds plugin tool buttons to this
@@ -215,6 +216,8 @@ export function activate(api: PluginContext): void {
   // The first selected text note, or null when none is
   // selected. The note-colours bar shows only then, and
   // sits next to this note.
+  // The buttons store the short kind (pencil, triangle) in
+  // their datasets; the tool itself is the plugin's full id.
   function selectedNote(): { id: number; bg: string } | null {
     const selected = api.board.getSelected();
     for (const id of selected) {
@@ -222,10 +225,6 @@ export function activate(api: PluginContext): void {
       if (it && "Text" in it.kind) return { id, bg: (it.kind as { Text: { bg?: string } }).Text.bg ?? "#FFFFFF" };
     }
     return null;
-  }
-
-  function isShapeTool(t: string): boolean {
-    return api.shapes.list().some((s) => s.kind === t);
   }
 
   // Whether the colour bar is open. It opens only when
@@ -316,13 +315,13 @@ export function activate(api: PluginContext): void {
       }
     }
 
-    setActive(connectorBtn, tool === "connector");
+    setActive(connectorBtn, tool === CONNECTOR_TOOL_ID);
 
     // The draw button shows the draw tool last chosen.
-    const isDraw = DRAW_TOOLS.some((d) => d.id === tool);
+    const isDraw = isDrawToolId(tool);
     setActive(drawBtn, isDraw);
     const drawTarget = isDraw
-      ? DRAW_TOOLS.find((d) => d.id === tool)
+      ? DRAW_TOOLS.find((d) => drawToolId(d.id) === tool)
       : (!drawBtn.dataset.draw ? DRAW_TOOLS.find((d) => d.id === "pen") : undefined);
     if (drawTarget && drawBtn.dataset.draw !== drawTarget.id) {
       drawBtn.dataset.draw = drawTarget.id;
@@ -344,13 +343,13 @@ export function activate(api: PluginContext): void {
         b.title = d.label;
         b.setAttribute("aria-label", d.label.replace(/ \(.*\)$/, ""));
         b.innerHTML = d.icon;
-        b.addEventListener("click", () => { pickerOpen = null; api.ui.setTool(d.id); b.blur(); });
+        b.addEventListener("click", () => { pickerOpen = null; api.ui.setTool(drawToolId(d.id)); b.blur(); });
         drawPicker.appendChild(b);
       }
     }
     if (showDraw) {
       for (const child of Array.from(drawPicker.children)) {
-        (child as HTMLButtonElement).classList.toggle("active", (child as HTMLButtonElement).dataset.draw === tool);
+        (child as HTMLButtonElement).classList.toggle("active", (child as HTMLButtonElement).dataset.draw === drawKindOf(tool));
       }
     }
 
@@ -358,7 +357,7 @@ export function activate(api: PluginContext): void {
     colorSwatch.style.setProperty("--swatch-color", penColor);
     colorSwatch.classList.toggle("active", colorBarOpen);
 
-    const isShape = isShapeTool(tool);
+    const isShape = isShapeToolId(tool);
     setActive(shapeBtn, isShape);
     // The button shows the shape last chosen. Before any
     // shape is used there is no last shape, so it starts
@@ -366,7 +365,7 @@ export function activate(api: PluginContext): void {
     // Without this it kept its initial select icon, a
     // duplicate of Select.
     const target = isShape
-      ? api.shapes.list().find((s) => s.kind === tool)
+      ? api.shapes.list().find((s) => shapeToolId(s.kind) === tool)
       : (!shapeBtn.dataset.shape ? api.shapes.list()[0] : undefined);
     if (target && shapeBtn.dataset.shape !== target.kind) {
       shapeBtn.dataset.shape = target.kind;
@@ -396,7 +395,7 @@ export function activate(api: PluginContext): void {
           b.title = meta.key ? `${meta.label} ${mode.id} (${meta.key})` : `${meta.label} ${mode.id}`;
           b.setAttribute("aria-label", `${meta.label} ${mode.id}`);
           b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${meta.svg}</svg>`;
-          b.addEventListener("click", () => { pickerOpen = null; api.shapes.setOutline(mode.outline); api.ui.setTool(meta.kind); b.blur(); });
+          b.addEventListener("click", () => { pickerOpen = null; api.shapes.setOutline(mode.outline); api.ui.setTool(shapeToolId(meta.kind)); b.blur(); });
           column.appendChild(b);
         }
         shapePicker.appendChild(column);
@@ -404,7 +403,7 @@ export function activate(api: PluginContext): void {
     }
     if (showShape) {
       for (const btn of Array.from(shapePicker.querySelectorAll<HTMLButtonElement>(".shape-option"))) {
-        btn.classList.toggle("active", btn.dataset.shape === tool && (btn.dataset.mode === "outline") === outline);
+        btn.classList.toggle("active", btn.dataset.shape === shapeKindOf(tool) && (btn.dataset.mode === "outline") === outline);
       }
     }
 
