@@ -107,9 +107,6 @@ function moveSelection(delta: number): void {
 function openPalette(): void {
   const api = apiRef;
   if (!api || isOpen || !root || !input) return;
-  // Opening from Settings' Run button must not leave the palette
-  // hidden behind the Settings sheet: close Settings first.
-  if (api.ui.isSettingsOpen()) api.ui.closeSettings();
   entries = buildEntries(api);
   selectedIdx = 0;
   isOpen = true;
