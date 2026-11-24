@@ -46,6 +46,7 @@ import {
   smoothStrokeSamples,
   splitStrokeByEraser,
   strokeMaxWidth,
+  strokeOpacity,
   strokePressuresVary,
   strokesWithin,
   toggleTaskLine,
@@ -102,6 +103,15 @@ describe("stylus pressure", () => {
     expect(strokeMaxWidth({ width: 3 })).toBe(3);
     expect(strokeMaxWidth({ width: 3, pressures: [] })).toBe(3);
     expect(strokeMaxWidth({ width: 3, pressures: [0.1, 0.5, 1] })).toBe(6);
+  });
+  it("strokeOpacity is 1 without an opacity, and multiplies with the marker's 0.45", () => {
+    expect(strokeOpacity({ marker: false })).toBe(1);
+    expect(strokeOpacity({ marker: true })).toBe(0.45);
+    expect(strokeOpacity({ opacity: 50, marker: false })).toBe(0.5);
+    expect(strokeOpacity({ opacity: 50, marker: true })).toBe(0.225);
+    expect(strokeOpacity({ opacity: 100, marker: false })).toBe(1);
+    expect(strokeOpacity({ opacity: 30, marker: true })).toBe(0.135);
+    expect(strokeOpacity({ opacity: 0, marker: false })).toBe(0);
   });
   it("strokePressuresVary needs a real spread, not jitter", () => {
     expect(strokePressuresVary({})).toBe(false);
@@ -711,6 +721,32 @@ describe("colour data patches", () => {
   it("accepts { color } on a stroke and { hex } on a swatch, normalised", () => {
     expect(colourDataPatch(stroke(1), { color: "#f00" })).toEqual({ color: "#FF0000" });
     expect(colourDataPatch(swatch(2), { hex: "#00ff00" })).toEqual({ hex: "#00FF00" });
+  });
+  it("accepts { opacity } and { color, opacity } on a stroke, normalised and rounded", () => {
+    expect(colourDataPatch(stroke(1), { opacity: 50 })).toEqual({ opacity: 50 });
+    expect(colourDataPatch(stroke(1), { color: "#f00", opacity: 50.6 })).toEqual({ color: "#FF0000", opacity: 51 });
+    expect(colourDataPatch(stroke(1), { opacity: 0 })).toEqual({ opacity: 0 });
+    expect(colourDataPatch(stroke(1), { opacity: 100 })).toEqual({ opacity: 100 });
+  });
+  it("refuses a bad opacity, an empty patch, or opacity on a swatch", () => {
+    expect(colourDataPatch(stroke(1), { opacity: 150 })).toBeNull();
+    expect(colourDataPatch(stroke(1), { opacity: -1 })).toBeNull();
+    expect(colourDataPatch(stroke(1), { opacity: "50" })).toBeNull();
+    expect(colourDataPatch(stroke(1), { opacity: Number.NaN })).toBeNull();
+    expect(colourDataPatch(stroke(1), { color: "#FF0000", opacity: 150 })).toBeNull();
+    expect(colourDataPatch(stroke(1), {})).toBeNull();
+    expect(colourDataPatch(swatch(2), { opacity: 50 })).toBeNull();
+    expect(colourDataPatch(textCard(3, 0, 0), { opacity: 50 })).toBeNull();
+  });
+  it("applyColourDataPatch applies opacity alone and with a colour, leaving the other field alone", () => {
+    const s = stroke(1);
+    expect(applyColourDataPatch(s, { opacity: 50 })).toBe(true);
+    expect((s.kind as { Stroke: { color: string; opacity?: number } }).Stroke.opacity).toBe(50);
+    expect((s.kind as { Stroke: { color: string } }).Stroke.color).toBe("#1A1A1A");
+    expect(applyColourDataPatch(s, { color: "#0000ff", opacity: 100 })).toBe(true);
+    expect((s.kind as { Stroke: { color: string; opacity?: number } }).Stroke).toEqual(
+      expect.objectContaining({ color: "#0000FF", opacity: 100 }),
+    );
   });
   it("refuses any other key, a bad hex, or a non-colour card", () => {
     expect(colourDataPatch(stroke(1), { width: 5 })).toBeNull();

@@ -197,6 +197,7 @@ describe("applyColour", () => {
   function makeApi(selected: number[], items: unknown[], updateResult = true) {
     const calls: unknown[] = [];
     let pen: string | null = null;
+    let penOpacity: number | null = null;
     let toast: string | null = null;
     const api = {
       board: {
@@ -204,10 +205,13 @@ describe("applyColour", () => {
         getItems: () => items,
         updateItems: (patches: unknown) => { calls.push(patches); return updateResult; },
       },
-      pen: { setColor: (hex: string) => { pen = hex; return true; } },
+      pen: {
+        setColor: (hex: string) => { pen = hex; return true; },
+        setOpacity: (opacity: number) => { penOpacity = opacity; return true; },
+      },
       ui: { toast: (msg: string) => { toast = msg; } },
     };
-    return { api: api as unknown as PluginContext, calls, pen: () => pen, toast: () => toast };
+    return { api: api as unknown as PluginContext, calls, pen: () => pen, penOpacity: () => penOpacity, toast: () => toast };
   }
   it("sets the pen when nothing colourable is selected", () => {
     const f = makeApi([3], [textItem(3)]);
@@ -216,11 +220,31 @@ describe("applyColour", () => {
     expect(f.calls).toEqual([]);
     expect(f.toast()).toBeNull();
   });
+  it("sets the pen colour and opacity when nothing colourable is selected", () => {
+    const f = makeApi([3], [textItem(3)]);
+    applyColour(f.api, "#FF0000", 50);
+    expect(f.pen()).toBe("#FF0000");
+    expect(f.penOpacity()).toBe(50);
+    expect(f.calls).toEqual([]);
+  });
+  it("leaves the pen opacity alone when no opacity is passed", () => {
+    const f = makeApi([3], [textItem(3)]);
+    applyColour(f.api, "#FF0000");
+    expect(f.penOpacity()).toBeNull();
+  });
   it("recolours selected strokes and swatches in one call", () => {
     const f = makeApi([1, 2, 3], [strokeItem(1), swatchItem(2), textItem(3)]);
     applyColour(f.api, "#00FF00");
     expect(f.pen()).toBeNull();
     expect(f.calls).toEqual([[{ id: 1, data: { color: "#00FF00" } }, { id: 2, data: { hex: "#00FF00" } }]]);
+    expect(f.toast()).toBeNull();
+  });
+  it("recolours a selected stroke with colour and opacity, and a swatch with the colour only", () => {
+    const f = makeApi([1, 2, 3], [strokeItem(1), swatchItem(2), textItem(3)]);
+    applyColour(f.api, "#00FF00", 50);
+    expect(f.pen()).toBeNull();
+    expect(f.penOpacity()).toBeNull();
+    expect(f.calls).toEqual([[{ id: 1, data: { color: "#00FF00", opacity: 50 } }, { id: 2, data: { hex: "#00FF00" } }]]);
     expect(f.toast()).toBeNull();
   });
   it("toasts when the recolour is refused", () => {
