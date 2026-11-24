@@ -533,7 +533,13 @@ async function main() {
     });
     page = await app.firstWindow();
 
+    // A subset for diagnosing one cluster without running
+    // the whole suite: E2E_FILTER is a comma-separated list
+    // of name fragments; only matching checks run, and
+    // skipped ones are not counted. Unset runs everything.
+    const filter = (process.env.E2E_FILTER ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
     const check = async (name, fn) => {
+      if (filter.length > 0 && !filter.some((f) => name.toLowerCase().includes(f))) return;
       try {
         await fn();
         results.push({ name, ok: true });
