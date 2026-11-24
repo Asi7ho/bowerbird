@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import type { PluginContext } from "bowerbird-plugin-api";
 import { applyColour } from "../../plugins/colours/apply";
-import { hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, normaliseHex, rgbToHex, HARMONY_NAMES, harmoniesFor } from "../../plugins/colours/color";
+import { hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, isNearDuplicate, colourDistance, normaliseHex, rgbToHex, HARMONY_NAMES, harmoniesFor } from "../../plugins/colours/color";
 import {
   addColour,
   createPalette,
@@ -167,8 +167,12 @@ describe("recent colours", () => {
     expect(parseRecent("no")).toBeNull();
     expect(parseRecent(["red"])).toBeNull();
     expect(parseRecent([1])).toBeNull();
-    const eleven = Array.from({ length: 11 }, (_, i) => `#${String(i).padStart(2, "0")}0000`);
+    const eleven = Array.from({ length: 11 }, (_, i) => hslToHex(i * 30, 100, 50));
     expect(parseRecent(eleven)).toHaveLength(MAX_RECENT);
+  });
+  it("parseRecent collapses near-duplicates, keeping the first of each cluster", () => {
+    expect(parseRecent(["#007BFF", "#007AFF", "#FF0000"])).toEqual(["#007BFF", "#FF0000"]);
+    expect(parseRecent(["#007BFF", "#0A5CFF"])).toEqual(["#007BFF", "#0A5CFF"]);
   });
   it("recordRecent puts the colour first, moves a repeat to the front, and caps at ten", () => {
     const before = ["#FF0000", "#00FF00"];
@@ -176,11 +180,21 @@ describe("recent colours", () => {
     expect(recordRecent(before, "#00ff00")).toEqual(["#00FF00", "#FF0000"]);
     expect(recordRecent(before, "red")).toBe(before);
     expect(before).toEqual(["#FF0000", "#00FF00"]);
-    const ten = Array.from({ length: 10 }, (_, i) => `#${(i + 1).toString(16).padStart(2, "0")}0000`.toUpperCase());
+    const ten = Array.from({ length: 10 }, (_, i) => hslToHex(i * 30, 100, 50));
     const capped = recordRecent(ten, "#FFFFFF");
     expect(capped).toHaveLength(10);
     expect(capped[0]).toBe("#FFFFFF");
     expect(capped).not.toContain(ten[9]);
+  });
+  it("recordRecent drops a near-duplicate of the new colour, and keeps visibly different ones", () => {
+    expect(recordRecent(["#007AFF", "#FF0000"], "#007BFF")).toEqual(["#007BFF", "#FF0000"]);
+    expect(recordRecent(["#0A5CFF", "#FF0000"], "#007BFF")).toEqual(["#007BFF", "#0A5CFF", "#FF0000"]);
+  });
+  it("colourDistance scores look-alikes low and distinct colours high", () => {
+    expect(colourDistance("#007BFF", "#007AFF")).toBeLessThan(15);
+    expect(colourDistance("#007BFF", "#0A5CFF")).toBeGreaterThan(15);
+    expect(isNearDuplicate("#007BFF", "#007AFF")).toBe(true);
+    expect(isNearDuplicate("#007BFF", "#FF0000")).toBe(false);
   });
 });
 

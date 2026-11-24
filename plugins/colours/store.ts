@@ -3,7 +3,7 @@
 // name and a list of hex colours; the store is the list of
 // palettes. Every function returns a new store and leaves
 // its input alone.
-import { normaliseHex } from "./color.js";
+import { isNearDuplicate, normaliseHex } from "./color.js";
 
 export interface Palette {
   name: string;
@@ -110,8 +110,9 @@ export const MAX_RECENT = 10;
 
 // The shape read back from plugin storage: the recent
 // list itself. Anything else is an empty list, never a
-// crash. Colours are normalised and deduplicated on the
-// way in, so old mixed-case hexes come out uniform.
+// crash. Colours are normalised and near-duplicates
+// collapsed on the way in, so a list stored before the
+// near-duplicate rule still reads as distinct colours.
 export function parseRecent(value: unknown): string[] | null {
   if (!Array.isArray(value)) return null;
   const recent: string[] = [];
@@ -119,16 +120,17 @@ export function parseRecent(value: unknown): string[] | null {
     if (typeof c !== "string") return null;
     const hex = normaliseHex(c);
     if (!hex) return null;
-    if (!recent.includes(hex)) recent.push(hex);
+    if (!recent.some((kept) => isNearDuplicate(kept, hex))) recent.push(hex);
   }
   return recent.slice(0, MAX_RECENT);
 }
 
 // Record a colour as the most recent: to the front, any
-// older copy removed, capped at ten. A bad hex leaves the
-// list alone, and the input is never mutated.
+// older copy — exact or near-duplicate — removed, capped
+// at ten. A bad hex leaves the list alone, and the input
+// is never mutated.
 export function recordRecent(recent: string[], hex: string): string[] {
   const colour = normaliseHex(hex);
   if (!colour) return recent;
-  return [colour, ...recent.filter((c) => c !== colour)].slice(0, MAX_RECENT);
+  return [colour, ...recent.filter((c) => !isNearDuplicate(c, colour))].slice(0, MAX_RECENT);
 }

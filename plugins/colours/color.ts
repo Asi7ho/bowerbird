@@ -95,8 +95,7 @@ export function hsvToHex(h: number, s: number, v: number): string {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-export function hexToHsl(hex: string): { h: number; s: number; l: number } {
-  const r = parseInt(hex.slice(1, 3), 16) / 255;
+export function hexToHsl(hex: string): { h: number; s: number; l: number } {  const r = parseInt(hex.slice(1, 3), 16) / 255;
   const g = parseInt(hex.slice(3, 5), 16) / 255;
   const b = parseInt(hex.slice(5, 7), 16) / 255;
   const max = Math.max(r, g, b), min = Math.min(r, g, b);
@@ -158,4 +157,23 @@ export function harmoniesFor(h: number, s: number, l: number): Harmony[] {
     { name: "Split complementary", colors: [col(0, 0), col(150, 0), col(210, 0), col(0, 15), col(150, 15)] },
     { name: "Triadic", colors: [col(0, 0), col(120, 0), col(240, 0), col(0, 15), col(120, 15)] },
   ];
+}
+
+// Two colours are near-duplicates when they read as the
+// same colour on a tile: a redmean-weighted RGB distance
+// under 15 — about one just-noticeable step at tile size.
+// #007BFF and #007AFF score 2; a visibly different blue
+// like #0A5CFF scores 67.
+export function colourDistance(a: string, b: string): number {
+  const ca = hexToRgb(a);
+  const cb = hexToRgb(b);
+  const rMean = (ca.r + cb.r) / 2;
+  const dr = ca.r - cb.r;
+  const dg = ca.g - cb.g;
+  const db = ca.b - cb.b;
+  return Math.sqrt((2 + rMean / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rMean) / 256) * db * db);
+}
+
+export function isNearDuplicate(a: string, b: string): boolean {
+  return colourDistance(a, b) < 15;
 }
