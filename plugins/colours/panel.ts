@@ -657,6 +657,19 @@ function renderGradientEditor(): void {
   gradientStripEl.setAttribute("aria-label", "Picked gradient");
   host.appendChild(gradientStripEl);
   renderGradientStops();
+  // The + beside the strip, not on it: a sibling in
+  // the editor row, so the stop at 100% keeps its
+  // centre free to grab. It lives here, not in
+  // renderGradientStops, so a picked tick rebuilding
+  // the markers never rebuilds it.
+  const add = document.createElement("button");
+  add.type = "button";
+  add.className = "col-strip-add";
+  add.innerHTML = ICON_PLUS;
+  add.title = "Add gradient stop";
+  add.setAttribute("aria-label", "Add gradient stop");
+  add.addEventListener("click", () => addStop());
+  host.appendChild(add);
   // The strip's background is set in updatePicked, which
   // ran before the strip existed when the gradient was
   // just turned on: refresh it here, or the strip stays
@@ -784,18 +797,6 @@ function renderGradientStops(): void {
     }
     strip.appendChild(wrap);
   });
-  // The + lives on the strip itself, at its top-right
-  // end: it adds a stop at the widest gap. Up in the
-  // corner, not centred, so the stop at 100% keeps
-  // its centre free to grab.
-  const add = document.createElement("button");
-  add.type = "button";
-  add.className = "col-strip-add";
-  add.innerHTML = ICON_PLUS;
-  add.title = "Add gradient stop";
-  add.setAttribute("aria-label", "Add gradient stop");
-  add.addEventListener("click", () => addStop());
-  strip.appendChild(add);
 }
 
 // The harmony type: Analogous first, so the middle tile

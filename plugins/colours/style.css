@@ -36,10 +36,12 @@
    with the stops as markers on it. */
 .col-gradient-strip {
   position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
   height: 28px;
   border: 1px solid var(--hairline);
   border-radius: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 0;
   touch-action: none;
 }
 
@@ -83,13 +85,16 @@
 /* The × on the selected stop: a small white disc on
    the wrapper's corner, its own click target — it
    never starts a marker drag. Only on the selected
-   stop, and never at two stops. */
+   stop, and never at two stops. Small (12px) and
+   pushed off the corner, so the disc centre stays
+   free to grab: the × circle's nearest edge is 8px
+   from the marker's centre. */
 .plugin-panel-body .col-stop-marker-x {
   position: absolute;
-  top: -6px;
-  right: -6px;
-  width: 16px;
-  height: 16px;
+  top: -8px;
+  right: -8px;
+  width: 12px;
+  height: 12px;
   box-sizing: border-box;
   margin: 0;
   padding: 0;
@@ -105,8 +110,8 @@
 }
 
 .plugin-panel-body .col-stop-marker-x svg {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   fill: none;
   stroke: currentColor;
   stroke-width: 2;
@@ -114,14 +119,21 @@
   stroke-linejoin: round;
 }
 
-/* The + on the strip: a small white disc at the
-   strip's top-right end, adding a stop at the widest
-   gap. Up in the corner, not centred, so the stop at
-   100% keeps its centre free to grab. */
+.plugin-panel-body .col-stop-marker-x:hover {
+  /* Opaque, not the translucent panel fill the core
+     button hover would put here: the × sits on the
+     coloured strip, and the translucent fill would
+     let the strip show through and swallow the glyph. */
+  background: #efefef;
+  color: var(--ink);
+}
+
+/* The + beside the strip: a small white disc in the
+   editor row, adding a stop at the widest gap. Next
+   to the strip, not on it, so the stop at 100% keeps
+   its centre free to grab. */
 .plugin-panel-body .col-strip-add {
-  position: absolute;
-  top: 2px;
-  right: 2px;
+  flex: none;
   width: 16px;
   height: 16px;
   box-sizing: border-box;
@@ -136,7 +148,6 @@
   color: var(--grey);
   box-shadow: var(--shadow-sm);
   cursor: pointer;
-  z-index: 1;
 }
 
 .plugin-panel-body .col-strip-add svg {
@@ -691,9 +702,13 @@
 
 /* The gradient editor: the strip and its controls row,
    under the Solid/Gradient switch. Empty while the
-   picked state is solid, so no gap shows. */
+   picked state is solid, so no gap shows. The strip
+   takes the width; the + sits beside it, centred. */
 .col-gradient-editor {
-  margin-bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 
 .col-gradient-editor:empty {
