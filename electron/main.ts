@@ -365,22 +365,33 @@ function installShowcaseAssets(dir: string, force = false): { pdf_size_bytes: nu
   fs.mkdirSync(dir, { recursive: true });
   const src = assetsDir();
   const sizeOf = (file: string): number => { try { return fs.statSync(file).size; } catch { return 0; } };
+  // True when the destination holds the start of the bundle
+  // copy: empty, truncated, or an interrupted copy. A file
+  // longer than the bundle copy is not a prefix of it, even
+  // when it starts with the bundle bytes.
+  const isPrefixOf = (dest: string, srcFile: string): boolean => {
+    try {
+      const destBytes = fs.readFileSync(dest);
+      const srcBytes = fs.readFileSync(srcFile);
+      return destBytes.length <= srcBytes.length && srcBytes.subarray(0, destBytes.length).equals(destBytes);
+    } catch { return false; }
+  };
   const copied: string[] = [];
   const missing: string[] = [];
   // Real photographs for the welcome board (Wikimedia Commons).
   // Normally only fills in what is missing, so a reset that
   // deletes the board dir gets a full fresh set, while an
-  // existing board keeps the copies it already has. But a
-  // file that exists with the wrong size — empty, truncated,
-  // a failed earlier copy — is just as broken as a missing
-  // file, and the old missing-only check left it broken
-  // forever. So copy when missing, when forced (the Restore
-  // button), or when the size does not match the bundle.
+  // existing board keeps the copies it already has. A file
+  // whose bytes are a prefix of the bundle copy — empty,
+  // truncated, an interrupted copy — is just as broken as
+  // a missing file, so copy that too. Different bytes are
+  // a replacement, not damage: leave them alone, whatever
+  // the size. Forced (the Restore button) overwrites all.
   for (const name of ["welcome-bower.jpg", "welcome-birdsong.mp3", "welcome-video.mp4", "sample.pdf", "welcome-cube.glb", "welcome-garden.psd", "welcome-heron.ai", "welcome-garden-preview.png", "welcome-heron-preview.png"]) {
     const srcFile = path.join(src, name);
     const dest = path.join(dir, name);
     if (!fs.existsSync(srcFile)) { missing.push(name); continue; }
-    if (force || !fs.existsSync(dest) || sizeOf(dest) !== sizeOf(srcFile)) {
+    if (force || !fs.existsSync(dest) || !isPrefixOf(dest, srcFile)) {
       try { fs.copyFileSync(srcFile, dest); copied.push(name); } catch (e) { missing.push(`${name} (${(e as Error).message})`); }
     }
   }
@@ -924,8 +935,9 @@ function registerIpc(): void {
     // or a board whose files were deleted, otherwise stays
     // broken forever — the image shows nothing, audio and
     // video play nothing, and nothing ever repairs it.
-    // installShowcaseAssets only fills what is missing, so
-    // this never overwrites a user's own files.
+    // installShowcaseAssets only repairs missing or
+    // truncated files, so this never overwrites a user's
+    // own files.
     const showcase = installShowcaseAssets(dir);
     let json: string | null = null;
     try {
