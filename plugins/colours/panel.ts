@@ -39,6 +39,10 @@ let store: ColourStore = emptyStore();
 // The picked colour, as HSL: the wheel and the sliders
 // all write the same three numbers, so they never drift.
 let base = hexToHsl("#007AFF");
+// The picked opacity, 0–100%: the other half of the
+// picked state. It moves with the opacity slider and the
+// pen, and rides along on every click-apply.
+let opacity = 100;
 // The harmony type: Analogous first, so the middle tile
 // of the shown set is the picked colour itself.
 let harmony: HarmonyName = "Analogous";
@@ -85,6 +89,8 @@ let hsvSatValue: HTMLSpanElement | null = null;
 let hsvValInput: HTMLInputElement | null = null;
 let hsvValValue: HTMLSpanElement | null = null;
 let hexInput: HTMLInputElement | null = null;
+let opacityInput: HTMLInputElement | null = null;
+let opacityValue: HTMLSpanElement | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
 // The native colour-input fallback, if one is open: its
@@ -102,6 +108,8 @@ export function initPanel(a: PluginContext, initial: ColourStore, initialMode: P
   if (a.pen) {
     const pen = a.pen.getColor();
     if (isHex(pen)) base = hexToHsl(pen);
+    const penOpacity = a.pen.getOpacity();
+    if (Number.isFinite(penOpacity)) opacity = Math.min(100, Math.max(0, Math.round(penOpacity)));
   }
 }
 
@@ -109,6 +117,7 @@ export function clearPanel(): void {
   api = null;
   store = emptyStore();
   harmony = "Analogous";
+  opacity = 100;
   recent = [];
   modeSegButtons = {};
   harmonySegButtons = {};
@@ -139,6 +148,8 @@ export function clearPanel(): void {
   hsvValInput = null;
   hsvValValue = null;
   hexInput = null;
+  opacityInput = null;
+  opacityValue = null;
   if (saveTimer !== null) clearTimeout(saveTimer);
   saveTimer = null;
   removeEyeDropperFallback();
@@ -171,10 +182,12 @@ function recordColour(hex: string): void {
 // Apply a colour, and record it: every tile click, the
 // preview click, an eyedropper pick and a hex commit all
 // go through here, so the recent list holds exactly the
-// colours that were applied.
+// colours that were applied. The picked opacity rides
+// along: a click applies the tile's colour at the picked
+// opacity, never at the stroke's old one.
 function applyAndRecord(hex: string): void {
   if (!api) return;
-  applyColour(api, hex);
+  applyColour(api, hex, opacity);
   recordColour(hex);
 }
 
@@ -196,11 +209,17 @@ function pickedHex(): string {
 function updatePicked(): void {
   const hex = pickedHex();
   if (pickedSwatch) {
-    pickedSwatch.style.background = hex;
+    // The preview shows the picked colour at its picked
+    // opacity, so the picked state is visible at a glance.
+    const { r, g, b } = hexToRgb(hex);
+    pickedSwatch.style.background = `rgba(${r}, ${g}, ${b}, ${opacity / 100})`;
     pickedSwatch.dataset.hex = hex;
-    pickedSwatch.title = hex;
+    pickedSwatch.dataset.opacity = String(opacity);
+    pickedSwatch.title = opacity === 100 ? hex : `${hex} at ${opacity}%`;
   }
   if (pickedHexEl) pickedHexEl.textContent = hex;
+  if (opacityInput && Number(opacityInput.value) !== opacity) opacityInput.value = String(opacity);
+  if (opacityValue) opacityValue.textContent = `${opacity}%`;
   if (wheel) wheel.setMarker(base.h, base.s);
   renderHarmonies();
   const setSlider = (input: HTMLInputElement | null, value: HTMLSpanElement | null, v: number, text: string): void => {
@@ -613,6 +632,21 @@ export function renderPanel(container: HTMLElement): void {
   pickerBtn.addEventListener("click", () => void pickWithEyeDropper());
   previewRow.appendChild(pickerBtn);
   pickerSection.appendChild(previewRow);
+  // The picked opacity, 0–100%, in the picker section
+  // beside the colour controls — one slider, in the same
+  // style, that never rebuilds on a mode switch. It
+  // moves the picked state and the pen on every tick,
+  // like the wheel moves the colour; it never recolours
+  // selected strokes by itself — the picked state only
+  // lands on a click-apply.
+  const opacityRow = sliderRow("Opacity", "col-slider-opacity", 100, opacity, (v) => {
+    opacity = v;
+    a.pen.setOpacity(v);
+    updatePicked();
+  });
+  opacityInput = opacityRow.input;
+  opacityValue = opacityRow.value;
+  pickerSection.appendChild(opacityRow.row);
   // The mode control, a segmented row: HSL, RGB, HSV or
   // Hex — one picked colour, four editors.
   const modeSeg = document.createElement("div");
