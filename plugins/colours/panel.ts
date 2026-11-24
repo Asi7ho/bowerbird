@@ -653,6 +653,11 @@ function renderGradientEditor(): void {
   gradientStopsEl.className = "col-tiles col-gradient-stops";
   host.appendChild(gradientStopsEl);
   renderGradientStops();
+  // The strip's background is set in updatePicked, which
+  // ran before the strip existed when the gradient was
+  // just turned on: refresh it here, or the strip stays
+  // blank until the next picked tick.
+  updatePicked();
 }
 
 // The stops list: one tile per stop, in offset order,
