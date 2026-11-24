@@ -10,7 +10,7 @@ import { applyCurve, clampExponent, copyCurve, curveFromExponent, LINEAR_CURVE, 
 import {
   createPreset, createTexture, deletePreset,
   nextPresetName, parseStored, renamePreset, seededStore,
-  updatePreset, type BrushStore,
+  syncPresetSizes, updatePreset, type BrushStore,
 } from "../../plugins/brushes/store";
 import { BUILTIN_TEXTURES, familyForTextureId, textureFilterSvg } from "../../plugins/brushes/textures";
 
@@ -225,6 +225,24 @@ describe("brush store", () => {
     expect(updatePreset(before, 0, { curve: [{ x: 0, y: 0 }, { x: 1, y: 1 }] }).presets[0].curve).toEqual(LINEAR_CURVE);
     expect(updatePreset(before, 0, { curve: [{ x: 0, y: 0 }] })).toBe(before);
     expect(updatePreset(before, 9, { texture: "grain" })).toBe(before);
+  });
+  it("syncPresetSizes moves only the active preset of each family, and only when it differs", () => {
+    const before = seeded();
+    // Ink (pen, size 3) and Graphite (pencil, size 2) take
+    // the new widths; Chalk, same family as Graphite, keeps 6.
+    const next = syncPresetSizes(before, { pen: "preset-1", pencil: "preset-2" }, { pen: 7, pencil: 5 });
+    expect(next.presets[0].size).toBe(7);
+    expect(next.presets[1].size).toBe(5);
+    expect(next.presets[2].size).toBe(6);
+    expect(next.presets[3].size).toBe(4);
+    // Nothing differs: the same store back, not a copy.
+    expect(syncPresetSizes(next, { pen: "preset-1", pencil: "preset-2" }, { pen: 7, pencil: 5 })).toBe(next);
+    // A family with no width or no active preset is untouched.
+    expect(syncPresetSizes(before, { pen: "preset-1" }, { pencil: 5 })).toBe(before);
+    expect(syncPresetSizes(before, {}, { pen: 7 })).toBe(before);
+    // An unknown active id is ignored, and widths clamp.
+    expect(syncPresetSizes(before, { pen: "preset-99" }, { pen: 7 })).toBe(before);
+    expect(syncPresetSizes(before, { pen: "preset-1" }, { pen: 99 }).presets[0].size).toBe(32);
   });
 });
 
