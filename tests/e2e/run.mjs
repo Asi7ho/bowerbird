@@ -4586,6 +4586,99 @@ async function main() {
       assert.equal(stroke.kind.Stroke.width, 3);
     });
 
+    await check("the toolbar size sets the stroke width", async () => {
+      // The size control lives in the toolbar now: a button
+      // beside the colour swatch opens a slider flyout.
+      await page.keyboard.press("Escape");
+      await page.locator('.plugin-tab[aria-label="Brush Library"]').click();
+      await page.locator(".br-brush").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // Ink is the pen's brush, size 3: make it the active
+      // brush, then set the width from the toolbar.
+      await page.locator(".br-brush-name", { hasText: "Ink" }).click();
+      await page.click("#tool-draw");
+      await page.waitForSelector('#draw-picker button[data-draw="pen"]', { state: "visible" });
+      await page.click('#draw-picker button[data-draw="pen"]');
+      // The size button shows the pen's width, as a line sample.
+      await page.waitForSelector("#tool-size", { state: "visible", timeout: READY_TIMEOUT_MS });
+      assert.equal(await page.locator("#tool-size").getAttribute("aria-label"), "Size 3");
+      await page.locator("#tool-size").click();
+      await page.waitForSelector("#size-picker input[type=range]", { state: "visible", timeout: READY_TIMEOUT_MS });
+      const before = strokes().filter((it) => it.kind.Stroke.width === 7).length;
+      await page.locator("#size-picker input[type=range]").evaluate((el) => {
+        el.value = "7";
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      // The button follows the new width at once.
+      assert.equal(await page.locator("#tool-size").getAttribute("aria-label"), "Size 7");
+      await page.mouse.move(650, 780);
+      await page.mouse.down();
+      await page.mouse.move(850, 780, { steps: 20 });
+      await page.mouse.up();
+      await waitFor("width-7 pen stroke from the toolbar size", () =>
+        strokes().filter((it) => it.kind.Stroke.width === 7).length > before ? true : null,
+      );
+      // Close the flyout, so it covers nothing later.
+      await page.locator("#tool-size").click();
+    });
+
+    await check("changing the toolbar size updates the active brush's stored size", async () => {
+      // Ink is still the active pen brush, now at size 7
+      // from the last check: the panel's Size slider agrees
+      // with the toolbar, because the pen event wrote the
+      // new width back into the brush.
+      await page.locator('.plugin-tab[aria-label="Brush Library"]').click();
+      await page.locator(".br-brush").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      assert.equal(await page.locator(".br-editor .br-value").first().textContent(), "7");
+      // And back to 3 from the toolbar: the brush follows.
+      await page.locator("#tool-size").click();
+      await page.waitForSelector("#size-picker input[type=range]", { state: "visible", timeout: READY_TIMEOUT_MS });
+      await page.locator("#size-picker input[type=range]").evaluate((el) => {
+        el.value = "3";
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      await waitFor("panel Size back to 3", async () =>
+        ((await page.locator(".br-editor .br-value").first().textContent()) === "3" ? true : null),
+      );
+      await page.locator("#tool-size").click();
+    });
+
+    await check("with the Brush Library off, the toolbar size still drives the core tools", async () => {
+      try {
+        assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("brushes", false)), false);
+        await page.reload();
+        await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
+        assert.equal(await page.locator('.plugin-tab[aria-label="Brush Library"]').count(), 0);
+        // No brush plugin: the pen is back to its built-in 3.
+        await page.click("#tool-draw");
+        await page.waitForSelector('#draw-picker button[data-draw="pen"]', { state: "visible" });
+        await page.click('#draw-picker button[data-draw="pen"]');
+        await page.waitForSelector("#tool-size", { state: "visible", timeout: READY_TIMEOUT_MS });
+        assert.equal(await page.locator("#tool-size").getAttribute("aria-label"), "Size 3");
+        await page.locator("#tool-size").click();
+        await page.waitForSelector("#size-picker input[type=range]", { state: "visible", timeout: READY_TIMEOUT_MS });
+        const before = strokes().filter((it) => it.kind.Stroke.width === 9).length;
+        await page.locator("#size-picker input[type=range]").evaluate((el) => {
+          el.value = "9";
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        assert.equal(await page.locator("#tool-size").getAttribute("aria-label"), "Size 9");
+        await page.mouse.move(650, 780);
+        await page.mouse.down();
+        await page.mouse.move(850, 780, { steps: 20 });
+        await page.mouse.up();
+        await waitFor("width-9 pen stroke with the plugin off", () =>
+          strokes().filter((it) => it.kind.Stroke.width === 9).length > before ? true : null,
+        );
+        await page.locator("#tool-size").click();
+      } finally {
+        // Re-enable even when an assertion above failed, or
+        // every later brush check times out on the missing tab.
+        assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("brushes", true)), true);
+        await page.reload();
+        await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
+      }
+    });
+
     await check("the pen size drives shape outlines and arrows", async () => {
       // The size is the pen's stroke-default width: picking
       // a brush leaves it alone, so a new outline shape and
