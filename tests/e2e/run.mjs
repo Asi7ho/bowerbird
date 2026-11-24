@@ -4151,12 +4151,14 @@ async function main() {
       // taken in solid mode.
       await page.locator('.col-mode-seg-btn[data-gradient="solid"]').click();
       await page.locator(".col-gradient-strip").waitFor({ state: "detached", timeout: READY_TIMEOUT_MS }).catch(() => undefined);
-      const fits = async () => page.locator('.plugin-panel[data-panel="colours"] .plugin-panel-body')
-        .evaluate((el) => el.scrollHeight <= el.clientHeight);
-      assert.ok(await fits(), "panel should fit without scrolling in solid mode");
+      const measure = async () => page.locator('.plugin-panel[data-panel="colours"] .plugin-panel-body')
+        .evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }));
+      const s = await measure();
+      assert.ok(s.scroll <= s.client, `panel should fit without scrolling in solid mode: ${s.scroll}/${s.client}`);
       await page.locator('.col-mode-seg-btn[data-gradient="gradient"]').click();
       await page.locator(".col-gradient-strip").waitFor({ timeout: READY_TIMEOUT_MS });
-      assert.ok(await fits(), "panel should fit without scrolling in gradient mode");
+      const g = await measure();
+      assert.ok(g.scroll <= g.client, `panel should fit without scrolling in gradient mode: ${g.scroll}/${g.client}`);
       await page.locator('.col-mode-seg-btn[data-gradient="solid"]').click();
     });
 
