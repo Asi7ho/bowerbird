@@ -10,7 +10,7 @@ import { type UndoStore } from "./backend/undo";
 import { type Drops } from "./backend/drops";
 import { ensureVideoPoster } from "./backend/poster";
 import {
-  Board, GroupEntry, Item,
+  Board, GroupEntry, Item, StrokeGradient,
   AUDIO_TRANSCRIPT_HIDDEN_H, boardGet, CARD_DECORATIONS_H,
   estimateTextHeight, healDuplicateIds, healLayers,
 } from "./backend/model";
@@ -38,6 +38,10 @@ export interface BootContext {
   // colour, so the next stroke draws at it. Missing on an
   // old session means 100.
   penOpacity: number;
+  // The pen's gradient, null for a solid stroke: session
+  // state like the colour, so the next stroke draws with
+  // it. Missing on an old session means null.
+  penGradient: StrokeGradient | null;
   // Whether new shapes are outlines (stroke only) or filled.
   shapeOutline: boolean;
   selected: number[];

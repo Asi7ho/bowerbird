@@ -24,6 +24,8 @@ import {
   lassoSelect,
   marquee,
   moveSelection,
+  linearGradientCoords,
+  normaliseGradient,
   normaliseHex,
   parseHex,
   parseInline,
@@ -767,5 +769,51 @@ describe("colour data patches", () => {
     expect((w.kind as { Swatch: { hex: string } }).Swatch.hex).toBe("#0000FF");
     expect(applyColourDataPatch(s, { width: 5 })).toBe(false);
     expect((s.kind as { Stroke: { color: string } }).Stroke.color).toBe("#0000FF");
+  });
+  it("accepts a gradient alone and with a colour, normalised and sorted by offset", () => {
+    expect(colourDataPatch(stroke(1), { gradient: { angle: 90, stops: [{ offset: 100, color: "#00ff00" }, { offset: 0, color: "#f00" }] } }))
+      .toEqual({ gradient: { angle: 90, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#00FF00" }] } });
+    expect(colourDataPatch(stroke(1), { color: "#f00", gradient: { angle: 0, stops: [{ offset: 0, color: "#f00" }, { offset: 100, color: "#00f" }] } }))
+      .toEqual({ color: "#FF0000", gradient: { angle: 0, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#0000FF" }] } });
+    expect(colourDataPatch(stroke(1), { gradient: null })).toEqual({ gradient: null });
+  });
+  it("refuses a bad gradient: too few stops, a bad offset, a bad colour, a bad angle", () => {
+    expect(colourDataPatch(stroke(1), { gradient: { angle: 0, stops: [{ offset: 0, color: "#FF0000" }] } })).toBeNull();
+    expect(colourDataPatch(stroke(1), { gradient: { angle: 0, stops: [{ offset: -1, color: "#FF0000" }, { offset: 100, color: "#00FF00" }] } })).toBeNull();
+    expect(colourDataPatch(stroke(1), { gradient: { angle: 0, stops: [{ offset: 0, color: "red" }, { offset: 100, color: "#00FF00" }] } })).toBeNull();
+    expect(colourDataPatch(stroke(1), { gradient: { angle: "90", stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#00FF00" }] } })).toBeNull();
+    expect(colourDataPatch(stroke(1), { gradient: { angle: 0, stops: "no" } })).toBeNull();
+    expect(colourDataPatch(swatch(2), { gradient: { angle: 0, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#00FF00" }] } })).toBeNull();
+  });
+  it("applyColourDataPatch sets the gradient and clears it back to solid with null", () => {
+    const s = stroke(1);
+    expect(applyColourDataPatch(s, { gradient: { angle: 45, stops: [{ offset: 0, color: "#f00" }, { offset: 100, color: "#00f" }] } })).toBe(true);
+    expect((s.kind as { Stroke: { gradient?: unknown } }).Stroke.gradient).toEqual(
+      { angle: 45, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#0000FF" }] },
+    );
+    expect(applyColourDataPatch(s, { gradient: null })).toBe(true);
+    expect((s.kind as { Stroke: { gradient?: unknown } }).Stroke.gradient).toBeUndefined();
+  });
+});
+
+describe("gradients", () => {
+  it("normaliseGradient wraps the angle, normalises colours and sorts the stops", () => {
+    expect(normaliseGradient({ angle: 450, stops: [{ offset: 100, color: "#00f" }, { offset: 0, color: "#f00" }] }))
+      .toEqual({ angle: 90, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#0000FF" }] });
+    expect(normaliseGradient({ angle: -90, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#00FF00" }] })?.angle).toBe(270);
+    expect(normaliseGradient(null)).toBeNull();
+    expect(normaliseGradient({ angle: 0, stops: [] })).toBeNull();
+  });
+  it("linearGradientCoords spans the box along the angle", () => {
+    const box = { x: 0, y: 0, w: 100, h: 40 };
+    expect(linearGradientCoords(0, box)).toEqual({ x1: 0, y1: 20, x2: 100, y2: 20 });
+    expect(linearGradientCoords(90, box)).toEqual({ x1: 50, y1: 0, x2: 50, y2: 40 });
+    expect(linearGradientCoords(180, box)).toEqual({ x1: 100, y1: 20, x2: 0, y2: 20 });
+    // A diagonal reaches corner to corner, not edge to edge.
+    const d = linearGradientCoords(45, box);
+    expect(d.x1).toBeCloseTo(15, 0);
+    expect(d.y1).toBeCloseTo(-15, 0);
+    expect(d.x2).toBeCloseTo(85, 0);
+    expect(d.y2).toBeCloseTo(55, 0);
   });
 });

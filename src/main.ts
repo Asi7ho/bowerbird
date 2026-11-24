@@ -25,10 +25,10 @@ import { S } from "./ui/board-state";
 import { measureNoteCardHeight } from "./ui/text-measure";
 import { showRecoveryOffer } from "./ui/recovery-dialog";
 import {
-  Board, Camera, Item, Layer, Pt, ShapeKind, Size,
+  Board, Camera, Item, Layer, Pt, ShapeKind, Size, StrokeGradient,
   applyColourDataPatch, boardGet, centre, clampZoom, createLayer, defaultLayer, deleteLayer, elementPoint, elementSize,
   getBoardExtension, healDuplicateIds, healLayers, hitTest, isItemLocked, isItemVisible, itemLayerId, itemsCentre,
-  lassoSelect, layerById, marquee, moveLayer, moveSelection, removeBoardExtension, renameLayer,
+  lassoSelect, layerById, marquee, moveLayer, moveSelection, normaliseGradient, removeBoardExtension, renameLayer,
   resizeItem, screenToWorld, select, setBoardExtension, setItemLayer, setLayerLocked,
   setLayerVisible, strokesWithin, zoomCamera,
 } from "./backend/model";
@@ -72,6 +72,7 @@ const C: BootContext = {
   boardGeneration: 0,
   penColor: PALETTE[0],
   penOpacity: 100,
+  penGradient: null,
   shapeOutline: false,
   selected: [],
   toastTimer: null,
@@ -828,6 +829,28 @@ async function init(): Promise<void> {
     setPenOpacity: (opacity: number) => {
       if (!Number.isFinite(opacity)) return false;
       C.penOpacity = Math.min(100, Math.max(0, Math.round(opacity)));
+      emitPluginEvent("pen");
+      return true;
+    },
+    // The pen's gradient, null for a solid stroke: session
+    // state like the colour. Null clears it; anything else
+    // must validate, or the pen keeps its old gradient. A
+    // change fires the same "pen" event, so a listening
+    // plugin can follow it without polling — the event
+    // carries no payload, like the colour and opacity
+    // setters: listeners re-read the pen. Setting a
+    // gradient also moves the pen colour to its first
+    // stop, so the colour stays the solid fallback.
+    getPenGradient: () => C.penGradient,
+    setPenGradient: (gradient: StrokeGradient | null) => {
+      if (gradient === null) {
+        C.penGradient = null;
+      } else {
+        const clean = normaliseGradient(gradient);
+        if (!clean) return false;
+        C.penGradient = clean;
+        C.penColor = clean.stops[0].color;
+      }
       emitPluginEvent("pen");
       return true;
     },
