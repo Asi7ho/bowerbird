@@ -3,7 +3,7 @@
 // API plus pure stroke geometry — the way a third-party
 // brush would. It activates before the toolbar.
 
-import type { Anchor, Kind, PluginContext, PluginManifest, Pt, ShapeKind, Size } from "bowerbird-plugin-api";
+import type { Anchor, Kind, PluginContext, PluginManifest, Pt, ShapeKind, Size, StrokeGradient } from "bowerbird-plugin-api";
 import { rectFromPoints, splitStrokeByEraser, strokeMaxWidth } from "../backend/model";
 
 export const manifest: PluginManifest = {
@@ -92,13 +92,16 @@ export interface PlacedItem {
 // a stroke — the old core path only committed two or more.
 // An opacity of 100 (or none) is stored as nothing: old
 // boards carry no opacity field, and missing means 100.
-export function buildStrokeItem(points: Pt[], pressures: number[], color: string, width: number, marker: boolean, pencil: boolean, opacity?: number): PlacedItem | null {
+// A gradient is stored as given — the pen hands over a
+// validated one — and a null gradient is stored as
+// nothing, like an opacity of 100: missing means solid.
+export function buildStrokeItem(points: Pt[], pressures: number[], color: string, width: number, marker: boolean, pencil: boolean, opacity?: number, gradient?: StrokeGradient | null): PlacedItem | null {
   if (points.length < 2) return null;
   const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
   const pos = { x: Math.min(...xs), y: Math.min(...ys) };
   const size = { w: Math.max(1, Math.max(...xs) - pos.x), h: Math.max(1, Math.max(...ys) - pos.y) };
   return {
-    kind: { Stroke: { points, color, width, marker, ...(pressures.length > 0 ? { pressures } : {}), ...(pencil ? { pencil: true } : {}), ...(opacity !== undefined && opacity !== 100 ? { opacity } : {}) } },
+    kind: { Stroke: { points, color, width, marker, ...(pressures.length > 0 ? { pressures } : {}), ...(pencil ? { pencil: true } : {}), ...(opacity !== undefined && opacity !== 100 ? { opacity } : {}), ...(gradient ? { gradient } : {}) } },
     pos,
     size,
   };
@@ -151,12 +154,14 @@ export interface StrokeProps {
   marker: boolean;
   pencil?: boolean;
   opacity?: number;
+  gradient?: StrokeGradient | null;
 }
 
 // The pieces of a stroke that survive an eraser pass at
 // this point: the runs either side of the eraser circle,
-// as items in the stroke's own colour, width and texture.
-// A stroke the eraser covers whole leaves no pieces.
+// as items in the stroke's own colour, width, texture
+// and gradient. A stroke the eraser covers whole leaves
+// no pieces.
 export function eraserSplitItems(stroke: StrokeProps, at: Pt, radius: number): PlacedItem[] {
   const runs = splitStrokeByEraser(stroke.points, stroke.pressures, at, radius, strokeMaxWidth(stroke) / 2);
   return runs.map((run) => {
@@ -164,7 +169,7 @@ export function eraserSplitItems(stroke: StrokeProps, at: Pt, radius: number): P
     const pos = { x: Math.min(...xs), y: Math.min(...ys) };
     const size = { w: Math.max(1, Math.max(...xs) - pos.x), h: Math.max(1, Math.max(...ys) - pos.y) };
     return {
-      kind: { Stroke: { points: run.points, color: stroke.color, width: stroke.width, marker: stroke.marker, ...(run.pressures && run.pressures.length > 0 ? { pressures: run.pressures } : {}), ...(stroke.pencil ? { pencil: true } : {}), ...(stroke.opacity !== undefined && stroke.opacity !== 100 ? { opacity: stroke.opacity } : {}) } },
+      kind: { Stroke: { points: run.points, color: stroke.color, width: stroke.width, marker: stroke.marker, ...(run.pressures && run.pressures.length > 0 ? { pressures: run.pressures } : {}), ...(stroke.pencil ? { pencil: true } : {}), ...(stroke.opacity !== undefined && stroke.opacity !== 100 ? { opacity: stroke.opacity } : {}), ...(stroke.gradient ? { gradient: stroke.gradient } : {}) } },
       pos,
       size,
     };
@@ -208,11 +213,11 @@ export function activate(api: PluginContext): void {
         if (Math.hypot(world.x - last.x, world.y - last.y) > 2 / api.view.getCamera().zoom) {
           points.push(world);
           if (ev.pointerType === "pen" && !marker) pressures.push(ev.pressure);
-          api.board.previewStroke(points, pressures, { width, marker, pencil, opacity: api.pen.getOpacity() });
+          api.board.previewStroke(points, pressures, { width, marker, pencil, opacity: api.pen.getOpacity(), gradient: api.pen.getGradient() });
         }
       },
       onPointerUp: () => {
-        const item = buildStrokeItem(points, pressures, api.pen.getColor(), width, marker, pencil, api.pen.getOpacity());
+        const item = buildStrokeItem(points, pressures, api.pen.getColor(), width, marker, pencil, api.pen.getOpacity(), api.pen.getGradient());
         points = [];
         pressures = [];
         if (item && !defaultLayerLocked()) api.board.addItem(item.kind, item.pos, item.size);

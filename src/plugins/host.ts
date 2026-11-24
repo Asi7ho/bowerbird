@@ -117,7 +117,7 @@ export function boardUngroupSelected(): boolean {
 export function boardDeleteSelected(): boolean {
   return boardController?.deleteSelected() ?? false;
 }
-export function boardPreviewStroke(points: Pt[], pressures: number[], opts?: { width?: number; color?: string; marker?: boolean; pencil?: boolean; opacity?: number }): void {
+export function boardPreviewStroke(points: Pt[], pressures: number[], opts?: { width?: number; color?: string; marker?: boolean; pencil?: boolean; opacity?: number; gradient?: StrokeGradient | null }): void {
   boardController?.previewStroke(points, pressures, opts);
 }
 // The live shape preview for a drag tool, in the preview
@@ -290,7 +290,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
       // The live preview stroke for a drag tool: preview layer
       // only — no board write, no save, no undo step — so a
       // plugin can call it on every pointermove.
-      previewStroke: (points: Pt[], pressures?: number[], opts?: { width?: number; color?: string; marker?: boolean; pencil?: boolean }) =>
+      previewStroke: (points: Pt[], pressures?: number[], opts?: { width?: number; color?: string; marker?: boolean; pencil?: boolean; gradient?: StrokeGradient | null }) =>
         boardPreviewStroke(points, pressures ?? [], opts),
       // The live shape preview for a drag tool: preview layer
       // only — no board write, no save, no undo step — so a
