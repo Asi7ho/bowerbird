@@ -248,8 +248,17 @@ function applyAndRecord(hex: string): void {
   }
   // Solid: the null gradient rides along too, so a
   // gradient stroke applied in solid mode goes back to
-  // solid instead of keeping its old gradient.
+  // solid instead of keeping its old gradient. The
+  // click also becomes the picked colour, so the panel
+  // follows it — the wheel, the preview, the hex and
+  // the harmony ring all move to the clicked tile,
+  // like the gradient path above already does.
   applyColour(api, hex, opacity, null);
+  const normalised = normaliseHex(hex);
+  if (normalised) {
+    base = hexToHsl(normalised);
+    updatePicked();
+  }
   recordColour(hex);
 }
 
