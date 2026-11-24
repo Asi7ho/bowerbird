@@ -447,7 +447,10 @@
 }
 
 .plugin-panel-body .col-tile-x:hover {
-  background: var(--fill);
+  /* Opaque, not the translucent panel fill: the x sits
+     on a coloured tile, and the translucent fill would
+     let a dark tile show through and swallow the glyph. */
+  background: #efefef;
   color: var(--ink);
 }
 
