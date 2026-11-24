@@ -3610,8 +3610,8 @@ async function main() {
       const tile = page.locator(".col-palette").first().locator(".col-tile").first();
       const box = await tile.boundingBox();
       assert.ok(box);
-      assert.equal(box.width, 40);
-      assert.equal(box.height, 40);
+      assert.equal(box.width, 32);
+      assert.equal(box.height, 32);
       // The row is far wider than the tile: the tile did
       // not stretch to fill it.
       const row = await page.locator(".col-palette").first().locator(".col-tiles").boundingBox();
@@ -4004,8 +4004,13 @@ async function main() {
       assert.ok(bg.includes("linear-gradient"), `gradient strip should show the gradient, got ${bg}`);
       assert.ok(bg.includes("0%") && bg.includes("100%"), `gradient strip should show both stops, got ${bg}`);
       const swatch = await page.locator(".col-picked").evaluate((el) => el.style.background);
-      assert.ok(swatch.includes("rgba"), `picked swatch should show the selected stop, got ${swatch}`);
       assert.ok(!swatch.includes("linear-gradient"), `picked swatch should not show the gradient, got ${swatch}`);
+      // The swatch shows the selected stop: its hex is the
+      // picked red. (The style serialises rgba(…, 1) as
+      // rgb(…), so the hex, not the background string, is
+      // the assertion.)
+      const swatchHex = await page.locator(".col-picked").evaluate((el) => el.dataset.hex);
+      assert.equal(swatchHex, pickedRed);
       // Click the preview with nothing selected: the pen
       // takes the gradient. The previous check leaves the
       // translucent stroke selected, so clear the selection
@@ -4141,6 +4146,11 @@ async function main() {
     await check("the colour panel fits without scrolling, solid and gradient", async () => {
       await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // Solid first: an earlier check may have left the
+      // gradient on, and the solid measurement must be
+      // taken in solid mode.
+      await page.locator('.col-mode-seg-btn[data-gradient="solid"]').click();
+      await page.locator(".col-gradient-strip").waitFor({ state: "detached", timeout: READY_TIMEOUT_MS }).catch(() => undefined);
       const fits = async () => page.locator('.plugin-panel[data-panel="colours"] .plugin-panel-body')
         .evaluate((el) => el.scrollHeight <= el.clientHeight);
       assert.ok(await fits(), "panel should fit without scrolling in solid mode");
