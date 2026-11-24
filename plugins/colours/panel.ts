@@ -6,7 +6,7 @@
 // colours come from.
 import type { PluginContext, StrokeGradient } from "bowerbird-plugin-api";
 import { applyColour } from "./apply.js";
-import { HARMONY_NAMES, colourDistance, harmoniesFor, hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, normaliseHex, rgbToHex, type HarmonyName } from "./color.js";
+import { HARMONY_NAMES, colourDistance, deepShadeHex, harmoniesFor, hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, normaliseHex, rgbToHex, type HarmonyName } from "./color.js";
 import { attachPlaceDrag } from "./place.js";
 import {
   addColour,
@@ -276,11 +276,11 @@ function syncSelectedStop(hex: string): void {
 function setGradientMode(on: boolean): void {
   if (on === (gradient !== null)) return;
   if (on) {
-    // A new gradient runs from the picked colour to
-    // white, at 90° (top to bottom): a visible gradient
-    // from the colour the user already picked.
+    // A new gradient runs from the picked colour to a
+    // deep shade of it, at 90° (top to bottom): a rich
+    // fade, never a wash-out to white.
     const hex = pickedHex();
-    setGradient({ angle: 90, stops: [{ offset: 0, color: hex }, { offset: 100, color: "#FFFFFF" }] });
+    setGradient({ angle: 90, stops: [{ offset: 0, color: hex }, { offset: 100, color: deepShadeHex(hex) }] });
     selectedStop = 0;
   } else {
     setGradient(null);
@@ -326,19 +326,26 @@ function pickedHex(): string {
   return hslToHex(base.h, base.s, base.l);
 }
 
-// Paint the strip from a set of stops: the whole
-// gradient at its angle and opacity. CSS angles run
-// 0° bottom-to-top, the gradient's 0° left-to-right,
-// so 90° is added. A marker drag paints with the
-// dragged offsets live and commits on release.
-function paintGradientStrip(stops: { offset: number; color: string }[]): void {
-  const strip = gradientStripEl;
-  if (!strip || !gradient) return;
-  const cssAngle = (90 + gradient.angle) % 360;
-  strip.style.background = `linear-gradient(${cssAngle}deg, ${stops.map((s) => {
+// The CSS for a gradient at its angle and opacity: the
+// strip and the preview swatch paint the same gradient.
+// CSS angles run 0° bottom-to-top, the gradient's 0°
+// left-to-right, so 90° is added.
+function gradientBackground(stops: { offset: number; color: string }[]): string {
+  const cssAngle = (90 + (gradient?.angle ?? 0)) % 360;
+  return `linear-gradient(${cssAngle}deg, ${stops.map((s) => {
     const { r, g, b } = hexToRgb(s.color);
     return `rgba(${r}, ${g}, ${b}, ${opacity / 100}) ${s.offset}%`;
   }).join(", ")})`;
+}
+
+// Paint the strip from a set of stops: the whole
+// gradient at its angle and opacity. A marker drag
+// paints with the dragged offsets live and commits on
+// release.
+function paintGradientStrip(stops: { offset: number; color: string }[]): void {
+  const strip = gradientStripEl;
+  if (!strip || !gradient) return;
+  strip.style.background = gradientBackground(stops);
 }
 
 // Refresh every control that shows the picked colour:
@@ -346,20 +353,19 @@ function paintGradientStrip(stops: { offset: number; color: string }[]): void {
 // mode's controls, and the harmony set, which is made
 // from the picked colour and follows it live. With a
 // gradient on, the preview shows the gradient, and the
-// stops row follows the wheel — the selected stop's tile
-// is the colour being edited.
+// strip markers follow the wheel — the selected stop's
+// marker is the colour being edited.
 function updatePicked(): void {
   const hex = pickedHex();
   if (pickedSwatch) {
     if (gradient) {
-      // The swatch shows the selected stop — the colour
-      // the wheel and sliders are editing — at its picked
-      // opacity, so the swatch and the hex beside it
-      // always agree. The whole gradient lives on the
-      // strip under the Solid/Gradient switch instead.
-      const stopColor = gradient.stops[selectedStop]?.color ?? hex;
-      const { r, g, b } = hexToRgb(stopColor);
-      pickedSwatch.style.background = `rgba(${r}, ${g}, ${b}, ${opacity / 100})`;
+      // The swatch shows the whole gradient at its
+      // angle and opacity, so the preview is what the
+      // stroke will look like. The hex beside it still
+      // shows the selected stop — the colour the wheel
+      // and sliders are editing — and dataset.hex stays
+      // that stop's colour.
+      pickedSwatch.style.background = gradientBackground(gradient.stops);
       pickedSwatch.dataset.hex = hex;
       pickedSwatch.dataset.opacity = String(opacity);
       pickedSwatch.title = opacity === 100 ? hex : `${hex} at ${opacity}%`;
@@ -374,9 +380,8 @@ function updatePicked(): void {
     }
   }
   // The gradient strip shows the whole picked gradient
-  // at its angle and opacity, so the gradient itself is
-  // always visible even though the swatch shows the stop
-  // being edited.
+  // at its angle and opacity, matching the preview
+  // swatch above it.
   if (gradient && gradientStripEl) {
     paintGradientStrip(gradient.stops);
     gradientStripEl.title = opacity === 100 ? `${gradient.stops[0].color} to ${gradient.stops[gradient.stops.length - 1].color} gradient` : `${gradient.stops[0].color} to ${gradient.stops[gradient.stops.length - 1].color} gradient at ${opacity}%`;

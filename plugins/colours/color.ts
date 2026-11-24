@@ -41,6 +41,17 @@ export function hslToHex(h: number, s: number, l: number): string {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
+// The default second stop for a new gradient: a deep
+// shade of the picked colour — same hue and saturation,
+// lightness 30 below the pick but never above 18, so a
+// light pick still fades to a deep shade, and never
+// below 5, the darkest hslToHex renders. A black pick
+// has no darker shade, so its gradient is flat by nature.
+export function deepShadeHex(hex: string): string {
+  const { h, s, l } = hexToHsl(hex);
+  return hslToHex(h, s, Math.max(5, Math.min(18, l - 30)));
+}
+
 // RGB, as 0–255 integers: the mode the picker offers
 // alongside HSL. Pure maths, no clamp — the 5–95%
 // lightness clamp lives in hslToHex only.

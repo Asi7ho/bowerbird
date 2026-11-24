@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import type { PluginContext } from "bowerbird-plugin-api";
 import { applyColour } from "../../plugins/colours/apply";
-import { hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, isNearDuplicate, colourDistance, normaliseHex, rgbToHex, HARMONY_NAMES, harmoniesFor } from "../../plugins/colours/color";
+import { deepShadeHex, hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, isNearDuplicate, colourDistance, normaliseHex, rgbToHex, HARMONY_NAMES, harmoniesFor } from "../../plugins/colours/color";
 import {
   addColour,
   createPalette,
@@ -48,6 +48,30 @@ describe("hslToHex and hexToHsl", () => {
     expect(hslToHex(red.h, red.s, red.l)).toBe("#E63946");
     const grey = hexToHsl("#1A1A1A");
     expect(hslToHex(grey.h, grey.s, grey.l)).toBe("#1A1A1A");
+  });
+});
+
+describe("deepShadeHex", () => {
+  it("is the same hue and saturation, 30 lightness below the pick and never above 18", () => {
+    // The e2e red (355°, 78%, 56%) fades to a deep crimson.
+    expect(deepShadeHex("#E63746")).toBe("#520A10");
+    const shade = hexToHsl(deepShadeHex("#E63746"));
+    expect(shade.h).toBeCloseTo(355, 0);
+    expect(shade.s).toBeCloseTo(78, 0);
+    expect(shade.l).toBeCloseTo(18, 0);
+    // A light pick fades to a deep shade, not a wash-out.
+    expect(deepShadeHex("#F5C542")).toBe("#574105");
+    // A mid pick lands on the 18 cap.
+    expect(hexToHsl(deepShadeHex("#7FB069")).l).toBeCloseTo(18, 0);
+  });
+
+  it("never goes below the darkest hslToHex renders, so a black pick is flat by nature", () => {
+    // Dark grey fades to the darkest renderable shade.
+    expect(deepShadeHex("#262626")).toBe("#0D0D0D");
+    // Black has no darker shade: the pick itself clamps
+    // to #0D0D0D, so both stops are the same colour.
+    expect(deepShadeHex("#000000")).toBe("#0D0D0D");
+    expect(deepShadeHex("#000000")).toBe(hslToHex(0, 0, 5));
   });
 });
 
