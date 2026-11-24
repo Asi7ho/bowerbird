@@ -73,6 +73,7 @@ let modeSegButtons: Partial<Record<PickerMode, HTMLButtonElement>> = {};
 let harmonySegButtons: Partial<Record<HarmonyName, HTMLButtonElement>> = {};
 let gradSegButtons: Partial<Record<"solid" | "gradient", HTMLButtonElement>> = {};
 let gradientEditorEl: HTMLDivElement | null = null;
+let gradientStripEl: HTMLDivElement | null = null;
 let gradientStopsEl: HTMLDivElement | null = null;
 let angleInput: HTMLInputElement | null = null;
 let angleValue: HTMLSpanElement | null = null;
@@ -145,6 +146,7 @@ export function clearPanel(): void {
   harmonySegButtons = {};
   gradSegButtons = {};
   gradientEditorEl = null;
+  gradientStripEl = null;
   gradientStopsEl = null;
   angleInput = null;
   angleValue = null;
@@ -325,19 +327,17 @@ function updatePicked(): void {
   const hex = pickedHex();
   if (pickedSwatch) {
     if (gradient) {
-      // The preview shows the picked gradient at its
-      // picked opacity, so the picked state is visible at
-      // a glance. CSS angles run 0° bottom-to-top, the
-      // gradient's 0° left-to-right, so 90° is added.
-      const cssAngle = (90 + gradient.angle) % 360;
-      const stops = gradient.stops.map((s) => {
-        const { r, g, b } = hexToRgb(s.color);
-        return `rgba(${r}, ${g}, ${b}, ${opacity / 100}) ${s.offset}%`;
-      }).join(", ");
-      pickedSwatch.style.background = `linear-gradient(${cssAngle}deg, ${stops})`;
+      // The swatch shows the selected stop — the colour
+      // the wheel and sliders are editing — at its picked
+      // opacity, so the swatch and the hex beside it
+      // always agree. The whole gradient lives on the
+      // strip under the Solid/Gradient switch instead.
+      const stopColor = gradient.stops[selectedStop]?.color ?? hex;
+      const { r, g, b } = hexToRgb(stopColor);
+      pickedSwatch.style.background = `rgba(${r}, ${g}, ${b}, ${opacity / 100})`;
       pickedSwatch.dataset.hex = hex;
       pickedSwatch.dataset.opacity = String(opacity);
-      pickedSwatch.title = opacity === 100 ? `${gradient.stops[0].color} to ${gradient.stops[gradient.stops.length - 1].color} gradient` : `${gradient.stops[0].color} to ${gradient.stops[gradient.stops.length - 1].color} gradient at ${opacity}%`;
+      pickedSwatch.title = opacity === 100 ? hex : `${hex} at ${opacity}%`;
     } else {
       // The preview shows the picked colour at its picked
       // opacity, so the picked state is visible at a glance.
@@ -347,6 +347,20 @@ function updatePicked(): void {
       pickedSwatch.dataset.opacity = String(opacity);
       pickedSwatch.title = opacity === 100 ? hex : `${hex} at ${opacity}%`;
     }
+  }
+  // The gradient strip shows the whole picked gradient
+  // at its angle and opacity, so the gradient itself is
+  // always visible even though the swatch shows the stop
+  // being edited. CSS angles run 0° bottom-to-top, the
+  // gradient's 0° left-to-right, so 90° is added.
+  if (gradient && gradientStripEl) {
+    const cssAngle = (90 + gradient.angle) % 360;
+    const stops = gradient.stops.map((s) => {
+      const { r, g, b } = hexToRgb(s.color);
+      return `rgba(${r}, ${g}, ${b}, ${opacity / 100}) ${s.offset}%`;
+    }).join(", ");
+    gradientStripEl.style.background = `linear-gradient(${cssAngle}deg, ${stops})`;
+    gradientStripEl.title = opacity === 100 ? `${gradient.stops[0].color} to ${gradient.stops[gradient.stops.length - 1].color} gradient` : `${gradient.stops[0].color} to ${gradient.stops[gradient.stops.length - 1].color} gradient at ${opacity}%`;
   }
   if (pickedHexEl) pickedHexEl.textContent = hex;
   if (opacityInput && Number(opacityInput.value) !== opacity) opacityInput.value = String(opacity);
@@ -617,8 +631,17 @@ function renderGradientEditor(): void {
   if (!host) return;
   host.innerHTML = "";
   angleInput = angleValue = null;
+  gradientStripEl = null;
   gradientStopsEl = null;
   if (!on || !gradient) return;
+  // The strip first: the whole gradient, so the gradient
+  // itself is visible while the swatch shows the stop
+  // being edited. Display only — the stops below it are
+  // the controls.
+  gradientStripEl = document.createElement("div");
+  gradientStripEl.className = "col-gradient-strip";
+  gradientStripEl.setAttribute("aria-label", "Picked gradient");
+  host.appendChild(gradientStripEl);
   const angle = sliderRow("Angle", "col-slider-angle", 360, gradient.angle, (v) => {
     if (!gradient) return;
     setGradient({ angle: v, stops: gradient.stops });
@@ -872,48 +895,11 @@ export function renderPanel(container: HTMLElement): void {
   pickerBtn.addEventListener("click", () => void pickWithEyeDropper());
   previewRow.appendChild(pickerBtn);
   pickerSection.appendChild(previewRow);
-  // The picked opacity, 0–100%, in the picker section
-  // beside the colour controls — one slider, in the same
-  // style, that never rebuilds on a mode switch. It
-  // moves the picked state and the pen on every tick,
-  // like the wheel moves the colour; it never recolours
-  // selected strokes by itself — the picked state only
-  // lands on a click-apply.
-  const opacityRow = sliderRow("Opacity", "col-slider-opacity", 100, opacity, (v) => {
-    opacity = v;
-    a.pen.setOpacity(v);
-    updatePicked();
-  });
-  opacityInput = opacityRow.input;
-  opacityValue = opacityRow.value;
-  pickerSection.appendChild(opacityRow.row);
-  // The gradient switch, a segmented row in the mode
-  // switch's treatment: Solid or Gradient — one picked
-  // state, two forms. Turning the gradient off clears
-  // it, and the picked state is solid again.
-  const gradSeg = document.createElement("div");
-  gradSeg.className = "col-mode-seg";
-  gradSeg.setAttribute("role", "group");
-  gradSeg.setAttribute("aria-label", "Gradient");
-  for (const [value, label] of [["solid", "Solid"], ["gradient", "Gradient"]] as const) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "col-mode-seg-btn" + ((value === "gradient") === (gradient !== null) ? " active" : "");
-    btn.dataset.gradient = value;
-    btn.textContent = label;
-    btn.setAttribute("aria-label", `${label} stroke`);
-    btn.setAttribute("aria-pressed", String((value === "gradient") === (gradient !== null)));
-    btn.addEventListener("click", () => setGradientMode(value === "gradient"));
-    gradSegButtons[value] = btn;
-    gradSeg.appendChild(btn);
-  }
-  pickerSection.appendChild(gradSeg);
-  gradientEditorEl = document.createElement("div");
-  gradientEditorEl.className = "col-gradient-editor";
-  pickerSection.appendChild(gradientEditorEl);
-  renderGradientEditor();
-  // The mode control, a segmented row: HSL, RGB, HSV or
-  // Hex — one picked colour, four editors.
+  // The tweak controls, a segmented row: HSL, RGB, HSV or
+  // Hex — one picked colour, four editors. They sit with
+  // the wheel and preview: picking a colour is the first
+  // thing, and the wheel, the preview and these sliders
+  // are one control surface.
   const modeSeg = document.createElement("div");
   modeSeg.className = "col-mode-seg";
   modeSeg.setAttribute("role", "group");
@@ -944,6 +930,53 @@ export function renderPanel(container: HTMLElement): void {
   controlsEl = document.createElement("div");
   controlsEl.className = "col-controls";
   pickerSection.appendChild(controlsEl);
+  // The fill controls, under their own hairline: what the
+  // picked colour becomes on the stroke — opacity, solid
+  // or gradient, and, for a gradient, its angle and
+  // stops. One group, so the two segmented switches no
+  // longer read as one split control.
+  const fillGroup = document.createElement("div");
+  fillGroup.className = "col-fill-group";
+  // The picked opacity, 0–100%, in the fill group — one
+  // slider, in the same style, that never rebuilds on a
+  // mode switch. It moves the picked state and the pen on
+  // every tick, like the wheel moves the colour; it never
+  // recolours selected strokes by itself — the picked
+  // state only lands on a click-apply.
+  const opacityRow = sliderRow("Opacity", "col-slider-opacity", 100, opacity, (v) => {
+    opacity = v;
+    a.pen.setOpacity(v);
+    updatePicked();
+  });
+  opacityInput = opacityRow.input;
+  opacityValue = opacityRow.value;
+  fillGroup.appendChild(opacityRow.row);
+  // The gradient switch, a segmented row in the mode
+  // switch's treatment: Solid or Gradient — one picked
+  // state, two forms. Turning the gradient off clears
+  // it, and the picked state is solid again.
+  const gradSeg = document.createElement("div");
+  gradSeg.className = "col-mode-seg";
+  gradSeg.setAttribute("role", "group");
+  gradSeg.setAttribute("aria-label", "Gradient");
+  for (const [value, label] of [["solid", "Solid"], ["gradient", "Gradient"]] as const) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "col-mode-seg-btn" + ((value === "gradient") === (gradient !== null) ? " active" : "");
+    btn.dataset.gradient = value;
+    btn.textContent = label;
+    btn.setAttribute("aria-label", `${label} stroke`);
+    btn.setAttribute("aria-pressed", String((value === "gradient") === (gradient !== null)));
+    btn.addEventListener("click", () => setGradientMode(value === "gradient"));
+    gradSegButtons[value] = btn;
+    gradSeg.appendChild(btn);
+  }
+  fillGroup.appendChild(gradSeg);
+  gradientEditorEl = document.createElement("div");
+  gradientEditorEl.className = "col-gradient-editor";
+  fillGroup.appendChild(gradientEditorEl);
+  pickerSection.appendChild(fillGroup);
+  renderGradientEditor();
   container.appendChild(pickerSection);
   renderControls();
   // Harmonies of the picked colour: a type selector in

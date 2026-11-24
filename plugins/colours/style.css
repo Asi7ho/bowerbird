@@ -31,6 +31,30 @@
   border-bottom: 1px solid var(--separator);
 }
 
+/* The fill group, under its own hairline inside the
+   picker: opacity, the Solid/Gradient switch and, for a
+   gradient, its angle and stops. One group, so the two
+   segmented switches no longer read as one split
+   control — the mode switch above belongs to picking
+   the colour, this one to what the colour becomes. */
+.col-fill-group {
+  border-top: 1px solid var(--separator);
+  padding-top: 8px;
+  margin-top: 8px;
+}
+
+/* The gradient strip: the whole picked gradient at its
+   angle, full width, so the gradient itself stays
+   visible while the preview swatch shows the stop being
+   edited. Display only — the stops below it are the
+   controls. */
+.col-gradient-strip {
+  height: 20px;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  margin-bottom: 6px;
+}
+
 .col-wheel-wrap {
   position: relative;
   width: 140px;
