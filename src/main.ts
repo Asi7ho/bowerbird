@@ -71,6 +71,7 @@ const C: BootContext = {
   currentBuildId: "dev",
   boardGeneration: 0,
   penColor: PALETTE[0],
+  penOpacity: 100,
   shapeOutline: false,
   selected: [],
   toastTimer: null,
@@ -816,6 +817,17 @@ async function init(): Promise<void> {
       // without a full board render per pick — one per
       // pointermove while dragging Palette's wheel would
       // rebuild every visible card for nothing.
+      emitPluginEvent("pen");
+      return true;
+    },
+    // The pen's opacity, 0–100: session state like the
+    // colour, clamped and rounded to a whole percent. A
+    // change fires the same "pen" event, so a listening
+    // plugin can follow it without polling.
+    getPenOpacity: () => C.penOpacity,
+    setPenOpacity: (opacity: number) => {
+      if (!Number.isFinite(opacity)) return false;
+      C.penOpacity = Math.min(100, Math.max(0, Math.round(opacity)));
       emitPluginEvent("pen");
       return true;
     },

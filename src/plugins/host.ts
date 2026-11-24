@@ -679,6 +679,8 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
     pen: {
       getColor: () => host!.getPenColor(),
       setColor: (hex: string) => host!.setPenColor(hex),
+      getOpacity: () => host!.getPenOpacity(),
+      setOpacity: (opacity: number) => host!.setPenOpacity(opacity),
     },
     ui: {
       toast: (msg: string) => host!.toast(msg),

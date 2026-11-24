@@ -567,6 +567,8 @@ export interface PluginHost {
   getSelectMode: () => "select" | "lasso";
   getPenColor: () => string;
   setPenColor: (hex: string) => boolean;
+  getPenOpacity: () => number;
+  setPenOpacity: (opacity: number) => boolean;
   getCamera: () => Camera;
   setCamera: (cam: Camera) => void;
   // Set the camera without saving or rendering, for a live
@@ -1051,9 +1053,16 @@ export interface PluginContext {
   // "pen" plugin event, so a listening plugin can follow
   // it without polling. Pen colour is session state, not
   // saved in board JSON.
+  // The pen's opacity, 0–100, is the same kind of state:
+  // the next stroke draws at it, and changing it fires
+  // the same "pen" event. It is session state too, not
+  // saved in board JSON — a stroke stores its own opacity
+  // when it is drawn.
   pen: {
     getColor: () => string;
     setColor: (hex: string) => boolean;
+    getOpacity: () => number;
+    setOpacity: (opacity: number) => boolean;
   };
   ui: {
     toast: (msg: string) => void;

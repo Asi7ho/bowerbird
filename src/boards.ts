@@ -34,6 +34,10 @@ export interface BootContext {
   // result into the new board's card with the same id.
   boardGeneration: number;
   penColor: string;
+  // The pen's opacity, 0–100: session state like the
+  // colour, so the next stroke draws at it. Missing on an
+  // old session means 100.
+  penOpacity: number;
   // Whether new shapes are outlines (stroke only) or filled.
   shapeOutline: boolean;
   selected: number[];
