@@ -296,6 +296,15 @@
   border-bottom: 1px solid var(--separator);
 }
 
+/* The Harmonies section breathes a little more than
+   the other sections: padding above the head row and
+   below the tiles, so it never feels tight against
+   the picker above or Recent below. */
+.col-section-harmonies {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
 .col-section-title {
   display: block;
   font-size: 13px;

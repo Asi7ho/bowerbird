@@ -1045,7 +1045,7 @@ export function renderPanel(container: HTMLElement): void {
   // menu in the head row, showing the current type, with
   // five tiles below it.
   const harmoniesSection = document.createElement("div");
-  harmoniesSection.className = "col-section";
+  harmoniesSection.className = "col-section col-section-harmonies";
   const harmoniesHead = document.createElement("div");
   harmoniesHead.className = "col-harmonies-head";
   const harmoniesTitle = document.createElement("span");
