@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import type { PluginContext } from "bowerbird-plugin-api";
 import { applyColour } from "../../plugins/colours/apply";
-import { hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, normaliseHex, rgbToHex } from "../../plugins/colours/color";
+import { hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, normaliseHex, rgbToHex, HARMONY_NAMES, harmoniesFor } from "../../plugins/colours/color";
 import {
   addColour,
   createPalette,
@@ -72,6 +72,38 @@ describe("hexToHsv and hsvToHex", () => {
     expect(hsvToHex(red.h, red.s, red.v)).toBe("#E63946");
     const grey = hexToHsv("#1A1A1A");
     expect(hsvToHex(grey.h, grey.s, grey.v)).toBe("#1A1A1A");
+  });
+});
+
+describe("harmoniesFor", () => {
+  it("returns the five harmony types in order, five colours each", () => {
+    const harmonies = harmoniesFor(0, 100, 50);
+    expect(harmonies.map((h) => h.name)).toEqual([...HARMONY_NAMES]);
+    for (const h of harmonies) {
+      expect(h.colors).toHaveLength(5);
+      for (const c of h.colors) expect(isHex(c)).toBe(true);
+      expect(new Set(h.colors).size).toBe(5);
+    }
+  });
+  it("builds each harmony from the base colour by hue and lightness only", () => {
+    const harmonies = harmoniesFor(0, 100, 50);
+    const byName = Object.fromEntries(harmonies.map((h) => [h.name, h.colors]));
+    // Every harmony but Monochromatic starts at the base.
+    expect(byName["Analogous"][2]).toBe("#FF0000");
+    expect(byName["Complementary"][0]).toBe("#FF0000");
+    expect(byName["Split complementary"][0]).toBe("#FF0000");
+    expect(byName["Triadic"][0]).toBe("#FF0000");
+    // The opposite hue, and the triadic hues.
+    expect(byName["Complementary"][1]).toBe("#00FFFF");
+    expect(byName["Triadic"][1]).toBe("#00FF00");
+    expect(byName["Triadic"][2]).toBe("#0000FF");
+    // Monochromatic: same hue, lightness dark to light.
+    const monoLight = byName["Monochromatic"].map((c) => hexToHsl(c).l);
+    for (let i = 1; i < monoLight.length; i++) expect(monoLight[i]).toBeGreaterThan(monoLight[i - 1]);
+    expect(byName["Monochromatic"][2]).toBe("#FF0000");
+    // The tints are the base lightened, never a new hue.
+    expect(hexToHsl(byName["Complementary"][2]).h).toBeCloseTo(0, 0);
+    expect(hexToHsl(byName["Complementary"][2]).l).toBeGreaterThan(50);
   });
 });
 

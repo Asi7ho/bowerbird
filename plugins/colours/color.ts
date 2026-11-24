@@ -110,3 +110,52 @@ export function hexToHsl(hex: string): { h: number; s: number; l: number } {
   else h = ((r - g) / d + 4) * 60;
   return { h, s, l };
 }
+
+// Colour harmonies, copied from the old Palette plugin's
+// palettesFor: same five types, same maths — plugins are
+// self-contained, so the logic is duplicated here, not
+// imported. Each harmony is five colours from a picked
+// colour, in order:
+//   Monochromatic — same hue, lightness steps, dark to
+//     light. Steps are -24, -12, 0, +12, +24 lightness,
+//     shifted as a whole to fit 5–95% so no two steps
+//     collapse to the same colour at the extremes.
+//   Analogous — hues -30, -15, 0, +15, +30, same
+//     saturation and lightness: colours next to each
+//     other on the wheel.
+//   Complementary — opposite colours, then tints and
+//     a shade to fill five: base, opposite, base light,
+//     opposite light, base dark.
+//   Split complementary — base, opposite +30, opposite
+//     -30 (that is, +150 and +210), then tints of the
+//     first two: base light, +150 light.
+//   Triadic — base, +120, +240, then tints of the first
+//     two: base light, +120 light.
+// Saturation never changes inside a harmony; only hue
+// (by harmony) and lightness (by tint, shade, or the
+// monochromatic steps) do, so a harmony stays harmonious
+// instead of drifting muddy. Lightness is clamped to
+// 5–95% so a swatch is never pure black or pure white.
+export const HARMONY_NAMES = ["Monochromatic", "Analogous", "Complementary", "Split complementary", "Triadic"] as const;
+export type HarmonyName = (typeof HARMONY_NAMES)[number];
+
+export interface Harmony {
+  name: HarmonyName;
+  colors: string[];
+}
+
+export function harmoniesFor(h: number, s: number, l: number): Harmony[] {
+  const col = (dh: number, dl: number): string => hslToHex(h + dh, s, l + dl);
+  // Monochromatic: lightness steps, shifted to fit 5–95.
+  const steps = [-24, -12, 0, 12, 24].map((dl) => l + dl);
+  const lo = Math.min(...steps), hi = Math.max(...steps);
+  const shift = lo < 5 ? 5 - lo : hi > 95 ? 95 - hi : 0;
+  const mono = steps.map((v) => hslToHex(h, s, v + shift));
+  return [
+    { name: "Monochromatic", colors: mono },
+    { name: "Analogous", colors: [-30, -15, 0, 15, 30].map((dh) => col(dh, 0)) },
+    { name: "Complementary", colors: [col(0, 0), col(180, 0), col(0, 15), col(180, 15), col(0, -15)] },
+    { name: "Split complementary", colors: [col(0, 0), col(150, 0), col(210, 0), col(0, 15), col(150, 15)] },
+    { name: "Triadic", colors: [col(0, 0), col(120, 0), col(240, 0), col(0, 15), col(120, 15)] },
+  ];
+}
