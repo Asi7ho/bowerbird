@@ -1701,6 +1701,100 @@ body.platform-linux #title-bar button.win-close:hover {
   box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35);
 }
 
+/* The size button in the toolbar: the stroke width in
+   use, as a line sample. Clicking it opens the size
+   flyout. It is a toolbar button in size, a sample in
+   look, like the colour swatch beside it. The line's
+   thickness follows the width, capped so a wide stroke
+   still reads as a line in the button. */
+#toolbar button.size-button {
+  width: 100%;
+  height: 40px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#toolbar button.size-button svg {
+  stroke-width: var(--size-width, 3);
+}
+
+/* The size flyout: the same floating .palette surface
+   as the colour bar, with a slider row — a label, the
+   app-style slider and the value. */
+#toolbar .size-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#toolbar .size-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--grey);
+}
+
+#toolbar .size-value {
+  font-size: 13px;
+  color: var(--grey);
+  min-width: 2ch;
+  text-align: right;
+}
+
+/* Slider, in app style — the palette panel's treatment:
+   a 4px fill-grey track, a white circular thumb with a
+   hairline border and a soft shadow. No browser default. */
+#toolbar .size-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 120px;
+  box-sizing: border-box;
+  margin: 0;
+  cursor: pointer;
+  height: 20px;
+  background: transparent;
+  outline: none;
+}
+
+#toolbar .size-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fill);
+}
+
+#toolbar .size-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-sm);
+}
+
+#toolbar .size-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fill);
+}
+
+#toolbar .size-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-sm);
+}
+
+#toolbar .size-slider:hover::-webkit-slider-thumb,
+#toolbar .size-slider:hover::-moz-range-thumb {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
+}
+
 #toolbar .palette .shape-option.active {
   background: #fff;
   color: var(--ink);
