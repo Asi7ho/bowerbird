@@ -3772,6 +3772,10 @@ async function main() {
         .evaluateAll((els) => els.map((el) => el.dataset.hex));
       assert.equal(new Set(hexes).size, 5);
       assert.equal(hexes[2], picked);
+      // The picked colour's tile carries the ring.
+      const marked = await page.locator(".col-harmony-tile.selected")
+        .evaluateAll((els) => els.map((el) => el.dataset.hex));
+      assert.deepEqual(marked, [picked]);
       // A harmony click applies: select the red stroke,
       // click the first harmony tile, and the stroke takes
       // its colour. One undo puts it back.
@@ -3994,10 +3998,14 @@ async function main() {
       assert.ok(/^#[0-9A-F]{6}$/.test(pickedRed));
       await page.locator('.col-mode-seg-btn[data-gradient="gradient"]').click();
       await page.locator(".col-slider-angle").fill("0");
-      // The preview swatch shows the picked gradient.
-      const bg = await page.locator(".col-picked").evaluate((el) => el.style.background);
-      assert.ok(bg.includes("linear-gradient"), `picked swatch should show the gradient, got ${bg}`);
-      assert.ok(bg.includes("0%") && bg.includes("100%"), `picked swatch should show both stops, got ${bg}`);
+      // The strip shows the picked gradient, and the
+      // preview swatch shows the stop being edited.
+      const bg = await page.locator(".col-gradient-strip").evaluate((el) => el.style.background);
+      assert.ok(bg.includes("linear-gradient"), `gradient strip should show the gradient, got ${bg}`);
+      assert.ok(bg.includes("0%") && bg.includes("100%"), `gradient strip should show both stops, got ${bg}`);
+      const swatch = await page.locator(".col-picked").evaluate((el) => el.style.background);
+      assert.ok(swatch.includes("rgba"), `picked swatch should show the selected stop, got ${swatch}`);
+      assert.ok(!swatch.includes("linear-gradient"), `picked swatch should not show the gradient, got ${swatch}`);
       // Click the preview with nothing selected: the pen
       // takes the gradient. The previous check leaves the
       // translucent stroke selected, so clear the selection
@@ -4129,6 +4137,17 @@ async function main() {
         const it = strokes().find((s) => s.id === before.id);
         return it && !it.kind.Stroke.gradient && it.kind.Stroke.color === picked ? true : null;
       });
+    });
+    await check("the colour panel fits without scrolling, solid and gradient", async () => {
+      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      const fits = async () => page.locator('.plugin-panel[data-panel="colours"] .plugin-panel-body')
+        .evaluate((el) => el.scrollHeight <= el.clientHeight);
+      assert.ok(await fits(), "panel should fit without scrolling in solid mode");
+      await page.locator('.col-mode-seg-btn[data-gradient="gradient"]').click();
+      await page.locator(".col-gradient-strip").waitFor({ timeout: READY_TIMEOUT_MS });
+      assert.ok(await fits(), "panel should fit without scrolling in gradient mode");
+      await page.locator('.col-mode-seg-btn[data-gradient="solid"]').click();
     });
 
     await check("a version restores from the Boards panel history", async () => {
