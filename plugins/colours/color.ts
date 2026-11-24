@@ -52,6 +52,15 @@ export function deepShadeHex(hex: string): string {
   return hslToHex(h, s, Math.max(5, Math.min(18, l - 30)));
 }
 
+// The same hue and saturation at lightness 50%: the
+// readable version of a picked colour, for the preview
+// while the wheel is being dragged — a dark pick barely
+// reads in the swatch, so the drag shows this instead.
+export function brightHex(hex: string): string {
+  const { h, s } = hexToHsl(hex);
+  return hslToHex(h, s, 50);
+}
+
 // RGB, as 0–255 integers: the mode the picker offers
 // alongside HSL. Pure maths, no clamp — the 5–95%
 // lightness clamp lives in hslToHex only.

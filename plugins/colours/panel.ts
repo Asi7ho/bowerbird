@@ -6,7 +6,7 @@
 // colours come from.
 import type { PluginContext, StrokeGradient } from "bowerbird-plugin-api";
 import { applyColour } from "./apply.js";
-import { HARMONY_NAMES, colourDistance, deepShadeHex, harmoniesFor, hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, normaliseHex, rgbToHex, type HarmonyName } from "./color.js";
+import { HARMONY_NAMES, brightHex, colourDistance, deepShadeHex, harmoniesFor, hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, normaliseHex, rgbToHex, type HarmonyName } from "./color.js";
 import { attachPlaceDrag } from "./place.js";
 import {
   addColour,
@@ -52,6 +52,12 @@ let gradient: StrokeGradient | null = null;
 // on: clicking a stop selects it, and the picked colour
 // targets that stop.
 let selectedStop = 0;
+// While the wheel is being dragged: the preview swatch
+// shows the picked hue and saturation at lightness 50%,
+// so a dark pick still reads while it moves. The picked
+// lightness itself never changes — this is preview-only,
+// and the swatch returns to the true colour on release.
+let wheelDragging = false;
 // The harmony type: Analogous first, so the middle tile
 // of the shown set is the picked colour itself.
 let harmony: HarmonyName = "Analogous";
@@ -359,15 +365,25 @@ function updatePicked(): void {
       // look like. The hex beside it still shows the
       // selected stop — the colour the wheel and sliders
       // are editing — and dataset.hex stays that stop's
-      // colour.
-      pickedSwatch.style.background = gradientBackground(gradient.stops);
+      // colour. While the wheel is being dragged, the
+      // selected stop shows at lightness 50% in the
+      // swatch, so the new hue reads even when the pick
+      // is dark; the strip keeps the true gradient.
+      const stops = wheelDragging
+        ? gradient.stops.map((s, j) => (j === selectedStop ? { offset: s.offset, color: brightHex(s.color) } : s))
+        : gradient.stops;
+      pickedSwatch.style.background = gradientBackground(stops);
       pickedSwatch.dataset.hex = hex;
       pickedSwatch.dataset.opacity = String(opacity);
       pickedSwatch.title = opacity === 100 ? hex : `${hex} at ${opacity}%`;
     } else {
       // The preview shows the picked colour at its picked
       // opacity, so the picked state is visible at a glance.
-      const { r, g, b } = hexToRgb(hex);
+      // While the wheel is being dragged it shows at
+      // lightness 50% instead, so a dark pick still reads;
+      // the hex and dataset stay the true colour.
+      const showHex = wheelDragging ? brightHex(hex) : hex;
+      const { r, g, b } = hexToRgb(showHex);
       pickedSwatch.style.background = `rgba(${r}, ${g}, ${b}, ${opacity / 100})`;
       pickedSwatch.dataset.hex = hex;
       pickedSwatch.dataset.opacity = String(opacity);
@@ -1015,7 +1031,11 @@ export function renderPanel(container: HTMLElement): void {
   pickerSection.className = "col-picker-section";
   // A wheel release records the settled colour; the
   // pointermove ticks of the drag do not.
-  wheel = createWheel((h, s) => setBase({ h, s }), () => recordColour(pickedHex()));
+  wheel = createWheel(
+    (h, s) => setBase({ h, s }),
+    () => { wheelDragging = false; updatePicked(); recordColour(pickedHex()); },
+    () => { wheelDragging = true; updatePicked(); },
+  );
   pickerSection.appendChild(wheel.element);
   const previewRow = document.createElement("div");
   previewRow.className = "col-preview-row";

@@ -16,7 +16,7 @@ export interface WheelHandle {
 // state, so the pixels are identical every time.
 let wheelPixels: { size: number; data: ImageData } | null = null;
 
-export function createWheel(onPick: (h: number, s: number) => void, onSettle?: () => void): WheelHandle {
+export function createWheel(onPick: (h: number, s: number) => void, onSettle?: () => void, onPickStart?: () => void): WheelHandle {
   const wrap = document.createElement("div");
   wrap.className = "col-wheel-wrap";
   const canvas = document.createElement("canvas");
@@ -93,6 +93,9 @@ export function createWheel(onPick: (h: number, s: number) => void, onSettle?: (
   };
 
   wrap.addEventListener("pointerdown", (e: PointerEvent) => {
+    // The drag starts here, before the first pick, so
+    // the caller can brighten its preview for the drag.
+    onPickStart?.();
     pickFromWheel(e.clientX, e.clientY);
     // Pointermove fires faster than a full panel update
     // costs, and each one reads layout twice: coalesce
