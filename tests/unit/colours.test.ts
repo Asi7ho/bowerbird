@@ -10,9 +10,12 @@ import {
   createPalette,
   deletePalette,
   emptyStore,
+  MAX_RECENT,
   movePalette,
   nextPaletteName,
+  parseRecent,
   parseStored,
+  recordRecent,
   removeColour,
   renamePalette,
   type ColourStore,
@@ -153,6 +156,31 @@ describe("palette store", () => {
     expect(addColour(before, 9, "#00FF00")).toBe(before);
     expect(removeColour(added, 0, 0).palettes[0].colors).toEqual(["#00FF00"]);
     expect(removeColour(added, 0, 9)).toBe(added);
+  });
+});
+
+describe("recent colours", () => {
+  it("parseRecent accepts a valid list, normalises, dedupes and caps at ten", () => {
+    expect(parseRecent(["#f00", "#00FF00"])).toEqual(["#FF0000", "#00FF00"]);
+    expect(parseRecent(["#FF0000", "#ff0000"])).toEqual(["#FF0000"]);
+    expect(parseRecent(null)).toBeNull();
+    expect(parseRecent("no")).toBeNull();
+    expect(parseRecent(["red"])).toBeNull();
+    expect(parseRecent([1])).toBeNull();
+    const eleven = Array.from({ length: 11 }, (_, i) => `#${String(i).padStart(2, "0")}0000`);
+    expect(parseRecent(eleven)).toHaveLength(MAX_RECENT);
+  });
+  it("recordRecent puts the colour first, moves a repeat to the front, and caps at ten", () => {
+    const before = ["#FF0000", "#00FF00"];
+    expect(recordRecent(before, "#0000ff")).toEqual(["#0000FF", "#FF0000", "#00FF00"]);
+    expect(recordRecent(before, "#00ff00")).toEqual(["#00FF00", "#FF0000"]);
+    expect(recordRecent(before, "red")).toBe(before);
+    expect(before).toEqual(["#FF0000", "#00FF00"]);
+    const ten = Array.from({ length: 10 }, (_, i) => `#${(i + 1).toString(16).padStart(2, "0")}0000`.toUpperCase());
+    const capped = recordRecent(ten, "#FFFFFF");
+    expect(capped).toHaveLength(10);
+    expect(capped[0]).toBe("#FFFFFF");
+    expect(capped).not.toContain(ten[9]);
   });
 });
 

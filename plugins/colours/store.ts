@@ -99,3 +99,36 @@ export function removeColour(store: ColourStore, paletteIndex: number, colourInd
   );
   return { palettes };
 }
+
+// Recent colours: the last colours applied or settled on,
+// most recent first, at most ten, no duplicates. They live
+// under their own storage key ("recent"), so the palettes
+// shape above never changes — changing it would wipe
+// stored palettes. Pure data, like the store: the panel
+// owns the list, these functions only shape it.
+export const MAX_RECENT = 10;
+
+// The shape read back from plugin storage: the recent
+// list itself. Anything else is an empty list, never a
+// crash. Colours are normalised and deduplicated on the
+// way in, so old mixed-case hexes come out uniform.
+export function parseRecent(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const recent: string[] = [];
+  for (const c of value) {
+    if (typeof c !== "string") return null;
+    const hex = normaliseHex(c);
+    if (!hex) return null;
+    if (!recent.includes(hex)) recent.push(hex);
+  }
+  return recent.slice(0, MAX_RECENT);
+}
+
+// Record a colour as the most recent: to the front, any
+// older copy removed, capped at ten. A bad hex leaves the
+// list alone, and the input is never mutated.
+export function recordRecent(recent: string[], hex: string): string[] {
+  const colour = normaliseHex(hex);
+  if (!colour) return recent;
+  return [colour, ...recent.filter((c) => c !== colour)].slice(0, MAX_RECENT);
+}
