@@ -640,7 +640,9 @@ export interface PluginHost {
   // The next stroke a core draw tool draws (see
   // StrokeDefaults): read at drag start, so a panel edit
   // applies to the next drag. Unset fields use the tool's
-  // built-ins; clearing restores them.
+  // built-ins; clearing restores them. Setting or clearing
+  // emits the `pen` event, so the toolbar's size control
+  // and other plugins can follow the width.
   getStrokeDefaults: (kind: "pen" | "pencil" | "highlighter") => StrokeDefaults;
   setStrokeDefaults: (kind: "pen" | "pencil" | "highlighter", defaults: StrokeDefaults) => void;
   clearStrokeDefaults: (kind: "pen" | "pencil" | "highlighter") => void;
@@ -1161,7 +1163,9 @@ export interface PluginContext {
     // built-in (pen 3, pencil 2, highlighter 12 and marker;
     // a linear curve; no texture). Clearing restores the
     // built-ins, so disabling the plugin that set them
-    // leaves the plain core tools.
+    // leaves the plain core tools. Setting or clearing
+    // emits the `pen` event, so the toolbar's size control
+    // and other plugins can follow the width.
     getStrokeDefaults: (kind: "pen" | "pencil" | "highlighter") => StrokeDefaults;
     setStrokeDefaults: (kind: "pen" | "pencil" | "highlighter", defaults: StrokeDefaults) => void;
     clearStrokeDefaults: (kind: "pen" | "pencil" | "highlighter") => void;
