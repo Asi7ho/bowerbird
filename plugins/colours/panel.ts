@@ -6,7 +6,7 @@
 // colours come from.
 import type { PluginContext } from "bowerbird-plugin-api";
 import { applyColour } from "./apply.js";
-import { hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, normaliseHex, rgbToHex } from "./color.js";
+import { HARMONY_NAMES, harmoniesFor, hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, normaliseHex, rgbToHex, type HarmonyName } from "./color.js";
 import { attachPlaceDrag } from "./place.js";
 import {
   addColour,
@@ -14,6 +14,7 @@ import {
   deletePalette,
   emptyStore,
   movePalette,
+  recordRecent,
   removeColour,
   renamePalette,
   type ColourStore,
@@ -38,6 +39,13 @@ let store: ColourStore = emptyStore();
 // The picked colour, as HSL: the wheel and the sliders
 // all write the same three numbers, so they never drift.
 let base = hexToHsl("#007AFF");
+// The harmony type: Analogous first, so the middle tile
+// of the shown set is the picked colour itself.
+let harmony: HarmonyName = "Analogous";
+// The recent colours, most recent first: recorded when a
+// colour is applied or the picked colour settles, never
+// on an intermediate drag tick.
+let recent: string[] = [];
 // The tweak mode: HSL, RGB, HSV or Hex — different
 // editors for the same picked colour, never separate
 // state. Persisted, so the panel reopens as left.
@@ -49,7 +57,11 @@ export function parsePickerMode(value: unknown): PickerMode {
 
 let mode: PickerMode = "hsl";
 let modeSegButtons: Partial<Record<PickerMode, HTMLButtonElement>> = {};
+let harmonySegButtons: Partial<Record<HarmonyName, HTMLButtonElement>> = {};
 let controlsEl: HTMLDivElement | null = null;
+let harmonyEl: HTMLDivElement | null = null;
+let recentSectionEl: HTMLDivElement | null = null;
+let recentEl: HTMLDivElement | null = null;
 let palettesEl: HTMLDivElement | null = null;
 let wheel: WheelHandle | null = null;
 let pickedSwatch: HTMLButtonElement | null = null;
@@ -82,10 +94,11 @@ let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let eyeDropperFallback: HTMLInputElement | null = null;
 let eyeDropperFallbackOnInput: (() => void) | null = null;
 
-export function initPanel(a: PluginContext, initial: ColourStore, initialMode: PickerMode = "hsl"): void {
+export function initPanel(a: PluginContext, initial: ColourStore, initialMode: PickerMode = "hsl", initialRecent: string[] = []): void {
   api = a;
   store = initial;
   mode = initialMode;
+  recent = initialRecent;
   if (a.pen) {
     const pen = a.pen.getColor();
     if (isHex(pen)) base = hexToHsl(pen);
@@ -95,8 +108,14 @@ export function initPanel(a: PluginContext, initial: ColourStore, initialMode: P
 export function clearPanel(): void {
   api = null;
   store = emptyStore();
+  harmony = "Analogous";
+  recent = [];
   modeSegButtons = {};
+  harmonySegButtons = {};
   controlsEl = null;
+  harmonyEl = null;
+  recentSectionEl = null;
+  recentEl = null;
   palettesEl = null;
   wheel = null;
   pickedSwatch = null;
@@ -129,13 +148,34 @@ function scheduleSave(): void {
   if (!api || !api.storage) return;
   // Debounced: every palette edit used to rewrite the
   // whole plugin-storage file at once, which is a full IPC
-  // call plus a synchronous disk write per edit.
+  // call plus a synchronous disk write per edit. Recents
+  // ride the same timer, under their own key.
   if (saveTimer !== null) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     saveTimer = null;
     if (!api || !api.storage) return;
     void api.storage.set("palettes", store.palettes).catch(() => { /* storage is a convenience, not a palette */ });
+    void api.storage.set("recent", recent).catch(() => { /* storage is a convenience, not a recent list */ });
   }, 250);
+}
+
+// Record a colour as the most recent one, and show it.
+function recordColour(hex: string): void {
+  const next = recordRecent(recent, hex);
+  if (next === recent) return;
+  recent = next;
+  scheduleSave();
+  renderRecent();
+}
+
+// Apply a colour, and record it: every tile click, the
+// preview click, an eyedropper pick and a hex commit all
+// go through here, so the recent list holds exactly the
+// colours that were applied.
+function applyAndRecord(hex: string): void {
+  if (!api) return;
+  applyColour(api, hex);
+  recordColour(hex);
 }
 
 function updateStore(next: ColourStore): void {
@@ -150,9 +190,9 @@ function pickedHex(): string {
 }
 
 // Refresh every control that shows the picked colour:
-// the preview, its hex, the wheel marker, and the
-// current mode's controls. The wheel draws in HSL, so
-// its marker is always the HSL position, in every mode.
+// the preview, its hex, the wheel marker, the current
+// mode's controls, and the harmony set, which is made
+// from the picked colour and follows it live.
 function updatePicked(): void {
   const hex = pickedHex();
   if (pickedSwatch) {
@@ -162,6 +202,7 @@ function updatePicked(): void {
   }
   if (pickedHexEl) pickedHexEl.textContent = hex;
   if (wheel) wheel.setMarker(base.h, base.s);
+  renderHarmonies();
   const setSlider = (input: HTMLInputElement | null, value: HTMLSpanElement | null, v: number, text: string): void => {
     if (input && Number(input.value) !== Math.round(v)) input.value = String(Math.round(v));
     if (value) value.textContent = text;
@@ -217,7 +258,10 @@ async function pickWithEyeDropper(): Promise<void> {
   if (typeof window.EyeDropper === "function") {
     try {
       const result = await new window.EyeDropper().open();
-      if (result?.sRGBHex) setPickedHex(result.sRGBHex);
+      if (result?.sRGBHex) {
+        setPickedHex(result.sRGBHex);
+        recordColour(pickedHex());
+      }
       return;
     } catch (e) {
       // AbortError is Esc / cancel: nothing to do. Any
@@ -233,7 +277,12 @@ async function pickWithEyeDropper(): Promise<void> {
   fallback.style.cssText = "position:fixed;left:-100px;top:-100px;width:1px;height:1px;opacity:0;";
   eyeDropperFallbackOnInput = () => setPickedHex(fallback.value);
   fallback.addEventListener("input", eyeDropperFallbackOnInput);
-  fallback.addEventListener("change", () => removeEyeDropperFallback(), { once: true });
+  // The dialog's change is its close: the pick settles
+  // there, not on every input tick while it is open.
+  fallback.addEventListener("change", () => {
+    recordColour(pickedHex());
+    removeEyeDropperFallback();
+  }, { once: true });
   eyeDropperFallback = fallback;
   document.body.appendChild(fallback);
   fallback.click();
@@ -261,8 +310,11 @@ function iconButton(label: string, title: string, svg: string): HTMLButtonElemen
 }
 
 // One slider row: label, slider and value on a single
-// line, in the old Palette panel's slider style.
-function sliderRow(label: string, cls: string, max: number, initial: number, onInput: (v: number) => void): { row: HTMLDivElement; input: HTMLInputElement; value: HTMLSpanElement } {
+// line, in the old Palette panel's slider style. The
+// change event is the release: a colour is recorded
+// there, when the picked colour settles, never on the
+// input ticks of a drag.
+function sliderRow(label: string, cls: string, max: number, initial: number, onInput: (v: number) => void, onSettle?: () => void): { row: HTMLDivElement; input: HTMLInputElement; value: HTMLSpanElement } {
   const row = document.createElement("div");
   row.className = "col-slider-row";
   const nameEl = document.createElement("span");
@@ -281,6 +333,7 @@ function sliderRow(label: string, cls: string, max: number, initial: number, onI
   // Delete deletes the selection.
   input.addEventListener("keydown", (e) => e.stopPropagation());
   input.addEventListener("input", () => onInput(Number(input.value)));
+  if (onSettle) input.addEventListener("change", () => onSettle());
   row.appendChild(input);
   const value = document.createElement("span");
   value.className = "col-slider-value";
@@ -300,16 +353,19 @@ function renderControls(): void {
   redInput = redValue = greenInput = greenValue = blueInput = blueValue = null;
   hsvHueInput = hsvHueValue = hsvSatInput = hsvSatValue = hsvValInput = hsvValValue = null;
   hexInput = null;
+  // A slider release records the settled colour; the
+  // input ticks of the drag do not.
+  const settle = (): void => recordColour(pickedHex());
   if (mode === "hsl") {
-    const hue = sliderRow("Hue", "col-slider-hue", 360, base.h, (v) => setBase({ h: v }));
+    const hue = sliderRow("Hue", "col-slider-hue", 360, base.h, (v) => setBase({ h: v }), settle);
     hueInput = hue.input;
     hueValue = hue.value;
     host.appendChild(hue.row);
-    const sat = sliderRow("Saturation", "col-slider-sat", 100, base.s, (v) => setBase({ s: v }));
+    const sat = sliderRow("Saturation", "col-slider-sat", 100, base.s, (v) => setBase({ s: v }), settle);
     satInput = sat.input;
     satValue = sat.value;
     host.appendChild(sat.row);
-    const light = sliderRow("Lightness", "col-slider-light", 100, base.l, (v) => setBase({ l: v }));
+    const light = sliderRow("Lightness", "col-slider-light", 100, base.l, (v) => setBase({ l: v }), settle);
     lightInput = light.input;
     lightValue = light.value;
     host.appendChild(light.row);
@@ -318,21 +374,21 @@ function renderControls(): void {
     const red = sliderRow("Red", "col-slider-red", 255, rgb.r, (v) => {
       const cur = hexToRgb(pickedHex());
       setPickedHex(rgbToHex(v, cur.g, cur.b));
-    });
+    }, settle);
     redInput = red.input;
     redValue = red.value;
     host.appendChild(red.row);
     const green = sliderRow("Green", "col-slider-green", 255, rgb.g, (v) => {
       const cur = hexToRgb(pickedHex());
       setPickedHex(rgbToHex(cur.r, v, cur.b));
-    });
+    }, settle);
     greenInput = green.input;
     greenValue = green.value;
     host.appendChild(green.row);
     const blue = sliderRow("Blue", "col-slider-blue", 255, rgb.b, (v) => {
       const cur = hexToRgb(pickedHex());
       setPickedHex(rgbToHex(cur.r, cur.g, v));
-    });
+    }, settle);
     blueInput = blue.input;
     blueValue = blue.value;
     host.appendChild(blue.row);
@@ -341,21 +397,21 @@ function renderControls(): void {
     const hue = sliderRow("Hue", "col-slider-hsv-hue", 360, hsv.h, (v) => {
       const cur = hexToHsv(pickedHex());
       setPickedHex(hsvToHex(v, cur.s, cur.v));
-    });
+    }, settle);
     hsvHueInput = hue.input;
     hsvHueValue = hue.value;
     host.appendChild(hue.row);
     const sat = sliderRow("Saturation", "col-slider-hsv-sat", 100, hsv.s, (v) => {
       const cur = hexToHsv(pickedHex());
       setPickedHex(hsvToHex(cur.h, v, cur.v));
-    });
+    }, settle);
     hsvSatInput = sat.input;
     hsvSatValue = sat.value;
     host.appendChild(sat.row);
     const val = sliderRow("Value", "col-slider-hsv-val", 100, hsv.v, (v) => {
       const cur = hexToHsv(pickedHex());
       setPickedHex(hsvToHex(cur.h, cur.s, v));
-    });
+    }, settle);
     hsvValInput = val.input;
     hsvValValue = val.value;
     host.appendChild(val.row);
@@ -369,9 +425,12 @@ function renderControls(): void {
     input.addEventListener("keydown", (e) => e.stopPropagation());
     const commit = (): void => {
       // A bad hex is ignored, not applied: the field
-      // falls back to the last good colour.
-      if (normaliseHex(input.value)) setPickedHex(input.value);
-      else input.value = pickedHex();
+      // falls back to the last good colour. A good hex
+      // is a commit, so it is recorded like any apply.
+      if (normaliseHex(input.value)) {
+        setPickedHex(input.value);
+        recordColour(pickedHex());
+      } else input.value = pickedHex();
     };
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") commit();
@@ -382,6 +441,55 @@ function renderControls(): void {
     host.appendChild(input);
   }
   updatePicked();
+}
+
+// The harmony set for the picked colour: five tiles for
+// the selected harmony type, remade whenever the picked
+// colour moves. Clicking one applies it like any tile.
+function renderHarmonies(): void {
+  const list = harmonyEl;
+  if (!list) return;
+  list.innerHTML = "";
+  const found = harmoniesFor(base.h, base.s, base.l).find((h) => h.name === harmony);
+  for (const hex of found ? found.colors : []) {
+    const wrap = document.createElement("div");
+    wrap.className = "col-tile-wrap";
+    const tile = document.createElement("button");
+    tile.type = "button";
+    tile.className = "col-tile col-harmony-tile";
+    tile.style.background = hex;
+    tile.dataset.hex = hex;
+    tile.title = hex;
+    tile.setAttribute("aria-label", hex);
+    tile.addEventListener("click", () => applyAndRecord(hex));
+    wrap.appendChild(tile);
+    list.appendChild(wrap);
+  }
+}
+
+// The recent colours, most recent first. The section
+// hides itself while there is nothing to show, so a
+// fresh install shows no empty row.
+function renderRecent(): void {
+  const section = recentSectionEl;
+  const list = recentEl;
+  if (!section || !list) return;
+  section.style.display = recent.length === 0 ? "none" : "";
+  list.innerHTML = "";
+  for (const hex of recent) {
+    const wrap = document.createElement("div");
+    wrap.className = "col-tile-wrap";
+    const tile = document.createElement("button");
+    tile.type = "button";
+    tile.className = "col-tile col-recent-tile";
+    tile.style.background = hex;
+    tile.dataset.hex = hex;
+    tile.title = hex;
+    tile.setAttribute("aria-label", hex);
+    tile.addEventListener("click", () => applyAndRecord(hex));
+    wrap.appendChild(tile);
+    list.appendChild(wrap);
+  }
 }
 
 function renderPalettes(): void {
@@ -447,9 +555,7 @@ function renderPalettes(): void {
       tile.dataset.hex = hex;
       tile.title = hex;
       tile.setAttribute("aria-label", hex);
-      tile.addEventListener("click", () => {
-        if (api) applyColour(api, hex);
-      });
+      tile.addEventListener("click", () => applyAndRecord(hex));
       attachPlaceDrag(a, tile);
       const x = document.createElement("button");
       x.type = "button";
@@ -482,7 +588,9 @@ export function renderPanel(container: HTMLElement): void {
   container.innerHTML = "";
   const pickerSection = document.createElement("div");
   pickerSection.className = "col-picker-section";
-  wheel = createWheel((h, s) => setBase({ h, s }));
+  // A wheel release records the settled colour; the
+  // pointermove ticks of the drag do not.
+  wheel = createWheel((h, s) => setBase({ h, s }), () => recordColour(pickedHex()));
   pickerSection.appendChild(wheel.element);
   const previewRow = document.createElement("div");
   previewRow.className = "col-preview-row";
@@ -490,9 +598,7 @@ export function renderPanel(container: HTMLElement): void {
   pickedSwatch.type = "button";
   pickedSwatch.className = "col-picked";
   pickedSwatch.setAttribute("aria-label", "Picked colour");
-  pickedSwatch.addEventListener("click", () => {
-    if (api) applyColour(api, pickedHex());
-  });
+  pickedSwatch.addEventListener("click", () => applyAndRecord(pickedHex()));
   attachPlaceDrag(a, pickedSwatch);
   previewRow.appendChild(pickedSwatch);
   pickedHexEl = document.createElement("div");
@@ -541,6 +647,63 @@ export function renderPanel(container: HTMLElement): void {
   pickerSection.appendChild(controlsEl);
   container.appendChild(pickerSection);
   renderControls();
+  // Harmonies of the picked colour: a type selector in
+  // the mode switch's segmented treatment, five tiles
+  // below it.
+  const harmoniesSection = document.createElement("div");
+  harmoniesSection.className = "col-section";
+  const harmoniesTitle = document.createElement("span");
+  harmoniesTitle.className = "col-section-title";
+  harmoniesTitle.textContent = "Harmonies";
+  harmoniesSection.appendChild(harmoniesTitle);
+  const harmonySeg = document.createElement("div");
+  harmonySeg.className = "col-harmony-seg";
+  harmonySeg.setAttribute("role", "group");
+  harmonySeg.setAttribute("aria-label", "Harmony type");
+  for (const value of HARMONY_NAMES) {
+    // Five full names do not fit the row, so the labels
+    // are abbreviated — the full name is the title.
+    const label = { Monochromatic: "Mono", Analogous: "Analog", Complementary: "Compl", "Split complementary": "Split", Triadic: "Triadic" }[value];
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "col-harmony-seg-btn" + (value === harmony ? " active" : "");
+    btn.dataset.harmony = value;
+    btn.textContent = label;
+    btn.title = value;
+    btn.setAttribute("aria-label", `${value} harmony`);
+    btn.setAttribute("aria-pressed", String(value === harmony));
+    btn.addEventListener("click", () => {
+      if (harmony === value) return;
+      harmony = value;
+      for (const [h, b] of Object.entries(harmonySegButtons)) {
+        const active = h === value;
+        b.classList.toggle("active", active);
+        b.setAttribute("aria-pressed", String(active));
+      }
+      renderHarmonies();
+    });
+    harmonySegButtons[value] = btn;
+    harmonySeg.appendChild(btn);
+  }
+  harmoniesSection.appendChild(harmonySeg);
+  harmonyEl = document.createElement("div");
+  harmonyEl.className = "col-tiles";
+  harmoniesSection.appendChild(harmonyEl);
+  container.appendChild(harmoniesSection);
+  renderHarmonies();
+  // The recent colours: the last applied or settled
+  // colours, most recent first.
+  recentSectionEl = document.createElement("div");
+  recentSectionEl.className = "col-section";
+  const recentTitle = document.createElement("span");
+  recentTitle.className = "col-section-title";
+  recentTitle.textContent = "Recent";
+  recentSectionEl.appendChild(recentTitle);
+  recentEl = document.createElement("div");
+  recentEl.className = "col-tiles";
+  recentSectionEl.appendChild(recentEl);
+  container.appendChild(recentSectionEl);
+  renderRecent();
   // The palettes head their own section: "Saved Palettes"
   // with a + button at the right end, instead of a
   // separate button under the list.

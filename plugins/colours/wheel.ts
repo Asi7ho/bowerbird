@@ -16,7 +16,7 @@ export interface WheelHandle {
 // state, so the pixels are identical every time.
 let wheelPixels: { size: number; data: ImageData } | null = null;
 
-export function createWheel(onPick: (h: number, s: number) => void): WheelHandle {
+export function createWheel(onPick: (h: number, s: number) => void, onSettle?: () => void): WheelHandle {
   const wrap = document.createElement("div");
   wrap.className = "col-wheel-wrap";
   const canvas = document.createElement("canvas");
@@ -111,13 +111,16 @@ export function createWheel(onPick: (h: number, s: number) => void): WheelHandle
     };
     // A drag ending outside the window fires pointercancel,
     // not pointerup: without it the listeners linger and the
-    // next drag adds a second pair.
+    // next drag adds a second pair. The release is also the
+    // settle point: the picked colour is recorded there,
+    // not on the pointermove ticks of the drag.
     const onUp = (): void => {
       if (raf) { cancelAnimationFrame(raf); raf = 0; }
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
       window.removeEventListener("blur", onUp);
+      onSettle?.();
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);

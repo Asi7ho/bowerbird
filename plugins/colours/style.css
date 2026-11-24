@@ -134,8 +134,10 @@
 /* The mode control, a segmented row: the Settings
    segmented treatment — a fill-grey pill, 2px padding,
    9px radius, the active option a white pill with the
-   segmented shadow. One short row, not a full select. */
-.col-mode-seg {
+   segmented shadow. One short row, not a full select.
+   The harmony type selector is the same treatment. */
+.col-mode-seg,
+.col-harmony-seg {
   display: flex;
   gap: 2px;
   background: var(--fill);
@@ -146,7 +148,8 @@
 
 /* Prefixed, so these beat the core .plugin-panel-body
    button rule on border, radius and padding. */
-.plugin-panel-body .col-mode-seg-btn {
+.plugin-panel-body .col-mode-seg-btn,
+.plugin-panel-body .col-harmony-seg-btn {
   flex: 1 1 0;
   min-width: 0;
   border: none;
@@ -160,13 +163,39 @@
   white-space: nowrap;
 }
 
-.plugin-panel-body .col-mode-seg-btn:hover {
+.plugin-panel-body .col-mode-seg-btn:hover,
+.plugin-panel-body .col-harmony-seg-btn:hover {
   background: rgba(0, 0, 0, 0.05);
 }
 
-.plugin-panel-body .col-mode-seg-btn.active {
+.plugin-panel-body .col-mode-seg-btn.active,
+.plugin-panel-body .col-harmony-seg-btn.active {
   background: #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+}
+
+/* A panel section below the picker: harmonies, then
+   recent, then Saved Palettes. Same separator as the
+   picker section, and the same 15px right lane as the
+   palettes list, so a tile row never sits under the
+   scrollbar. */
+.col-section {
+  flex: none;
+  padding-bottom: 8px;
+  padding-right: 15px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--separator);
+}
+
+.col-section-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.col-harmony-seg {
+  margin-bottom: 8px;
 }
 
 /* The Hex mode field: same text-field style as the
