@@ -772,7 +772,7 @@ describe("colour data patches", () => {
   });
   it("accepts a gradient alone and with a colour, normalised and sorted by offset", () => {
     expect(colourDataPatch(stroke(1), { gradient: { angle: 90, stops: [{ offset: 100, color: "#00ff00" }, { offset: 0, color: "#f00" }] } }))
-      .toEqual({ gradient: { angle: 90, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#00FF00" }] } });
+      .toEqual({ gradient: { angle: 0, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#00FF00" }] } });
     expect(colourDataPatch(stroke(1), { color: "#f00", gradient: { angle: 0, stops: [{ offset: 0, color: "#f00" }, { offset: 100, color: "#00f" }] } }))
       .toEqual({ color: "#FF0000", gradient: { angle: 0, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#0000FF" }] } });
     expect(colourDataPatch(stroke(1), { gradient: null })).toEqual({ gradient: null });
@@ -789,7 +789,7 @@ describe("colour data patches", () => {
     const s = stroke(1);
     expect(applyColourDataPatch(s, { gradient: { angle: 45, stops: [{ offset: 0, color: "#f00" }, { offset: 100, color: "#00f" }] } })).toBe(true);
     expect((s.kind as { Stroke: { gradient?: unknown } }).Stroke.gradient).toEqual(
-      { angle: 45, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#0000FF" }] },
+      { angle: 0, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#0000FF" }] },
     );
     expect(applyColourDataPatch(s, { gradient: null })).toBe(true);
     expect((s.kind as { Stroke: { gradient?: unknown } }).Stroke.gradient).toBeUndefined();
@@ -797,10 +797,11 @@ describe("colour data patches", () => {
 });
 
 describe("gradients", () => {
-  it("normaliseGradient wraps the angle, normalises colours and sorts the stops", () => {
+  it("normaliseGradient sets the angle to 0, normalises colours and sorts the stops", () => {
     expect(normaliseGradient({ angle: 450, stops: [{ offset: 100, color: "#00f" }, { offset: 0, color: "#f00" }] }))
-      .toEqual({ angle: 90, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#0000FF" }] });
-    expect(normaliseGradient({ angle: -90, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#00FF00" }] })?.angle).toBe(270);
+      .toEqual({ angle: 0, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#0000FF" }] });
+    expect(normaliseGradient({ angle: -90, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#00FF00" }] })?.angle).toBe(0);
+    expect(normaliseGradient({ angle: 90, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#00FF00" }] })?.angle).toBe(0);
     expect(normaliseGradient(null)).toBeNull();
     expect(normaliseGradient({ angle: 0, stops: [] })).toBeNull();
   });

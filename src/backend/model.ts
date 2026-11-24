@@ -965,11 +965,13 @@ export function normaliseHex(hex: string): string | null {
 }
 
 // A linear gradient, validated and normalised: the angle
-// a finite number, wrapped to [0, 360), and two or more
-// stops, each an offset 0–100 with a normalised hex,
-// stored in offset order. Anything else is not a
+// is always 0 — gradients run left to right — and two
+// or more stops, each an offset 0–100 with a normalised
+// hex, stored in offset order. Anything else is not a
 // gradient. Null is not valid here — null means "no
-// gradient", and is handled by the caller.
+// gradient", and is handled by the caller. The angle
+// field stays on the model for compatibility, but a
+// stored gradient at any other angle renders at 0.
 export function normaliseGradient(value: unknown): StrokeGradient | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const { angle, stops } = value as { angle?: unknown; stops?: unknown };
@@ -986,8 +988,7 @@ export function normaliseGradient(value: unknown): StrokeGradient | null {
     clean.push({ offset, color: hex });
   }
   clean.sort((a, b) => a.offset - b.offset);
-  const wrapped = ((angle % 360) + 360) % 360;
-  return { angle: Math.round(wrapped * 100) / 100, stops: clean };
+  return { angle: 0, stops: clean };
 }
 
 // The userSpaceOnUse endpoints of a linear gradient at

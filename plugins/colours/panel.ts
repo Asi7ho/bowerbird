@@ -82,8 +82,6 @@ let gradientStripEl: HTMLDivElement | null = null;
 // the markers, so the drag never loses its marker
 // to a rebuild under the pointer.
 let draggingStop: number | null = null;
-let angleInput: HTMLInputElement | null = null;
-let angleValue: HTMLSpanElement | null = null;
 let controlsEl: HTMLDivElement | null = null;
 let harmonyEl: HTMLDivElement | null = null;
 let recentSectionEl: HTMLDivElement | null = null;
@@ -158,8 +156,6 @@ export function clearPanel(): void {
   gradientEditorEl = null;
   gradientStripEl = null;
   draggingStop = null;
-  angleInput = null;
-  angleValue = null;
   controlsEl = null;
   harmonyEl = null;
   recentSectionEl = null;
@@ -252,8 +248,8 @@ function applyAndRecord(hex: string): void {
 }
 
 // Write a gradient to the pen and re-read it, so the
-// panel's state is exactly the pen's — the core
-// normalises the angle and sorts the stops. Setting a
+// panel's state is exactly the pen's — the core forces
+// the angle to 0 and sorts the stops. Setting a
 // gradient also moves the pen colour to its first stop.
 function setGradient(next: StrokeGradient | null): void {
   if (!api || !api.pen) return;
@@ -277,10 +273,10 @@ function setGradientMode(on: boolean): void {
   if (on === (gradient !== null)) return;
   if (on) {
     // A new gradient runs from the picked colour to a
-    // deep shade of it, at 90° (top to bottom): a rich
-    // fade, never a wash-out to white.
+    // deep shade of it, left to right: a rich fade,
+    // never a wash-out to white.
     const hex = pickedHex();
-    setGradient({ angle: 90, stops: [{ offset: 0, color: hex }, { offset: 100, color: deepShadeHex(hex) }] });
+    setGradient({ angle: 0, stops: [{ offset: 0, color: hex }, { offset: 100, color: deepShadeHex(hex) }] });
     selectedStop = 0;
   } else {
     setGradient(null);
@@ -326,10 +322,10 @@ function pickedHex(): string {
   return hslToHex(base.h, base.s, base.l);
 }
 
-// The CSS for a gradient at its angle and opacity: the
-// strip and the preview swatch paint the same gradient.
-// CSS angles run 0° bottom-to-top, the gradient's 0°
-// left-to-right, so 90° is added.
+// The CSS for a gradient at its opacity: the strip
+// and the preview swatch paint the same gradient.
+// The gradient is always 0° (left to right); CSS
+// angles run 0° bottom-to-top, so 90° is added.
 function gradientBackground(stops: { offset: number; color: string }[]): string {
   const cssAngle = (90 + (gradient?.angle ?? 0)) % 360;
   return `linear-gradient(${cssAngle}deg, ${stops.map((s) => {
@@ -339,9 +335,8 @@ function gradientBackground(stops: { offset: number; color: string }[]): string 
 }
 
 // Paint the strip from a set of stops: the whole
-// gradient at its angle and opacity. A marker drag
-// paints with the dragged offsets live and commits on
-// release.
+// gradient at its opacity. A marker drag paints with
+// the dragged offsets live and commits on release.
 function paintGradientStrip(stops: { offset: number; color: string }[]): void {
   const strip = gradientStripEl;
   if (!strip || !gradient) return;
@@ -360,11 +355,11 @@ function updatePicked(): void {
   if (pickedSwatch) {
     if (gradient) {
       // The swatch shows the whole gradient at its
-      // angle and opacity, so the preview is what the
-      // stroke will look like. The hex beside it still
-      // shows the selected stop — the colour the wheel
-      // and sliders are editing — and dataset.hex stays
-      // that stop's colour.
+      // opacity, so the preview is what the stroke will
+      // look like. The hex beside it still shows the
+      // selected stop — the colour the wheel and sliders
+      // are editing — and dataset.hex stays that stop's
+      // colour.
       pickedSwatch.style.background = gradientBackground(gradient.stops);
       pickedSwatch.dataset.hex = hex;
       pickedSwatch.dataset.opacity = String(opacity);
@@ -380,8 +375,7 @@ function updatePicked(): void {
     }
   }
   // The gradient strip shows the whole picked gradient
-  // at its angle and opacity, matching the preview
-  // swatch above it.
+  // at its opacity, matching the preview swatch above it.
   if (gradient && gradientStripEl) {
     paintGradientStrip(gradient.stops);
     gradientStripEl.title = opacity === 100 ? `${gradient.stops[0].color} to ${gradient.stops[gradient.stops.length - 1].color} gradient` : `${gradient.stops[0].color} to ${gradient.stops[gradient.stops.length - 1].color} gradient at ${opacity}%`;
@@ -389,8 +383,6 @@ function updatePicked(): void {
   if (pickedHexEl) pickedHexEl.textContent = hex;
   if (opacityInput && Number(opacityInput.value) !== opacity) opacityInput.value = String(opacity);
   if (opacityValue) opacityValue.textContent = `${opacity}%`;
-  if (gradient && angleInput && Number(angleInput.value) !== Math.round(gradient.angle)) angleInput.value = String(Math.round(gradient.angle));
-  if (gradient && angleValue) angleValue.textContent = `${Math.round(gradient.angle)}°`;
   if (wheel) wheel.setMarker(base.h, base.s);
   renderHarmonies();
   renderGradientStops();
@@ -641,10 +633,10 @@ function renderControls(): void {
 // The gradient editor: the strip IS the control, with
 // the stops as markers on it — rebuilt when the
 // gradient turns on or off or a stop is added or
-// removed, never on a colour tick, so dragging the
-// angle slider never rebuilds the slider under the
-// pointer. The markers alone rebuild on a colour tick
-// (see renderGradientStops).
+// removed, never on a colour tick, so a marker drag
+// never rebuilds the strip under the pointer. The
+// markers alone rebuild on a colour tick (see
+// renderGradientStops).
 function renderGradientEditor(): void {
   const on = gradient !== null;
   if (gradToggleBtn) {
@@ -654,7 +646,6 @@ function renderGradientEditor(): void {
   const host = gradientEditorEl;
   if (!host) return;
   host.innerHTML = "";
-  angleInput = angleValue = null;
   gradientStripEl = null;
   draggingStop = null;
   if (!on || !gradient) return;
@@ -665,18 +656,11 @@ function renderGradientEditor(): void {
   gradientStripEl.className = "col-gradient-strip";
   gradientStripEl.setAttribute("aria-label", "Picked gradient");
   host.appendChild(gradientStripEl);
-  // One quiet row under the strip: the angle slider,
-  // then + to add a stop at the widest gap and × to
-  // remove the selected stop (disabled at two stops).
+  // One quiet row under the strip: + to add a stop at
+  // the widest gap and × to remove the selected stop
+  // (disabled at two stops).
   const controls = document.createElement("div");
   controls.className = "col-gradient-controls";
-  const angle = sliderRow("Angle", "col-slider-angle", 360, gradient.angle, (v) => {
-    if (!gradient) return;
-    setGradient({ angle: v, stops: gradient.stops });
-  });
-  angleInput = angle.input;
-  angleValue = angle.value;
-  controls.appendChild(angle.row);
   const add = iconButton("Add gradient stop", "Add stop", ICON_PLUS);
   add.addEventListener("click", () => addStop());
   controls.appendChild(add);
@@ -700,8 +684,8 @@ function renderGradientEditor(): void {
 // strip repainting live and the gradient committing on
 // release. Arrow keys nudge the focused marker. Rebuilt
 // on every picked colour tick, so the selected stop's
-// marker follows the wheel; the angle slider is never
-// rebuilt here, and a marker mid-drag never is either.
+// marker follows the wheel; a marker mid-drag never is
+// either.
 function renderGradientStops(): void {
   if (draggingStop !== null) return;
   const strip = gradientStripEl;

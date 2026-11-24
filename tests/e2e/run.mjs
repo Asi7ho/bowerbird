@@ -3996,8 +3996,8 @@ async function main() {
       await page.keyboard.press("p");
       // Pick the red on the HSL sliders, then turn the
       // gradient on: it runs from the picked colour to a
-      // deep shade of it, at 90°. Set the angle to 0
-      // (left to right).
+      // deep shade of it, at 0° (left to right). There
+      // is no angle control: the angle is always 0.
       await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
       await page.locator(".col-slider-hue").fill("355");
       await page.locator(".col-slider-sat").fill("78");
@@ -4005,9 +4005,9 @@ async function main() {
       pickedRed = (await page.locator(".col-hex").textContent()) ?? "";
       assert.ok(/^#[0-9A-F]{6}$/.test(pickedRed));
       await setFillMode(true);
-      await page.locator(".col-slider-angle").fill("0");
+      assert.equal(await page.locator(".col-slider-angle").count(), 0, "no angle control in the gradient editor");
       // The strip shows the picked gradient, and the
-      // preview swatch shows it too, at its angle.
+      // preview swatch shows it too.
       const bg = await page.locator(".col-gradient-strip").evaluate((el) => el.style.background);
       assert.ok(bg.includes("linear-gradient"), `gradient strip should show the gradient, got ${bg}`);
       assert.ok(bg.includes("0%") && bg.includes("100%"), `gradient strip should show both stops, got ${bg}`);
@@ -4024,7 +4024,7 @@ async function main() {
       // takes the gradient. The previous check leaves the
       // translucent stroke selected, so clear the selection
       // first — clicking the Harmonies title moves the
-      // focus off the angle slider (a focused slider
+      // focus off the lightness slider (a focused slider
       // swallows Escape), and Escape then clears the
       // selection. Without this, the click below would
       // apply the gradient to that stroke instead of
