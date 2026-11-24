@@ -287,14 +287,12 @@ export function activate(api: PluginContext): void {
     const cam = api.view.getCamera();
     const zoom = cam.zoom;
     const outline = api.shapes.getOutline();
-    // The stroke width in use: the active draw tool's
-    // width from its stroke defaults, or its built-in
-    // when no plugin set one. Only the three stroke
-    // tools have a width — the eraser erases, and the
-    // rest do not draw strokes.
-    const strokeKind = drawKindOf(tool);
-    const isStrokeKind = strokeKind === "pen" || strokeKind === "pencil" || strokeKind === "highlighter";
-    const strokeWidth = isStrokeKind ? (api.pen.getStrokeDefaults(strokeKind).width ?? builtinStrokeWidth(strokeKind)) : 0;
+    // The stroke width in use: the pen's width from its
+    // stroke defaults, or its built-in when no plugin set
+    // one. The button always shows it, whatever the tool
+    // — the pen, the shapes and the arrows all draw at
+    // this width, so it never has nothing to show.
+    const strokeWidth = api.pen.getStrokeDefaults("pen").width ?? builtinStrokeWidth("pen");
     // The note's position is in the key, so the colours
     // bar follows it when it is moved, not only when the
     // selection or the camera changes. The camera's pan
@@ -309,7 +307,7 @@ export function activate(api: PluginContext): void {
     // between select and lasso leaves the tool as "select",
     // so without it the button and picker would not refresh.
     const mode = api.ui.getSelectMode();
-    const key = `${tool}|${mode}|${pickerOpen ?? ""}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}|${cam.x},${cam.y}|${colorBarOpen}|${sizeBarOpen}|${outline}|${notePos ? `${notePos.x},${notePos.y}` : ""}|${isStrokeKind ? strokeWidth : ""}`;
+    const key = `${tool}|${mode}|${pickerOpen ?? ""}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}|${cam.x},${cam.y}|${colorBarOpen}|${sizeBarOpen}|${outline}|${notePos ? `${notePos.x},${notePos.y}` : ""}|${strokeWidth}`;
     if (key === lastKey) return;
     lastKey = key;
 
@@ -401,9 +399,10 @@ export function activate(api: PluginContext): void {
     colorSwatch.classList.toggle("active", colorBarOpen);
 
     // The size button shows the stroke width in use, as
-    // a line sample, and only for the stroke tools.
-    sizeBtn.style.display = isStrokeKind ? "" : "none";
-    if (isStrokeKind && sizeBtn.dataset.width !== String(strokeWidth)) {
+    // a line sample. It stays in the toolbar whatever the
+    // tool — hiding it when the pen was not active made
+    // it jump in and out as tools changed.
+    if (sizeBtn.dataset.width !== String(strokeWidth)) {
       sizeBtn.dataset.width = String(strokeWidth);
       sizeBtn.style.setProperty("--size-width", String(Math.min(strokeWidth, 8)));
       sizeBtn.title = `Size ${strokeWidth} — change the stroke width`;
@@ -562,10 +561,10 @@ export function activate(api: PluginContext): void {
       }
     }
 
-    // Size flyout: shown only when the size button opened
-    // it and a stroke tool is active. The slider sets the
-    // width live, and the value follows it.
-    const showSize = isStrokeKind && sizeBarOpen;
+    // Size flyout: shown when the size button opened
+    // it. The slider sets the width live, and the value
+    // follows it.
+    const showSize = sizeBarOpen;
     sizePicker.style.display = showSize ? "flex" : "none";
     if (showSize) sizePicker.style.top = `${sizeBtn.offsetTop}px`;
     if (showSize && sizePicker.childElementCount === 0) {
@@ -582,11 +581,15 @@ export function activate(api: PluginContext): void {
       input.max = "32";
       input.step = "1";
       input.setAttribute("aria-label", "Size");
+      // A drag on the slider must stay on the slider:
+      // without this the press reaches the board, and
+      // the board pans instead of the size changing.
+      input.addEventListener("pointerdown", (e) => e.stopPropagation());
       input.addEventListener("input", () => {
-        const kind = drawKindOf(api.ui.getTool());
-        if (kind !== "pen" && kind !== "pencil" && kind !== "highlighter") return;
-        const cur = api.pen.getStrokeDefaults(kind);
-        api.pen.setStrokeDefaults(kind, { ...cur, width: Number(input.value) });
+        // The slider always sets the pen's width: the pen,
+        // the shapes and the arrows all read it.
+        const cur = api.pen.getStrokeDefaults("pen");
+        api.pen.setStrokeDefaults("pen", { ...cur, width: Number(input.value) });
       });
       row.appendChild(input);
       sizeSlider = input;
@@ -632,7 +635,7 @@ export function activate(api: PluginContext): void {
   document.addEventListener("pointerdown", (e) => {
     if (pickerOpen === null) return;
     const t = e.target as Node;
-    if (selectBtn.contains(t) || drawBtn.contains(t) || shapeBtn.contains(t) || selectPicker.contains(t) || drawPicker.contains(t) || shapePicker.contains(t)) return;
+    if (selectBtn.contains(t) || drawBtn.contains(t) || shapeBtn.contains(t) || sizeBtn.contains(t) || selectPicker.contains(t) || drawPicker.contains(t) || shapePicker.contains(t) || sizePicker.contains(t)) return;
     pickerOpen = null;
     update();
   });
