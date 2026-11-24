@@ -437,6 +437,17 @@ export function strokeMaxWidth(stroke: { width: number; pressures?: number[] }):
   }
   return max;
 }
+// A stroke's effective opacity: its own opacity, 0–100
+// (an old board has none, which means 100), multiplied
+// by the marker's 0.45 — a translucent highlighter is
+// fainter still. The renderer and the drag preview share
+// it, so a stroke looks the same while drawing as after
+// release.
+export function strokeOpacity(stroke: { opacity?: number; marker: boolean }): number {
+  const base = stroke.opacity ?? 100;
+  return (base / 100) * (stroke.marker ? 0.45 : 1);
+}
+
 // Whether a stroke's pressures actually vary: a pen held at
 // one pressure draws a uniform stroke, and it renders as a
 // single path like a mouse stroke.
@@ -952,18 +963,32 @@ export function normaliseHex(hex: string): string | null {
 }
 
 // A colour data patch: the one `data` edit a plugin may make
-// on a core card. A stroke takes { color }, a swatch takes
-// { hex }; anything else is not a colour patch. The hex is
-// normalised, so "#f00" and "#FF0000" mean the same colour.
-export function colourDataPatch(item: Item, data: unknown): { color: string } | { hex: string } | null {
+// on a core card. A stroke takes { color?, opacity? } — a
+// non-empty subset of the two, each validated: the colour
+// is a normalised hex, the opacity a number 0–100. A
+// swatch takes { hex }; anything else is not a colour
+// patch. A patch that leaves a field out leaves that
+// field alone, so recolouring a translucent stroke at
+// opacity 100 has to send opacity: 100 to restore it.
+export function colourDataPatch(item: Item, data: unknown): { color?: string; opacity?: number } | { hex: string } | null {
   if (!data || typeof data !== "object" || Array.isArray(data)) return null;
   const keys = Object.keys(data);
   if ("Stroke" in item.kind) {
-    if (keys.length !== 1 || keys[0] !== "color") return null;
-    const value = (data as { color?: unknown }).color;
-    if (typeof value !== "string") return null;
-    const hex = normaliseHex(value);
-    return hex ? { color: hex } : null;
+    if (keys.length === 0 || keys.some((k) => k !== "color" && k !== "opacity")) return null;
+    const patch: { color?: string; opacity?: number } = {};
+    if ("color" in data) {
+      const value = (data as { color?: unknown }).color;
+      if (typeof value !== "string") return null;
+      const hex = normaliseHex(value);
+      if (!hex) return null;
+      patch.color = hex;
+    }
+    if ("opacity" in data) {
+      const value = (data as { opacity?: unknown }).opacity;
+      if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 100) return null;
+      patch.opacity = Math.round(value);
+    }
+    return patch;
   }
   if ("Swatch" in item.kind) {
     if (keys.length !== 1 || keys[0] !== "hex") return null;
@@ -981,9 +1006,14 @@ export function colourDataPatch(item: Item, data: unknown): { color: string } | 
 export function applyColourDataPatch(item: Item, data: unknown): boolean {
   const patch = colourDataPatch(item, data);
   if (!patch) return false;
-  if ("color" in patch && "Stroke" in item.kind) item.kind.Stroke.color = patch.color;
-  else if ("hex" in patch && "Swatch" in item.kind) item.kind.Swatch.hex = patch.hex;
-  else return false;
+  if ("hex" in patch) {
+    if (!("Swatch" in item.kind)) return false;
+    item.kind.Swatch.hex = patch.hex;
+  } else {
+    if (!("Stroke" in item.kind)) return false;
+    if (patch.color !== undefined) item.kind.Stroke.color = patch.color;
+    if (patch.opacity !== undefined) item.kind.Stroke.opacity = patch.opacity;
+  }
   return true;
 }
 
