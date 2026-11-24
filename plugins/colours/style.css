@@ -32,15 +32,60 @@
 }
 
 /* The gradient strip: the whole picked gradient at its
-   angle, full width, so the gradient itself stays
-   visible while the preview swatch shows the stop being
-   edited. Display only — the stops below it are the
-   controls. */
+   angle, tall enough to grab and to read — and the
+   control itself, with the stops as markers on it. */
 .col-gradient-strip {
-  height: 12px;
+  position: relative;
+  height: 28px;
   border: 1px solid var(--hairline);
-  border-radius: 6px;
-  margin-bottom: 2px;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  touch-action: none;
+}
+
+/* A gradient stop on the strip: a small disc in the
+   stop's colour, centred on its offset. The selected
+   one carries a blue ring, like a selected tile.
+   Prefixed, so this beats the core .plugin-panel-body
+   button rule on border, radius and padding. */
+.plugin-panel-body .col-stop-marker {
+  position: absolute;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  transform: translate(-50%, -50%);
+  cursor: grab;
+  touch-action: none;
+}
+
+.plugin-panel-body .col-stop-marker.selected {
+  outline: 2px solid #007AFF;
+  outline-offset: 1px;
+}
+
+.plugin-panel-body .col-stop-marker:active {
+  cursor: grabbing;
+}
+
+/* The row under the strip: the angle slider, then +
+   to add a stop and × to remove the selected one. The
+   slider takes the width; the buttons stay quiet. */
+.col-gradient-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.col-gradient-controls .col-slider-row {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-bottom: 0;
 }
 
 .col-wheel-wrap {
@@ -582,8 +627,8 @@
   cursor: default;
 }
 
-/* The gradient editor: the angle slider and the stops
-   list, under the Solid/Gradient switch. Empty while the
+/* The gradient editor: the strip and its controls row,
+   under the Solid/Gradient switch. Empty while the
    picked state is solid, so no gap shows. */
 .col-gradient-editor {
   margin-bottom: 0;
@@ -591,10 +636,6 @@
 
 .col-gradient-editor:empty {
   margin-bottom: 0;
-}
-
-.col-gradient-stops {
-  margin-top: 2px;
 }
 
 /* The selected gradient stop: a blue ring, so the stop

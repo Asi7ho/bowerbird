@@ -77,7 +77,11 @@ let harmonyMenuEl: HTMLDivElement | null = null;
 let gradToggleBtn: HTMLButtonElement | null = null;
 let gradientEditorEl: HTMLDivElement | null = null;
 let gradientStripEl: HTMLDivElement | null = null;
-let gradientStopsEl: HTMLDivElement | null = null;
+// The stop being dragged on the strip, by index —
+// while set, renderGradientStops does not rebuild
+// the markers, so the drag never loses its marker
+// to a rebuild under the pointer.
+let draggingStop: number | null = null;
 let angleInput: HTMLInputElement | null = null;
 let angleValue: HTMLSpanElement | null = null;
 let controlsEl: HTMLDivElement | null = null;
@@ -153,7 +157,7 @@ export function clearPanel(): void {
   gradToggleBtn = null;
   gradientEditorEl = null;
   gradientStripEl = null;
-  gradientStopsEl = null;
+  draggingStop = null;
   angleInput = null;
   angleValue = null;
   controlsEl = null;
@@ -322,6 +326,21 @@ function pickedHex(): string {
   return hslToHex(base.h, base.s, base.l);
 }
 
+// Paint the strip from a set of stops: the whole
+// gradient at its angle and opacity. CSS angles run
+// 0° bottom-to-top, the gradient's 0° left-to-right,
+// so 90° is added. A marker drag paints with the
+// dragged offsets live and commits on release.
+function paintGradientStrip(stops: { offset: number; color: string }[]): void {
+  const strip = gradientStripEl;
+  if (!strip || !gradient) return;
+  const cssAngle = (90 + gradient.angle) % 360;
+  strip.style.background = `linear-gradient(${cssAngle}deg, ${stops.map((s) => {
+    const { r, g, b } = hexToRgb(s.color);
+    return `rgba(${r}, ${g}, ${b}, ${opacity / 100}) ${s.offset}%`;
+  }).join(", ")})`;
+}
+
 // Refresh every control that shows the picked colour:
 // the preview, its hex, the wheel marker, the current
 // mode's controls, and the harmony set, which is made
@@ -357,15 +376,9 @@ function updatePicked(): void {
   // The gradient strip shows the whole picked gradient
   // at its angle and opacity, so the gradient itself is
   // always visible even though the swatch shows the stop
-  // being edited. CSS angles run 0° bottom-to-top, the
-  // gradient's 0° left-to-right, so 90° is added.
+  // being edited.
   if (gradient && gradientStripEl) {
-    const cssAngle = (90 + gradient.angle) % 360;
-    const stops = gradient.stops.map((s) => {
-      const { r, g, b } = hexToRgb(s.color);
-      return `rgba(${r}, ${g}, ${b}, ${opacity / 100}) ${s.offset}%`;
-    }).join(", ");
-    gradientStripEl.style.background = `linear-gradient(${cssAngle}deg, ${stops})`;
+    paintGradientStrip(gradient.stops);
     gradientStripEl.title = opacity === 100 ? `${gradient.stops[0].color} to ${gradient.stops[gradient.stops.length - 1].color} gradient` : `${gradient.stops[0].color} to ${gradient.stops[gradient.stops.length - 1].color} gradient at ${opacity}%`;
   }
   if (pickedHexEl) pickedHexEl.textContent = hex;
@@ -620,12 +633,13 @@ function renderControls(): void {
   updatePicked();
 }
 
-// The gradient editor: an angle slider and the stops
-// list, rebuilt when the gradient turns on or off or a
-// stop is added or removed — never on a colour tick, so
-// dragging the angle slider never rebuilds the slider
-// under the pointer. The stops row alone rebuilds on a
-// colour tick (see renderGradientStops).
+// The gradient editor: the strip IS the control, with
+// the stops as markers on it — rebuilt when the
+// gradient turns on or off or a stop is added or
+// removed, never on a colour tick, so dragging the
+// angle slider never rebuilds the slider under the
+// pointer. The markers alone rebuild on a colour tick
+// (see renderGradientStops).
 function renderGradientEditor(): void {
   const on = gradient !== null;
   if (gradToggleBtn) {
@@ -637,26 +651,35 @@ function renderGradientEditor(): void {
   host.innerHTML = "";
   angleInput = angleValue = null;
   gradientStripEl = null;
-  gradientStopsEl = null;
+  draggingStop = null;
   if (!on || !gradient) return;
-  // The strip first: the whole gradient, so the gradient
-  // itself is visible while the swatch shows the stop
-  // being edited. Display only — the stops below it are
-  // the controls.
+  // The strip first: the whole gradient, tall enough to
+  // grab, with the stops as markers on it — click a
+  // marker to edit that stop, drag it to move its offset.
   gradientStripEl = document.createElement("div");
   gradientStripEl.className = "col-gradient-strip";
   gradientStripEl.setAttribute("aria-label", "Picked gradient");
   host.appendChild(gradientStripEl);
+  // One quiet row under the strip: the angle slider,
+  // then + to add a stop at the widest gap and × to
+  // remove the selected stop (disabled at two stops).
+  const controls = document.createElement("div");
+  controls.className = "col-gradient-controls";
   const angle = sliderRow("Angle", "col-slider-angle", 360, gradient.angle, (v) => {
     if (!gradient) return;
     setGradient({ angle: v, stops: gradient.stops });
   });
   angleInput = angle.input;
   angleValue = angle.value;
-  host.appendChild(angle.row);
-  gradientStopsEl = document.createElement("div");
-  gradientStopsEl.className = "col-tiles col-gradient-stops";
-  host.appendChild(gradientStopsEl);
+  controls.appendChild(angle.row);
+  const add = iconButton("Add gradient stop", "Add stop", ICON_PLUS);
+  add.addEventListener("click", () => addStop());
+  controls.appendChild(add);
+  const remove = iconButton(`Remove stop ${selectedStop + 1}`, "Remove stop", ICON_CLOSE);
+  remove.disabled = gradient.stops.length <= 2;
+  remove.addEventListener("click", () => removeStop(selectedStop));
+  controls.appendChild(remove);
+  host.appendChild(controls);
   renderGradientStops();
   // The strip's background is set in updatePicked, which
   // ran before the strip existed when the gradient was
@@ -665,60 +688,104 @@ function renderGradientEditor(): void {
   updatePicked();
 }
 
-// The stops list: one tile per stop, in offset order,
-// plus a + tile. Clicking a stop selects it — the wheel
-// and sliders then edit that stop's colour — and the ×
-// on a stop removes it (a gradient keeps at least two
-// stops, so the × hides at two). Rebuilt on every picked
-// colour tick, so the selected stop's tile follows the
-// wheel; the angle slider is never rebuilt here.
+// The stops as markers on the strip, one per stop at
+// its offset. Clicking a marker selects it — the wheel
+// and sliders then edit that stop's colour — and
+// dragging it along the strip moves its offset, the
+// strip repainting live and the gradient committing on
+// release. Arrow keys nudge the focused marker. Rebuilt
+// on every picked colour tick, so the selected stop's
+// marker follows the wheel; the angle slider is never
+// rebuilt here, and a marker mid-drag never is either.
 function renderGradientStops(): void {
-  const list = gradientStopsEl;
-  if (!list || !gradient) return;
-  list.innerHTML = "";
+  if (draggingStop !== null) return;
+  const strip = gradientStripEl;
+  if (!strip || !gradient) return;
+  strip.innerHTML = "";
   gradient.stops.forEach((stop, i) => {
-    const wrap = document.createElement("div");
-    wrap.className = "col-tile-wrap";
-    const tile = document.createElement("button");
-    tile.type = "button";
-    tile.className = "col-tile col-stop" + (i === selectedStop ? " selected" : "");
-    tile.style.background = stop.color;
-    tile.dataset.hex = stop.color;
-    tile.dataset.offset = String(stop.offset);
-    tile.title = `${stop.color} at ${stop.offset}%`;
-    tile.setAttribute("aria-label", `Gradient stop ${i + 1}, ${stop.color} at ${stop.offset}%`);
-    tile.setAttribute("aria-pressed", String(i === selectedStop));
-    tile.addEventListener("click", () => {
+    const marker = document.createElement("button");
+    marker.type = "button";
+    marker.className = "col-stop-marker" + (i === selectedStop ? " selected" : "");
+    marker.style.background = stop.color;
+    marker.style.left = `${stop.offset}%`;
+    marker.dataset.hex = stop.color;
+    marker.dataset.offset = String(stop.offset);
+    marker.title = `${stop.color} at ${stop.offset}%`;
+    marker.setAttribute("aria-label", `Gradient stop ${i + 1}, ${stop.color} at ${stop.offset}%`);
+    marker.setAttribute("aria-pressed", String(i === selectedStop));
+    const select = (): void => {
       selectedStop = i;
       base = hexToHsl(stop.color);
       updatePicked();
+    };
+    // Keyboard: Enter/Space fire click, with no
+    // pointerdown — the click is the select.
+    marker.addEventListener("click", () => select());
+    marker.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (!gradient) return;
+      const step = (e.shiftKey ? 10 : 1) * (e.key === "ArrowLeft" ? -1 : 1);
+      const offset = Math.min(100, Math.max(0, stop.offset + step));
+      if (offset === stop.offset) return;
+      const stops = gradient.stops.map((s, j) => (j === i ? { offset, color: s.color } : s));
+      setGradient({ angle: gradient.angle, stops });
+      if (gradient) selectedStop = Math.max(0, gradient.stops.findIndex((s) => s.offset === offset && s.color === stop.color));
+      renderGradientStops();
     });
-    wrap.appendChild(tile);
-    if (gradient && gradient.stops.length > 2) {
-      const x = document.createElement("button");
-      x.type = "button";
-      x.className = "col-tiles-x";
-      x.innerHTML = ICON_CLOSE;
-      x.title = "Remove stop";
-      x.setAttribute("aria-label", `Remove stop ${i + 1}`);
-      x.addEventListener("click", (e) => {
-        e.stopPropagation();
-        removeStop(i);
-      });
-      wrap.appendChild(x);
-    }
-    list.appendChild(wrap);
+    marker.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || !gradient) return;
+      e.preventDefault();
+      // Select first, so the wheel follows the stop
+      // being dragged; the rebuild is guarded below.
+      selectedStop = i;
+      base = hexToHsl(stop.color);
+      draggingStop = i;
+      updatePicked();
+      marker.setPointerCapture(e.pointerId);
+      const stripEl = gradientStripEl;
+      const offsetAt = (clientX: number): number => {
+        const rect = stripEl?.getBoundingClientRect();
+        if (!rect || rect.width === 0) return stop.offset;
+        return Math.round(Math.min(100, Math.max(0, ((clientX - rect.left) / rect.width) * 100)));
+      };
+      const move = (ev: PointerEvent): void => {
+        if (!gradient) return;
+        const offset = offsetAt(ev.clientX);
+        marker.style.left = `${offset}%`;
+        marker.dataset.offset = String(offset);
+        marker.title = `${stop.color} at ${offset}%`;
+        marker.setAttribute("aria-label", `Gradient stop ${i + 1}, ${stop.color} at ${offset}%`);
+        paintGradientStrip(gradient.stops.map((s, j) => (j === i ? { offset, color: s.color } : s)));
+      };
+      const finish = (ev: PointerEvent, commit: boolean): void => {
+        marker.removeEventListener("pointermove", move);
+        marker.removeEventListener("pointerup", up);
+        marker.removeEventListener("pointercancel", cancel);
+        draggingStop = null;
+        if (!commit || !gradient) { renderGradientStops(); return; }
+        const offset = offsetAt(ev.clientX);
+        if (offset === stop.offset) { renderGradientStops(); return; }
+        const stops = gradient.stops.map((s, j) => (j === i ? { offset, color: s.color } : s));
+        setGradient({ angle: gradient.angle, stops });
+        // setGradient sorts, so the dragged stop may
+        // have a new index — follow it, by offset and
+        // colour, falling back to offset alone.
+        if (gradient) {
+          const at = gradient.stops.findIndex((s) => s.offset === offset && s.color === stop.color);
+          selectedStop = at >= 0 ? at : Math.max(0, gradient.stops.findIndex((s) => s.offset === offset));
+        }
+        renderGradientStops();
+      };
+      const up = (ev: PointerEvent): void => finish(ev, true);
+      const cancel = (ev: PointerEvent): void => finish(ev, false);
+      marker.addEventListener("pointermove", move);
+      marker.addEventListener("pointerup", up);
+      marker.addEventListener("pointercancel", cancel);
+    });
+    strip.appendChild(marker);
   });
-  // The + tile adds a stop in the picked colour, at the
-  // end of the row, the same size as a tile.
-  const add = document.createElement("button");
-  add.type = "button";
-  add.className = "col-add-tile";
-  add.innerHTML = ICON_PLUS;
-  add.title = "Add stop";
-  add.setAttribute("aria-label", "Add gradient stop");
-  add.addEventListener("click", () => addStop());
-  list.appendChild(add);
 }
 
 // The harmony type: Analogous first, so the middle tile
