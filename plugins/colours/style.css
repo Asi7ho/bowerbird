@@ -26,8 +26,8 @@
 
 .col-picker-section {
   flex: none;
-  padding-bottom: 6px;
-  margin-bottom: 6px;
+  padding-bottom: 4px;
+  margin-bottom: 4px;
   border-bottom: 1px solid var(--separator);
 }
 
@@ -49,16 +49,16 @@
    edited. Display only — the stops below it are the
    controls. */
 .col-gradient-strip {
-  height: 16px;
+  height: 12px;
   border: 1px solid var(--hairline);
-  border-radius: 8px;
+  border-radius: 6px;
   margin-bottom: 2px;
 }
 
 .col-wheel-wrap {
   position: relative;
-  width: 104px;
-  height: 104px;
+  width: 96px;
+  height: 96px;
   margin: 0 auto 6px;
   cursor: crosshair;
   touch-action: none;
@@ -95,9 +95,9 @@
 
 .col-picked {
   flex: none;
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
   border: 1px solid var(--hairline);
   box-shadow: var(--shadow-sm);
   padding: 0;
@@ -110,7 +110,7 @@
    9px/separator button, even when its own radius is 12px. */
 .plugin-panel-body .col-picked {
   border: 1px solid var(--hairline);
-  border-radius: 12px;
+  border-radius: 10px;
   box-shadow: var(--shadow-sm);
   padding: 0;
 }
@@ -205,9 +205,9 @@
    scrollbar. */
 .col-section {
   flex: none;
-  padding-bottom: 6px;
+  padding-bottom: 4px;
   padding-right: 15px;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   border-bottom: 1px solid var(--separator);
 }
 
@@ -215,7 +215,7 @@
   display: block;
   font-size: 13px;
   font-weight: 600;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .col-harmony-seg {
@@ -332,7 +332,7 @@
   flex: none;
   display: flex;
   align-items: center;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   padding-right: 15px;
 }
 
@@ -357,7 +357,7 @@
 /* Palettes are plain sections, not boxes: the name is
    plain text, the tiles a row below it. */
 .col-palette {
-  margin-bottom: 12px;
+  margin-bottom: 10px;
 }
 
 .col-palette-head {
