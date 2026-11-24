@@ -309,7 +309,7 @@ export function activate(api: PluginContext): void {
     // between select and lasso leaves the tool as "select",
     // so without it the button and picker would not refresh.
     const mode = api.ui.getSelectMode();
-    const key = `${tool}|${mode}|${pickerOpen ?? ""}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}|${cam.x},${cam.y}|${colorBarOpen}|${outline}|${notePos ? `${notePos.x},${notePos.y}` : ""}|${isStrokeKind ? strokeWidth : ""}`;
+    const key = `${tool}|${mode}|${pickerOpen ?? ""}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}|${cam.x},${cam.y}|${colorBarOpen}|${sizeBarOpen}|${outline}|${notePos ? `${notePos.x},${notePos.y}` : ""}|${isStrokeKind ? strokeWidth : ""}`;
     if (key === lastKey) return;
     lastKey = key;
 
