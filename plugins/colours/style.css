@@ -39,8 +39,8 @@
    the colour, this one to what the colour becomes. */
 .col-fill-group {
   border-top: 1px solid var(--separator);
-  padding-top: 6px;
-  margin-top: 6px;
+  padding-top: 4px;
+  margin-top: 4px;
 }
 
 /* The gradient strip: the whole picked gradient at its
@@ -49,16 +49,16 @@
    edited. Display only — the stops below it are the
    controls. */
 .col-gradient-strip {
-  height: 20px;
+  height: 16px;
   border: 1px solid var(--hairline);
-  border-radius: 10px;
-  margin-bottom: 4px;
+  border-radius: 8px;
+  margin-bottom: 2px;
 }
 
 .col-wheel-wrap {
   position: relative;
-  width: 112px;
-  height: 112px;
+  width: 104px;
+  height: 104px;
   margin: 0 auto 6px;
   cursor: crosshair;
   touch-action: none;
@@ -436,7 +436,7 @@
    list, under the Solid/Gradient switch. Empty while the
    picked state is solid, so no gap shows. */
 .col-gradient-editor {
-  margin-bottom: 4px;
+  margin-bottom: 0;
 }
 
 .col-gradient-editor:empty {
@@ -444,7 +444,7 @@
 }
 
 .col-gradient-stops {
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 /* The selected gradient stop: a blue ring, so the stop
