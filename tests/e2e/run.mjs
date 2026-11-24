@@ -3865,6 +3865,116 @@ async function main() {
       );
     });
 
+    await check("opacity slider draws a translucent stroke, previewed mid-drag", async () => {
+      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // The pen first: filling a slider leaves the focus
+      // on it, and a focused slider swallows the "p" key
+      // (it stops the keydown propagating), so the tool
+      // would stay on select and no stroke would draw.
+      await page.keyboard.press("p");
+      // Pick the red on the HSL sliders, then halve the
+      // opacity: the preview swatch shows the picked
+      // colour at 50%.
+      await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
+      await page.locator(".col-slider-hue").fill("355");
+      await page.locator(".col-slider-sat").fill("78");
+      await page.locator(".col-slider-light").fill("56");
+      await page.locator(".col-slider-opacity").fill("50");
+      assert.equal(await page.locator(".col-slider-opacity").inputValue(), "50");
+      const bg = await page.locator(".col-picked").evaluate((el) => el.style.background);
+      assert.ok(bg.includes("0.5"), `picked swatch should show 50% opacity, got ${bg}`);
+      // The sliders only pick: the pen takes the picked
+      // state on a click-apply, so click the preview with
+      // nothing selected — the pen becomes red at 50%.
+      await page.locator(".col-picked").click();
+      // Draw on a fresh line, and read the live preview
+      // while the pen is still down: it paints at the same
+      // 0.5 the stroke will carry after release.
+      await page.mouse.move(300, 650);
+      await page.mouse.down();
+      await page.mouse.move(350, 650, { steps: 10 });
+      await waitFor("live preview at 50% opacity", async () => {
+        const op = await page.evaluate(() => {
+          const live = document.querySelector("#live-stroke");
+          const el = live?.querySelector("path, line");
+          return el?.getAttribute("opacity") ?? null;
+        });
+        return op === "0.5" ? true : null;
+      });
+      await page.mouse.move(500, 650, { steps: 10 });
+      await page.mouse.up();
+      const stroke = await waitFor("translucent stroke in board.json", () => {
+        const found = strokes().filter((it) => it.kind.Stroke.color === pickedRed && it.kind.Stroke.opacity === 50);
+        return found.length >= 1 ? found[found.length - 1] : null;
+      });
+      // The committed stroke renders at the same opacity
+      // the preview showed mid-drag.
+      const rendered = await page.evaluate((id) => {
+        const el = document.querySelector(`#cards .card.stroke[data-id="${id}"] path`);
+        return el?.getAttribute("opacity") ?? null;
+      }, stroke.id);
+      assert.equal(rendered, "0.5");
+    });
+
+    await check("applying a colour and opacity recolours a stroke in one undo step", async () => {
+      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // The translucent red stroke from the last check, on
+      // its own line: select it, pick blue at 30% opacity,
+      // and click the picked colour.
+      const before = strokes().find((it) => it.kind.Stroke.opacity === 50);
+      assert.ok(before);
+      await page.keyboard.press("v");
+      await page.mouse.click(400, 650);
+      await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
+      await page.locator(".col-slider-hue").fill("211");
+      await page.locator(".col-slider-sat").fill("100");
+      await page.locator(".col-slider-light").fill("50");
+      await page.locator(".col-slider-opacity").fill("30");
+      const picked = (await page.locator(".col-hex").textContent()) ?? "";
+      assert.ok(/^#[0-9A-F]{6}$/.test(picked));
+      await page.locator(".col-picked").click();
+      await waitFor("stroke recoloured blue at 30%", () => {
+        const it = strokes().find((s) => s.id === before.id);
+        return it?.kind.Stroke.color === picked && it.kind.Stroke.opacity === 30 ? true : null;
+      });
+      await page.keyboard.press("Control+z");
+      await waitFor("undo restores colour and opacity together", () => {
+        const it = strokes().find((s) => s.id === before.id);
+        return it?.kind.Stroke.color === pickedRed && it.kind.Stroke.opacity === 50 ? true : null;
+      });
+    });
+
+    await check("recolouring with opacity on a locked layer is refused", async () => {
+      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      const stroke = strokes().find((it) => it.kind.Stroke.opacity === 50);
+      assert.ok(stroke);
+      try {
+        await page.evaluate(() => window.__ciLayers.setLocked("default", true));
+        await page.keyboard.press("v");
+        await page.mouse.click(400, 650);
+        // Opacity 80, on the red tile: the refusal leaves
+        // both the colour and the opacity untouched.
+        await page.locator(".col-slider-opacity").fill("80");
+        await page.locator(".col-palette").nth(1).locator(".col-tile").first().click();
+        await waitFor("locked-layer toast", async () => {
+          const toast = (await page.locator("#toast").textContent()) ?? "";
+          return toast === "Layer is locked" ? true : null;
+        });
+        const after = strokes().find((it) => it.id === stroke.id);
+        assert.equal(after.kind.Stroke.color, pickedRed);
+        assert.equal(after.kind.Stroke.opacity, 50);
+      } finally {
+        await page.evaluate(() => window.__ciLayers.setLocked("default", false)).catch(() => undefined);
+        // Leave the pen at full opacity, so later checks
+        // draw the strokes they expect. Best-effort: a
+        // missing slider must not mask the check's result.
+        await page.locator(".col-slider-opacity").fill("100").catch(() => undefined);
+      }
+    });
+
     await check("a version restores from the Boards panel history", async () => {
       // Enable the Boards plugin (bundled, opt-in) and open its panel.
       assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("boards", true)), true);
