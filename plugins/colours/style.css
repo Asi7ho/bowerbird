@@ -646,11 +646,16 @@
 }
 
 /* Tiles are fixed 32px squares that wrap: a lone colour
-   in a palette is one small tile, never a stretched row. */
+   in a palette is one small tile, never a stretched row.
+   The rows breathe: 8px above and below each row, so a
+   row never sits tight against its head or the next
+   section. */
 .col-tiles {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  margin-top: 8px;
+  margin-bottom: 8px;
 }
 
 .col-tile-wrap {
