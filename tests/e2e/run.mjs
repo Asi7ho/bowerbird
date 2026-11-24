@@ -4623,12 +4623,12 @@ async function main() {
 
     await check("changing the toolbar size updates the active brush's stored size", async () => {
       // Ink is still the active pen brush, now at size 7
-      // from the last check: the panel's Size slider agrees
-      // with the toolbar, because the pen event wrote the
+      // from the last check: the brush row's title carries
+      // the stored size, because the pen event wrote the
       // new width back into the brush.
       await page.locator('.plugin-tab[aria-label="Brush Library"]').click();
       await page.locator(".br-brush").first().waitFor({ timeout: READY_TIMEOUT_MS });
-      assert.equal(await page.locator(".br-editor .br-value").first().textContent(), "7");
+      assert.equal(await page.locator(".br-brush-name", { hasText: "Ink" }).getAttribute("title"), "Ink — None, size 7");
       // And back to 3 from the toolbar: the brush follows.
       await page.locator("#tool-size").click();
       await page.waitForSelector("#size-picker input[type=range]", { state: "visible", timeout: READY_TIMEOUT_MS });
@@ -4636,8 +4636,8 @@ async function main() {
         el.value = "3";
         el.dispatchEvent(new Event("input", { bubbles: true }));
       });
-      await waitFor("panel Size back to 3", async () =>
-        ((await page.locator(".br-editor .br-value").first().textContent()) === "3" ? true : null),
+      await waitFor("Ink stored size back to 3", async () =>
+        ((await page.locator(".br-brush-name", { hasText: "Ink" }).getAttribute("title")) === "Ink — None, size 3" ? true : null),
       );
       await page.locator("#tool-size").click();
     });
