@@ -3995,8 +3995,9 @@ async function main() {
       // would draw.
       await page.keyboard.press("p");
       // Pick the red on the HSL sliders, then turn the
-      // gradient on: it runs from the picked colour to
-      // white, at 90°. Set the angle to 0 (left to right).
+      // gradient on: it runs from the picked colour to a
+      // deep shade of it, at 90°. Set the angle to 0
+      // (left to right).
       await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
       await page.locator(".col-slider-hue").fill("355");
       await page.locator(".col-slider-sat").fill("78");
@@ -4006,16 +4007,17 @@ async function main() {
       await setFillMode(true);
       await page.locator(".col-slider-angle").fill("0");
       // The strip shows the picked gradient, and the
-      // preview swatch shows the stop being edited.
+      // preview swatch shows it too, at its angle.
       const bg = await page.locator(".col-gradient-strip").evaluate((el) => el.style.background);
       assert.ok(bg.includes("linear-gradient"), `gradient strip should show the gradient, got ${bg}`);
       assert.ok(bg.includes("0%") && bg.includes("100%"), `gradient strip should show both stops, got ${bg}`);
       const swatch = await page.locator(".col-picked").evaluate((el) => el.style.background);
-      assert.ok(!swatch.includes("linear-gradient"), `picked swatch should not show the gradient, got ${swatch}`);
-      // The swatch shows the selected stop: its hex is the
-      // picked red. (The style serialises rgba(…, 1) as
-      // rgb(…), so the hex, not the background string, is
-      // the assertion.)
+      assert.ok(swatch.includes("linear-gradient"), `picked swatch should show the gradient, got ${swatch}`);
+      assert.ok(swatch.includes("0%") && swatch.includes("100%"), `picked swatch should show both stops, got ${swatch}`);
+      // The hex beside the swatch still shows the
+      // selected stop: its hex is the picked red. (The
+      // style serialises rgba(…, 1) as rgb(…), so the
+      // hex, not the background string, is the assertion.)
       const swatchHex = await page.locator(".col-picked").evaluate((el) => el.dataset.hex);
       assert.equal(swatchHex, pickedRed);
       // Click the preview with nothing selected: the pen
@@ -4061,7 +4063,7 @@ async function main() {
       assert.equal(stroke.kind.Stroke.color, pickedRed);
       assert.deepEqual(stroke.kind.Stroke.gradient, {
         angle: 0,
-        stops: [{ offset: 0, color: pickedRed }, { offset: 100, color: "#FFFFFF" }],
+        stops: [{ offset: 0, color: pickedRed }, { offset: 100, color: "#520A10" }],
       });
       // The committed stroke renders through its own
       // linearGradient, mapped across its bounding box.
@@ -4079,7 +4081,7 @@ async function main() {
       assert.ok(rendered);
       assert.equal(rendered.id, `grad-${stroke.id}`);
       assert.equal(rendered.stroke, `url(#grad-${stroke.id})`);
-      assert.deepEqual(rendered.stops, [{ offset: "0%", color: pickedRed }, { offset: "100%", color: "#FFFFFF" }]);
+      assert.deepEqual(rendered.stops, [{ offset: "0%", color: pickedRed }, { offset: "100%", color: "#520A10" }]);
     });
 
     await check("applying a gradient recolours a selected stroke in one undo step", async () => {
@@ -4087,7 +4089,7 @@ async function main() {
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       // The gradient stroke from the last check, on its
       // own line: select it, then edit its second stop
-      // (white) to blue on the sliders — clicking the stop
+      // (the deep shade) to blue on the sliders — clicking the stop
       // selects it, and the picked colour targets it. The
       // click lands on the stroke's left half, clear of
       // the shape card covering its right half.
@@ -4122,7 +4124,7 @@ async function main() {
       await page.keyboard.press("Control+z");
       await waitFor("undo restores the gradient together", () => {
         const it = strokes().find((s) => s.id === before.id);
-        return it?.kind.Stroke.gradient?.stops[1]?.color === "#FFFFFF" ? true : null;
+        return it?.kind.Stroke.gradient?.stops[1]?.color === "#520A10" ? true : null;
       });
     });
 
