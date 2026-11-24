@@ -6,7 +6,7 @@
 // colours come from.
 import type { PluginContext, StrokeGradient } from "bowerbird-plugin-api";
 import { applyColour } from "./apply.js";
-import { HARMONY_NAMES, harmoniesFor, hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, normaliseHex, rgbToHex, type HarmonyName } from "./color.js";
+import { HARMONY_NAMES, colourDistance, harmoniesFor, hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, normaliseHex, rgbToHex, type HarmonyName } from "./color.js";
 import { attachPlaceDrag } from "./place.js";
 import {
   addColour,
@@ -691,25 +691,39 @@ function renderGradientStops(): void {
 // The harmony set for the picked colour: five tiles for
 // the selected harmony type, remade whenever the picked
 // colour moves. Clicking one applies it like any tile.
+// The tile holding the picked colour — middle for
+// Analogous and Monochromatic, first for the rest —
+// carries a blue ring, so the picked colour's place in
+// the set is visible at a glance. Nearest match, not
+// exact: a shifted Monochromatic set has no exact hit.
 function renderHarmonies(): void {
   const list = harmonyEl;
   if (!list) return;
   list.innerHTML = "";
   const found = harmoniesFor(base.h, base.s, base.l).find((h) => h.name === harmony);
-  for (const hex of found ? found.colors : []) {
+  const colors = found ? found.colors : [];
+  const picked = pickedHex();
+  let pickedIndex = 0;
+  let best = Infinity;
+  colors.forEach((hex, i) => {
+    const d = colourDistance(hex, picked);
+    if (d < best) { best = d; pickedIndex = i; }
+  });
+  colors.forEach((hex, i) => {
     const wrap = document.createElement("div");
     wrap.className = "col-tile-wrap";
     const tile = document.createElement("button");
     tile.type = "button";
-    tile.className = "col-tile col-harmony-tile";
+    tile.className = "col-tile col-harmony-tile" + (i === pickedIndex ? " selected" : "");
     tile.style.background = hex;
     tile.dataset.hex = hex;
     tile.title = hex;
     tile.setAttribute("aria-label", hex);
+    tile.setAttribute("aria-pressed", String(i === pickedIndex));
     tile.addEventListener("click", () => applyAndRecord(hex));
     wrap.appendChild(tile);
     list.appendChild(wrap);
-  }
+  });
 }
 
 // The recent colours, most recent first. The section
