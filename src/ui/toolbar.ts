@@ -132,26 +132,40 @@ export function activate(api: PluginContext): void {
   palette.style.display = "none";
   toolbar.appendChild(palette);
 
+  // The pen controls — colour and size — live in a
+  // segment of their own, below the tools and above the
+  // zoom, so the bar reads tools | colour + size | zoom.
+  // The divider above it separates it from the tools;
+  // div1 below separates it from the zoom.
+  const penDiv = document.createElement("div");
+  penDiv.className = "divider";
+  toolbar.appendChild(penDiv);
+
+  const penSeg = document.createElement("div");
+  penSeg.className = "seg";
+  penSeg.id = "pen-controls";
+  toolbar.appendChild(penSeg);
+
   // The colour in use, as a swatch in the toolbar.
   // Clicking it opens the colour bar to change colours.
-  // It lives at the end of the tools, after the shape
-  // button, so the tool buttons stay together.
+  // It lives in the pen-controls segment with the size
+  // button, so the pen controls sit together.
   const colorSwatch = toolButton("tool-colour", "Colour — change the pen colour", "Colour", "", () => {
     colorBarOpen = !colorBarOpen;
     sizeBarOpen = false;
     update();
-  }, toolsSeg, { className: "colour-swatch", type: "button" });
+  }, penSeg, { className: "colour-swatch", type: "button" });
 
   // The stroke width in use, as a line sample in the
   // toolbar. Clicking it opens the size flyout to change
   // it, like the colour swatch opens the colour bar. It
-  // sits beside the swatch, so the pen controls sit
-  // together, and only shows for the three stroke tools.
+  // sits beside the swatch in the pen-controls segment,
+  // and stays visible whatever tool is active.
   const sizeBtn = toolButton("tool-size", "Size — change the stroke width", "Size", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16" /></svg>', () => {
     sizeBarOpen = !sizeBarOpen;
     colorBarOpen = false;
     update();
-  }, toolsSeg, { className: "size-button", type: "button" });
+  }, penSeg, { className: "size-button", type: "button" });
 
   const shapePicker = document.createElement("div");
   shapePicker.className = "palette";
@@ -531,6 +545,10 @@ export function activate(api: PluginContext): void {
     // colour swatch opened it. Picking a colour sets the
     // pen colour and closes the bar.
     palette.style.display = colorBarOpen ? "flex" : "none";
+    // The bar sits beside the swatch, like the size
+    // flyout sits beside the size button: the swatch
+    // moved into its own segment, so the bar follows it.
+    if (colorBarOpen) palette.style.top = `${colorSwatch.offsetTop}px`;
     if (colorBarOpen && palette.childElementCount === 0) {
       for (const hex of PALETTE) {
         // The sync loop below marks the active swatch, so

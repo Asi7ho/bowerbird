@@ -4538,6 +4538,54 @@ async function main() {
       }
     });
 
+    await check("colour and size live in their own toolbar section", async () => {
+      const layout = await page.evaluate(() => {
+        const seg = document.getElementById("pen-controls");
+        if (!seg) return null;
+        const kids = Array.from(seg.children).map((el) => el.id);
+        const prev = seg.previousElementSibling;
+        const next = seg.nextElementSibling;
+        const tools = document.getElementById("tools");
+        const zoom = document.querySelector("#toolbar .zoom-group");
+        return {
+          kids,
+          prevDivider: prev?.classList.contains("divider") ?? false,
+          nextDivider: next?.classList.contains("divider") ?? false,
+          inTools: tools?.contains(document.getElementById("tool-colour")) || tools?.contains(document.getElementById("tool-size")),
+          afterTools: Boolean(tools && (tools.compareDocumentPosition(seg) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0),
+          beforeZoom: Boolean(zoom && (seg.compareDocumentPosition(zoom) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0),
+        };
+      });
+      assert.deepEqual(layout?.kids, ["tool-colour", "tool-size"]);
+      assert.equal(layout?.prevDivider, true);
+      assert.equal(layout?.nextDivider, true);
+      assert.equal(layout?.inTools, false);
+      assert.equal(layout?.afterTools, true);
+      assert.equal(layout?.beforeZoom, true);
+      // The flyouts still open beside their buttons: the
+      // colour bar beside the swatch, the size flyout
+      // beside the size button.
+      await page.click("#tool-colour");
+      await page.waitForSelector("#palette", { state: "visible" });
+      const barTop = await page.evaluate(() => {
+        const bar = document.getElementById("palette");
+        const sw = document.getElementById("tool-colour");
+        return bar && sw ? Math.abs(bar.getBoundingClientRect().top - sw.getBoundingClientRect().top) : null;
+      });
+      assert.ok(barTop !== null && barTop < 3, `colour bar sits beside the swatch (off by ${barTop})`);
+      await page.click("#tool-colour");
+      await page.click("#tool-size");
+      await page.waitForSelector("#size-picker input[type=range]", { state: "visible", timeout: READY_TIMEOUT_MS });
+      const flyTop = await page.evaluate(() => {
+        const fly = document.getElementById("size-picker");
+        const btn = document.getElementById("tool-size");
+        return fly && btn ? Math.abs(fly.getBoundingClientRect().top - btn.getBoundingClientRect().top) : null;
+      });
+      assert.ok(flyTop !== null && flyTop < 3, `size flyout sits beside the size button (off by ${flyTop})`);
+      await page.click("#tool-size");
+    });
+
+
     await check("creating a brush from the inline editor builds its texture from the parameters", async () => {
       await page.locator('.plugin-tab[aria-label="Brush Library"]').click();
       await page.locator(".br-brush").first().waitFor({ timeout: READY_TIMEOUT_MS });
