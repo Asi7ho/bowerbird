@@ -1722,7 +1722,13 @@ body.platform-linux #title-bar button.win-close:hover {
 
 /* The size flyout: the same floating .palette surface
    as the colour bar, with a slider row — a label, the
-   app-style slider and the value. */
+   app-style slider and the value. It sits inside the
+   toolbar's drag region, so exempt it: dragging here
+   must move the slider thumb, not the window. */
+#toolbar #size-picker {
+  -webkit-app-region: no-drag;
+}
+
 #toolbar .size-row {
   display: flex;
   align-items: center;
@@ -1755,6 +1761,9 @@ body.platform-linux #title-bar button.win-close:hover {
   height: 20px;
   background: transparent;
   outline: none;
+  /* The toolbar is a window-drag region; without this
+     the slider drag moves the window on macOS. */
+  -webkit-app-region: no-drag;
 }
 
 #toolbar .size-slider::-webkit-slider-runnable-track {
