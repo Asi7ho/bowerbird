@@ -70,7 +70,10 @@ export function parsePickerMode(value: unknown): PickerMode {
 
 let mode: PickerMode = "hsl";
 let modeSegButtons: Partial<Record<PickerMode, HTMLButtonElement>> = {};
-let harmonySegButtons: Partial<Record<HarmonyName, HTMLButtonElement>> = {};
+let harmonyMenuItems: Partial<Record<HarmonyName, HTMLButtonElement>> = {};
+let harmonyBtn: HTMLButtonElement | null = null;
+let harmonyBtnLabel: HTMLSpanElement | null = null;
+let harmonyMenuEl: HTMLDivElement | null = null;
 let gradSegButtons: Partial<Record<"solid" | "gradient", HTMLButtonElement>> = {};
 let gradientEditorEl: HTMLDivElement | null = null;
 let gradientStripEl: HTMLDivElement | null = null;
@@ -143,7 +146,10 @@ export function clearPanel(): void {
   selectedStop = 0;
   recent = [];
   modeSegButtons = {};
-  harmonySegButtons = {};
+  harmonyMenuItems = {};
+  harmonyBtn = null;
+  harmonyBtnLabel = null;
+  harmonyMenuEl = null;
   gradSegButtons = {};
   gradientEditorEl = null;
   gradientStripEl = null;
@@ -716,6 +722,61 @@ function renderGradientStops(): void {
   list.appendChild(add);
 }
 
+// The harmony type: Analogous first, so the middle tile
+// of the shown set is the picked colour itself. Picked
+// from a small menu in the Harmonies head row, not a
+// five-tab strip across the panel: five short names
+// squeezed into the width read as crammed.
+function setHarmony(value: HarmonyName): void {
+  if (harmony === value) return;
+  harmony = value;
+  if (harmonyBtnLabel) harmonyBtnLabel.textContent = value;
+  for (const [h, b] of Object.entries(harmonyMenuItems)) {
+    const active = h === value;
+    b.classList.toggle("active", active);
+    b.setAttribute("aria-checked", String(active));
+  }
+  renderHarmonies();
+}
+
+function closeHarmonyMenu(): void {
+  if (!harmonyMenuEl || !harmonyMenuEl.classList.contains("open")) return;
+  harmonyMenuEl.classList.remove("open");
+  harmonyBtn?.setAttribute("aria-expanded", "false");
+  document.removeEventListener("pointerdown", onHarmonyMenuOutside, true);
+  document.removeEventListener("keydown", onHarmonyMenuKey, true);
+}
+
+function onHarmonyMenuOutside(e: PointerEvent): void {
+  // Outside the button and the menu: the menu closes,
+  // like any flyout. A click on the button itself is
+  // inside, so the button's own click toggles it.
+  const target = e.target as Node | null;
+  if (target && harmonyMenuEl?.contains(target)) return;
+  if (target && harmonyBtn?.contains(target)) return;
+  closeHarmonyMenu();
+}
+
+function onHarmonyMenuKey(e: KeyboardEvent): void {
+  if (e.key === "Escape") {
+    e.stopPropagation();
+    closeHarmonyMenu();
+    harmonyBtn?.focus();
+  }
+}
+
+function toggleHarmonyMenu(): void {
+  if (!harmonyMenuEl || !harmonyBtn) return;
+  if (harmonyMenuEl.classList.contains("open")) {
+    closeHarmonyMenu();
+    return;
+  }
+  harmonyMenuEl.classList.add("open");
+  harmonyBtn.setAttribute("aria-expanded", "true");
+  document.addEventListener("pointerdown", onHarmonyMenuOutside, true);
+  document.addEventListener("keydown", onHarmonyMenuKey, true);
+}
+
 // The harmony set for the picked colour: five tiles for
 // the selected harmony type, remade whenever the picked
 // colour moves. Clicking one applies it like any tile.
@@ -935,19 +996,14 @@ export function renderPanel(container: HTMLElement): void {
   controlsEl = document.createElement("div");
   controlsEl.className = "col-controls";
   pickerSection.appendChild(controlsEl);
-  // The fill controls, under their own hairline: what the
-  // picked colour becomes on the stroke — opacity, solid
-  // or gradient, and, for a gradient, its angle and
-  // stops. One group, so the two segmented switches no
-  // longer read as one split control.
-  const fillGroup = document.createElement("div");
-  fillGroup.className = "col-fill-group";
-  // The picked opacity, 0–100%, in the fill group — one
-  // slider, in the same style, that never rebuilds on a
-  // mode switch. It moves the picked state and the pen on
-  // every tick, like the wheel moves the colour; it never
-  // recolours selected strokes by itself — the picked
-  // state only lands on a click-apply.
+  // The picked opacity sits with the tweak controls, right
+  // after the mode's sliders: it is a property of the
+  // colour being picked, not of the fill. One slider, in
+  // the same style, that never rebuilds on a mode switch.
+  // It moves the picked state and the pen on every tick,
+  // like the wheel moves the colour; it never recolours
+  // selected strokes by itself — the picked state only
+  // lands on a click-apply.
   const opacityRow = sliderRow("Opacity", "col-slider-opacity", 100, opacity, (v) => {
     opacity = v;
     a.pen.setOpacity(v);
@@ -955,11 +1011,13 @@ export function renderPanel(container: HTMLElement): void {
   });
   opacityInput = opacityRow.input;
   opacityValue = opacityRow.value;
-  fillGroup.appendChild(opacityRow.row);
-  // The gradient switch, a segmented row in the mode
-  // switch's treatment: Solid or Gradient — one picked
-  // state, two forms. Turning the gradient off clears
-  // it, and the picked state is solid again.
+  pickerSection.appendChild(opacityRow.row);
+  // The gradient switch follows the opacity row directly:
+  // no hairline, no section of its own — the mode switch,
+  // the sliders, the opacity and this switch are one
+  // picking surface, and the gradient editor follows from
+  // the switch. Turning the gradient off clears it, and
+  // the picked state is solid again.
   const gradSeg = document.createElement("div");
   gradSeg.className = "col-mode-seg";
   gradSeg.setAttribute("role", "group");
@@ -976,53 +1034,60 @@ export function renderPanel(container: HTMLElement): void {
     gradSegButtons[value] = btn;
     gradSeg.appendChild(btn);
   }
-  fillGroup.appendChild(gradSeg);
+  pickerSection.appendChild(gradSeg);
   gradientEditorEl = document.createElement("div");
   gradientEditorEl.className = "col-gradient-editor";
-  fillGroup.appendChild(gradientEditorEl);
-  pickerSection.appendChild(fillGroup);
+  pickerSection.appendChild(gradientEditorEl);
   renderGradientEditor();
   container.appendChild(pickerSection);
   renderControls();
-  // Harmonies of the picked colour: a type selector in
-  // the mode switch's segmented treatment, five tiles
-  // below it.
+  // Harmonies of the picked colour: the type is a small
+  // menu in the head row, showing the current type, with
+  // five tiles below it.
   const harmoniesSection = document.createElement("div");
   harmoniesSection.className = "col-section";
+  const harmoniesHead = document.createElement("div");
+  harmoniesHead.className = "col-harmonies-head";
   const harmoniesTitle = document.createElement("span");
   harmoniesTitle.className = "col-section-title";
   harmoniesTitle.textContent = "Harmonies";
-  harmoniesSection.appendChild(harmoniesTitle);
-  const harmonySeg = document.createElement("div");
-  harmonySeg.className = "col-harmony-seg";
-  harmonySeg.setAttribute("role", "group");
-  harmonySeg.setAttribute("aria-label", "Harmony type");
+  harmoniesHead.appendChild(harmoniesTitle);
+  harmonyBtn = document.createElement("button");
+  harmonyBtn.type = "button";
+  harmonyBtn.className = "col-harmony-btn";
+  harmonyBtn.setAttribute("aria-label", "Harmony type");
+  harmonyBtn.setAttribute("aria-haspopup", "menu");
+  harmonyBtn.setAttribute("aria-expanded", "false");
+  harmonyBtnLabel = document.createElement("span");
+  harmonyBtnLabel.textContent = harmony;
+  harmonyBtn.appendChild(harmonyBtnLabel);
+  const harmonyChevron = document.createElement("span");
+  harmonyChevron.className = "col-harmony-chevron";
+  harmonyChevron.innerHTML = ICON_CHEVRON_DOWN;
+  harmonyBtn.appendChild(harmonyChevron);
+  harmonyBtn.addEventListener("click", () => toggleHarmonyMenu());
+  harmoniesHead.appendChild(harmonyBtn);
+  harmonyMenuEl = document.createElement("div");
+  harmonyMenuEl.className = "col-harmony-menu";
+  harmonyMenuEl.setAttribute("role", "menu");
+  harmonyMenuEl.setAttribute("aria-label", "Harmony type");
   for (const value of HARMONY_NAMES) {
-    // Five full names do not fit the row, so the labels
-    // are abbreviated — the full name is the title.
-    const label = { Monochromatic: "Mono", Analogous: "Analog", Complementary: "Compl", "Split complementary": "Split", Triadic: "Triadic" }[value];
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "col-harmony-seg-btn" + (value === harmony ? " active" : "");
-    btn.dataset.harmony = value;
-    btn.textContent = label;
-    btn.title = value;
-    btn.setAttribute("aria-label", `${value} harmony`);
-    btn.setAttribute("aria-pressed", String(value === harmony));
-    btn.addEventListener("click", () => {
-      if (harmony === value) return;
-      harmony = value;
-      for (const [h, b] of Object.entries(harmonySegButtons)) {
-        const active = h === value;
-        b.classList.toggle("active", active);
-        b.setAttribute("aria-pressed", String(active));
-      }
-      renderHarmonies();
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "col-harmony-menu-item" + (value === harmony ? " active" : "");
+    item.dataset.harmony = value;
+    item.textContent = value;
+    item.setAttribute("role", "menuitemradio");
+    item.setAttribute("aria-checked", String(value === harmony));
+    item.addEventListener("click", () => {
+      setHarmony(value);
+      closeHarmonyMenu();
     });
-    harmonySegButtons[value] = btn;
-    harmonySeg.appendChild(btn);
+    harmonyMenuItems[value] = item;
+    harmonyMenuEl.appendChild(item);
   }
-  harmoniesSection.appendChild(harmonySeg);
+  harmoniesHead.appendChild(harmonyMenuEl);
+  harmoniesSection.appendChild(harmoniesHead);
   harmonyEl = document.createElement("div");
   harmonyEl.className = "col-tiles";
   harmoniesSection.appendChild(harmonyEl);

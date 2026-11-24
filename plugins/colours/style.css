@@ -31,18 +31,6 @@
   border-bottom: 1px solid var(--separator);
 }
 
-/* The fill group, under its own hairline inside the
-   picker: opacity, the Solid/Gradient switch and, for a
-   gradient, its angle and stops. One group, so the two
-   segmented switches no longer read as one split
-   control — the mode switch above belongs to picking
-   the colour, this one to what the colour becomes. */
-.col-fill-group {
-  border-top: 1px solid var(--separator);
-  padding-top: 4px;
-  margin-top: 4px;
-}
-
 /* The gradient strip: the whole picked gradient at its
    angle, full width, so the gradient itself stays
    visible while the preview swatch shows the stop being
@@ -57,8 +45,8 @@
 
 .col-wheel-wrap {
   position: relative;
-  width: 96px;
-  height: 96px;
+  width: 180px;
+  height: 180px;
   margin: 0 auto 6px;
   cursor: crosshair;
   touch-action: none;
@@ -158,10 +146,8 @@
 /* The mode control, a segmented row: the Settings
    segmented treatment — a fill-grey pill, 2px padding,
    9px radius, the active option a white pill with the
-   segmented shadow. One short row, not a full select.
-   The harmony type selector is the same treatment. */
-.col-mode-seg,
-.col-harmony-seg {
+   segmented shadow. One short row, not a full select. */
+.col-mode-seg {
   display: flex;
   gap: 2px;
   background: var(--fill);
@@ -172,8 +158,7 @@
 
 /* Prefixed, so these beat the core .plugin-panel-body
    button rule on border, radius and padding. */
-.plugin-panel-body .col-mode-seg-btn,
-.plugin-panel-body .col-harmony-seg-btn {
+.plugin-panel-body .col-mode-seg-btn {
   flex: 1 1 0;
   min-width: 0;
   border: none;
@@ -187,15 +172,115 @@
   white-space: nowrap;
 }
 
-.plugin-panel-body .col-mode-seg-btn:hover,
-.plugin-panel-body .col-harmony-seg-btn:hover {
+.plugin-panel-body .col-mode-seg-btn:hover {
   background: rgba(0, 0, 0, 0.05);
 }
 
-.plugin-panel-body .col-mode-seg-btn.active,
-.plugin-panel-body .col-harmony-seg-btn.active {
+.plugin-panel-body .col-mode-seg-btn.active {
   background: #fff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+}
+
+/* The Harmonies head row: the title on the left, the type
+   as a small menu button on the right — one compact
+   control, not a five-tab strip across the panel. */
+.col-harmonies-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.col-harmonies-head .col-section-title {
+  flex: 1 1 auto;
+  margin-bottom: 0;
+}
+
+/* Prefixed, so this beats the core .plugin-panel-body
+   button rule on border, radius and padding. A fill-grey
+   pill like the segmented treatment, showing the current
+   harmony type and a chevron. */
+.plugin-panel-body .col-harmony-btn {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: var(--fill);
+  border-radius: 9px;
+  padding: 4px 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.plugin-panel-body .col-harmony-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.col-harmony-chevron {
+  display: flex;
+  align-items: center;
+}
+
+.col-harmony-chevron svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The harmony type menu: a small popover under the head
+   button, in the app's popover style — white, hairline
+   border, 9px radius, soft shadow. The active type is
+   semibold on fill grey. */
+.col-harmony-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 10;
+  min-width: 168px;
+  padding: 2px;
+  background: #fff;
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  box-shadow: var(--shadow-sm);
+}
+
+.col-harmony-menu.open {
+  display: block;
+}
+
+/* Prefixed, so these beat the core .plugin-panel-body
+   button rule on border, radius and padding. */
+.plugin-panel-body .col-harmony-menu-item {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.plugin-panel-body .col-harmony-menu-item:hover {
+  background: var(--fill);
+}
+
+.plugin-panel-body .col-harmony-menu-item.active {
+  background: var(--fill);
+  font-weight: 600;
 }
 
 /* A panel section below the picker: harmonies, then
@@ -216,10 +301,6 @@
   font-size: 13px;
   font-weight: 600;
   margin-bottom: 4px;
-}
-
-.col-harmony-seg {
-  margin-bottom: 6px;
 }
 
 /* The Hex mode field: same text-field style as the
