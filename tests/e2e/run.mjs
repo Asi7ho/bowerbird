@@ -3999,15 +3999,26 @@ async function main() {
       assert.ok(bg.includes("linear-gradient"), `picked swatch should show the gradient, got ${bg}`);
       assert.ok(bg.includes("0%") && bg.includes("100%"), `picked swatch should show both stops, got ${bg}`);
       // Click the preview with nothing selected: the pen
-      // takes the gradient. Draw on a fresh line, and
-      // read the live preview while the pen is still down:
-      // it carries its own gradient def, and the stroke
-      // paints through it, exactly as the committed stroke
-      // will.
+      // takes the gradient. The previous check leaves the
+      // translucent stroke selected, so clear the selection
+      // first — clicking the already-active Gradient button
+      // is a no-op that moves the focus off the angle
+      // slider (a focused slider swallows Escape), and
+      // Escape then clears the selection. Without this,
+      // the click below would apply the gradient to that
+      // stroke instead of setting the pen.
+      await page.locator('.col-mode-seg-btn[data-gradient="gradient"]').click();
+      await page.keyboard.press("Escape");
       await page.locator(".col-picked").click();
-      await page.mouse.move(300, 550);
+      // Draw on a fresh line, from x=150 so the stroke's
+      // middle sits clear of the shape card that covers
+      // its right half at this zoom, and read the live
+      // preview while the pen is still down: it carries
+      // its own gradient def, and the stroke paints
+      // through it, exactly as the committed stroke will.
+      await page.mouse.move(150, 550);
       await page.mouse.down();
-      await page.mouse.move(350, 550, { steps: 10 });
+      await page.mouse.move(200, 550, { steps: 10 });
       await waitFor("live preview with a gradient", async () => {
         const preview = await page.evaluate(() => {
           const live = document.querySelector("#live-stroke");
@@ -4055,11 +4066,20 @@ async function main() {
       // The gradient stroke from the last check, on its
       // own line: select it, then edit its second stop
       // (white) to blue on the sliders — clicking the stop
-      // selects it, and the picked colour targets it.
+      // selects it, and the picked colour targets it. The
+      // click lands on the stroke's left half, clear of
+      // the shape card covering its right half.
       const before = strokes().find((it) => it.kind.Stroke.gradient);
       assert.ok(before);
       await page.keyboard.press("v");
-      await page.mouse.click(400, 550);
+      await page.mouse.click(325, 550);
+      await waitFor("gradient stroke selected", async () => {
+        const sel = await page.evaluate((id) => {
+          const el = document.querySelector(`#cards .card.stroke.selected[data-id="${id}"]`);
+          return el ? true : null;
+        }, before.id);
+        return sel;
+      });
       await page.locator(".col-gradient-stops .col-tile").nth(1).click();
       await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
       await page.locator(".col-slider-hue").fill("211");
@@ -4090,7 +4110,14 @@ async function main() {
       const before = strokes().find((it) => it.kind.Stroke.gradient);
       assert.ok(before);
       await page.keyboard.press("v");
-      await page.mouse.click(400, 550);
+      await page.mouse.click(325, 550);
+      await waitFor("gradient stroke selected", async () => {
+        const sel = await page.evaluate((id) => {
+          const el = document.querySelector(`#cards .card.stroke.selected[data-id="${id}"]`);
+          return el ? true : null;
+        }, before.id);
+        return sel;
+      });
       // The picked colour is still the blue from the last
       // check: turning the gradient off and applying it
       // leaves a solid blue stroke.
