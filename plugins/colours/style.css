@@ -31,9 +31,9 @@
   border-bottom: 1px solid var(--separator);
 }
 
-/* The gradient strip: the whole picked gradient at its
-   angle, tall enough to grab and to read — and the
-   control itself, with the stops as markers on it. */
+/* The gradient strip: the whole picked gradient, tall
+   enough to grab and to read — and the control itself,
+   with the stops as markers on it. */
 .col-gradient-strip {
   position: relative;
   height: 28px;
@@ -43,23 +43,30 @@
   touch-action: none;
 }
 
-/* A gradient stop on the strip: a small disc in the
-   stop's colour, centred on its offset. The selected
-   one carries a blue ring, like a selected tile.
-   Prefixed, so this beats the core .plugin-panel-body
-   button rule on border, radius and padding. */
-.plugin-panel-body .col-stop-marker {
+/* One positioned wrapper per stop: the disc fills it,
+   and the × on the selected stop hangs off its corner. */
+.col-stop-marker-wrap {
   position: absolute;
   top: 50%;
   width: 16px;
   height: 16px;
+  transform: translate(-50%, -50%);
+}
+
+/* A gradient stop on the strip: a small disc in the
+   stop's colour. The selected one carries a blue ring,
+   like a selected tile. Prefixed, so this beats the
+   core .plugin-panel-body button rule on border,
+   radius and padding. */
+.plugin-panel-body .col-stop-marker {
+  width: 100%;
+  height: 100%;
   box-sizing: border-box;
   margin: 0;
   padding: 0;
   border: 2px solid #fff;
   border-radius: 50%;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(0, 0, 0, 0.08);
-  transform: translate(-50%, -50%);
   cursor: grab;
   touch-action: none;
 }
@@ -73,19 +80,73 @@
   cursor: grabbing;
 }
 
-/* The row under the strip: the angle slider, then +
-   to add a stop and × to remove the selected one. The
-   slider takes the width; the buttons stay quiet. */
-.col-gradient-controls {
+/* The × on the selected stop: a small white disc on
+   the wrapper's corner, its own click target — it
+   never starts a marker drag. Only on the selected
+   stop, and never at two stops. */
+.plugin-panel-body .col-stop-marker-x {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--grey);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
 }
 
-.col-gradient-controls .col-slider-row {
-  flex: 1 1 auto;
-  min-width: 0;
-  margin-bottom: 0;
+.plugin-panel-body .col-stop-marker-x svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The + on the strip: a small white disc at the
+   strip's top-right end, adding a stop at the widest
+   gap. Up in the corner, not centred, so the stop at
+   100% keeps its centre free to grab. */
+.plugin-panel-body .col-strip-add {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--grey);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  z-index: 1;
+}
+
+.plugin-panel-body .col-strip-add svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .col-wheel-wrap {

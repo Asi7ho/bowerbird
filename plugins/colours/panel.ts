@@ -656,19 +656,6 @@ function renderGradientEditor(): void {
   gradientStripEl.className = "col-gradient-strip";
   gradientStripEl.setAttribute("aria-label", "Picked gradient");
   host.appendChild(gradientStripEl);
-  // One quiet row under the strip: + to add a stop at
-  // the widest gap and × to remove the selected stop
-  // (disabled at two stops).
-  const controls = document.createElement("div");
-  controls.className = "col-gradient-controls";
-  const add = iconButton("Add gradient stop", "Add stop", ICON_PLUS);
-  add.addEventListener("click", () => addStop());
-  controls.appendChild(add);
-  const remove = iconButton(`Remove stop ${selectedStop + 1}`, "Remove stop", ICON_CLOSE);
-  remove.disabled = gradient.stops.length <= 2;
-  remove.addEventListener("click", () => removeStop(selectedStop));
-  controls.appendChild(remove);
-  host.appendChild(controls);
   renderGradientStops();
   // The strip's background is set in updatePicked, which
   // ran before the strip existed when the gradient was
@@ -692,11 +679,17 @@ function renderGradientStops(): void {
   if (!strip || !gradient) return;
   strip.innerHTML = "";
   gradient.stops.forEach((stop, i) => {
+    // One positioned wrapper per stop: the disc fills
+    // it, and the × on the selected stop hangs off its
+    // corner as its own click target, so it never
+    // starts a marker drag.
+    const wrap = document.createElement("div");
+    wrap.className = "col-stop-marker-wrap";
+    wrap.style.left = `${stop.offset}%`;
     const marker = document.createElement("button");
     marker.type = "button";
     marker.className = "col-stop-marker" + (i === selectedStop ? " selected" : "");
     marker.style.background = stop.color;
-    marker.style.left = `${stop.offset}%`;
     marker.dataset.hex = stop.color;
     marker.dataset.offset = String(stop.offset);
     marker.title = `${stop.color} at ${stop.offset}%`;
@@ -742,7 +735,7 @@ function renderGradientStops(): void {
       const move = (ev: PointerEvent): void => {
         if (!gradient) return;
         const offset = offsetAt(ev.clientX);
-        marker.style.left = `${offset}%`;
+        wrap.style.left = `${offset}%`;
         marker.dataset.offset = String(offset);
         marker.title = `${stop.color} at ${offset}%`;
         marker.setAttribute("aria-label", `Gradient stop ${i + 1}, ${stop.color} at ${offset}%`);
@@ -773,8 +766,36 @@ function renderGradientStops(): void {
       marker.addEventListener("pointerup", up);
       marker.addEventListener("pointercancel", cancel);
     });
-    strip.appendChild(marker);
+    wrap.appendChild(marker);
+    // The × on the selected stop only, never at two
+    // stops: its own button on the wrapper's corner,
+    // so clicking it removes the stop without
+    // selecting or dragging the marker.
+    if (i === selectedStop && gradient && gradient.stops.length > 2) {
+      const x = document.createElement("button");
+      x.type = "button";
+      x.className = "col-stop-marker-x";
+      x.innerHTML = ICON_CLOSE;
+      x.title = `Remove stop ${i + 1}`;
+      x.setAttribute("aria-label", `Remove stop ${i + 1}`);
+      x.addEventListener("pointerdown", (e) => { e.stopPropagation(); e.preventDefault(); });
+      x.addEventListener("click", (e) => { e.stopPropagation(); removeStop(i); });
+      wrap.appendChild(x);
+    }
+    strip.appendChild(wrap);
   });
+  // The + lives on the strip itself, at its top-right
+  // end: it adds a stop at the widest gap. Up in the
+  // corner, not centred, so the stop at 100% keeps
+  // its centre free to grab.
+  const add = document.createElement("button");
+  add.type = "button";
+  add.className = "col-strip-add";
+  add.innerHTML = ICON_PLUS;
+  add.title = "Add gradient stop";
+  add.setAttribute("aria-label", "Add gradient stop");
+  add.addEventListener("click", () => addStop());
+  strip.appendChild(add);
 }
 
 // The harmony type: Analogous first, so the middle tile
