@@ -386,12 +386,14 @@ function installShowcaseAssets(dir: string, force = false): { pdf_size_bytes: nu
   // truncated, an interrupted copy — is just as broken as
   // a missing file, so copy that too. Different bytes are
   // a replacement, not damage: leave them alone, whatever
-  // the size. Forced (the Restore button) overwrites all.
+  // the size. The size check skips an identical copy
+  // without reading bytes. Forced (the Restore button)
+  // overwrites all.
   for (const name of ["welcome-bower.jpg", "welcome-birdsong.mp3", "welcome-video.mp4", "sample.pdf", "welcome-cube.glb", "welcome-garden.psd", "welcome-heron.ai", "welcome-garden-preview.png", "welcome-heron-preview.png"]) {
     const srcFile = path.join(src, name);
     const dest = path.join(dir, name);
     if (!fs.existsSync(srcFile)) { missing.push(name); continue; }
-    if (force || !fs.existsSync(dest) || !isPrefixOf(dest, srcFile)) {
+    if (force || !fs.existsSync(dest) || (sizeOf(dest) !== sizeOf(srcFile) && isPrefixOf(dest, srcFile))) {
       try { fs.copyFileSync(srcFile, dest); copied.push(name); } catch (e) { missing.push(`${name} (${(e as Error).message})`); }
     }
   }
