@@ -4102,7 +4102,7 @@ async function main() {
         }, before.id);
         return sel;
       });
-      await page.locator(".col-gradient-stops .col-tile").nth(1).click();
+      await page.locator(".col-gradient-strip .col-stop-marker").nth(1).click();
       await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
       await page.locator(".col-slider-hue").fill("211");
       await page.locator(".col-slider-sat").fill("100");
@@ -4124,6 +4124,40 @@ async function main() {
         const it = strokes().find((s) => s.id === before.id);
         return it?.kind.Stroke.gradient?.stops[1]?.color === "#FFFFFF" ? true : null;
       });
+    });
+
+    await check("gradient stops move, add and remove on the strip", async () => {
+      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // The gradient is on from the last check, two
+      // stops: red at 0, blue at 100. The + adds a stop
+      // in the picked colour at the widest gap — the
+      // middle, 50% — and selects it.
+      const markers = page.locator(".col-gradient-strip .col-stop-marker");
+      assert.equal(await markers.count(), 2);
+      await page.locator('button[aria-label="Add gradient stop"]').click();
+      assert.equal(await markers.count(), 3);
+      assert.equal(await markers.nth(1).getAttribute("data-offset"), "50");
+      // Drag the middle marker to 25%: a real pointer
+      // drag, from the marker's centre to the point a
+      // quarter along the strip.
+      const markerBox = await markers.nth(1).boundingBox();
+      assert.ok(markerBox);
+      const stripBox = await page.locator(".col-gradient-strip").boundingBox();
+      assert.ok(stripBox);
+      await page.mouse.move(markerBox.x + markerBox.width / 2, markerBox.y + markerBox.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(stripBox.x + stripBox.width * 0.25, markerBox.y + markerBox.height / 2, { steps: 10 });
+      await page.mouse.up();
+      assert.equal(await markers.nth(1).getAttribute("data-offset"), "25");
+      const bg = await page.locator(".col-gradient-strip").evaluate((el) => el.style.background);
+      assert.ok(bg.includes("25%"), `strip should show the moved stop, got ${bg}`);
+      // The × removes the selected stop; the gradient is
+      // back to two stops, red at 0 and blue at 100.
+      await page.locator('button[aria-label="Remove stop 2"]').click();
+      assert.equal(await markers.count(), 2);
+      assert.equal(await markers.nth(0).getAttribute("data-offset"), "0");
+      assert.equal(await markers.nth(1).getAttribute("data-offset"), "100");
     });
 
     await check("turning the gradient off returns the stroke to solid", async () => {
