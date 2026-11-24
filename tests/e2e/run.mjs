@@ -3755,6 +3755,116 @@ async function main() {
       await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
     });
 
+    await check("harmonies show five colours for the picked colour and a harmony click applies", async () => {
+      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // Pick the red on the HSL sliders: Analogous is the
+      // default harmony, so the middle tile is the picked
+      // colour itself.
+      await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
+      await page.locator(".col-slider-hue").fill("355");
+      await page.locator(".col-slider-sat").fill("78");
+      await page.locator(".col-slider-light").fill("56");
+      const picked = (await page.locator(".col-hex").textContent()) ?? "";
+      assert.ok(/^#[0-9A-F]{6}$/.test(picked));
+      assert.equal(await page.locator(".col-harmony-tile").count(), 5);
+      const hexes = await page.locator(".col-harmony-tile")
+        .evaluateAll((els) => els.map((el) => el.dataset.hex));
+      assert.equal(new Set(hexes).size, 5);
+      assert.equal(hexes[2], picked);
+      // A harmony click applies: select the red stroke,
+      // click the first harmony tile, and the stroke takes
+      // its colour. One undo puts it back.
+      const stroke = strokes().find((it) => it.kind.Stroke.color === pickedRed);
+      assert.ok(stroke);
+      await page.keyboard.press("v");
+      await page.mouse.click(400, 800);
+      await page.locator(".col-harmony-tile").first().click();
+      await waitFor("stroke recoloured by harmony", () =>
+        strokes().find((it) => it.id === stroke.id)?.kind.Stroke.color === hexes[0] ? true : null,
+      );
+      await page.keyboard.press("Control+z");
+      await waitFor("undo restores the red stroke", () =>
+        strokes().find((it) => it.id === stroke.id)?.kind.Stroke.color === pickedRed ? true : null,
+      );
+    });
+
+    await check("the harmony type selector switches the shown set", async () => {
+      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
+      await page.locator(".col-slider-hue").fill("355");
+      await page.locator(".col-slider-sat").fill("78");
+      await page.locator(".col-slider-light").fill("56");
+      const picked = (await page.locator(".col-hex").textContent()) ?? "";
+      const analogous = await page.locator(".col-harmony-tile")
+        .evaluateAll((els) => els.map((el) => el.dataset.hex));
+      assert.equal(analogous[2], picked);
+      await page.locator('.col-harmony-seg-btn[data-harmony="Triadic"]').click();
+      const triadic = await page.locator(".col-harmony-tile")
+        .evaluateAll((els) => els.map((el) => el.dataset.hex));
+      assert.notDeepEqual(triadic, analogous);
+      // Every harmony starts at the picked colour.
+      assert.equal(triadic[0], picked);
+      assert.ok(await page.locator('.col-harmony-seg-btn[data-harmony="Triadic"]')
+        .evaluate((el) => el.classList.contains("active")));
+      // Back to Analogous, so later checks find the default.
+      await page.locator('.col-harmony-seg-btn[data-harmony="Analogous"]').click();
+      assert.ok(await page.locator('.col-harmony-seg-btn[data-harmony="Analogous"]')
+        .evaluate((el) => el.classList.contains("active")));
+    });
+
+    await check("recent colours record on apply and a recent click restores the colour", async () => {
+      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // Settling the sliders records: pick blue, and it is
+      // the most recent colour before anything is applied.
+      await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
+      await page.locator(".col-slider-hue").fill("211");
+      await page.locator(".col-slider-sat").fill("100");
+      await page.locator(".col-slider-light").fill("50");
+      const blue = (await page.locator(".col-hex").textContent()) ?? "";
+      assert.ok(/^#[0-9A-F]{6}$/.test(blue));
+      assert.notEqual(blue, pickedRed);
+      let recents = await page.locator(".col-recent-tile")
+        .evaluateAll((els) => els.map((el) => el.dataset.hex));
+      assert.equal(recents[0], blue);
+      // Applying puts the colour first: the picked blue,
+      // then the red palette tile.
+      await page.locator(".col-picked").click();
+      await page.locator(".col-palette").nth(1).locator(".col-tile").first().click();
+      recents = await page.locator(".col-recent-tile")
+        .evaluateAll((els) => els.map((el) => el.dataset.hex));
+      assert.equal(recents[0], pickedRed);
+      assert.equal(recents[1], blue);
+      // No duplicates, and the list survives a reload.
+      assert.equal(new Set(recents).size, recents.length);
+      await new Promise((r) => setTimeout(r, 600));
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
+      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      recents = await page.locator(".col-recent-tile")
+        .evaluateAll((els) => els.map((el) => el.dataset.hex));
+      assert.equal(recents[0], pickedRed);
+      assert.equal(recents[1], blue);
+      // A recent click restores the colour: select the red
+      // stroke, click the blue recent tile, and the stroke
+      // turns blue. One undo puts it back.
+      const stroke = strokes().find((it) => it.kind.Stroke.color === pickedRed);
+      assert.ok(stroke);
+      await page.keyboard.press("v");
+      await page.mouse.click(400, 800);
+      await page.locator(".col-recent-tile").nth(1).click();
+      await waitFor("stroke recoloured from recent", () =>
+        strokes().find((it) => it.id === stroke.id)?.kind.Stroke.color === blue ? true : null,
+      );
+      await page.keyboard.press("Control+z");
+      await waitFor("undo restores the red stroke", () =>
+        strokes().find((it) => it.id === stroke.id)?.kind.Stroke.color === pickedRed ? true : null,
+      );
+    });
+
     await check("a version restores from the Boards panel history", async () => {
       // Enable the Boards plugin (bundled, opt-in) and open its panel.
       assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("boards", true)), true);
