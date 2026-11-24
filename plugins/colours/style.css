@@ -181,6 +181,66 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
 }
 
+/* The fill control: a binary toggle — Solid on the
+   left, Gradient on the right, one switch between
+   them. Deliberately not the segmented treatment:
+   the mode switch above picks one of four editors,
+   this flips one binary choice. The knob slides to
+   the active side and the track takes the accent;
+   the active label is ink, the other grey. */
+.plugin-panel-body .col-fill-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.col-fill-toggle-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--grey);
+}
+
+.col-fill-toggle:not(.on) .col-fill-toggle-label:first-child,
+.col-fill-toggle.on .col-fill-toggle-label:last-child {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.col-fill-toggle-track {
+  flex: none;
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--fill);
+  transition: background 0.15s ease;
+}
+
+.col-fill-toggle.on .col-fill-toggle-track {
+  background: var(--accent);
+}
+
+.col-fill-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  transition: transform 0.15s ease;
+}
+
+.col-fill-toggle.on .col-fill-toggle-knob {
+  transform: translateX(20px);
+}
+
 /* The Harmonies head row: the title on the left, the type
    as a small menu button on the right — one compact
    control, not a five-tab strip across the panel. */

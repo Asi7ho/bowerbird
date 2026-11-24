@@ -74,7 +74,7 @@ let harmonyMenuItems: Partial<Record<HarmonyName, HTMLButtonElement>> = {};
 let harmonyBtn: HTMLButtonElement | null = null;
 let harmonyBtnLabel: HTMLSpanElement | null = null;
 let harmonyMenuEl: HTMLDivElement | null = null;
-let gradSegButtons: Partial<Record<"solid" | "gradient", HTMLButtonElement>> = {};
+let gradToggleBtn: HTMLButtonElement | null = null;
 let gradientEditorEl: HTMLDivElement | null = null;
 let gradientStripEl: HTMLDivElement | null = null;
 let gradientStopsEl: HTMLDivElement | null = null;
@@ -150,7 +150,7 @@ export function clearPanel(): void {
   harmonyBtn = null;
   harmonyBtnLabel = null;
   harmonyMenuEl = null;
-  gradSegButtons = {};
+  gradToggleBtn = null;
   gradientEditorEl = null;
   gradientStripEl = null;
   gradientStopsEl = null;
@@ -628,10 +628,9 @@ function renderControls(): void {
 // colour tick (see renderGradientStops).
 function renderGradientEditor(): void {
   const on = gradient !== null;
-  for (const [key, b] of Object.entries(gradSegButtons)) {
-    const active = (key === "gradient") === on;
-    b.classList.toggle("active", active);
-    b.setAttribute("aria-pressed", String(active));
+  if (gradToggleBtn) {
+    gradToggleBtn.setAttribute("aria-checked", String(on));
+    gradToggleBtn.classList.toggle("on", on);
   }
   const host = gradientEditorEl;
   if (!host) return;
@@ -1012,29 +1011,36 @@ export function renderPanel(container: HTMLElement): void {
   opacityInput = opacityRow.input;
   opacityValue = opacityRow.value;
   pickerSection.appendChild(opacityRow.row);
-  // The gradient switch follows the opacity row directly:
-  // no hairline, no section of its own — the mode switch,
-  // the sliders, the opacity and this switch are one
-  // picking surface, and the gradient editor follows from
-  // the switch. Turning the gradient off clears it, and
-  // the picked state is solid again.
-  const gradSeg = document.createElement("div");
-  gradSeg.className = "col-mode-seg";
-  gradSeg.setAttribute("role", "group");
-  gradSeg.setAttribute("aria-label", "Gradient");
-  for (const [value, label] of [["solid", "Solid"], ["gradient", "Gradient"]] as const) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "col-mode-seg-btn" + ((value === "gradient") === (gradient !== null) ? " active" : "");
-    btn.dataset.gradient = value;
-    btn.textContent = label;
-    btn.setAttribute("aria-label", `${label} stroke`);
-    btn.setAttribute("aria-pressed", String((value === "gradient") === (gradient !== null)));
-    btn.addEventListener("click", () => setGradientMode(value === "gradient"));
-    gradSegButtons[value] = btn;
-    gradSeg.appendChild(btn);
-  }
-  pickerSection.appendChild(gradSeg);
+  // The fill control follows the opacity row directly:
+  // no hairline, no section of its own. It is a binary
+  // toggle, not a second segmented row — Solid on the
+  // left, Gradient on the right, one switch between
+  // them, the knob sliding to the active side. The
+  // gradient editor follows from it. Turning the
+  // gradient off clears it, and the picked state is
+  // solid again.
+  gradToggleBtn = document.createElement("button");
+  gradToggleBtn.type = "button";
+  gradToggleBtn.className = "col-fill-toggle";
+  gradToggleBtn.setAttribute("role", "switch");
+  gradToggleBtn.setAttribute("aria-label", "Gradient stroke");
+  gradToggleBtn.setAttribute("aria-checked", String(gradient !== null));
+  const solidLabel = document.createElement("span");
+  solidLabel.className = "col-fill-toggle-label";
+  solidLabel.textContent = "Solid";
+  gradToggleBtn.appendChild(solidLabel);
+  const toggleTrack = document.createElement("span");
+  toggleTrack.className = "col-fill-toggle-track";
+  const toggleKnob = document.createElement("span");
+  toggleKnob.className = "col-fill-toggle-knob";
+  toggleTrack.appendChild(toggleKnob);
+  gradToggleBtn.appendChild(toggleTrack);
+  const gradientLabel = document.createElement("span");
+  gradientLabel.className = "col-fill-toggle-label";
+  gradientLabel.textContent = "Gradient";
+  gradToggleBtn.appendChild(gradientLabel);
+  gradToggleBtn.addEventListener("click", () => setGradientMode(gradient === null));
+  pickerSection.appendChild(gradToggleBtn);
   gradientEditorEl = document.createElement("div");
   gradientEditorEl.className = "col-gradient-editor";
   pickerSection.appendChild(gradientEditorEl);

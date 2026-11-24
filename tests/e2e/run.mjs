@@ -3979,6 +3979,13 @@ async function main() {
       }
     });
 
+    // The fill control is a toggle, not two buttons:
+    // set the mode only when it differs, so a check
+    // never flips it by accident.
+    const setFillMode = async (on) => {
+      const isOn = await page.locator(".col-fill-toggle").evaluate((el) => el.getAttribute("aria-checked") === "true");
+      if (isOn !== on) await page.locator(".col-fill-toggle").click();
+    };
     await check("gradient editor draws a gradient stroke, preview included", async () => {
       await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
@@ -3996,7 +4003,7 @@ async function main() {
       await page.locator(".col-slider-light").fill("56");
       pickedRed = (await page.locator(".col-hex").textContent()) ?? "";
       assert.ok(/^#[0-9A-F]{6}$/.test(pickedRed));
-      await page.locator('.col-mode-seg-btn[data-gradient="gradient"]').click();
+      await setFillMode(true);
       await page.locator(".col-slider-angle").fill("0");
       // The strip shows the picked gradient, and the
       // preview swatch shows the stop being edited.
@@ -4014,13 +4021,15 @@ async function main() {
       // Click the preview with nothing selected: the pen
       // takes the gradient. The previous check leaves the
       // translucent stroke selected, so clear the selection
-      // first — clicking the already-active Gradient button
-      // is a no-op that moves the focus off the angle
-      // slider (a focused slider swallows Escape), and
-      // Escape then clears the selection. Without this,
-      // the click below would apply the gradient to that
-      // stroke instead of setting the pen.
-      await page.locator('.col-mode-seg-btn[data-gradient="gradient"]').click();
+      // first — clicking the Harmonies title moves the
+      // focus off the angle slider (a focused slider
+      // swallows Escape), and Escape then clears the
+      // selection. Without this, the click below would
+      // apply the gradient to that stroke instead of
+      // setting the pen. The title is a plain span, so
+      // the click has no side effect — unlike the fill
+      // toggle, which would flip the gradient off.
+      await page.locator(".col-harmonies-head .col-section-title").click();
       await page.keyboard.press("Escape");
       await page.locator(".col-picked").click();
       // Draw on a fresh line, from x=150 so the stroke's
@@ -4134,7 +4143,7 @@ async function main() {
       // The picked colour is still the blue from the last
       // check: turning the gradient off and applying it
       // leaves a solid blue stroke.
-      await page.locator('.col-mode-seg-btn[data-gradient="solid"]').click();
+      await setFillMode(false);
       const picked = (await page.locator(".col-hex").textContent()) ?? "";
       assert.ok(/^#[0-9A-F]{6}$/.test(picked));
       await page.locator(".col-picked").click();
@@ -4149,12 +4158,12 @@ async function main() {
       // Solid first: an earlier check may have left the
       // gradient on, and the solid measurement must be
       // taken in solid mode.
-      await page.locator('.col-mode-seg-btn[data-gradient="solid"]').click();
+      await setFillMode(false);
       await page.locator(".col-gradient-strip").waitFor({ state: "detached", timeout: READY_TIMEOUT_MS }).catch(() => undefined);
       const measure = async () => page.locator('.plugin-panel[data-panel="colours"] .plugin-panel-body')
         .evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }));
       const s = await measure();
-      await page.locator('.col-mode-seg-btn[data-gradient="gradient"]').click();
+      await setFillMode(true);
       await page.locator(".col-gradient-strip").waitFor({ timeout: READY_TIMEOUT_MS });
       const g = await measure();
       // Scrolling is accepted: the wheel is back at its
@@ -4164,7 +4173,7 @@ async function main() {
       // by how much.
       console.log(`colour panel heights: solid ${s.scroll}/${s.client}, gradient ${g.scroll}/${g.client}`);
       assert.ok(s.scroll > 0 && g.scroll > 0, "panel should render in both modes");
-      await page.locator('.col-mode-seg-btn[data-gradient="solid"]').click();
+      await setFillMode(false);
     });
 
     await check("a version restores from the Boards panel history", async () => {
