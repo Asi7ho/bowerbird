@@ -408,6 +408,28 @@
   cursor: default;
 }
 
+/* The gradient editor: the angle slider and the stops
+   list, under the Solid/Gradient switch. Empty while the
+   picked state is solid, so no gap shows. */
+.col-gradient-editor {
+  margin-bottom: 6px;
+}
+
+.col-gradient-editor:empty {
+  margin-bottom: 0;
+}
+
+.col-gradient-stops {
+  margin-top: 6px;
+}
+
+/* The selected gradient stop: a blue ring, so the stop
+   the wheel and sliders edit is visible at a glance. */
+.plugin-panel-body .col-tile.selected {
+  outline: 2px solid #007AFF;
+  outline-offset: 1px;
+}
+
 /* Tiles are fixed 40px squares that wrap: a lone colour
    in a palette is one small tile, never a stretched row. */
 .col-tiles {

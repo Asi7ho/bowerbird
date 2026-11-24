@@ -4,7 +4,7 @@
 // pen); drag a tile to place a swatch on the board. The
 // picked colour is the colour new palettes and added
 // colours come from.
-import type { PluginContext } from "bowerbird-plugin-api";
+import type { PluginContext, StrokeGradient } from "bowerbird-plugin-api";
 import { applyColour } from "./apply.js";
 import { HARMONY_NAMES, harmoniesFor, hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, normaliseHex, rgbToHex, type HarmonyName } from "./color.js";
 import { attachPlaceDrag } from "./place.js";
@@ -43,6 +43,15 @@ let base = hexToHsl("#007AFF");
 // picked state. It moves with the opacity slider and the
 // pen, and rides along on every click-apply.
 let opacity = 100;
+// The picked gradient, null for a solid stroke: the
+// third part of the picked state. It moves with the
+// gradient editor and the pen, and rides along on every
+// click-apply, like the opacity.
+let gradient: StrokeGradient | null = null;
+// The stop the wheel and sliders edit when a gradient is
+// on: clicking a stop selects it, and the picked colour
+// targets that stop.
+let selectedStop = 0;
 // The harmony type: Analogous first, so the middle tile
 // of the shown set is the picked colour itself.
 let harmony: HarmonyName = "Analogous";
@@ -62,6 +71,11 @@ export function parsePickerMode(value: unknown): PickerMode {
 let mode: PickerMode = "hsl";
 let modeSegButtons: Partial<Record<PickerMode, HTMLButtonElement>> = {};
 let harmonySegButtons: Partial<Record<HarmonyName, HTMLButtonElement>> = {};
+let gradSegButtons: Partial<Record<"solid" | "gradient", HTMLButtonElement>> = {};
+let gradientEditorEl: HTMLDivElement | null = null;
+let gradientStopsEl: HTMLDivElement | null = null;
+let angleInput: HTMLInputElement | null = null;
+let angleValue: HTMLSpanElement | null = null;
 let controlsEl: HTMLDivElement | null = null;
 let harmonyEl: HTMLDivElement | null = null;
 let recentSectionEl: HTMLDivElement | null = null;
@@ -110,6 +124,12 @@ export function initPanel(a: PluginContext, initial: ColourStore, initialMode: P
     if (isHex(pen)) base = hexToHsl(pen);
     const penOpacity = a.pen.getOpacity();
     if (Number.isFinite(penOpacity)) opacity = Math.min(100, Math.max(0, Math.round(penOpacity)));
+    const penGradient = a.pen.getGradient();
+    if (penGradient && penGradient.stops.length > 0) {
+      gradient = penGradient;
+      selectedStop = 0;
+      base = hexToHsl(penGradient.stops[0].color);
+    }
   }
 }
 
@@ -118,9 +138,16 @@ export function clearPanel(): void {
   store = emptyStore();
   harmony = "Analogous";
   opacity = 100;
+  gradient = null;
+  selectedStop = 0;
   recent = [];
   modeSegButtons = {};
   harmonySegButtons = {};
+  gradSegButtons = {};
+  gradientEditorEl = null;
+  gradientStopsEl = null;
+  angleInput = null;
+  angleValue = null;
   controlsEl = null;
   harmonyEl = null;
   recentSectionEl = null;
@@ -184,11 +211,93 @@ function recordColour(hex: string): void {
 // go through here, so the recent list holds exactly the
 // colours that were applied. The picked opacity rides
 // along: a click applies the tile's colour at the picked
-// opacity, never at the stroke's old one.
+// opacity, never at the stroke's old one. With a gradient
+// on, the tile's colour sets the selected stop — the
+// picked colour targets that stop — and the whole picked
+// state (colour, opacity, gradient) is applied: a plain
+// colour tile still carries the gradient, because the
+// picked state is one thing.
 function applyAndRecord(hex: string): void {
   if (!api) return;
+  if (gradient) {
+    const normalised = normaliseHex(hex);
+    if (normalised) {
+      base = hexToHsl(normalised);
+      syncSelectedStop(normalised);
+    }
+    const g = gradient;
+    if (g) {
+      applyColour(api, g.stops[0].color, opacity, g);
+      recordColour(normalised ?? hex);
+      return;
+    }
+  }
   applyColour(api, hex, opacity);
   recordColour(hex);
+}
+
+// Write a gradient to the pen and re-read it, so the
+// panel's state is exactly the pen's — the core
+// normalises the angle and sorts the stops. Setting a
+// gradient also moves the pen colour to its first stop.
+function setGradient(next: StrokeGradient | null): void {
+  if (!api || !api.pen) return;
+  if (api.pen.setGradient(next)) {
+    gradient = api.pen.getGradient();
+    selectedStop = gradient ? Math.min(selectedStop, gradient.stops.length - 1) : 0;
+  }
+  updatePicked();
+}
+
+// The picked colour, as the selected stop's colour: the
+// wheel, the sliders, the hex field and a tile click all
+// land on that stop when a gradient is on.
+function syncSelectedStop(hex: string): void {
+  if (!gradient) return;
+  const stops = gradient.stops.map((s, i) => (i === selectedStop ? { offset: s.offset, color: hex } : s));
+  setGradient({ angle: gradient.angle, stops });
+}
+
+function setGradientMode(on: boolean): void {
+  if (on === (gradient !== null)) return;
+  if (on) {
+    // A new gradient runs from the picked colour to
+    // white, at 90° (top to bottom): a visible gradient
+    // from the colour the user already picked.
+    const hex = pickedHex();
+    setGradient({ angle: 90, stops: [{ offset: 0, color: hex }, { offset: 100, color: "#FFFFFF" }] });
+    selectedStop = 0;
+  } else {
+    setGradient(null);
+    selectedStop = 0;
+  }
+  renderGradientEditor();
+}
+
+function addStop(): void {
+  if (!gradient) return;
+  // The new stop sits in the middle of the widest gap,
+  // in the picked colour, so the gradient gains a stop
+  // where it has the most room.
+  const stops = [...gradient.stops].sort((a, b) => a.offset - b.offset);
+  let gap = 0, at = 50;
+  for (let i = 0; i + 1 < stops.length; i++) {
+    const g = stops[i + 1].offset - stops[i].offset;
+    if (g > gap) { gap = g; at = (stops[i].offset + stops[i + 1].offset) / 2; }
+  }
+  const offset = Math.round(at);
+  const next = [...gradient.stops, { offset, color: pickedHex() }];
+  setGradient({ angle: gradient.angle, stops: next });
+  if (gradient) selectedStop = Math.max(0, gradient.stops.findIndex((s) => s.offset === offset));
+  renderGradientEditor();
+}
+
+function removeStop(i: number): void {
+  if (!gradient || gradient.stops.length <= 2) return;
+  const stops = gradient.stops.filter((_, j) => j !== i);
+  selectedStop = Math.min(selectedStop, stops.length - 1);
+  setGradient({ angle: gradient.angle, stops });
+  renderGradientEditor();
 }
 
 function updateStore(next: ColourStore): void {
@@ -205,23 +314,45 @@ function pickedHex(): string {
 // Refresh every control that shows the picked colour:
 // the preview, its hex, the wheel marker, the current
 // mode's controls, and the harmony set, which is made
-// from the picked colour and follows it live.
+// from the picked colour and follows it live. With a
+// gradient on, the preview shows the gradient, and the
+// stops row follows the wheel — the selected stop's tile
+// is the colour being edited.
 function updatePicked(): void {
   const hex = pickedHex();
   if (pickedSwatch) {
-    // The preview shows the picked colour at its picked
-    // opacity, so the picked state is visible at a glance.
-    const { r, g, b } = hexToRgb(hex);
-    pickedSwatch.style.background = `rgba(${r}, ${g}, ${b}, ${opacity / 100})`;
-    pickedSwatch.dataset.hex = hex;
-    pickedSwatch.dataset.opacity = String(opacity);
-    pickedSwatch.title = opacity === 100 ? hex : `${hex} at ${opacity}%`;
+    if (gradient) {
+      // The preview shows the picked gradient at its
+      // picked opacity, so the picked state is visible at
+      // a glance. CSS angles run 0° bottom-to-top, the
+      // gradient's 0° left-to-right, so 90° is added.
+      const cssAngle = (90 + gradient.angle) % 360;
+      const stops = gradient.stops.map((s) => {
+        const { r, g, b } = hexToRgb(s.color);
+        return `rgba(${r}, ${g}, ${b}, ${opacity / 100}) ${s.offset}%`;
+      }).join(", ");
+      pickedSwatch.style.background = `linear-gradient(${cssAngle}deg, ${stops})`;
+      pickedSwatch.dataset.hex = hex;
+      pickedSwatch.dataset.opacity = String(opacity);
+      pickedSwatch.title = opacity === 100 ? `${gradient.stops[0].color} to ${gradient.stops[gradient.stops.length - 1].color} gradient` : `${gradient.stops[0].color} to ${gradient.stops[gradient.stops.length - 1].color} gradient at ${opacity}%`;
+    } else {
+      // The preview shows the picked colour at its picked
+      // opacity, so the picked state is visible at a glance.
+      const { r, g, b } = hexToRgb(hex);
+      pickedSwatch.style.background = `rgba(${r}, ${g}, ${b}, ${opacity / 100})`;
+      pickedSwatch.dataset.hex = hex;
+      pickedSwatch.dataset.opacity = String(opacity);
+      pickedSwatch.title = opacity === 100 ? hex : `${hex} at ${opacity}%`;
+    }
   }
   if (pickedHexEl) pickedHexEl.textContent = hex;
   if (opacityInput && Number(opacityInput.value) !== opacity) opacityInput.value = String(opacity);
   if (opacityValue) opacityValue.textContent = `${opacity}%`;
+  if (gradient && angleInput && Number(angleInput.value) !== Math.round(gradient.angle)) angleInput.value = String(Math.round(gradient.angle));
+  if (gradient && angleValue) angleValue.textContent = `${Math.round(gradient.angle)}°`;
   if (wheel) wheel.setMarker(base.h, base.s);
   renderHarmonies();
+  renderGradientStops();
   const setSlider = (input: HTMLInputElement | null, value: HTMLSpanElement | null, v: number, text: string): void => {
     if (input && Number(input.value) !== Math.round(v)) input.value = String(Math.round(v));
     if (value) value.textContent = text;
@@ -253,14 +384,18 @@ function saveMode(): void {
 
 function setBase(patch: Partial<typeof base>): void {
   base = { ...base, ...patch };
-  updatePicked();
+  // The wheel and sliders edit the selected stop when a
+  // gradient is on, not a separate picked colour.
+  if (gradient) syncSelectedStop(hslToHex(base.h, base.s, base.l));
+  else updatePicked();
 }
 
 function setPickedHex(hex: string): void {
   const normalised = normaliseHex(hex);
   if (!normalised) return;
   base = hexToHsl(normalised);
-  updatePicked();
+  if (gradient) syncSelectedStop(normalised);
+  else updatePicked();
 }
 
 function removeEyeDropperFallback(): void {
@@ -462,6 +597,94 @@ function renderControls(): void {
   updatePicked();
 }
 
+// The gradient editor: an angle slider and the stops
+// list, rebuilt when the gradient turns on or off or a
+// stop is added or removed — never on a colour tick, so
+// dragging the angle slider never rebuilds the slider
+// under the pointer. The stops row alone rebuilds on a
+// colour tick (see renderGradientStops).
+function renderGradientEditor(): void {
+  const on = gradient !== null;
+  for (const [key, b] of Object.entries(gradSegButtons)) {
+    const active = (key === "gradient") === on;
+    b.classList.toggle("active", active);
+    b.setAttribute("aria-pressed", String(active));
+  }
+  const host = gradientEditorEl;
+  if (!host) return;
+  host.innerHTML = "";
+  angleInput = angleValue = null;
+  gradientStopsEl = null;
+  if (!on || !gradient) return;
+  const angle = sliderRow("Angle", "col-slider-angle", 360, gradient.angle, (v) => {
+    if (!gradient) return;
+    setGradient({ angle: v, stops: gradient.stops });
+  });
+  angleInput = angle.input;
+  angleValue = angle.value;
+  host.appendChild(angle.row);
+  gradientStopsEl = document.createElement("div");
+  gradientStopsEl.className = "col-tiles col-gradient-stops";
+  host.appendChild(gradientStopsEl);
+  renderGradientStops();
+}
+
+// The stops list: one tile per stop, in offset order,
+// plus a + tile. Clicking a stop selects it — the wheel
+// and sliders then edit that stop's colour — and the ×
+// on a stop removes it (a gradient keeps at least two
+// stops, so the × hides at two). Rebuilt on every picked
+// colour tick, so the selected stop's tile follows the
+// wheel; the angle slider is never rebuilt here.
+function renderGradientStops(): void {
+  const list = gradientStopsEl;
+  if (!list || !gradient) return;
+  list.innerHTML = "";
+  gradient.stops.forEach((stop, i) => {
+    const wrap = document.createElement("div");
+    wrap.className = "col-tile-wrap";
+    const tile = document.createElement("button");
+    tile.type = "button";
+    tile.className = "col-tile col-stop" + (i === selectedStop ? " selected" : "");
+    tile.style.background = stop.color;
+    tile.dataset.hex = stop.color;
+    tile.dataset.offset = String(stop.offset);
+    tile.title = `${stop.color} at ${stop.offset}%`;
+    tile.setAttribute("aria-label", `Gradient stop ${i + 1}, ${stop.color} at ${stop.offset}%`);
+    tile.setAttribute("aria-pressed", String(i === selectedStop));
+    tile.addEventListener("click", () => {
+      selectedStop = i;
+      base = hexToHsl(stop.color);
+      updatePicked();
+    });
+    wrap.appendChild(tile);
+    if (gradient && gradient.stops.length > 2) {
+      const x = document.createElement("button");
+      x.type = "button";
+      x.className = "col-tiles-x";
+      x.innerHTML = ICON_CLOSE;
+      x.title = "Remove stop";
+      x.setAttribute("aria-label", `Remove stop ${i + 1}`);
+      x.addEventListener("click", (e) => {
+        e.stopPropagation();
+        removeStop(i);
+      });
+      wrap.appendChild(x);
+    }
+    list.appendChild(wrap);
+  });
+  // The + tile adds a stop in the picked colour, at the
+  // end of the row, the same size as a tile.
+  const add = document.createElement("button");
+  add.type = "button";
+  add.className = "col-add-tile";
+  add.innerHTML = ICON_PLUS;
+  add.title = "Add stop";
+  add.setAttribute("aria-label", "Add gradient stop");
+  add.addEventListener("click", () => addStop());
+  list.appendChild(add);
+}
+
 // The harmony set for the picked colour: five tiles for
 // the selected harmony type, remade whenever the picked
 // colour moves. Clicking one applies it like any tile.
@@ -647,6 +870,31 @@ export function renderPanel(container: HTMLElement): void {
   opacityInput = opacityRow.input;
   opacityValue = opacityRow.value;
   pickerSection.appendChild(opacityRow.row);
+  // The gradient switch, a segmented row in the mode
+  // switch's treatment: Solid or Gradient — one picked
+  // state, two forms. Turning the gradient off clears
+  // it, and the picked state is solid again.
+  const gradSeg = document.createElement("div");
+  gradSeg.className = "col-mode-seg";
+  gradSeg.setAttribute("role", "group");
+  gradSeg.setAttribute("aria-label", "Gradient");
+  for (const [value, label] of [["solid", "Solid"], ["gradient", "Gradient"]] as const) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "col-mode-seg-btn" + ((value === "gradient") === (gradient !== null) ? " active" : "");
+    btn.dataset.gradient = value;
+    btn.textContent = label;
+    btn.setAttribute("aria-label", `${label} stroke`);
+    btn.setAttribute("aria-pressed", String((value === "gradient") === (gradient !== null)));
+    btn.addEventListener("click", () => setGradientMode(value === "gradient"));
+    gradSegButtons[value] = btn;
+    gradSeg.appendChild(btn);
+  }
+  pickerSection.appendChild(gradSeg);
+  gradientEditorEl = document.createElement("div");
+  gradientEditorEl.className = "col-gradient-editor";
+  pickerSection.appendChild(gradientEditorEl);
+  renderGradientEditor();
   // The mode control, a segmented row: HSL, RGB, HSV or
   // Hex — one picked colour, four editors.
   const modeSeg = document.createElement("div");

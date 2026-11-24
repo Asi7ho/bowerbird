@@ -198,6 +198,7 @@ describe("applyColour", () => {
     const calls: unknown[] = [];
     let pen: string | null = null;
     let penOpacity: number | null = null;
+    let penGradient: unknown = undefined;
     let toast: string | null = null;
     const api = {
       board: {
@@ -208,10 +209,11 @@ describe("applyColour", () => {
       pen: {
         setColor: (hex: string) => { pen = hex; return true; },
         setOpacity: (opacity: number) => { penOpacity = opacity; return true; },
+        setGradient: (gradient: unknown) => { penGradient = gradient; return true; },
       },
       ui: { toast: (msg: string) => { toast = msg; } },
     };
-    return { api: api as unknown as PluginContext, calls, pen: () => pen, penOpacity: () => penOpacity, toast: () => toast };
+    return { api: api as unknown as PluginContext, calls, pen: () => pen, penOpacity: () => penOpacity, penGradient: () => penGradient, toast: () => toast };
   }
   it("sets the pen when nothing colourable is selected", () => {
     const f = makeApi([3], [textItem(3)]);
@@ -252,5 +254,31 @@ describe("applyColour", () => {
     applyColour(f.api, "#00FF00");
     expect(f.toast()).toBe("Layer is locked");
     expect(f.pen()).toBeNull();
+  });
+  it("sets the pen gradient when nothing colourable is selected", () => {
+    const f = makeApi([3], [textItem(3)]);
+    const gradient = { angle: 90, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#0000FF" }] };
+    applyColour(f.api, "#FF0000", 50, gradient);
+    expect(f.pen()).toBe("#FF0000");
+    expect(f.penOpacity()).toBe(50);
+    expect(f.penGradient()).toEqual(gradient);
+    expect(f.calls).toEqual([]);
+  });
+  it("leaves the pen gradient alone when no gradient is passed", () => {
+    const f = makeApi([3], [textItem(3)]);
+    applyColour(f.api, "#FF0000", 50);
+    expect(f.penGradient()).toBeUndefined();
+  });
+  it("sends the gradient with a selected stroke, colour from its first stop, and the colour only to a swatch", () => {
+    const f = makeApi([1, 2, 3], [strokeItem(1), swatchItem(2), textItem(3)]);
+    const gradient = { angle: 90, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#0000FF" }] };
+    applyColour(f.api, "#00FF00", 50, gradient);
+    expect(f.pen()).toBeNull();
+    expect(f.calls).toEqual([[{ id: 1, data: { color: "#FF0000", opacity: 50, gradient } }, { id: 2, data: { hex: "#FF0000" } }]]);
+  });
+  it("clears a selected stroke's gradient with a null gradient", () => {
+    const f = makeApi([1], [strokeItem(1)]);
+    applyColour(f.api, "#00FF00", 50, null);
+    expect(f.calls).toEqual([[{ id: 1, data: { color: "#00FF00", opacity: 50, gradient: null } }]]);
   });
 });
