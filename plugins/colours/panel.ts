@@ -232,7 +232,10 @@ function applyAndRecord(hex: string): void {
       return;
     }
   }
-  applyColour(api, hex, opacity);
+  // Solid: the null gradient rides along too, so a
+  // gradient stroke applied in solid mode goes back to
+  // solid instead of keeping its old gradient.
+  applyColour(api, hex, opacity, null);
   recordColour(hex);
 }
 

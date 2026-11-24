@@ -3975,6 +3975,135 @@ async function main() {
       }
     });
 
+    await check("gradient editor draws a gradient stroke, preview included", async () => {
+      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // The pen first: filling a slider leaves the focus
+      // on it, and a focused slider swallows the "p" key,
+      // so the tool would stay on select and no stroke
+      // would draw.
+      await page.keyboard.press("p");
+      // Pick the red on the HSL sliders, then turn the
+      // gradient on: it runs from the picked colour to
+      // white, at 90°. Set the angle to 0 (left to right).
+      await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
+      await page.locator(".col-slider-hue").fill("355");
+      await page.locator(".col-slider-sat").fill("78");
+      await page.locator(".col-slider-light").fill("56");
+      pickedRed = (await page.locator(".col-hex").textContent()) ?? "";
+      assert.ok(/^#[0-9A-F]{6}$/.test(pickedRed));
+      await page.locator('.col-mode-seg-btn[data-gradient="gradient"]').click();
+      await page.locator(".col-slider-angle").fill("0");
+      // The preview swatch shows the picked gradient.
+      const bg = await page.locator(".col-picked").evaluate((el) => el.style.background);
+      assert.ok(bg.includes("linear-gradient"), `picked swatch should show the gradient, got ${bg}`);
+      assert.ok(bg.includes("0%") && bg.includes("100%"), `picked swatch should show both stops, got ${bg}`);
+      // Click the preview with nothing selected: the pen
+      // takes the gradient. Draw on a fresh line, and
+      // read the live preview while the pen is still down:
+      // it carries its own gradient def, and the stroke
+      // paints through it, exactly as the committed stroke
+      // will.
+      await page.locator(".col-picked").click();
+      await page.mouse.move(300, 550);
+      await page.mouse.down();
+      await page.mouse.move(350, 550, { steps: 10 });
+      await waitFor("live preview with a gradient", async () => {
+        const preview = await page.evaluate(() => {
+          const live = document.querySelector("#live-stroke");
+          const lg = live?.querySelector("linearGradient");
+          const el = live?.querySelector("path, line");
+          return lg && el?.getAttribute("stroke") === "url(#live-stroke-grad)"
+            ? { id: lg.id, x1: lg.getAttribute("x1"), x2: lg.getAttribute("x2") }
+            : null;
+        });
+        return preview ? true : null;
+      });
+      await page.mouse.move(500, 550, { steps: 10 });
+      await page.mouse.up();
+      const stroke = await waitFor("gradient stroke in board.json", () => {
+        const found = strokes().filter((it) => it.kind.Stroke.gradient);
+        return found.length >= 1 ? found[found.length - 1] : null;
+      });
+      assert.equal(stroke.kind.Stroke.color, pickedRed);
+      assert.deepEqual(stroke.kind.Stroke.gradient, {
+        angle: 0,
+        stops: [{ offset: 0, color: pickedRed }, { offset: 100, color: "#FFFFFF" }],
+      });
+      // The committed stroke renders through its own
+      // linearGradient, mapped across its bounding box.
+      const rendered = await page.evaluate((id) => {
+        const svg = document.querySelector(`#cards .card.stroke[data-id="${id}"] svg`);
+        const lg = svg?.querySelector("linearGradient");
+        if (!lg) return null;
+        const path = svg?.querySelector("path, line");
+        return {
+          id: lg.id,
+          stroke: path?.getAttribute("stroke") ?? null,
+          stops: [...lg.querySelectorAll("stop")].map((s) => ({ offset: s.getAttribute("offset"), color: s.getAttribute("stop-color") })),
+        };
+      }, stroke.id);
+      assert.ok(rendered);
+      assert.equal(rendered.id, `grad-${stroke.id}`);
+      assert.equal(rendered.stroke, `url(#grad-${stroke.id})`);
+      assert.deepEqual(rendered.stops, [{ offset: "0%", color: pickedRed }, { offset: "100%", color: "#FFFFFF" }]);
+    });
+
+    await check("applying a gradient recolours a selected stroke in one undo step", async () => {
+      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // The gradient stroke from the last check, on its
+      // own line: select it, then edit its second stop
+      // (white) to blue on the sliders — clicking the stop
+      // selects it, and the picked colour targets it.
+      const before = strokes().find((it) => it.kind.Stroke.gradient);
+      assert.ok(before);
+      await page.keyboard.press("v");
+      await page.mouse.click(400, 550);
+      await page.locator(".col-gradient-stops .col-tile").nth(1).click();
+      await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
+      await page.locator(".col-slider-hue").fill("211");
+      await page.locator(".col-slider-sat").fill("100");
+      await page.locator(".col-slider-light").fill("50");
+      const pickedBlue = (await page.locator(".col-hex").textContent()) ?? "";
+      assert.ok(/^#[0-9A-F]{6}$/.test(pickedBlue));
+      await page.locator(".col-picked").click();
+      await waitFor("stroke gradient recoloured blue", () => {
+        const it = strokes().find((s) => s.id === before.id);
+        return it?.kind.Stroke.gradient?.stops[1]?.color === pickedBlue ? true : null;
+      });
+      // The first stop — and the solid fallback colour —
+      // did not move.
+      const applied = strokes().find((s) => s.id === before.id);
+      assert.equal(applied.kind.Stroke.gradient.stops[0].color, pickedRed);
+      assert.equal(applied.kind.Stroke.color, pickedRed);
+      await page.keyboard.press("Control+z");
+      await waitFor("undo restores the gradient together", () => {
+        const it = strokes().find((s) => s.id === before.id);
+        return it?.kind.Stroke.gradient?.stops[1]?.color === "#FFFFFF" ? true : null;
+      });
+    });
+
+    await check("turning the gradient off returns the stroke to solid", async () => {
+      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      const before = strokes().find((it) => it.kind.Stroke.gradient);
+      assert.ok(before);
+      await page.keyboard.press("v");
+      await page.mouse.click(400, 550);
+      // The picked colour is still the blue from the last
+      // check: turning the gradient off and applying it
+      // leaves a solid blue stroke.
+      await page.locator('.col-mode-seg-btn[data-gradient="solid"]').click();
+      const picked = (await page.locator(".col-hex").textContent()) ?? "";
+      assert.ok(/^#[0-9A-F]{6}$/.test(picked));
+      await page.locator(".col-picked").click();
+      await waitFor("stroke solid again", () => {
+        const it = strokes().find((s) => s.id === before.id);
+        return it && !it.kind.Stroke.gradient && it.kind.Stroke.color === picked ? true : null;
+      });
+    });
+
     await check("a version restores from the Boards panel history", async () => {
       // Enable the Boards plugin (bundled, opt-in) and open its panel.
       assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("boards", true)), true);
