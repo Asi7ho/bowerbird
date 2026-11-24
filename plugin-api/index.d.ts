@@ -294,12 +294,15 @@ export interface PluginPointerEvent {
 // How a drag tool's live preview stroke looks. All fields
 // are optional: width defaults to 3, color to the pen
 // colour, marker to false (opaque), pencil to false (no
-// graphite texture).
+// graphite texture), opacity to 100 (fully opaque) —
+// a caller that wants the pen's opacity passes
+// api.pen.getOpacity() itself.
 export interface PluginPreviewStrokeOptions {
   width?: number;
   color?: string;
   marker?: boolean;
   pencil?: boolean;
+  opacity?: number;
 }
 
 // How a drag tool's live shape preview looks. All fields

@@ -4,7 +4,7 @@
 // plugin uses.
 
 import type { PluginContext, PluginManifest } from "../plugins/host";
-import { isInlineVideo, pressureWidth, smoothStrokePressures, smoothStrokeSamples, strokeMaxWidth, strokePressuresVary, type Item } from "../backend/model";
+import { isInlineVideo, pressureWidth, smoothStrokePressures, smoothStrokeSamples, strokeMaxWidth, strokeOpacity, strokePressuresVary, type Item } from "../backend/model";
 import { strokePath } from "./board-geometry";
 
 export const manifest: PluginManifest = {
@@ -258,7 +258,12 @@ export function activate(api: PluginContext): void {
       const vh = Math.max(1, maxY - minY) + pad * 2;
       const local = pts.map((p) => ({ x: p.x - minX + pad, y: p.y - minY + pad }));
       const color = safeColor(st.color, "#1A1A1A");
-      const marker = st.marker ? ` opacity="0.45"` : "";
+      // The stroke's own opacity multiplies with the
+      // marker's 0.45 (see strokeOpacity): a 50% marker
+      // paints at 0.225, a 50% pen at 0.5. Fully opaque
+      // paint carries no attribute, exactly as before.
+      const op = strokeOpacity(st);
+      const marker = op !== 1 ? ` opacity="${String(op)}"` : "";
       let inner = "";
       if (st.pencil) inner += `<g filter="url(#pencil-texture)">`;
       if (st.pressures && strokePressuresVary(st)) {

@@ -122,7 +122,7 @@ export function activate(a: PluginContext): void {
     // previews exactly like a core one. No points clears it.
     previewStroke: (points, pressures, opts) => {
       if (points.length === 0) { clearLiveStroke(); return; }
-      updateLiveStroke(points, pressures, opts?.width ?? 3, opts?.marker ?? false, opts?.pencil ?? false, opts?.color);
+      updateLiveStroke(points, pressures, opts?.width ?? 3, opts?.marker ?? false, opts?.pencil ?? false, opts?.color, opts?.opacity ?? 100);
     },
     // The live shape preview for a plugin drag tool: the
     // same path the shape tool draws through, so a plugin

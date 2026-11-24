@@ -445,7 +445,9 @@ export function strokeMaxWidth(stroke: { width: number; pressures?: number[] }):
 // release.
 export function strokeOpacity(stroke: { opacity?: number; marker: boolean }): number {
   const base = stroke.opacity ?? 100;
-  return (base / 100) * (stroke.marker ? 0.45 : 1);
+  // Rounded to three decimals: 0.3 × 0.45 must paint as
+  // 0.135, not 0.13500000000000001.
+  return Math.round((base / 100) * (stroke.marker ? 0.45 : 1) * 1000) / 1000;
 }
 
 // Whether a stroke's pressures actually vary: a pen held at

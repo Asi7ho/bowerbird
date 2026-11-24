@@ -117,7 +117,7 @@ export function boardUngroupSelected(): boolean {
 export function boardDeleteSelected(): boolean {
   return boardController?.deleteSelected() ?? false;
 }
-export function boardPreviewStroke(points: Pt[], pressures: number[], opts?: { width?: number; color?: string; marker?: boolean; pencil?: boolean }): void {
+export function boardPreviewStroke(points: Pt[], pressures: number[], opts?: { width?: number; color?: string; marker?: boolean; pencil?: boolean; opacity?: number }): void {
   boardController?.previewStroke(points, pressures, opts);
 }
 // The live shape preview for a drag tool, in the preview

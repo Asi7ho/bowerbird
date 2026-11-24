@@ -6,7 +6,7 @@
 import { ACCENT, S } from "./board-state";
 import { groupBounds, svgEl2 } from "./board-geometry";
 import {
-  pressureWidth, smoothStrokePath, smoothStrokePressures, smoothStrokeSamples, strokePressuresVary,
+  pressureWidth, smoothStrokePath, smoothStrokePressures, smoothStrokeSamples, strokeOpacity, strokePressuresVary,
   type Item, type Pt,
 } from "../backend/model";
 
@@ -33,7 +33,7 @@ export function dragPreview(id: string, tag: string, toPreview = false): SVGElem
 // tool's base width: the pencil draws thinner than the pen,
 // the highlighter much wider. A marker (highlighter) draws
 // translucent, like the stored stroke.
-export function updateLiveStroke(points: Pt[], pressures: number[], width: number, marker: boolean, pencil = false, color?: string): void {
+export function updateLiveStroke(points: Pt[], pressures: number[], width: number, marker: boolean, pencil = false, color?: string, opacityPct = 100): void {
   const el = dragPreview("live-stroke", "g");
   while (el.firstChild) el.removeChild(el.firstChild);
   const stroke = color ?? S.api.pen.getColor();
@@ -55,7 +55,10 @@ export function updateLiveStroke(points: Pt[], pressures: number[], width: numbe
     const s = points[0];
     el.appendChild(svgEl2("rect", { x: String(s.x - 256), y: String(s.y - 256), width: "512", height: "512", fill: "none" }));
   }
-  const opacity = marker ? "0.45" : "1";
+  // The preview paints at the same effective opacity as
+  // the committed stroke (see strokeOpacity), so the
+  // stroke does not change shade on release.
+  const opacity = String(strokeOpacity({ opacity: opacityPct, marker }));
   if (pressures.length === points.length && strokePressuresVary({ pressures })) {
     const pts = smoothStrokeSamples(points);
     const prs = smoothStrokePressures(pressures);
