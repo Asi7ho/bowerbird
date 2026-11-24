@@ -4544,7 +4544,11 @@ async function main() {
         if (!seg) return null;
         const kids = Array.from(seg.children).map((el) => el.id);
         const prev = seg.previousElementSibling;
-        const next = seg.nextElementSibling;
+        // The flyouts (.palette) are absolutely positioned
+        // and sit between the segment and div1 in the DOM,
+        // so skip them to find the next in-flow sibling.
+        let next = seg.nextElementSibling;
+        while (next && next.classList.contains("palette")) next = next.nextElementSibling;
         const tools = document.getElementById("tools");
         const zoom = document.querySelector("#toolbar .zoom-group");
         return {
