@@ -1453,7 +1453,6 @@ body.platform-linux #title-bar button.win-close:hover {
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 16px;
   box-shadow: var(--shadow-md);
-  -webkit-app-region: drag;
 }
 
 #toolbar .seg {
@@ -1485,7 +1484,6 @@ body.platform-linux #title-bar button.win-close:hover {
   justify-content: center;
   cursor: pointer;
   color: var(--ink);
-  -webkit-app-region: no-drag;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
@@ -1576,7 +1574,6 @@ body.platform-linux #title-bar button.win-close:hover {
   border-radius: 50%;
   border: 1px solid rgba(0, 0, 0, 0.12);
   cursor: pointer;
-  -webkit-app-region: no-drag;
   padding: 0;
   appearance: none;
   -webkit-appearance: none;
@@ -1722,12 +1719,7 @@ body.platform-linux #title-bar button.win-close:hover {
 
 /* The size flyout: the same floating .palette surface
    as the colour bar, with a slider row — a label, the
-   app-style slider and the value. It sits inside the
-   toolbar's drag region, so exempt it: dragging here
-   must move the slider thumb, not the window. */
-#toolbar #size-picker {
-  -webkit-app-region: no-drag;
-}
+   app-style slider and the value. */
 
 #toolbar .size-row {
   display: flex;
@@ -1761,9 +1753,6 @@ body.platform-linux #title-bar button.win-close:hover {
   height: 20px;
   background: transparent;
   outline: none;
-  /* The toolbar is a window-drag region; without this
-     the slider drag moves the window on macOS. */
-  -webkit-app-region: no-drag;
 }
 
 #toolbar .size-slider::-webkit-slider-runnable-track {
