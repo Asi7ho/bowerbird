@@ -464,6 +464,26 @@ async function main() {
   // checks use the hex that was actually picked.
   let pickedRed = "";
   let pickedBlue = "";
+  // The gradient swatch and strip paint from a canvas
+  // image (a CSS gradient stripes — see gradientPixels):
+  // read an element's painted pixels back through a
+  // canvas to assert what it shows.
+  const hexRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const closeRgb = (a, b, tol = 2) => a.slice(0, 3).every((v, i) => Math.abs(v - b[i]) <= tol);
+  const gradientPixelsAt = async (selector, fx) => page.locator(selector).evaluate(async (el, fx) => {
+    const bg = el.style.backgroundImage;
+    if (!bg.startsWith('url("data:image/png')) return null;
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = bg.slice(5, -2); });
+    const c = document.createElement("canvas");
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0);
+    const x = Math.min(c.width - 1, Math.floor(c.width * fx));
+    const d = ctx.getImageData(x, Math.floor(c.height / 2), 1, 1).data;
+    return [d[0], d[1], d[2], d[3]];
+  }, fx);
 
   const results = [];
   let app;
@@ -4007,13 +4027,19 @@ async function main() {
       await setFillMode(true);
       assert.equal(await page.locator(".col-slider-angle").count(), 0, "no angle control in the gradient editor");
       // The strip shows the picked gradient, and the
-      // preview swatch shows it too.
-      const bg = await page.locator(".col-gradient-strip").evaluate((el) => el.style.background);
-      assert.ok(bg.includes("linear-gradient"), `gradient strip should show the gradient, got ${bg}`);
-      assert.ok(bg.includes("0%") && bg.includes("100%"), `gradient strip should show both stops, got ${bg}`);
-      const swatch = await page.locator(".col-picked").evaluate((el) => el.style.background);
-      assert.ok(swatch.includes("linear-gradient"), `picked swatch should show the gradient, got ${swatch}`);
-      assert.ok(swatch.includes("0%") && swatch.includes("100%"), `picked swatch should show both stops, got ${swatch}`);
+      // preview swatch shows it too: both paint from a
+      // canvas image, so read their end pixels — the
+      // first is the picked red, the last its deep shade.
+      const stripFirst = await gradientPixelsAt(".col-gradient-strip", 0);
+      const stripLast = await gradientPixelsAt(".col-gradient-strip", 1);
+      assert.ok(stripFirst && stripLast, "gradient strip should paint a canvas image");
+      assert.ok(closeRgb(stripFirst, hexRgb(pickedRed)), `strip should start at the picked red, got ${stripFirst}`);
+      assert.ok(closeRgb(stripLast, hexRgb("#520A10")), `strip should end at the deep shade, got ${stripLast}`);
+      const swatchFirst = await gradientPixelsAt(".col-picked", 0);
+      const swatchLast = await gradientPixelsAt(".col-picked", 1);
+      assert.ok(swatchFirst && swatchLast, "picked swatch should paint a canvas image");
+      assert.ok(closeRgb(swatchFirst, hexRgb(pickedRed)), `swatch should start at the picked red, got ${swatchFirst}`);
+      assert.ok(closeRgb(swatchLast, hexRgb("#520A10")), `swatch should end at the deep shade, got ${swatchLast}`);
       // The hex beside the swatch still shows the
       // selected stop: its hex is the picked red. (The
       // style serialises rgba(…, 1) as rgb(…), so the
@@ -4152,8 +4178,12 @@ async function main() {
       await page.mouse.move(stripBox.x + stripBox.width * 0.25, markerBox.y + markerBox.height / 2, { steps: 10 });
       await page.mouse.up();
       assert.equal(await markers.nth(1).getAttribute("data-offset"), "25");
-      const bg = await page.locator(".col-gradient-strip").evaluate((el) => el.style.background);
-      assert.ok(bg.includes("25%"), `strip should show the moved stop, got ${bg}`);
+      // The strip repaints with the moved stop: the
+      // pixels a quarter along it are the middle stop's
+      // colour, the picked blue.
+      const atQuarter = await gradientPixelsAt(".col-gradient-strip", 0.25);
+      assert.ok(atQuarter, "gradient strip should paint a canvas image");
+      assert.ok(closeRgb(atQuarter, hexRgb(pickedBlue), 3), `strip should show the moved stop at 25%, got ${atQuarter}`);
       // The × removes the selected stop; the gradient is
       // back to two stops, red at 0 and blue at 100.
       await page.locator('button[aria-label="Remove stop 2"]').click();
