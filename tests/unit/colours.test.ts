@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import type { PluginContext } from "bowerbird-plugin-api";
 import { applyColour } from "../../plugins/colours/apply";
-import { brightHex, deepShadeHex, hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, isNearDuplicate, colourDistance, normaliseHex, rgbToHex, HARMONY_NAMES, harmoniesFor } from "../../plugins/colours/color";
+import { brightHex, deepShadeHex, gradientPixels, hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, isNearDuplicate, colourDistance, normaliseHex, rgbToHex, HARMONY_NAMES, harmoniesFor } from "../../plugins/colours/color";
 import {
   addColour,
   createPalette,
@@ -87,6 +87,62 @@ describe("brightHex", () => {
     expect(brightHex(hslToHex(200, 80, 50))).toBe(hslToHex(200, 80, 50));
     // A light pick comes down to 50%, not to black.
     expect(hexToHsl(brightHex("#F5C542")).l).toBeCloseTo(50, 0);
+  });
+});
+
+describe("gradientPixels", () => {
+  const red = { offset: 0, color: "#E63746" };
+  const dark = { offset: 100, color: "#520A10" };
+  const px = (buf: Uint8ClampedArray, w: number, x: number, y = 0): [number, number, number, number] => {
+    const i = (y * w + x) * 4;
+    return [buf[i], buf[i + 1], buf[i + 2], buf[i + 3]];
+  };
+  const close = (a: number, b: number): boolean => Math.abs(a - b) <= 1;
+
+  it("runs from the first stop to the last, with the opacity as a uniform alpha", () => {
+    const buf = gradientPixels([red, dark], 101, 4, 50);
+    expect(buf.length).toBe(101 * 4 * 4);
+    const [r0, g0, b0, a0] = px(buf, 101, 0);
+    expect(close(r0, 230) && close(g0, 55) && close(b0, 70)).toBe(true);
+    const [r1, g1, b1, a1] = px(buf, 101, 100);
+    expect(close(r1, 82) && close(g1, 10) && close(b1, 16)).toBe(true);
+    expect(a0).toBe(128);
+    expect(a1).toBe(128);
+    // The middle is the average of the stops, give or take the noise.
+    const [rm, gm, bm] = px(buf, 101, 50);
+    expect(close(rm, 156) && close(gm, 33) && close(bm, 43)).toBe(true);
+  });
+
+  it("is seeded: the same gradient paints the same pixels every time", () => {
+    const a = gradientPixels([red, dark], 80, 40, 100);
+    const b = gradientPixels([red, dark], 80, 40, 100);
+    expect(a).toEqual(b);
+    // A different gradient paints different grain.
+    const c = gradientPixels([red, { offset: 100, color: "#0000FF" }], 80, 40, 100);
+    expect(c).not.toEqual(a);
+  });
+
+  it("keeps every pixel within one step of the noiseless ramp", () => {
+    const buf = gradientPixels([red, dark], 201, 2, 100);
+    for (let x = 0; x < 201; x++) {
+      const t = x / 200;
+      const [r, g, b] = px(buf, 201, x);
+      expect(Math.abs(r - (230 + (82 - 230) * t))).toBeLessThanOrEqual(1);
+      expect(Math.abs(g - (55 + (10 - 55) * t))).toBeLessThanOrEqual(1);
+      expect(Math.abs(b - (70 + (16 - 70) * t))).toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("handles one stop, unsorted stops, and empty sizes", () => {
+    const solid = gradientPixels([red], 10, 2, 100);
+    const [r, g, b, a] = px(solid, 10, 9);
+    expect(close(r, 230) && close(g, 55) && close(b, 70)).toBe(true);
+    expect(a).toBe(255);
+    const unsorted = gradientPixels([dark, red], 101, 1, 100);
+    const [r0] = px(unsorted, 101, 0);
+    expect(close(r0, 230)).toBe(true);
+    expect(gradientPixels([red, dark], 0, 10, 100).length).toBe(0);
+    expect(gradientPixels([], 10, 10, 100).length).toBe(0);
   });
 });
 

@@ -61,6 +61,76 @@ export function brightHex(hex: string): string {
   return hslToHex(h, s, 50);
 }
 
+// A gradient as pixels, with random-noise dithering.
+// The CSS linear-gradient the swatch and strip used to
+// paint reads as vertical stripes: Skia's ordered
+// dither has a regular pattern the eye groups into
+// bands, worst in the dark half of a gradient. Random
+// noise has no regular structure, so the same ramp
+// reads smooth at any size. Pure data, no DOM: the
+// panel paints the pixels onto a canvas. The noise is
+// seeded from the stops, so the same gradient paints
+// the same grain on every repaint instead of shimmering
+// while the wheel is dragged.
+export interface GradientStop {
+  offset: number;
+  color: string;
+}
+
+export function gradientPixels(
+  stops: GradientStop[],
+  width: number,
+  height: number,
+  opacity: number,
+): Uint8ClampedArray {
+  const w = Math.max(0, Math.floor(width));
+  const h = Math.max(0, Math.floor(height));
+  if (w === 0 || h === 0 || stops.length === 0) return new Uint8ClampedArray(0);
+  const out = new Uint8ClampedArray(w * h * 4);
+  const sorted = [...stops]
+    .map((s) => ({ offset: s.offset, ...hexToRgb(s.color) }))
+    .sort((a, b) => a.offset - b.offset);
+  const alpha = Math.round((clamp(opacity, 0, 100) / 100) * 255);
+  // A small seeded PRNG (mulberry32): the grain is
+  // stable for a given gradient, and differs between
+  // gradients so two identical ramps don't share a
+  // visible pattern.
+  let seed = 0;
+  const key = JSON.stringify([sorted, opacity]);
+  for (let i = 0; i < key.length; i++) seed = (Math.imul(seed, 31) + key.charCodeAt(i)) | 0;
+  const rand = (): number => {
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const at = (offset: number): { r: number; g: number; b: number } => {
+    if (offset <= sorted[0].offset) return sorted[0];
+    const last = sorted[sorted.length - 1];
+    if (offset >= last.offset) return last;
+    for (let i = 0; i + 1 < sorted.length; i++) {
+      const a = sorted[i], b = sorted[i + 1];
+      if (offset >= a.offset && offset <= b.offset) {
+        const t = b.offset === a.offset ? 0 : (offset - a.offset) / (b.offset - a.offset);
+        return { r: a.r + (b.r - a.r) * t, g: a.g + (b.g - a.g) * t, b: a.b + (b.b - a.b) * t };
+      }
+    }
+    return last;
+  };
+  for (let x = 0; x < w; x++) {
+    const offset = w === 1 ? 0 : (x / (w - 1)) * 100;
+    const c = at(offset);
+    for (let y = 0; y < h; y++) {
+      const i = (y * w + x) * 4;
+      out[i] = Math.round(c.r + (rand() - 0.5));
+      out[i + 1] = Math.round(c.g + (rand() - 0.5));
+      out[i + 2] = Math.round(c.b + (rand() - 0.5));
+      out[i + 3] = alpha;
+    }
+  }
+  return out;
+}
+
 // RGB, as 0–255 integers: the mode the picker offers
 // alongside HSL. Pure maths, no clamp — the 5–95%
 // lightness clamp lives in hslToHex only.
