@@ -6,7 +6,7 @@
 // colours come from.
 import type { PluginContext, StrokeGradient } from "bowerbird-plugin-api";
 import { applyColour } from "./apply.js";
-import { HARMONY_NAMES, brightHex, colourDistance, deepShadeHex, harmoniesFor, hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, normaliseHex, rgbToHex, type HarmonyName } from "./color.js";
+import { HARMONY_NAMES, brightHex, colourDistance, deepShadeHex, gradientPixels, harmoniesFor, hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, normaliseHex, rgbToHex, type HarmonyName } from "./color.js";
 import { attachPlaceDrag } from "./place.js";
 import {
   addColour,
@@ -337,16 +337,40 @@ function pickedHex(): string {
   return hslToHex(base.h, base.s, base.l);
 }
 
-// The CSS for a gradient at its opacity: the strip
-// and the preview swatch paint the same gradient.
-// The gradient is always 0° (left to right); CSS
-// angles run 0° bottom-to-top, so 90° is added.
-function gradientBackground(stops: { offset: number; color: string }[]): string {
-  const cssAngle = (90 + (gradient?.angle ?? 0)) % 360;
-  return `linear-gradient(${cssAngle}deg, ${stops.map((s) => {
-    const { r, g, b } = hexToRgb(s.color);
-    return `rgba(${r}, ${g}, ${b}, ${opacity / 100}) ${s.offset}%`;
-  }).join(", ")})`;
+// The swatch and strip paint their gradient from a
+// canvas, not a CSS gradient: the CSS one stripes (see
+// gradientPixels). One cached image per gradient and
+// size, so a repaint on every picked tick reuses it.
+let gradientCanvas: HTMLCanvasElement | null = null;
+let gradientImageKey = "";
+let gradientImageUrl = "";
+function gradientImage(stops: { offset: number; color: string }[], width: number, height: number): string {
+  const key = JSON.stringify([stops, opacity, width, height]);
+  if (key === gradientImageKey) return gradientImageUrl;
+  const canvas = gradientCanvas ?? (gradientCanvas = document.createElement("canvas"));
+  canvas.width = Math.max(1, Math.round(width));
+  canvas.height = Math.max(1, Math.round(height));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+  ctx.putImageData(
+    new ImageData(gradientPixels(stops, canvas.width, canvas.height, opacity), canvas.width, canvas.height),
+    0, 0,
+  );
+  gradientImageUrl = canvas.toDataURL("image/png");
+  gradientImageKey = key;
+  return gradientImageUrl;
+}
+
+// Paint a gradient onto an element from the canvas
+// image, at the element's own size in device pixels.
+function paintGradientOn(el: HTMLElement, stops: { offset: number; color: string }[], cssWidth: number, cssHeight: number): void {
+  const dpr = window.devicePixelRatio || 1;
+  const url = gradientImage(stops, Math.max(1, Math.round(cssWidth * dpr)), Math.max(1, Math.round(cssHeight * dpr)));
+  if (!url) return;
+  el.style.background = "";
+  el.style.backgroundImage = `url("${url}")`;
+  el.style.backgroundSize = "100% 100%";
+  el.style.backgroundRepeat = "no-repeat";
 }
 
 // Paint the strip from a set of stops: the whole
@@ -355,7 +379,7 @@ function gradientBackground(stops: { offset: number; color: string }[]): string 
 function paintGradientStrip(stops: { offset: number; color: string }[]): void {
   const strip = gradientStripEl;
   if (!strip || !gradient) return;
-  strip.style.background = gradientBackground(stops);
+  paintGradientOn(strip, stops, strip.clientWidth || 220, strip.clientHeight || 28);
 }
 
 // Refresh every control that shows the picked colour:
@@ -381,7 +405,7 @@ function updatePicked(): void {
       const stops = wheelDragging
         ? gradient.stops.map((s, j) => (j === selectedStop ? { offset: s.offset, color: brightHex(s.color) } : s))
         : gradient.stops;
-      pickedSwatch.style.background = gradientBackground(stops);
+      paintGradientOn(pickedSwatch, stops, 40, 40);
       pickedSwatch.dataset.hex = hex;
       pickedSwatch.dataset.opacity = String(opacity);
       pickedSwatch.title = opacity === 100 ? hex : `${hex} at ${opacity}%`;

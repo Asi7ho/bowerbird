@@ -82,11 +82,13 @@ export function gradientPixels(
   width: number,
   height: number,
   opacity: number,
-): Uint8ClampedArray {
+): Uint8ClampedArray<ArrayBuffer> {
   const w = Math.max(0, Math.floor(width));
   const h = Math.max(0, Math.floor(height));
-  if (w === 0 || h === 0 || stops.length === 0) return new Uint8ClampedArray(0);
-  const out = new Uint8ClampedArray(w * h * 4);
+  if (w === 0 || h === 0 || stops.length === 0) return new Uint8ClampedArray(new ArrayBuffer(0));
+  // An explicit ArrayBuffer (not ArrayBufferLike), so the
+  // pixels go straight into ImageData without a cast.
+  const out = new Uint8ClampedArray(new ArrayBuffer(w * h * 4));
   const sorted = [...stops]
     .map((s) => ({ offset: s.offset, ...hexToRgb(s.color) }))
     .sort((a, b) => a.offset - b.offset);
