@@ -717,11 +717,12 @@ function renderCurveGraph(host: HTMLElement, initialCurve: CurvePoint[], onCommi
 // The parameters below a brush: a draft of a new brush
 // from it. The name, the texture's parameters, the
 // pressure curve, and a live preview of the draft
-// texture — one wavy stroke, big enough to judge it.
-// Save creates the new brush (and a new texture when
-// the parameters moved) and selects it; Cancel drops
-// the draft; Delete removes the brush itself. The
-// original brush is untouched until Save.
+// texture — one stroke at the size the brush draws, so
+// the preview shows what the brush draws, not a
+// generic thick stroke. Save creates the new brush (and
+// a new texture when the parameters moved) and selects
+// it; Cancel drops the draft; Delete removes the brush
+// itself. The original brush is untouched until Save.
 function renderExpansion(list: HTMLElement, index: number): void {
   const a = api;
   if (!a) return;
@@ -754,7 +755,7 @@ function renderExpansion(list: HTMLElement, index: number): void {
     // their basis, the draft texture once they moved.
     if (source && !draftNeedsNewTexture()) {
       const opacity = source.family === "highlighter" ? ` opacity="0.65"` : "";
-      const stroke = `<path d="M8 28 L 232 28" fill="none" stroke="#1A1A1A" stroke-width="7" stroke-linecap="round"${opacity} />`;
+      const stroke = `<path d="M8 28 L 232 28" fill="none" stroke="#1A1A1A" stroke-width="${source.size}" stroke-linecap="round"${opacity} />`;
       const inner = source.texture
         ? `<g filter="url(#texture-${source.texture})"><rect x="0" y="0" width="240" height="56" fill="none" />${stroke}</g>`
         : stroke;
@@ -763,8 +764,9 @@ function renderExpansion(list: HTMLElement, index: number): void {
     }
     // The filter region is in user units over the whole
     // preview, so displaced grain is never clipped at the
-    // edges.
-    previewHost.innerHTML = `<svg viewBox="0 0 240 56" aria-hidden="true"><defs><filter id="br-draft-preview" filterUnits="userSpaceOnUse" x="0" y="0" width="240" height="56">${textureFilterSvg(draftParams)}</filter></defs><path d="M8 28 L 232 28" fill="none" stroke="#1A1A1A" stroke-width="7" stroke-linecap="round" filter="url(#br-draft-preview)" /></svg>`;
+    // edges. The draft keeps the source brush's size: the
+    // saved brush draws at that size, so the preview does.
+    previewHost.innerHTML = `<svg viewBox="0 0 240 56" aria-hidden="true"><defs><filter id="br-draft-preview" filterUnits="userSpaceOnUse" x="0" y="0" width="240" height="56">${textureFilterSvg(draftParams)}</filter></defs><path d="M8 28 L 232 28" fill="none" stroke="#1A1A1A" stroke-width="${source?.size ?? 7}" stroke-linecap="round" filter="url(#br-draft-preview)" /></svg>`;
   };
   drawPreview();
   box.appendChild(previewHost);
