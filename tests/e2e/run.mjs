@@ -242,12 +242,33 @@ export async function activate(api) {
   const recoloured = firstStroke ? api.board.getItem(firstStroke.id).kind.Stroke.color : null;
   if (firstStroke && firstStrokeColor) api.board.updateItem(firstStroke.id, { data: { color: firstStrokeColor } });
   let badPatchThrew = false;
-  try { api.board.updateItem(firstStroke.id, { data: { width: 9 } }); } catch { badPatchThrew = true; }
+  try { api.board.updateItem(firstStroke.id, { data: { marker: true } }); } catch { badPatchThrew = true; }
   let badHexThrew = false;
   try { api.board.updateItem(firstStroke.id, { data: { color: "red" } }); } catch { badHexThrew = true; }
   let textPatchThrew = false;
   try { api.board.updateItem(id, { data: { color: "#FF0000" } }); } catch { textPatchThrew = true; }
-  window.__apiTest = { id, before, after, isFrameFrame, isFrameText, actionOk, dblOk, actionMiss, dblMiss, actionSeen, dblSeen, toolDef: toolDef ? { id: toolDef.id, title: toolDef.title, pluginId: toolDef.pluginId } : null, toolMiss, shortcutOk, shortcutMiss, shortcutSeen, cmdCount: counts.cmd, actionCount: counts.action, shortcutCount: counts.shortcut, routeThrew, installCollisionThrew, recolourOk, recoloured, badPatchThrew, badHexThrew, textPatchThrew };
+  // Brush data patches: a texture patch on a stroke is
+  // allowed, anything else on a core card throws. Register
+  // a texture, patch the first stroke with it, then put
+  // the stroke back, so the board is unchanged when
+  // activate ends.
+  api.brushes.registerTexture({ id: "api-test-tex", label: "API test", filterSvg: '<feTurbulence type="fractalNoise" baseFrequency="0.5" numOctaves="2" seed="1" result="noise" /><feDisplacementMap in="SourceGraphic" in2="noise" scale="3" />' });
+  const listedTexture = api.brushes.listTextures().find((t) => t.id === "api-test-tex");
+  const firstStrokeTexture = firstStroke ? (firstStroke.kind.Stroke.texture ?? null) : null;
+  const firstStrokeWidth = firstStroke ? firstStroke.kind.Stroke.width : null;
+  const textureOk = firstStroke ? api.board.updateItem(firstStroke.id, { data: { texture: "api-test-tex", width: 5 } }) : false;
+  const textured = firstStroke ? api.board.getItem(firstStroke.id).kind.Stroke.texture : null;
+  const widened = firstStroke ? api.board.getItem(firstStroke.id).kind.Stroke.width : null;
+  if (firstStroke) api.board.updateItem(firstStroke.id, { data: { texture: firstStrokeTexture, width: firstStrokeWidth } });
+  let badTextureIdThrew = false;
+  try { api.board.updateItem(firstStroke.id, { data: { texture: "bad id" } }); } catch { badTextureIdThrew = true; }
+  let badWidthThrew = false;
+  try { api.board.updateItem(firstStroke.id, { data: { width: 0 } }); } catch { badWidthThrew = true; }
+  let mixedPatchThrew = false;
+  try { api.board.updateItem(firstStroke.id, { data: { color: "#FF0000", marker: true } }); } catch { mixedPatchThrew = true; }
+  let textureOnTextThrew = false;
+  try { api.board.updateItem(id, { data: { texture: "api-test-tex" } }); } catch { textureOnTextThrew = true; }
+  window.__apiTest = { id, before, after, isFrameFrame, isFrameText, actionOk, dblOk, actionMiss, dblMiss, actionSeen, dblSeen, toolDef: toolDef ? { id: toolDef.id, title: toolDef.title, pluginId: toolDef.pluginId } : null, toolMiss, shortcutOk, shortcutMiss, shortcutSeen, cmdCount: counts.cmd, actionCount: counts.action, shortcutCount: counts.shortcut, routeThrew, installCollisionThrew, recolourOk, recoloured, badPatchThrew, badHexThrew, textPatchThrew, listedTextureId: listedTexture ? listedTexture.id : null, textureOk, textured, widened, badTextureIdThrew, badWidthThrew, mixedPatchThrew, textureOnTextThrew };
 }
 export function deactivate() {}
 `;
@@ -1103,6 +1124,14 @@ async function main() {
       assert.equal(before.routeThrew, true);
       // Installing over a bundled plugin's id is rejected.
       assert.equal(before.installCollisionThrew, true);
+      assert.equal(before.listedTextureId, "api-test-tex");
+      assert.equal(before.textureOk, true);
+      assert.equal(before.textured, "api-test-tex");
+      assert.equal(before.widened, 5);
+      assert.equal(before.badTextureIdThrew, true);
+      assert.equal(before.badWidthThrew, true);
+      assert.equal(before.mixedPatchThrew, true);
+      assert.equal(before.textureOnTextThrew, true);
       assert.equal(before.cmdCount, 1);
       // Colour data patches: a colour patch recolours a
       // stroke; a non-colour patch, a bad hex, and a colour
@@ -3376,12 +3405,23 @@ async function main() {
         }
         return out;
       };
-      // Pencil stays pencil through P, not back to the pen.
+      // The draw picker holds pen and eraser only: pencil,
+      // highlighter and every other style live in the Brush
+      // Library, which configures the pen.
       await page.click("#tool-draw");
-      await page.waitForSelector('#draw-picker button[data-draw="pencil"]', { state: "visible" });
-      await page.click('#draw-picker button[data-draw="pencil"]');
+      await page.waitForSelector('#draw-picker button[data-draw="pen"]', { state: "visible" });
+      assert.deepEqual(await page.evaluate(() => [...document.querySelectorAll("#draw-picker button")].map((b) => b.dataset.draw)), ["pen", "eraser"], "the draw picker must hold pen and eraser only");
+      // P activates the draw tool last chosen, not always
+      // the pen: an eraser stays an eraser through P.
+      await page.waitForSelector('#draw-picker button[data-draw="eraser"]', { state: "visible" });
+      await page.click('#draw-picker button[data-draw="eraser"]');
       await page.keyboard.press("p");
-      assert.equal(await page.evaluate(toolOf), "pencil", "P must not switch the pencil back to the pen");
+      assert.equal(await page.evaluate(toolOf), "eraser", "P must not switch the eraser back to the pen");
+      await page.click("#tool-draw");
+      await page.waitForSelector('#draw-picker button[data-draw="pen"]', { state: "visible" });
+      await page.click('#draw-picker button[data-draw="pen"]');
+      await page.keyboard.press("p");
+      assert.equal(await page.evaluate(toolOf), "pen", "P must keep the pen");
       // R is the one geometry shortcut: it activates the
       // shape last chosen, not always the rectangle. A
       // triangle stays a triangle through R, and R remembers
@@ -4240,6 +4280,400 @@ async function main() {
       console.log(`colour panel heights: solid ${s.scroll}/${s.client}, gradient ${g.scroll}/${g.client}`);
       assert.ok(s.scroll > 0 && g.scroll > 0, "panel should render in both modes");
       await setFillMode(false);
+    });
+
+    await check("Brush Library draws with a textured brush", async () => {
+      // Bundled, opt-in: enable it, then reload so it activates.
+      assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("brushes", true)), true);
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
+      // First run seeds eight brushes, one per texture.
+      await page.locator('.plugin-tab[aria-label="Brush Library"]').click();
+      await page.locator(".br-brush").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      assert.deepEqual(await page.locator(".br-brush-name").allTextContents(), ["Ink", "Graphite", "Chalk", "Marker", "Charcoal", "Crayon", "Watercolour", "Spray"]);
+      // No brush tool in the toolbar: brushes configure the
+      // core tools instead of adding their own.
+      assert.equal(await page.locator('[id^="tool-plugin-brushes-"]').count(), 0);
+      // Clicking Graphite with nothing selected makes it the
+      // active brush: draw with it and the stroke carries the
+      // texture, at the preset's width.
+      await page.locator(".br-brush-name", { hasText: "Graphite" }).click();
+      await page.mouse.move(650, 800);
+      await page.mouse.down();
+      await page.mouse.move(850, 800, { steps: 20 });
+      await page.mouse.up();
+      const stroke = await waitFor("graphite stroke in board.json", () => {
+        const found = strokes().filter((it) => it.kind.Stroke.texture === "graphite");
+        return found.length >= 1 ? found[found.length - 1] : null;
+      });
+      assert.equal(stroke.kind.Stroke.width, 2);
+      // The card renders through the texture filter.
+      assert.equal(await page.evaluate(() => !!document.querySelector('#cards .stroke svg g[filter="url(#texture-graphite)"]')), true);
+    });
+
+    await check("the stroke preview stays above the cards, and a buttonless move does not kink it", async () => {
+      await page.locator('.plugin-tab[aria-label="Brush Library"]').click();
+      await page.locator(".br-brush").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      const before = strokes().filter((it) => it.kind.Stroke.texture === "graphite").length;
+      // Draw over the "Try this" note: an opaque card the
+      // preview used to hide under until release.
+      await page.locator(".br-brush-name", { hasText: "Graphite" }).click();
+      await page.mouse.move(650, 830);
+      await page.mouse.down();
+      await page.mouse.move(850, 830, { steps: 20 });
+      // Mid-drag the live stroke is in the preview layer
+      // above the cards, not the world layer below them.
+      assert.equal(await page.evaluate(() => !!document.querySelector("#preview-world #live-stroke")), true);
+      assert.equal(await page.evaluate(() => !!document.querySelector("#world #live-stroke")), false);
+      // A move with no button down is not a drag: it must
+      // not append a point to the stroke.
+      await page.evaluate(() => window.dispatchEvent(new PointerEvent("pointermove", { clientX: 700, clientY: 500, buttons: 0, bubbles: true })));
+      await page.mouse.up();
+      const stroke = await waitFor("clean graphite stroke after the stray move", () => {
+        const found = strokes().filter((it) => it.kind.Stroke.texture === "graphite");
+        return found.length > before ? found[found.length - 1] : null;
+      });
+      assert.equal(stroke.kind.Stroke.points.length, 21);
+      assert.equal(new Set(stroke.kind.Stroke.points.map((p) => p.y)).size, 1);
+    });
+
+    await check("a pressure graph point can be added and deleted", async () => {
+      await page.locator('.plugin-tab[aria-label="Brush Library"]').click();
+      await page.locator(".br-brush").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // The graph lives in the brush's expansion now: click
+      // a brush to open its parameters, and the selected
+      // brush's graph starts with two points.
+      await page.locator(".br-brush-name", { hasText: "Graphite" }).click();
+      await page.locator(".br-expand").waitFor({ timeout: READY_TIMEOUT_MS });
+      const dots = page.locator(".br-graph-dot");
+      await waitFor("two graph points", async () => ((await dots.count()) === 2 ? true : null));
+      // The graph sits below the brush list: bring it into
+      // view before clicking at its box.
+      await page.locator(".br-graph").scrollIntoViewIfNeeded();
+      const box = await page.locator(".br-graph").boundingBox();
+      assert.ok(box);
+      const x = box.x + box.width * 0.5;
+      const y = box.y + box.height * 0.5;
+      // Click the empty graph to add a point, then press it
+      // twice quickly to delete it again.
+      await page.mouse.click(x, y);
+      await waitFor("three graph points", async () => ((await dots.count()) === 3 ? true : null));
+      await page.mouse.dblclick(x, y);
+      await waitFor("two graph points again", async () => ((await dots.count()) === 2 ? true : null));
+      // Add it back, click it to select it, delete it with Delete.
+      await page.mouse.click(x, y);
+      await waitFor("three graph points again", async () => ((await dots.count()) === 3 ? true : null));
+      await page.mouse.click(x, y);
+      await waitFor("point selected", async () =>
+        ((await page.locator(".br-graph-dot-selected").count()) === 1 ? true : null),
+      );
+      await page.keyboard.press("Delete");
+      await waitFor("two graph points after Delete", async () => ((await dots.count()) === 2 ? true : null));
+      // The graph edits are a draft: Cancel leaves the
+      // brush untouched and closes the expansion.
+      await page.locator(".br-btn-quiet", { hasText: "Cancel" }).click();
+      await waitFor("expansion closed", async () => ((await page.locator(".br-expand").count()) === 0 ? true : null));
+    });
+
+    await check("dragging a pressure handle bends the curve, and a drawn stroke follows it", async () => {
+      await page.locator('.plugin-tab[aria-label="Brush Library"]').click();
+      await page.locator(".br-brush").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      await page.locator(".br-brush-name", { hasText: "Ink" }).click();
+      await page.locator(".br-graph").scrollIntoViewIfNeeded();
+      const box = await page.locator(".br-graph").boundingBox();
+      assert.ok(box);
+      // The graph is 200x120 with 8px padding: graph (x, y)
+      // to a point in the box.
+      const at = (gx, gy) => ({
+        x: box.x + (box.width * (8 + gx * 184)) / 200,
+        y: box.y + (box.height * (112 - gy * 104)) / 120,
+      });
+      // Click the first point (0,0) to select it: its out
+      // handle appears, at its default a third along the chord.
+      const p0 = at(0, 0);
+      await page.mouse.click(p0.x, p0.y);
+      await waitFor("out handle shown", async () => ((await page.locator(".br-graph-handle").count()) === 1 ? true : null));
+      // Drag the out handle down: the curve stays low, then
+      // rises late. The rendered path turns cubic.
+      const from = at(1 / 3, 1 / 3);
+      const to = at(0.55, 0.08);
+      await page.mouse.move(from.x, from.y);
+      await page.mouse.down();
+      await page.mouse.move(to.x, to.y, { steps: 10 });
+      await page.mouse.up();
+      await waitFor("graph path is cubic", async () => {
+        const d = await page.locator(".br-graph-line").getAttribute("d");
+        return d?.includes("C") ? true : null;
+      });
+      // The bent curve is a draft until Save: save it as a
+      // new brush, which becomes the active brush, and the
+      // draw below uses it.
+      await page.locator(".br-expand-name").fill("Bent Curve");
+      await page.locator(".br-btn", { hasText: "Save" }).click();
+      await waitFor("bent brush active", async () =>
+        ((await page.locator(".br-brush.br-active .br-brush-name").textContent()) === "Bent Curve" ? true : null),
+      );
+      // Draw with a stylus at pressure 0.5: the bent curve
+      // maps it to about 0.3, not 0.5, and the stroke
+      // stores the bent pressures. A mouse records no
+      // pressures, so the draw is synthetic pen input.
+      await page.click("#tool-draw");
+      await page.waitForSelector('#draw-picker button[data-draw="pen"]', { state: "visible" });
+      await page.click('#draw-picker button[data-draw="pen"]');
+      await page.evaluate(() => {
+        const board = document.querySelector("#board");
+        const init = (x, y, buttons) => ({
+          pointerType: "pen", pressure: 0.5, buttons, button: 0, bubbles: true, clientX: x, clientY: y,
+        });
+        board.dispatchEvent(new PointerEvent("pointerdown", init(650, 860, 1)));
+        for (let i = 1; i <= 10; i++) {
+          window.dispatchEvent(new PointerEvent("pointermove", init(650 + i * 20, 860, 1)));
+        }
+        window.dispatchEvent(new PointerEvent("pointerup", init(850, 860, 0)));
+      });
+      const stroke = await waitFor("bent-pressure stroke in board.json", () => {
+        const found = strokes().filter((it) => (it.kind.Stroke.pressures ?? []).length > 0);
+        return found.length >= 1 ? found[found.length - 1] : null;
+      });
+      const pressures = stroke.kind.Stroke.pressures;
+      assert.ok(pressures.length >= 2);
+      assert.ok(pressures.every((v) => v > 0.2 && v < 0.4));
+    });
+
+    await check("applying a brush retextures a selected stroke, and undo restores it", async () => {
+      const stroke = strokes().find((it) => it.kind.Stroke.texture === "graphite");
+      assert.ok(stroke);
+      await page.keyboard.press("v");
+      await page.mouse.click(750, 800);
+      await page.locator(".br-brush-name", { hasText: "Chalk" }).click();
+      await waitFor("stroke retextured to chalk", () =>
+        strokes().find((it) => it.id === stroke.id)?.kind.Stroke.texture === "chalk" ? true : null,
+      );
+      assert.equal(strokes().find((it) => it.id === stroke.id).kind.Stroke.width, 6);
+      await page.keyboard.press("Control+z");
+      await waitFor("undo restores the graphite stroke", () =>
+        strokes().find((it) => it.id === stroke.id)?.kind.Stroke.texture === "graphite" ? true : null,
+      );
+      assert.equal(strokes().find((it) => it.id === stroke.id).kind.Stroke.width, 2);
+    });
+
+    await check("erasing a textured stroke keeps the texture on the pieces", async () => {
+      const before = strokes().filter((it) => it.kind.Stroke.texture === "graphite");
+      assert.ok(before.length >= 1);
+      const target = before[before.length - 1];
+      await page.click("#tool-draw");
+      await page.waitForSelector('#draw-picker button[data-draw="eraser"]', { state: "visible" });
+      await page.click('#draw-picker button[data-draw="eraser"]');
+      await page.mouse.move(750, 800);
+      await page.mouse.down();
+      await page.mouse.move(750, 830, { steps: 5 });
+      await page.mouse.up();
+      await waitFor("textured pieces after the erase", () => {
+        const pieces = strokes().filter((it) => it.kind.Stroke.texture === "graphite" && it.id !== target.id);
+        return pieces.length >= 2 ? pieces : null;
+      });
+    });
+
+    await check("disabling the Brush Library drops the brush filters, and the board keeps them", async () => {
+      const stroke = strokes().find((it) => it.kind.Stroke.texture === "graphite");
+      assert.ok(stroke);
+      try {
+        assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("brushes", false)), false);
+        await page.reload();
+        await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
+        assert.equal(await page.locator('.plugin-tab[aria-label="Brush Library"]').count(), 0);
+        // The stroke is still there, texture field and all.
+        const kept = strokes().find((it) => it.id === stroke.id);
+        assert.ok(kept);
+        assert.equal(kept.kind.Stroke.texture, "graphite");
+        // But no brush filter in the DOM: with the plugin
+        // off its texture is unregistered, so the stroke
+        // renders plain, not as graphite.
+        const brushed = await page.evaluate(() => !!document.querySelector('#cards .stroke svg g[filter="url(#texture-graphite)"]'));
+        assert.equal(brushed, false);
+        // With the plugin off, the pen draws plain: a new
+        // stroke carries no brush texture.
+        const plainBefore = strokes().filter((it) => !it.kind.Stroke.texture && !it.kind.Stroke.pencil).length;
+        await page.click("#tool-draw");
+        await page.waitForSelector('#draw-picker button[data-draw="pen"]', { state: "visible" });
+        await page.click('#draw-picker button[data-draw="pen"]');
+        await page.mouse.move(650, 800);
+        await page.mouse.down();
+        await page.mouse.move(850, 800, { steps: 20 });
+        await page.mouse.up();
+        await waitFor("plain pen stroke after disable", () =>
+          strokes().filter((it) => !it.kind.Stroke.texture && !it.kind.Stroke.pencil).length > plainBefore ? true : null,
+        );
+      } finally {
+        // Re-enable even when an assertion above failed, or
+        // every later brush check times out on the missing tab.
+        assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("brushes", true)), true);
+        await page.reload();
+        await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
+      }
+      // Re-enabled: the graphite filter comes back.
+      assert.equal(await page.evaluate(() => !!document.querySelector('#cards .stroke svg g[filter="url(#texture-graphite)"]')), true);
+    });
+
+    await check("applying a brush to a locked layer is refused", async () => {
+      const stroke = strokes().find((it) => it.kind.Stroke.texture === "graphite");
+      assert.ok(stroke);
+      try {
+        await page.evaluate(() => window.__ciLayers.setLocked("default", true));
+        await page.keyboard.press("v");
+        // The stroke was split by the erase check: click the
+        // left piece, not the erased middle.
+        await page.mouse.click(700, 800);
+        await page.locator('.plugin-tab[aria-label="Brush Library"]').click();
+        await page.locator(".br-brush").first().waitFor({ timeout: READY_TIMEOUT_MS });
+        await page.locator(".br-brush-name", { hasText: "Chalk" }).click();
+        await waitFor("locked-layer toast", async () => {
+          const toast = (await page.locator("#toast").textContent()) ?? "";
+          return toast === "Layer is locked" ? true : null;
+        });
+        assert.equal(strokes().find((it) => it.id === stroke.id).kind.Stroke.texture, "graphite");
+      } finally {
+        await page.evaluate(() => window.__ciLayers.setLocked("default", false)).catch(() => undefined);
+      }
+    });
+
+    await check("creating a brush from the inline editor builds its texture from the parameters", async () => {
+      await page.locator('.plugin-tab[aria-label="Brush Library"]').click();
+      await page.locator(".br-brush").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // Click Ink: its parameters open below it in the list.
+      await page.locator(".br-brush-name", { hasText: "Ink" }).click();
+      await page.locator(".br-expand").waitFor({ timeout: READY_TIMEOUT_MS });
+      // No "+ New brush" button and no separate create form:
+      // the parameters live below the brush itself.
+      assert.equal(await page.locator(".br-btn", { hasText: "New brush" }).count(), 0);
+      assert.equal(await page.locator(".br-create").count(), 0);
+      assert.equal(await page.locator(".br-editor").count(), 0);
+      // One sample stroke only, the wave: the straight
+      // sample is gone at the user's call.
+      assert.equal(await page.locator(".br-tex-preview svg path").count(), 1);
+      // The preview redraws as a slider moves: Frequency
+      // 0.9 shows up in the preview filter.
+      await page.locator('.br-expand .br-slider[aria-label="Frequency"]').evaluate((el) => {
+        el.value = "0.9";
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      assert.equal(await page.evaluate(() => document.querySelector(".br-tex-preview feTurbulence")?.getAttribute("baseFrequency")), "0.9");
+      await page.locator(".br-expand-name").fill("Test Grain");
+      await page.locator(".br-btn", { hasText: "Save" }).click();
+      await waitFor("new brush in the list", async () => {
+        const names = await page.locator(".br-brush-name").allTextContents();
+        return names.includes("Test Grain") ? true : null;
+      });
+      // It is the selected brush, at Ink's size: size lives
+      // in the toolbar now, so a saved brush keeps its
+      // source brush's size.
+      assert.equal(await page.locator(".br-brush.br-active .br-brush-name").textContent(), "Test Grain");
+      // Opening its parameters again starts from the new
+      // brush's custom texture, so tweaking it keeps its values.
+      await page.locator(".br-brush-name", { hasText: "Test Grain" }).click();
+      await page.locator(".br-expand").waitFor({ timeout: READY_TIMEOUT_MS });
+      assert.equal(await page.locator('.br-expand .br-slider[aria-label="Frequency"]').inputValue(), "0.9");
+      await page.locator(".br-btn-quiet", { hasText: "Cancel" }).click();
+      // And it draws with the new custom texture.
+      await page.mouse.move(650, 820);
+      await page.mouse.down();
+      await page.mouse.move(850, 820, { steps: 20 });
+      await page.mouse.up();
+      const stroke = await waitFor("custom-texture stroke from the new brush", () => {
+        const found = strokes().filter((it) => typeof it.kind.Stroke.texture === "string" && it.kind.Stroke.texture.startsWith("tex-"));
+        return found.length >= 1 ? found[found.length - 1] : null;
+      });
+      assert.equal(stroke.kind.Stroke.width, 3);
+    });
+
+    await check("the pen size drives shape outlines and arrows", async () => {
+      // The size is the pen's stroke-default width: pick a
+      // brush and its size goes onto the pen, then a new
+      // outline shape and a new arrow both take it. (The
+      // size lives in the toolbar, not the panel, so the
+      // brush's own size is what the pen takes.)
+      // Escape first, so no stroke is selected: applying a
+      // brush to a selection retextures it instead of
+      // making it the active brush.
+      await page.keyboard.press("Escape");
+      await page.locator('.plugin-tab[aria-label="Brush Library"]').click();
+      await page.locator(".br-brush").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      await page.locator(".br-brush-name", { hasText: "Chalk" }).click();
+      // An outline rectangle takes the size as its width.
+      await page.click("#tool-shape");
+      await page.waitForSelector('#shape-picker button[data-shape="rect"][data-mode="outline"]', { state: "visible" });
+      await page.click('#shape-picker button[data-shape="rect"][data-mode="outline"]');
+      await page.mouse.move(650, 300);
+      await page.mouse.down();
+      await page.mouse.move(850, 420, { steps: 10 });
+      await page.mouse.up();
+      const shape = await waitFor("outline shape in board.json", () => {
+        const found = readBoard().items.filter((it) => "Shape" in it.kind && it.kind.Shape.outline);
+        return found.length >= 1 ? found[found.length - 1] : null;
+      });
+      assert.equal(shape.kind.Shape.width, 6);
+      assert.equal(await page.evaluate(() => document.querySelector('#cards .shape svg [stroke-width="6"]') !== null), true);
+      // An arrow takes it too.
+      const before = readBoard().items.filter((it) => "Connector" in it.kind).length;
+      await page.keyboard.press("a");
+      await page.mouse.move(650, 500);
+      await page.mouse.down();
+      await page.mouse.move(850, 500, { steps: 10 });
+      await page.mouse.up();
+      await waitFor("arrow saved", () => readBoard().items.filter((it) => "Connector" in it.kind).length > before ? true : null);
+      const drawn = readBoard().items.filter((it) => "Connector" in it.kind).pop();
+      assert.equal(drawn.kind.Connector.width, 6);
+    });
+
+    await check("undo works from the panel and takes back a deleted brush", async () => {
+      // Draw a stroke, then focus a texture slider: Ctrl+Z
+      // still undoes the stroke — the board's handler
+      // skips the shortcut on inputs, so the panel takes
+      // it instead, from every focus state inside it.
+      await page.locator('.plugin-tab[aria-label="Brush Library"]').click();
+      await page.locator(".br-brush").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      await page.click("#tool-draw");
+      await page.waitForSelector('#draw-picker button[data-draw="pen"]', { state: "visible" });
+      await page.click('#draw-picker button[data-draw="pen"]');
+      await page.mouse.move(650, 840);
+      await page.mouse.down();
+      await page.mouse.move(850, 840, { steps: 10 });
+      await page.mouse.up();
+      const stroke = await waitFor("stroke to undo", () => {
+        const found = strokes();
+        return found.length >= 1 ? found[found.length - 1] : null;
+      });
+      await page.locator(".br-brush-name", { hasText: "Ink" }).click();
+      await page.locator(".br-expand").waitFor({ timeout: READY_TIMEOUT_MS });
+      await page.locator('.br-expand .br-slider[aria-label="Frequency"]').click();
+      await page.keyboard.press("Control+z");
+      await waitFor("stroke undone from the slider", () =>
+        strokes().find((it) => it.id === stroke.id) === undefined ? true : null,
+      );
+      // Redo from the slider brings it back.
+      await page.keyboard.press("Control+Shift+z");
+      await waitFor("stroke redone from the slider", () =>
+        strokes().find((it) => it.id === stroke.id) !== undefined ? true : null,
+      );
+      // Undo it again, then delete a brush: the delete is
+      // the most recent change, so Ctrl+Z takes it back.
+      await page.keyboard.press("Control+z");
+      await waitFor("stroke undone again", () =>
+        strokes().find((it) => it.id === stroke.id) === undefined ? true : null,
+      );
+      const names = () => page.locator(".br-brush-name").allTextContents();
+      await page.locator(".br-brush-name", { hasText: "Spray" }).click();
+      await page.locator(".br-expand").waitFor({ timeout: READY_TIMEOUT_MS });
+      await page.locator(".br-expand .br-btn-quiet", { hasText: "Delete" }).click();
+      await waitFor("Spray deleted", async () => ((await names()).includes("Spray") ? null : true));
+      await page.keyboard.press("Control+z");
+      await waitFor("Spray back after undo", async () => ((await names()).includes("Spray") ? true : null));
+      // Redo takes it away again, and one more undo puts
+      // the library back as it was for the next checks.
+      await page.keyboard.press("Control+Shift+z");
+      await waitFor("Spray gone after redo", async () => ((await names()).includes("Spray") ? null : true));
+      await page.keyboard.press("Control+z");
+      await waitFor("Spray back again", async () => ((await names()).includes("Spray") ? true : null));
     });
 
     await check("a version restores from the Boards panel history", async () => {
