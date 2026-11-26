@@ -167,25 +167,27 @@ describe("brush store", () => {
     expect(parseStored(seeded())).toEqual(seeded());
     expect(parseStored(null)).toBeNull();
     expect(parseStored("no")).toBeNull();
-    expect(parseStored({ presets: [{ id: "preset-1", name: "Ink", texture: null, size: 3, curve: 1, marker: false }], textures: [] })).not.toBeNull();
+    expect(parseStored({ presets: [{ id: "preset-1", name: "Ink", texture: null, curve: 1, marker: false }], textures: [] })).not.toBeNull();
     // An old numeric curve migrates to its equivalent points.
-    const migrated = parseStored({ presets: [{ id: "preset-1", name: "Ink", texture: null, size: 3, curve: 2, marker: false }], textures: [] });
+    const migrated = parseStored({ presets: [{ id: "preset-1", name: "Ink", texture: null, curve: 2, marker: false }], textures: [] });
     expect(migrated?.presets[0].curve).toEqual(curveFromExponent(2));
     // An old preset without a family takes its texture's.
-    const migratedFamily = parseStored({ presets: [{ id: "preset-2", name: "Graphite", texture: "graphite", size: 2, curve: 1, marker: false }], textures: [] });
+    const migratedFamily = parseStored({ presets: [{ id: "preset-2", name: "Graphite", texture: "graphite", curve: 1, marker: false }], textures: [] });
     expect(migratedFamily?.presets[0].family).toBe("pencil");
-    const migratedPlain = parseStored({ presets: [{ id: "preset-1", name: "Ink", texture: null, size: 3, curve: 1, marker: false }], textures: [] });
+    const migratedPlain = parseStored({ presets: [{ id: "preset-1", name: "Ink", texture: null, curve: 1, marker: false }], textures: [] });
     expect(migratedPlain?.presets[0].family).toBe("pen");
-    expect(parseStored({ presets: [{ id: "preset-1", name: "Ink", texture: null, size: 3, curve: 1 }], textures: [] })).not.toBeNull();
-    expect(parseStored({ presets: [{ id: "preset-1", name: "Ink", texture: null, size: 99, curve: 1, marker: false }], textures: [] })).toBeNull();
+    expect(parseStored({ presets: [{ id: "preset-1", name: "Ink", texture: null, curve: 1 }], textures: [] })).not.toBeNull();
+    // A preset needs no size any more, and old stored data
+    // with one still loads: the size is ignored on read.
+    expect(parseStored({ presets: [{ id: "preset-1", name: "Ink", texture: null, size: 3, curve: [{ x: 0, y: 0 }, { x: 1, y: 1 }] }], textures: [] })?.presets[0]).toEqual({ id: "preset-1", name: "Ink", texture: null, curve: LINEAR_CURVE, family: "pen" });
     expect(parseStored({ presets: [{ id: "preset-1", name: "Ink", texture: "bad id", size: 3, curve: 1, marker: false }], textures: [] })).toBeNull();
     expect(parseStored({ presets: [], textures: [{ id: "tex-1", name: "T", baseFrequency: 0.5, octaves: 2, scale: 4, seed: 1 }] })).not.toBeNull();
     expect(parseStored({ presets: [], textures: [{ id: "tex-1", name: "T", baseFrequency: 0.5, octaves: 2.5, scale: 4, seed: 1 }] })).toBeNull();
   });
   it("createPreset names the next free Brush N and copies the base", () => {
-    const { store, index } = createPreset(seeded(), { texture: "grain", size: 9, curve: curveFromExponent(2) });
+    const { store, index } = createPreset(seeded(), { texture: "grain", curve: curveFromExponent(2) });
     expect(index).toBe(8);
-    expect(store.presets[8]).toEqual({ id: "preset-9", name: "Brush 1", texture: "grain", size: 9, curve: curveFromExponent(2), family: "pen" });
+    expect(store.presets[8]).toEqual({ id: "preset-9", name: "Brush 1", texture: "grain", curve: curveFromExponent(2), family: "pen" });
     expect(nextPresetName(store)).toBe("Brush 2");
   });
   it("createPreset takes an explicit name, and a blank one auto-names", () => {
@@ -216,15 +218,13 @@ describe("brush store", () => {
     expect(deletePreset(before, 0).presets.map((p) => p.name)).toEqual(["Graphite", "Chalk", "Marker", "Charcoal", "Crayon", "Watercolour", "Spray"]);
     expect(deletePreset(before, 9)).toBe(before);
   });
-  it("updatePreset clamps the size, checks the curve, and refuses a bad texture id", () => {
+  it("updatePreset checks the curve, and refuses a bad texture id", () => {
     const before = seeded();
-    expect(updatePreset(before, 0, { size: 99 }).presets[0].size).toBe(32);
-    expect(updatePreset(before, 0, { size: 0 }).presets[0].size).toBe(1);
     expect(updatePreset(before, 0, { texture: "bad id" })).toBe(before);
     expect(updatePreset(before, 0, { texture: "grain" }).presets[0].texture).toBe("grain");
     expect(updatePreset(before, 0, { curve: [{ x: 0, y: 0 }, { x: 1, y: 1 }] }).presets[0].curve).toEqual(LINEAR_CURVE);
     expect(updatePreset(before, 0, { curve: [{ x: 0, y: 0 }] })).toBe(before);
-    expect(updatePreset(before, 9, { size: 5 })).toBe(before);
+    expect(updatePreset(before, 9, { texture: "grain" })).toBe(before);
   });
 });
 
@@ -238,6 +238,7 @@ describe("applyBrush", () => {
   function makeApi(selected: number[], items: unknown[], updateResult = true) {
     const calls: unknown[] = [];
     const defaults: unknown[] = [];
+    const penDefaults: Record<string, unknown> = {};
     let tool: string | null = null;
     let toast: string | null = null;
     const api = {
@@ -247,6 +248,7 @@ describe("applyBrush", () => {
         updateItems: (patches: unknown) => { calls.push(patches); return updateResult; },
       },
       pen: {
+        getStrokeDefaults: () => ({ ...penDefaults }),
         setStrokeDefaults: (kind: string, d: unknown) => { defaults.push([kind, d]); },
       },
       ui: {
@@ -254,47 +256,54 @@ describe("applyBrush", () => {
         toast: (msg: string) => { toast = msg; },
       },
     };
-    return { api: api as unknown as PluginContext, calls, defaults, tool: () => tool, toast: () => toast };
+    return { api: api as unknown as PluginContext, calls, defaults, penDefaults, tool: () => tool, toast: () => toast };
   }
-  const graphite = { id: "preset-2", name: "Graphite", texture: "graphite", size: 2, curve: LINEAR_CURVE, family: "pencil" as const };
-  const ink = { id: "preset-1", name: "Ink", texture: null, size: 3, curve: LINEAR_CURVE, family: "pen" as const };
-  const marker = { id: "preset-4", name: "Marker", texture: "marker", size: 4, curve: LINEAR_CURVE, family: "highlighter" as const };
+  const graphite = { id: "preset-2", name: "Graphite", texture: "graphite", curve: LINEAR_CURVE, family: "pencil" as const };
+  const ink = { id: "preset-1", name: "Ink", texture: null, curve: LINEAR_CURVE, family: "pen" as const };
+  const marker = { id: "preset-4", name: "Marker", texture: "marker", curve: LINEAR_CURVE, family: "highlighter" as const };
   it("activates the pen when nothing stroke-like is selected", () => {
     const f = makeApi([3], [textItem(3)]);
     applyBrush(f.api, graphite);
     expect(f.tool()).toBe("plugin:core-draw:pen");
-    expect(f.defaults).toEqual([["pen", { width: 2, texture: "graphite", marker: false, curve: LINEAR_CURVE }]]);
+    expect(f.defaults).toEqual([["pen", { texture: "graphite", marker: false, curve: LINEAR_CURVE, width: 3 }]]);
     expect(f.calls).toEqual([]);
     expect(f.toast()).toBeNull();
   });
   it("brushDefaults derives marker from the family", () => {
     expect(brushDefaults(graphite).marker).toBe(false);
     expect(brushDefaults(marker).marker).toBe(true);
-    expect(brushDefaults(marker)).toEqual({ width: 4, texture: "marker", marker: true, curve: LINEAR_CURVE });
+    expect(brushDefaults(marker)).toEqual({ texture: "marker", marker: true, curve: LINEAR_CURVE });
   });
   it("applyBrushDefaults sets the preset on the pen", () => {
     const f = makeApi([], []);
     applyBrushDefaults(f.api, graphite);
-    expect(f.defaults).toEqual([["pen", { width: 2, texture: "graphite", marker: false, curve: LINEAR_CURVE }]]);
+    expect(f.defaults).toEqual([["pen", { texture: "graphite", marker: false, curve: LINEAR_CURVE, width: 3 }]]);
+    expect(f.tool()).toBeNull();
+  });
+  it("applyBrushDefaults keeps the pen width", () => {
+    const f = makeApi([], []);
+    f.penDefaults.width = 17;
+    applyBrushDefaults(f.api, graphite);
+    expect(f.defaults).toEqual([["pen", { texture: "graphite", marker: false, curve: LINEAR_CURVE, width: 17 }]]);
     expect(f.tool()).toBeNull();
   });
   it("activateBrush sets the defaults and the pen", () => {
     const f = makeApi([], []);
     activateBrush(f.api, marker);
-    expect(f.defaults).toEqual([["pen", { width: 4, texture: "marker", marker: true, curve: LINEAR_CURVE }]]);
+    expect(f.defaults).toEqual([["pen", { texture: "marker", marker: true, curve: LINEAR_CURVE, width: 3 }]]);
     expect(f.tool()).toBe("plugin:core-draw:pen");
   });
-  it("applies texture and width to the selected strokes in one call", () => {
+  it("applies texture to the selected strokes in one call, leaving the width alone", () => {
     const f = makeApi([1, 3], [strokeItem(1), textItem(3)]);
     applyBrush(f.api, graphite);
     expect(f.tool()).toBeNull();
-    expect(f.calls).toEqual([[{ id: 1, data: { texture: "graphite", width: 2 } }]]);
+    expect(f.calls).toEqual([[{ id: 1, data: { texture: "graphite" } }]]);
     expect(f.toast()).toBeNull();
   });
   it("a textureless brush clears the texture", () => {
     const f = makeApi([1], [strokeItem(1)]);
     applyBrush(f.api, ink);
-    expect(f.calls).toEqual([[{ id: 1, data: { texture: null, width: 3 } }]]);
+    expect(f.calls).toEqual([[{ id: 1, data: { texture: null } }]]);
   });
   it("toasts when the apply is refused", () => {
     const f = makeApi([1], [strokeItem(1)], false);

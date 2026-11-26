@@ -1,6 +1,6 @@
 // Brush Library — bundled Bowerbird plugin (see PLUGIN_API.md).
 //
-// Brush presets with texture, size and pressure curve.
+// Brush presets with texture and pressure curve.
 // Click a brush to apply it to the selected strokes, or
 // to draw with it when nothing is selected: the brush
 // configures the matching core tool through the pen's

@@ -31,9 +31,10 @@ let selectedId: string | null = null;
 let expandedId: string | null = null;
 // The expansion's draft: the edited settings, leaving
 // the original brush unchanged until Save. The name, the
-// texture parameters and the curve are all draft; the
-// size stays the source brush's, since size lives in the
-// toolbar. The basis is the source brush's own custom
+// texture parameters and the curve are all draft; there
+// is no size to draft — the size lives in the toolbar,
+// and the saved brush draws at it. The basis is the
+// source brush's own custom
 // texture, or the defaults for a built-in texture or plain
 // ink — Save makes a new texture only when the parameters
 // moved from that basis.
@@ -79,6 +80,12 @@ function getPresetById(id: string): BrushPreset | undefined {
 
 function activePreset(): BrushPreset | undefined {
   return activeBrushId ? getPresetById(activeBrushId) : store.presets[0];
+}
+
+// The width the next stroke draws at: the toolbar's,
+// read from the pen's defaults (built-in 3 when unset).
+function penWidth(): number {
+  return api?.pen.getStrokeDefaults("pen").width ?? 3;
 }
 
 // The active brush's settings onto the pen.
@@ -233,12 +240,14 @@ export function initPanel(a: PluginContext, initial: BrushStore): void {
   closeDraft();
   if (api.events) api.events.on("tool", onToolChange);
   if (api.events) api.events.on("board", onBoardChange);
+  if (api.events) api.events.on("pen", onPenChange);
   window.addEventListener("keydown", onPanelKeydown, true);
 }
 
 export function clearPanel(): void {
   if (api?.events) api.events.off("tool", onToolChange);
   if (api?.events) api.events.off("board", onBoardChange);
+  if (api?.events) api.events.off("pen", onPenChange);
   window.removeEventListener("keydown", onPanelKeydown, true);
   clearSettings();
   api = null;
@@ -259,6 +268,13 @@ export function clearPanel(): void {
 
 function onToolChange(): void {
   syncDefaults();
+  renderBrushes();
+}
+
+// The pen changed — a new size from the toolbar, a new
+// colour, a new brush: the rows preview at the pen width,
+// so re-render them.
+function onPenChange(): void {
   renderBrushes();
 }
 
@@ -390,7 +406,7 @@ function previewSvg(preset: BrushPreset): string {
   // A wash at 0.45 read as a faded grey smear next
   // to Ink; 0.65 stays translucent but reads as a mark.
   const opacity = preset.family === "highlighter" ? ` opacity="0.65"` : "";
-  const w = preset.size;
+  const w = penWidth();
   const d = "M10 15 L 98 15";
   const stroke = `<path d="${d}" fill="none" stroke="#1A1A1A" stroke-width="${w}" stroke-linecap="round"${opacity} />`;
   if (!preset.texture) {
@@ -425,7 +441,7 @@ function renderBrushes(): void {
     const nameEl = document.createElement("span");
     nameEl.className = "br-brush-name";
     nameEl.textContent = preset.name;
-    nameEl.title = `${preset.name} — ${textureLabel(preset.texture)}, size ${preset.size}`;
+    nameEl.title = `${preset.name} — ${textureLabel(preset.texture)}`;
     const activate = (): void => {
       const wasOpen = expandedId === preset.id;
       selectedId = preset.id;
@@ -755,7 +771,7 @@ function renderExpansion(list: HTMLElement, index: number): void {
     // their basis, the draft texture once they moved.
     if (source && !draftNeedsNewTexture()) {
       const opacity = source.family === "highlighter" ? ` opacity="0.65"` : "";
-      const stroke = `<path d="M8 28 L 232 28" fill="none" stroke="#1A1A1A" stroke-width="${source.size}" stroke-linecap="round"${opacity} />`;
+      const stroke = `<path d="M8 28 L 232 28" fill="none" stroke="#1A1A1A" stroke-width="${penWidth()}" stroke-linecap="round"${opacity} />`;
       const inner = source.texture
         ? `<g filter="url(#texture-${source.texture})"><rect x="0" y="0" width="240" height="56" fill="none" />${stroke}</g>`
         : stroke;
@@ -764,9 +780,9 @@ function renderExpansion(list: HTMLElement, index: number): void {
     }
     // The filter region is in user units over the whole
     // preview, so displaced grain is never clipped at the
-    // edges. The draft keeps the source brush's size: the
-    // saved brush draws at that size, so the preview does.
-    previewHost.innerHTML = `<svg viewBox="0 0 240 56" aria-hidden="true"><defs><filter id="br-draft-preview" filterUnits="userSpaceOnUse" x="0" y="0" width="240" height="56">${textureFilterSvg(draftParams)}</filter></defs><path d="M8 28 L 232 28" fill="none" stroke="#1A1A1A" stroke-width="${source?.size ?? 7}" stroke-linecap="round" filter="url(#br-draft-preview)" /></svg>`;
+    // edges. The preview draws at the pen width: the saved
+    // brush draws at the toolbar size, so the preview does.
+    previewHost.innerHTML = `<svg viewBox="0 0 240 56" aria-hidden="true"><defs><filter id="br-draft-preview" filterUnits="userSpaceOnUse" x="0" y="0" width="240" height="56">${textureFilterSvg(draftParams)}</filter></defs><path d="M8 28 L 232 28" fill="none" stroke="#1A1A1A" stroke-width="${penWidth()}" stroke-linecap="round" filter="url(#br-draft-preview)" /></svg>`;
   };
   drawPreview();
   box.appendChild(previewHost);
@@ -822,12 +838,11 @@ function renderExpansion(list: HTMLElement, index: number): void {
       textureId = def.id;
     }
     // The family follows the brush this was made from;
-    // the size stays the source's, since size lives in
-    // the toolbar.
+    // a saved brush carries no size: it draws at the
+    // toolbar size, like every brush.
     const created = createPreset(next, {
       name,
       texture: textureId,
-      size: source.size,
       curve: draftCurve,
       family: source.family,
     });

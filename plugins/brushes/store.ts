@@ -8,7 +8,6 @@ export interface BrushPreset {
   id: string;
   name: string;
   texture: string | null;
-  size: number;
   curve: CurvePoint[];
   // The pen family the brush belongs to: the texture
   // list follows the active tool, so a brush shows
@@ -42,14 +41,14 @@ export function emptyStore(): BrushStore {
 export function seededStore(): BrushStore {
   return {
     presets: [
-      { id: "preset-1", name: "Ink", texture: null, size: 3, curve: copyCurve(LINEAR_CURVE), family: "pen" },
-      { id: "preset-2", name: "Graphite", texture: "graphite", size: 2, curve: copyCurve(LINEAR_CURVE), family: "pencil" },
-      { id: "preset-3", name: "Chalk", texture: "chalk", size: 6, curve: copyCurve(LINEAR_CURVE), family: "pencil" },
-      { id: "preset-4", name: "Marker", texture: "marker", size: 4, curve: copyCurve(LINEAR_CURVE), family: "highlighter" },
-      { id: "preset-5", name: "Charcoal", texture: "charcoal", size: 5, curve: copyCurve(LINEAR_CURVE), family: "pencil" },
-      { id: "preset-6", name: "Crayon", texture: "crayon", size: 4, curve: copyCurve(LINEAR_CURVE), family: "pencil" },
-      { id: "preset-7", name: "Watercolour", texture: "watercolour", size: 8, curve: copyCurve(LINEAR_CURVE), family: "highlighter" },
-      { id: "preset-8", name: "Spray", texture: "spray", size: 6, curve: copyCurve(LINEAR_CURVE), family: "pen" },
+      { id: "preset-1", name: "Ink", texture: null, curve: copyCurve(LINEAR_CURVE), family: "pen" },
+      { id: "preset-2", name: "Graphite", texture: "graphite", curve: copyCurve(LINEAR_CURVE), family: "pencil" },
+      { id: "preset-3", name: "Chalk", texture: "chalk", curve: copyCurve(LINEAR_CURVE), family: "pencil" },
+      { id: "preset-4", name: "Marker", texture: "marker", curve: copyCurve(LINEAR_CURVE), family: "highlighter" },
+      { id: "preset-5", name: "Charcoal", texture: "charcoal", curve: copyCurve(LINEAR_CURVE), family: "pencil" },
+      { id: "preset-6", name: "Crayon", texture: "crayon", curve: copyCurve(LINEAR_CURVE), family: "pencil" },
+      { id: "preset-7", name: "Watercolour", texture: "watercolour", curve: copyCurve(LINEAR_CURVE), family: "highlighter" },
+      { id: "preset-8", name: "Spray", texture: "spray", curve: copyCurve(LINEAR_CURVE), family: "pen" },
     ],
     textures: [],
   };
@@ -63,17 +62,11 @@ function isNumberIn(value: unknown, lo: number, hi: number): value is number {
   return typeof value === "number" && isFinite(value) && value >= lo && value <= hi;
 }
 
-export function clampSize(size: number): number {
-  if (!isFinite(size)) return 3;
-  return Math.min(32, Math.max(1, size));
-}
-
 function parsePreset(value: unknown): BrushPreset | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const v = value as Record<string, unknown>;
   if (!isId(v.id) || typeof v.name !== "string" || !v.name.trim()) return null;
   if (!(v.texture === null || isId(v.texture))) return null;
-  if (!isNumberIn(v.size, 1, 32)) return null;
   // A stored curve is points; a number is the old single
   // exponent, migrated to its equivalent points.
   const curve = typeof v.curve === "number" ? curveFromExponent(v.curve) : parseCurvePoints(v.curve);
@@ -89,7 +82,6 @@ function parsePreset(value: unknown): BrushPreset | null {
     id: v.id,
     name: v.name.trim(),
     texture,
-    size: v.size as number,
     curve,
     family,
   };
@@ -160,7 +152,6 @@ export function createPreset(store: BrushStore, base?: Partial<BrushPreset>): { 
     // An explicit name wins; a blank one auto-names, as before.
     name: base?.name?.trim() ? base.name.trim() : nextPresetName(store),
     texture: base?.texture ?? null,
-    size: clampSize(base?.size ?? 3),
     curve: base?.curve ? copyCurve(base.curve) : copyCurve(LINEAR_CURVE),
     // The base's family, else the base texture's family:
     // a copy of a pencil brush stays a pencil brush.
@@ -203,7 +194,6 @@ export function updatePreset(store: BrushStore, index: number, patch: Partial<Br
     if (!(patch.texture === null || isId(patch.texture))) return store;
     next.texture = patch.texture;
   }
-  if (patch.size !== undefined) next.size = clampSize(patch.size);
   if (patch.curve !== undefined) {
     const points = parseCurvePoints(patch.curve);
     if (!points) return store;
