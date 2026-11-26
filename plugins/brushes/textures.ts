@@ -77,17 +77,21 @@ export const BUILTIN_TEXTURES: BuiltinTexture[] = [
   },
   {
     id: "charcoal", label: "Charcoal", family: "pencil",
-    // Smudged and dark: heavily displaced, then the
-    // alpha is pushed back up — without the push the
-    // smudge read as a pale ghost. No blur: the blur
-    // spread the edge over several pixels and the
-    // stroke read as out of focus. The grain cuts
-    // hard, so the smudge keeps dark cores.
+    // Smudged and rich black: a dark continuous core with
+    // a soft grey halo under it, so the edge fades out
+    // like smudged charcoal instead of stopping dead.
+    // The grain cut is gentle, so the core stays solid;
+    // the halo is only a blur of the stroke at half
+    // alpha, and the core on top of it stays hard — a
+    // blur of the whole stroke read as out of focus.
     filterSvg:
-      grainMask(0.3, 4, 21, 5, -2)
+      grainMask(0.3, 4, 21, 5, -1.5)
       + `<feDisplacementMap in="SourceGraphic" in2="noise" scale="9" result="smudged" />`
-      + `<feComponentTransfer in="smudged" result="dark"><feFuncA type="linear" slope="2" intercept="-0.2" /></feComponentTransfer>`
-      + `<feComposite in="dark" in2="grain" operator="in" />`,
+      + `<feComponentTransfer in="smudged" result="dark"><feFuncA type="linear" slope="2.5" intercept="-0.3" /></feComponentTransfer>`
+      + `<feComposite in="dark" in2="grain" operator="in" result="core" />`
+      + `<feGaussianBlur in="SourceGraphic" stdDeviation="1.2" result="haloBlur" />`
+      + `<feComponentTransfer in="haloBlur" result="halo"><feFuncA type="linear" slope="0.35" intercept="0" /></feComponentTransfer>`
+      + `<feMerge><feMergeNode in="halo" /><feMergeNode in="core" /></feMerge>`,
   },
   {
     id: "crayon", label: "Crayon", family: "pencil",
