@@ -4679,24 +4679,27 @@ async function main() {
       await page.locator("#tool-size").click();
     });
 
-    await check("changing the toolbar size updates the active brush's stored size", async () => {
+    await check("changing the toolbar size updates the brush row preview", async () => {
       // Ink is still the active pen brush, now at size 7
-      // from the last check: the brush row's title carries
-      // the stored size, because the pen event wrote the
-      // new width back into the brush.
+      // from the last check: the row holds no stored size,
+      // so its title is plain — but the row's sample
+      // previews at the pen width, so it reads 7.
       await page.locator('.plugin-tab[aria-label="Brush Library"]').click();
       await page.locator(".br-brush").first().waitFor({ timeout: READY_TIMEOUT_MS });
-      assert.equal(await page.locator(".br-brush-name", { hasText: "Ink" }).getAttribute("title"), "Ink — None, size 7");
-      // And back to 3 from the toolbar: the brush follows.
+      assert.equal(await page.locator(".br-brush-name", { hasText: "Ink" }).getAttribute("title"), "Ink — None");
+      const sampleWidth = async () => await page.evaluate(() => {
+        const path = document.querySelector(".br-brush svg path");
+        return path ? path.getAttribute("stroke-width") : null;
+      });
+      assert.equal(await sampleWidth(), "7");
+      // And back to 3 from the toolbar: the row follows.
       await page.locator("#tool-size").click();
       await page.waitForSelector("#size-picker input[type=range]", { state: "visible", timeout: READY_TIMEOUT_MS });
       await page.locator("#size-picker input[type=range]").evaluate((el) => {
         el.value = "3";
         el.dispatchEvent(new Event("input", { bubbles: true }));
       });
-      await waitFor("Ink stored size back to 3", async () =>
-        ((await page.locator(".br-brush-name", { hasText: "Ink" }).getAttribute("title")) === "Ink — None, size 3" ? true : null),
-      );
+      await waitFor("Ink row sample back to 3", async () => (await sampleWidth()) === "3" ? true : null);
       await page.locator("#tool-size").click();
     });
 
