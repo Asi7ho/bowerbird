@@ -1,4 +1,4 @@
-// Colour Library — the colour wheel. Hue round the wheel,
+// Color Management — the colour wheel. Hue round the wheel,
 // saturation centre to edge, drawn on a canvas at
 // lightness 50%, pixel by pixel in HSL, like the old
 // Palette panel's wheel: a conic-gradient with a white
@@ -27,7 +27,7 @@ export function createWheel(onPick: (h: number, s: number) => void, onSettle?: (
   canvas.height = Math.round(cssSize * dpr);
   canvas.style.width = `${cssSize}px`;
   canvas.style.height = `${cssSize}px`;
-  canvas.setAttribute("aria-label", "Colour wheel: hue round the wheel, saturation from centre to edge");
+  canvas.setAttribute("aria-label", "Color wheel: hue round the wheel, saturation from centre to edge");
   wrap.appendChild(canvas);
   const marker = document.createElement("div");
   marker.className = "col-marker";

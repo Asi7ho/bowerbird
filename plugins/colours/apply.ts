@@ -1,4 +1,4 @@
-// Colour Library — applying a colour. Clicking a colour
+// Color Management — applying a colour. Clicking a colour
 // recolours the selected strokes and swatches, in one undo
 // step; with nothing colourable selected it sets the pen
 // for the next stroke instead. The picked state is a

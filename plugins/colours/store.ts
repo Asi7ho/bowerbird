@@ -1,4 +1,4 @@
-// Colour Library — the palette store. Pure data, no DOM and
+// Color Management — the palette store. Pure data, no DOM and
 // no API, so it is unit-tested on its own. A palette is a
 // name and a list of hex colours; the store is the list of
 // palettes. Every function returns a new store and leaves

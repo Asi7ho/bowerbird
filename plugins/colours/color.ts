@@ -1,4 +1,4 @@
-// Colour Library — hex colours, plus the HSL maths the
+// Color Management — hex colours, plus the HSL maths the
 // wheel and sliders need. The plugin cannot import the
 // core's colour helpers (public API only), so the ones it
 // needs live here: normalise "#f00" and "#FF0000" to the

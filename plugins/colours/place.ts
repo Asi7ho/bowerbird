@@ -1,4 +1,4 @@
-// Colour Library — placing swatches on the board. Drag a
+// Color Management — placing swatches on the board. Drag a
 // colour tile to place a 120x120 swatch at the drop point,
 // centred there, the same interaction as Visual Library.
 // (A click applies the colour instead, so only the drag

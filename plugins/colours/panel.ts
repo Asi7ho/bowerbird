@@ -1,4 +1,4 @@
-// Colour Library — the panel: a wheel and sliders pick
+// Color Management — the panel: a wheel and sliders pick
 // the colour, named palettes hold it. Click a tile to
 // apply its colour (selected strokes and swatches, or the
 // pen); drag a tile to place a swatch on the board. The
@@ -1133,7 +1133,7 @@ export function renderPanel(container: HTMLElement): void {
   const modeSeg = document.createElement("div");
   modeSeg.className = "col-mode-seg";
   modeSeg.setAttribute("role", "group");
-  modeSeg.setAttribute("aria-label", "Colour mode");
+  modeSeg.setAttribute("aria-label", "Color mode");
   for (const [value, label] of [["hsl", "HSL"], ["rgb", "RGB"], ["hsv", "HSV"], ["hex", "Hex"]] as const) {
     const btn = document.createElement("button");
     btn.type = "button";

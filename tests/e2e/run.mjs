@@ -3575,13 +3575,13 @@ async function main() {
         },
       });
 
-    await check("Colour Library creates a palette and it survives a reload", async () => {
+    await check("Color Management creates a palette and it survives a reload", async () => {
       // Bundled, opt-in: enable it, then reload so it activates.
       assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("colours", true)), true);
       await page.reload();
       await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
       // First run seeds one palette from the pen colour.
-      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       assert.deepEqual(await page.locator(".col-palette-name").allTextContents(), ["Palette 1"]);
       // A new palette starts from the picked colour, so set
@@ -3615,7 +3615,7 @@ async function main() {
       await new Promise((r) => setTimeout(r, 600));
       await page.reload();
       await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
-      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       assert.deepEqual(await page.locator(".col-palette-name").allTextContents(), ["Palette 1", "Palette 2"]);
       const hexes = await page.locator(".col-palette").nth(1).locator(".col-tile")
@@ -3624,7 +3624,7 @@ async function main() {
     });
 
     await check("a lone colour in a palette stays a fixed-size tile", async () => {
-      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       // Palette 1 holds one colour, the seeded pen colour.
       const tile = page.locator(".col-palette").first().locator(".col-tile").first();
@@ -3639,7 +3639,7 @@ async function main() {
     });
 
     await check("clicking a colour sets the pen, and recolours a selected stroke", async () => {
-      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       // Click the red tile with nothing selected: the pen
       // takes the colour. Draw a stroke to prove it.
@@ -3714,19 +3714,19 @@ async function main() {
       assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("colours", false)), false);
       await page.reload();
       await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
-      assert.equal(await page.locator('.plugin-tab[aria-label="Colour Library"]').count(), 0);
+      assert.equal(await page.locator('.plugin-tab[aria-label="Color Management"]').count(), 0);
       assert.ok(readBoard().items.some((it) => it.id === swatch.id));
       // Re-enable: the palettes are still there.
       assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("colours", true)), true);
       await page.reload();
       await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
-      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       assert.deepEqual(await page.locator(".col-palette-name").allTextContents(), ["Palette 1", "Palette 2"]);
     });
 
     await check("switching the picker mode keeps the picked colour", async () => {
-      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       // Pick a red in HSL, read it back, then switch modes:
       // the picked colour must not move.
@@ -3767,7 +3767,7 @@ async function main() {
       await page.locator('.col-mode-seg-btn[data-mode="rgb"]').click();
       await page.reload();
       await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
-      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       assert.ok(await page.locator('.col-mode-seg-btn[data-mode="rgb"]').evaluate((el) => el.classList.contains("active")));
       // Leave HSL selected, so later checks find the HSL
@@ -3776,7 +3776,7 @@ async function main() {
     });
 
     await check("harmonies show five colours for the picked colour and a harmony click applies", async () => {
-      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       // Pick the red on the HSL sliders: Analogous is the
       // default harmony, so the middle tile is the picked
@@ -3814,7 +3814,7 @@ async function main() {
     });
 
     await check("the harmony type selector switches the shown set", async () => {
-      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
       await page.locator(".col-slider-hue").fill("355");
@@ -3839,7 +3839,7 @@ async function main() {
     });
 
     await check("recent colours record on apply and a recent click restores the colour", async () => {
-      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       // Settling the sliders records: pick blue, and it is
       // the most recent colour before anything is applied.
@@ -3866,7 +3866,7 @@ async function main() {
       await new Promise((r) => setTimeout(r, 600));
       await page.reload();
       await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
-      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       recents = await page.locator(".col-recent-tile")
         .evaluateAll((els) => els.map((el) => el.dataset.hex));
@@ -3890,7 +3890,7 @@ async function main() {
     });
 
     await check("opacity slider draws a translucent stroke, previewed mid-drag", async () => {
-      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       // The pen first: filling a slider leaves the focus
       // on it, and a focused slider swallows the "p" key
@@ -3942,7 +3942,7 @@ async function main() {
     });
 
     await check("applying a colour and opacity recolours a stroke in one undo step", async () => {
-      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       // The translucent red stroke from the last check, on
       // its own line: select it, pick blue at 30% opacity,
@@ -3971,7 +3971,7 @@ async function main() {
     });
 
     await check("recolouring with opacity on a locked layer is refused", async () => {
-      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       const stroke = strokes().find((it) => it.kind.Stroke.opacity === 50);
       assert.ok(stroke);
@@ -4007,7 +4007,7 @@ async function main() {
       if (isOn !== on) await page.locator(".col-fill-toggle").click();
     };
     await check("gradient editor draws a gradient stroke, preview included", async () => {
-      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       // The pen first: filling a slider leaves the focus
       // on it, and a focused slider swallows the "p" key,
@@ -4111,7 +4111,7 @@ async function main() {
     });
 
     await check("applying a gradient recolours a selected stroke in one undo step", async () => {
-      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       // The gradient stroke from the last check, on its
       // own line: select it, then edit its second stop
@@ -4155,7 +4155,7 @@ async function main() {
     });
 
     await check("gradient stops move, add and remove on the strip", async () => {
-      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       // The gradient is on from the last check, two
       // stops: red at 0, blue at 100. The + adds a stop
@@ -4193,7 +4193,7 @@ async function main() {
     });
 
     await check("turning the gradient off returns the stroke to solid", async () => {
-      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       const before = strokes().find((it) => it.kind.Stroke.gradient);
       assert.ok(before);
@@ -4219,7 +4219,7 @@ async function main() {
       });
     });
     await check("the colour panel heights, solid and gradient", async () => {
-      await page.locator('.plugin-tab[aria-label="Colour Library"]').click();
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
       await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
       // Solid first: an earlier check may have left the
       // gradient on, and the solid measurement must be

@@ -1,4 +1,4 @@
-// Unit tests for the Colour Library palette store
+// Unit tests for the Color Management palette store
 // (plugins/colours/store.ts) and its hex helper
 // (plugins/colours/color.ts): pure data, no DOM, no API.
 import { describe, expect, it } from "vitest";
