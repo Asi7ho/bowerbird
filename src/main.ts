@@ -27,7 +27,7 @@ import { showRecoveryOffer } from "./ui/recovery-dialog";
 import {
   Board, Camera, Item, Layer, Pt, ShapeKind, Size, StrokeGradient,
   applyColourDataPatch, boardGet, centre, clampZoom, createLayer, defaultLayer, deleteLayer, elementPoint, elementSize,
-  getBoardExtension, healDuplicateIds, healLayers, hitTest, isItemLocked, isItemVisible, itemLayerId, itemsCentre,
+  getBoardExtension, healDuplicateIds, healLayers, hitTest, isItemLocked, isItemVisible, isValidCurvePoints, itemLayerId, itemsCentre,
   lassoSelect, layerById, marquee, moveLayer, moveSelection, normaliseGradient, removeBoardExtension, renameLayer,
   resizeItem, screenToWorld, select, setBoardExtension, setItemLayer, setLayerLocked,
   setLayerVisible, strokesWithin, zoomCamera,
@@ -41,7 +41,7 @@ import {
   initPlugins, isSettingsUIOpen,
   openSettingsUI,
   refreshSettingsUI, registerShellElements,
-  type PluginHost,
+  type PluginHost, type StrokeDefaults,
 } from "./plugins/host";
 
 // ---------------------------------------------------------------- state
@@ -255,8 +255,8 @@ function zoomCentre(factor: number): void {
   zoomAt({ x: s.x / 2, y: s.y / 2 }, factor);
 }
 // Apply one item patch: position, size, group, layer, and data —
-// for plugin cards only, plus a colour patch on a stroke or a
-// swatch. Shared by updateItem and updateItems.
+// for plugin cards only, plus a colour or brush patch on a
+// stroke or a swatch. Shared by updateItem and updateItems.
 function applyPatch(it: Item, patch: { pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }): void {
   if (patch.pos) it.pos = patch.pos;
   if (patch.size) it.size = patch.size;
@@ -520,6 +520,11 @@ async function init(): Promise<void> {
   // Panel tab order, loaded with the board: the plugin system
   // applies it once panels are registered, and saves it back
   // whenever the user drags a tab.
+  // Stroke defaults, per core draw tool: what a brush plugin
+  // set for the next stroke. Session state, like the pen
+  // colour — not saved in board JSON. Unset fields use the
+  // tool's built-ins.
+  const strokeDefaults: Record<"pen" | "pencil" | "highlighter", StrokeDefaults> = { pen: {}, pencil: {}, highlighter: {} };
   const pluginHost: PluginHost = {
     getBoard: () => C.board,
     getSelected: () => C.selected,
@@ -853,6 +858,32 @@ async function init(): Promise<void> {
       }
       emitPluginEvent("pen");
       return true;
+    },
+    getStrokeDefaults: (kind) => ({ ...strokeDefaults[kind] }),
+    setStrokeDefaults: (kind, defaults) => {
+      // A call replaces the kind's defaults whole: an
+      // omitted field uses the built-in. Bad values are
+      // ignored field by field, never stored.
+      const next: StrokeDefaults = {};
+      if (typeof defaults.width === "number" && isFinite(defaults.width)) next.width = Math.min(32, Math.max(1, defaults.width));
+      if (defaults.texture === null || typeof defaults.texture === "string") next.texture = defaults.texture;
+      if (typeof defaults.marker === "boolean") next.marker = defaults.marker;
+      if (defaults.curve === null) next.curve = null;
+      else if (isValidCurvePoints(defaults.curve)) {
+        // Copy the handles too: a shared handle object
+        // would let the plugin reshape the stored default
+        // without another setStrokeDefaults call.
+        next.curve = defaults.curve.map((p) => {
+          const q: { x: number; y: number; out?: { dx: number; dy: number }; in?: { dx: number; dy: number } } = { x: p.x, y: p.y };
+          if (p.out) q.out = { ...p.out };
+          if (p.in) q.in = { ...p.in };
+          return q;
+        });
+      }
+      strokeDefaults[kind] = next;
+    },
+    clearStrokeDefaults: (kind) => {
+      strokeDefaults[kind] = {};
     },
     getCamera: () => C.board.camera,
     screenToWorld: (clientX, clientY) => toWorld(boardPoint(clientX, clientY)),

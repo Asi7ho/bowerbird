@@ -1,0 +1,1 @@
+{"apiVersion":"2","contributions":{"panels":[{"id":"brushes","title":"Brush Library"}]},"description":"Brush presets with texture, size and pressure curve. Apply a brush to the selected strokes, or draw with it.","id":"brushes","main":"main.ts","name":"Brush Library","permissions":["board:read","board:write","pen","storage"],"styles":["style.css"],"version":"1.0.0"}

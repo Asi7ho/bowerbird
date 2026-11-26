@@ -32,9 +32,13 @@ export function dragPreview(id: string, tag: string, toPreview = false): SVGElem
 // stroke visibly thickens as it is drawn. `width` is the
 // tool's base width: the pencil draws thinner than the pen,
 // the highlighter much wider. A marker (highlighter) draws
-// translucent, like the stored stroke.
-export function updateLiveStroke(points: Pt[], pressures: number[], width: number, marker: boolean, pencil = false, color?: string, opacityPct = 100, gradient?: StrokeGradient | null): void {
-  const el = dragPreview("live-stroke", "g");
+// translucent, like the stored stroke. It lives in the
+// preview layer above #cards, like the shape preview: a
+// stroke drawn over an opaque card (a note, a photo) stays
+// visible while it is drawn, instead of hiding under the
+// card and only appearing on release.
+export function updateLiveStroke(points: Pt[], pressures: number[], width: number, marker: boolean, pencil = false, color?: string, opacityPct = 100, gradient?: StrokeGradient | null, texture?: string): void {
+  const el = dragPreview("live-stroke", "g", true);
   while (el.firstChild) el.removeChild(el.firstChild);
   const solid = color ?? S.api.pen.getColor();
   // A gradient preview carries its own def inside the
@@ -65,11 +69,12 @@ export function updateLiveStroke(points: Pt[], pressures: number[], width: numbe
     el.appendChild(defs);
     paint = "url(#live-stroke-grad)";
   }
-  // A pencil stroke shows its graphite texture while it
-  // is being drawn, not only once it is committed.
-  if (pencil) el.setAttribute("filter", "url(#pencil-texture)");
+  // A textured stroke shows its filter while it is being
+  // drawn, like the pencil shows its graphite texture.
+  const filter = texture ? `url(#texture-${texture})` : pencil ? "url(#pencil-texture)" : null;
+  if (filter) el.setAttribute("filter", filter);
   else el.removeAttribute("filter");
-  if (pencil && points.length > 0) {
+  if ((pencil || texture) && points.length > 0) {
     // Pin the filter region for the whole drag. Without
     // this, the group's box — and so the filter region —
     // grows with every move, and the turbulence is
@@ -100,15 +105,16 @@ export function updateLiveStroke(points: Pt[], pressures: number[], width: numbe
 }
 // Remove the live stroke node outright: a drag that ends
 // without a commit renders nothing, so only this explicit
-// clear ends the preview.
+// clear ends the preview. It lives in the preview layer
+// (see updateLiveStroke), not the world layer.
 export function clearLiveStroke(): void {
-  S.worldEl.querySelector("#live-stroke")?.remove();
+  S.previewWorldEl.querySelector("#live-stroke")?.remove();
 }
 // The live shape, drawn while a shape tool drags, in the
 // pen colour — the same shape the drag commits on release.
 // It lives in the preview layer above #cards, so cards
 // cannot cover it mid-drag.
-export function updateShapePreview(shape: string, x0: number, y0: number, w: number, h: number, color: string, outline: boolean): void {
+export function updateShapePreview(shape: string, x0: number, y0: number, w: number, h: number, color: string, outline: boolean, width = 4): void {
   // An outline shape previews as a stroke, not a fill.
   const fillAttr = outline ? "none" : color;
   const strokeAttr = outline ? color : "none";
@@ -118,18 +124,18 @@ export function updateShapePreview(shape: string, x0: number, y0: number, w: num
     el.setAttribute("width", String(w)); el.setAttribute("height", String(h));
     el.setAttribute("rx", "12");
     el.setAttribute("fill", fillAttr); el.setAttribute("fill-opacity", outline ? "1" : "0.85");
-    el.setAttribute("stroke", strokeAttr); el.setAttribute("stroke-width", outline ? "4" : "0");
+    el.setAttribute("stroke", strokeAttr); el.setAttribute("stroke-width", outline ? String(width) : "0");
   } else if (shape === "ellipse") {
     const el = dragPreview("shape-preview", "ellipse", true);
     el.setAttribute("cx", String(x0 + w / 2)); el.setAttribute("cy", String(y0 + h / 2));
     el.setAttribute("rx", String(w / 2)); el.setAttribute("ry", String(h / 2));
     el.setAttribute("fill", fillAttr); el.setAttribute("fill-opacity", outline ? "1" : "0.85");
-    el.setAttribute("stroke", strokeAttr); el.setAttribute("stroke-width", outline ? "4" : "0");
+    el.setAttribute("stroke", strokeAttr); el.setAttribute("stroke-width", outline ? String(width) : "0");
   } else {
     const el = dragPreview("shape-preview", "polygon", true);
     el.setAttribute("points", S.api.shapes.previewPoints(shape, x0, y0, w, h));
     el.setAttribute("fill", fillAttr); el.setAttribute("fill-opacity", outline ? "1" : "0.85");
-    el.setAttribute("stroke", strokeAttr); el.setAttribute("stroke-width", outline ? "4" : "0");
+    el.setAttribute("stroke", strokeAttr); el.setAttribute("stroke-width", outline ? String(width) : "0");
     el.setAttribute("stroke-linejoin", "round");
   }
 }

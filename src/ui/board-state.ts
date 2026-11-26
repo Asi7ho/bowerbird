@@ -88,9 +88,9 @@ interface BoardState {
   // toggled by L, with no toolbar button.
   lassoMode: boolean;
   tool: Tool;
-  // The draw tool last chosen (pencil, pen, highlighter or
-  // eraser). The P shortcut activates this one, not always
-  // the pen — so a pencil stays a pencil.
+  // The draw tool last chosen (pen or eraser). The P
+  // shortcut activates this one, not always the pen — so
+  // an eraser stays an eraser.
   lastDrawTool: Tool | null;
   // The geometry shape last chosen (rectangle, ellipse,
   // triangle, …). The R shortcut activates this one, not

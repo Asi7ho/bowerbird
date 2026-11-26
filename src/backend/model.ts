@@ -2,8 +2,8 @@
 // GPUI board so existing board.json files load unchanged.
 // Markdown lives in markdown.ts.
 
-import type { Anchor, ArrangeOptions, Block, Board, Camera, GradientStop, GroupEntry, ImportSource, Item, Kind, Layer, Pt, Segment, ShapeKind, Size, StrokeGradient } from "bowerbird-plugin-api";
-export type { Anchor, ArrangeOptions, Block, Board, Camera, GradientStop, GroupEntry, ImportSource, Item, Kind, Layer, Pt, Segment, ShapeKind, Size, StrokeGradient };
+import type { Anchor, ArrangeOptions, Block, Board, Camera, CurvePoint, GradientStop, GroupEntry, ImportSource, Item, Kind, Layer, Pt, Segment, ShapeKind, Size, StrokeGradient } from "bowerbird-plugin-api";
+export type { Anchor, ArrangeOptions, Block, Board, Camera, CurvePoint, GradientStop, GroupEntry, ImportSource, Item, Kind, Layer, Pt, Segment, ShapeKind, Size, StrokeGradient };
 
 // Shape outline fractions, in % of the shape's box. The single
 // source of truth for a shape's geometry: cards.ts renders the
@@ -352,12 +352,11 @@ function itemHit(board: Board, item: Item, world: Pt): boolean {
     const shape = item.kind.Shape.shape;
     // An outline shape is a stroked edge, not a filled
     // area: its interior is empty, so only the edge
-    // selects it. The outline stroke is 4px wide; the
-    // tolerance matches the stroke convention (half the
-    // width + 6, floored at 8), so the edge is as easy to
-    // grab as a pen stroke.
+    // selects it. The tolerance matches the stroke
+    // convention (half the width + 6, floored at 8), so
+    // the edge is as easy to grab as a pen stroke.
     if (item.kind.Shape.outline === true) {
-      const tol = 8;
+      const tol = Math.max(8, (item.kind.Shape.width ?? 4) / 2 + 6);
       if (shape === "rect") {
         const { x, y } = item.pos, { w, h } = item.size;
         const inOuter = p.x >= x - tol && p.x <= x + w + tol && p.y >= y - tol && p.y <= y + h + tol;
@@ -418,6 +417,84 @@ export function hitTest(board: Board, world: Pt): number | null {
   return null;
 }
 
+// A pressure curve as control points: raw stylus pressure
+// to the pressure the stroke stores, piecewise-linear.
+// The Brush Library plugin has the same few lines in its
+// own curve module — the core cannot import from a plugin,
+// so the math lives here too, for the core draw tools.
+export function applyPressureCurve(pressure: number, curve: ReadonlyArray<CurvePoint> | null): number {
+  const p = Math.min(1, Math.max(0, pressure));
+  if (!curve || curve.length === 0) return p;
+  if (p <= curve[0].x) return curve[0].y;
+  for (let i = 1; i < curve.length; i++) {
+    if (p <= curve[i].x) {
+      const a = curve[i - 1], b = curve[i];
+      // No handles on either side: the straight line,
+      // exactly as before — an untouched curve is untouched.
+      if (!a.out && !b.in) {
+        const t = (p - a.x) / (b.x - a.x);
+        return a.y + t * (b.y - a.y);
+      }
+      return cubicPressureAt(a, b, p);
+    }
+  }
+  return curve[curve.length - 1].y;
+}
+
+// The twin of the Brush Library's cubic in
+// plugins/brushes/curve.ts: the core cannot import a
+// plugin, so the same small maths lives here too.
+function cubicPressureAt(a: CurvePoint, b: CurvePoint, p: number): number {
+  if (p <= a.x) return a.y;
+  if (p >= b.x) return b.y;
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const c1x = Math.min(b.x, Math.max(a.x, a.x + (a.out?.dx ?? dx / 3)));
+  const c1y = a.y + (a.out?.dy ?? dy / 3);
+  const c2x = Math.min(b.x, Math.max(a.x, b.x + (b.in?.dx ?? -dx / 3)));
+  const c2y = b.y + (b.in?.dy ?? -dy / 3);
+  const coord = (p0: number, p1: number, p2: number, p3: number, t: number): number => {
+    const u = 1 - t;
+    return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
+  };
+  let lo = 0, hi = 1;
+  for (let i = 0; i < 30; i++) {
+    const t = (lo + hi) / 2;
+    if (coord(a.x, c1x, c2x, b.x, t) < p) lo = t; else hi = t;
+  }
+  const t = (lo + hi) / 2;
+  return Math.min(1, Math.max(0, coord(a.y, c1y, c2y, b.y, t)));
+}
+
+// A curve from across the plugin API: 2..8 points, x
+// strictly rising 0..1, y 0..1, with optional in/out
+// bezier handles (offsets from the point, each within
+// the graph). A bad shape is ignored, never stored as a
+// stroke default.
+export function isValidCurvePoints(value: unknown): value is CurvePoint[] {
+  if (!Array.isArray(value) || value.length < 2 || value.length > 8) return false;
+  for (const p of value) {
+    if (!p || typeof p !== "object" || Array.isArray(p)) return false;
+    const { x, y, out, in: inn } = p as Record<string, unknown>;
+    if (typeof x !== "number" || typeof y !== "number" || !isFinite(x) || !isFinite(y)) return false;
+    if (x < 0 || x > 1 || y < 0 || y > 1) return false;
+    if (!isValidCurveHandle(out) || !isValidCurveHandle(inn)) return false;
+  }
+  for (let i = 1; i < value.length; i++) {
+    if (value[i].x <= value[i - 1].x) return false;
+  }
+  return true;
+}
+
+// A handle is valid when absent, or a pair of finite
+// offsets no longer than the graph.
+function isValidCurveHandle(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const { dx, dy } = value as Record<string, unknown>;
+  return typeof dx === "number" && typeof dy === "number" && isFinite(dx) && isFinite(dy)
+    && Math.abs(dx) <= 1 && Math.abs(dy) <= 1;
+}
+
 // A stylus reports pressure 0..1; a mouse reports 0.5 while a
 // button is down, so a mouse stroke is exactly its base width.
 // Width follows pressure around the base width, floored so a
@@ -445,9 +522,9 @@ export function strokeMaxWidth(stroke: { width: number; pressures?: number[] }):
 // release.
 export function strokeOpacity(stroke: { opacity?: number; marker: boolean }): number {
   const base = stroke.opacity ?? 100;
-  // Rounded to three decimals: 0.3 × 0.45 must paint as
-  // 0.135, not 0.13500000000000001.
-  return Math.round((base / 100) * (stroke.marker ? 0.45 : 1) * 1000) / 1000;
+  // Rounded to three decimals: 0.3 × 0.65 must paint as
+  // 0.195, not 0.19500000000000001.
+  return Math.round((base / 100) * (stroke.marker ? 0.65 : 1) * 1000) / 1000;
 }
 
 // Whether a stroke's pressures actually vary: a pen held at
@@ -1023,22 +1100,33 @@ export function linearGradientCoords(angle: number, box: { x: number; y: number;
   };
 }
 
+// A texture id, as a brush patch or a registry entry
+// carries it: a letter first, then letters, digits,
+// dashes and underscores, so it is safe inside an SVG
+// filter id (url(#texture-<id>)) and a board file.
+export function isTextureId(id: unknown): id is string {
+  return typeof id === "string" && /^[A-Za-z][A-Za-z0-9_-]{0,63}$/.test(id);
+}
+
 // A colour data patch: the one `data` edit a plugin may make
-// on a core card. A stroke takes { color?, opacity?, gradient? } — a
-// non-empty subset of the three, each validated: the colour
-// is a normalised hex, the opacity a number 0–100, the
-// gradient a normalised linear gradient — or null, which
-// clears the gradient and leaves the stroke solid. A
+// on a core card. A stroke takes { color?, opacity?,
+// gradient?, texture?, width? } — a non-empty subset of
+// the five, each validated: the colour is a normalised
+// hex, the opacity a number 0–100, the gradient a
+// normalised linear gradient — or null, which clears the
+// gradient and leaves the stroke solid — the texture a
+// registered texture id, or null to clear it, and the
+// width the stroke's base width, 0 < width <= 64. A
 // swatch takes { hex }; anything else is not a colour
 // patch. A patch that leaves a field out leaves that
 // field alone, so recolouring a translucent stroke at
 // opacity 100 has to send opacity: 100 to restore it.
-export function colourDataPatch(item: Item, data: unknown): { color?: string; opacity?: number; gradient?: StrokeGradient | null } | { hex: string } | null {
+export function colourDataPatch(item: Item, data: unknown): { color?: string; opacity?: number; gradient?: StrokeGradient | null; texture?: string | null; width?: number } | { hex: string } | null {
   if (!data || typeof data !== "object" || Array.isArray(data)) return null;
   const keys = Object.keys(data);
   if ("Stroke" in item.kind) {
-    if (keys.length === 0 || keys.some((k) => k !== "color" && k !== "opacity" && k !== "gradient")) return null;
-    const patch: { color?: string; opacity?: number; gradient?: StrokeGradient | null } = {};
+    if (keys.length === 0 || keys.some((k) => k !== "color" && k !== "opacity" && k !== "gradient" && k !== "texture" && k !== "width")) return null;
+    const patch: { color?: string; opacity?: number; gradient?: StrokeGradient | null; texture?: string | null; width?: number } = {};
     if ("color" in data) {
       const value = (data as { color?: unknown }).color;
       if (typeof value !== "string") return null;
@@ -1060,6 +1148,16 @@ export function colourDataPatch(item: Item, data: unknown): { color?: string; op
         if (!gradient) return null;
         patch.gradient = gradient;
       }
+    }
+    if ("texture" in data) {
+      const value = (data as { texture?: unknown }).texture;
+      if (value !== null && !isTextureId(value)) return null;
+      patch.texture = value;
+    }
+    if ("width" in data) {
+      const value = (data as { width?: unknown }).width;
+      if (typeof value !== "number" || !isFinite(value) || value <= 0 || value > 64) return null;
+      patch.width = value;
     }
     return patch;
   }
@@ -1094,6 +1192,11 @@ export function applyColourDataPatch(item: Item, data: unknown): boolean {
       if (patch.gradient === null) delete item.kind.Stroke.gradient;
       else item.kind.Stroke.gradient = patch.gradient;
     }
+    if (patch.texture !== undefined) {
+      if (patch.texture === null) delete item.kind.Stroke.texture;
+      else item.kind.Stroke.texture = patch.texture;
+    }
+    if (patch.width !== undefined) item.kind.Stroke.width = patch.width;
   }
   return true;
 }

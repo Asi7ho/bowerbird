@@ -1272,7 +1272,7 @@ export function attachWindowListeners(): void {
     // by remembering it.
     else if (matches(e, "select")) setTool("select");
     // P activates the draw tool last chosen, not always the
-    // pen: a pencil stays a pencil. Before any draw tool is
+    // pen: an eraser stays an eraser. Before any draw tool is
     // used it is the pen, the draw button's default.
     else if (matches(e, "pen")) setTool(S.lastDrawTool ?? PEN_TOOL_ID);
     else if (matches(e, "connector")) setTool(CONNECTOR_TOOL_ID);

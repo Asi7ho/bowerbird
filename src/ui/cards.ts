@@ -18,8 +18,8 @@ export const manifest: PluginManifest = {
 };
 
 type TextData = { text: string; bold: boolean; size: number; color: string; bg?: string };
-type ShapeData = { shape: string; fill: string; outline?: boolean };
-type StrokeData = { points: { x: number; y: number }[]; color: string; width: number; marker: boolean; pressures?: number[]; pencil?: boolean; opacity?: number; gradient?: StrokeGradient | null };
+type ShapeData = { shape: string; fill: string; outline?: boolean; width?: number };
+type StrokeData = { points: { x: number; y: number }[]; color: string; width: number; marker: boolean; pressures?: number[]; pencil?: boolean; opacity?: number; gradient?: StrokeGradient | null; texture?: string };
 type ImageData = { path: string };
 type UrlCardData = { url: string; title: string | null; description: string | null; image?: string | null; icon?: string | null; embed?: boolean };
 type PdfCardData = { path: string; size_bytes: number };
@@ -63,11 +63,12 @@ function shapeClipPath(kind: string): string | null {
 // An outline shape: the same geometry as the filled shape,
 // drawn as an SVG stroke with no fill, so the line follows
 // the shape — a triangle's outline is a triangle, not a
-// rectangle. The stroke is 4px, inset by half its width so
-// it is not clipped by the card edge. The fractions match
+// rectangle. The stroke is the shape's width (4 before
+// widths existed), inset by half its width so it is not
+// clipped by the card edge. The fractions match
 // shapeClipPath above.
-function shapeOutlineSvg(shape: string, w: number, h: number, color: string): string {
-  const sw = 4, inset = sw / 2;
+function shapeOutlineSvg(shape: string, w: number, h: number, color: string, width = 4): string {
+  const sw = width, inset = sw / 2;
   const stroke = `fill="none" stroke="${color}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"`;
   const frac: Record<string, Array<[number, number]>> = {
     triangle: [[0.5, 0], [1, 1], [0, 1]],
@@ -196,7 +197,7 @@ export function activate(api: PluginContext): void {
     title: "Shape",
     render: (item, data, plain = false) => {
       const c = chrome(item, plain);
-      const { shape, fill, outline } = data as ShapeData;
+      const { shape, fill, outline, width } = data as ShapeData;
       const fillColor = safeColor(fill, "#1A1A1A");
       const radius = shape === "ellipse" ? "50%" : shape === "rect" ? "12px" : "0px";
       // An outline shape is a stroked SVG, not a filled
@@ -204,7 +205,7 @@ export function activate(api: PluginContext): void {
       // for a triangle. A shape saved before outlines
       // existed has no outline flag, and draws filled.
       if (outline) {
-        return `<div class="${c.cls} shape" data-id="${c.id}" style="${c.style}background:transparent;border:none;border-radius:${radius}"><div class="inner" style="width:100%;height:100%">${shapeOutlineSvg(shape, item.size.w, item.size.h, fillColor)}</div></div>`;
+        return `<div class="${c.cls} shape" data-id="${c.id}" style="${c.style}background:transparent;border:none;border-radius:${radius}"><div class="inner" style="width:100%;height:100%">${shapeOutlineSvg(shape, item.size.w, item.size.h, fillColor, width ?? 4)}</div></div>`;
       }
       // Outer card is transparent with no hairline border,
       // so an ellipse is really an ellipse: a filled outer
@@ -256,7 +257,6 @@ export function activate(api: PluginContext): void {
       const pad = Math.ceil(strokeMaxWidth(st) / 2) + 1;
       const vw = Math.max(1, maxX - minX) + pad * 2;
       const vh = Math.max(1, maxY - minY) + pad * 2;
-      const local = pts.map((p) => ({ x: p.x - minX + pad, y: p.y - minY + pad }));
       const color = safeColor(st.color, "#1A1A1A");
       // A gradient stroke paints through an SVG
       // <linearGradient> mapped across the stroke's own
@@ -265,36 +265,52 @@ export function activate(api: PluginContext): void {
       // card's. The id is unique per stroke, and the def
       // lives inside this card's own svg, so two cards
       // never share one. A missing or invalid gradient is
-      // a solid stroke, exactly as on an old board.
+      // a solid stroke, exactly as on an old board. The
+      // box is in world coordinates, like the path below.
       const gradient = normaliseGradient(st.gradient);
       const paint = gradient ? `url(#grad-${c.id})` : color;
       let defs = "";
       if (gradient) {
-        const coords = linearGradientCoords(gradient.angle, { x: pad, y: pad, w: Math.max(1, maxX - minX), h: Math.max(1, maxY - minY) });
+        const coords = linearGradientCoords(gradient.angle, { x: minX, y: minY, w: Math.max(1, maxX - minX), h: Math.max(1, maxY - minY) });
         const stops = gradient.stops.map((s) => `<stop offset="${s.offset}%" stop-color="${s.color}" />`).join("");
         defs = `<defs><linearGradient id="grad-${c.id}" gradientUnits="userSpaceOnUse" x1="${coords.x1}" y1="${coords.y1}" x2="${coords.x2}" y2="${coords.y2}">${stops}</linearGradient></defs>`;
       }
       // The stroke's own opacity multiplies with the
-      // marker's 0.45 (see strokeOpacity): a 50% marker
-      // paints at 0.225, a 50% pen at 0.5. Fully opaque
+      // marker's 0.65 (see strokeOpacity): a 50% marker
+      // paints at 0.325, a 50% pen at 0.5. Fully opaque
       // paint carries no attribute, exactly as before.
       const op = strokeOpacity(st);
       const marker = op !== 1 ? ` opacity="${String(op)}"` : "";
+      // A textured stroke renders through its filter while
+      // the texture is registered; an unregistered id (its
+      // plugin disabled) renders plain. The pencil filter
+      // is the fallback when no texture is set. The id
+      // comes from the registry, never from the board file
+      // unchecked, so it is safe inside url(#...).
+      const texture = st.texture && api.brushes.listTextures().some((t) => t.id === st.texture) ? st.texture : null;
+      const filter = texture ? `url(#texture-${texture})` : st.pencil ? "url(#pencil-texture)" : null;
       let inner = "";
-      if (st.pencil) inner += `<g filter="url(#pencil-texture)">`;
+      // The stroke is drawn in world coordinates, like the
+      // drag preview: the turbulence is sampled in the
+      // svg's user space, so a card drawn in local
+      // coordinates samples a different patch of noise and
+      // the texture visibly shifts on release. The viewBox
+      // origin is the stroke's box, so the card still
+      // lands in the same place on screen.
+      if (filter) inner += `<g filter="${filter}"><rect x="${pts[0].x - 256}" y="${pts[0].y - 256}" width="512" height="512" fill="none" />`;
       if (st.pressures && strokePressuresVary(st)) {
-        const spts = smoothStrokeSamples(local);
+        const spts = smoothStrokeSamples(pts);
         const sprs = smoothStrokePressures(st.pressures);
         for (let i = 0; i + 1 < spts.length; i++) {
           const w = pressureWidth(st.width, (sprs[i] + sprs[i + 1]) / 2);
           inner += `<line x1="${spts[i].x}" y1="${spts[i].y}" x2="${spts[i + 1].x}" y2="${spts[i + 1].y}" stroke="${paint}" stroke-width="${w}" stroke-linecap="round"${marker} />`;
         }
       } else {
-        const d = strokePath(item, local, color, st.width);
+        const d = strokePath(item, pts, color, st.width);
         inner += `<path d="${d}" fill="none" stroke="${paint}" stroke-width="${st.width}" stroke-linecap="round" stroke-linejoin="round"${marker} />`;
       }
-      if (st.pencil) inner += `</g>`;
-      return `<div class="${c.cls} stroke" data-id="${c.id}" style="${c.style}background:transparent;border:none"><svg viewBox="0 0 ${vw} ${vh}" style="position:absolute;left:${-pad}px;top:${-pad}px;width:calc(100% + ${pad * 2}px);height:calc(100% + ${pad * 2}px);overflow:visible" aria-hidden="true">${defs}${inner}</svg></div>`;
+      if (filter) inner += `</g>`;
+      return `<div class="${c.cls} stroke" data-id="${c.id}" style="${c.style}background:transparent;border:none"><svg viewBox="${minX - pad} ${minY - pad} ${vw} ${vh}" style="position:absolute;left:${-pad}px;top:${-pad}px;width:calc(100% + ${pad * 2}px);height:calc(100% + ${pad * 2}px);overflow:visible" aria-hidden="true">${defs}${inner}</svg></div>`;
     },
   });
 

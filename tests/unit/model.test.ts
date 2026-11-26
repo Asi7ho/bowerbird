@@ -31,6 +31,8 @@ import {
   parseInline,
   parseMarkdown,
   pointInPolygon,
+  applyPressureCurve,
+  isValidCurvePoints,
   pressureWidth,
   proportionalResize,
   rectCrossing,
@@ -106,14 +108,52 @@ describe("stylus pressure", () => {
     expect(strokeMaxWidth({ width: 3, pressures: [] })).toBe(3);
     expect(strokeMaxWidth({ width: 3, pressures: [0.1, 0.5, 1] })).toBe(6);
   });
-  it("strokeOpacity is 1 without an opacity, and multiplies with the marker's 0.45", () => {
+  it("strokeOpacity is 1 without an opacity, and multiplies with the marker's 0.65", () => {
     expect(strokeOpacity({ marker: false })).toBe(1);
-    expect(strokeOpacity({ marker: true })).toBe(0.45);
+    expect(strokeOpacity({ marker: true })).toBe(0.65);
     expect(strokeOpacity({ opacity: 50, marker: false })).toBe(0.5);
-    expect(strokeOpacity({ opacity: 50, marker: true })).toBe(0.225);
+    expect(strokeOpacity({ opacity: 50, marker: true })).toBe(0.325);
     expect(strokeOpacity({ opacity: 100, marker: false })).toBe(1);
-    expect(strokeOpacity({ opacity: 30, marker: true })).toBe(0.135);
+    expect(strokeOpacity({ opacity: 30, marker: true })).toBe(0.195);
     expect(strokeOpacity({ opacity: 0, marker: false })).toBe(0);
+  });
+  it("a pressure curve bends the pressure, and null is the diagonal", () => {
+    const steep = [{ x: 0, y: 0 }, { x: 0.5, y: 0.25 }, { x: 1, y: 1 }];
+    expect(applyPressureCurve(0.5, steep)).toBe(0.25);
+    expect(applyPressureCurve(0.25, steep)).toBe(0.125);
+    expect(applyPressureCurve(2, steep)).toBe(1);
+    expect(applyPressureCurve(0.5, null)).toBe(0.5);
+  });
+  it("a pressure curve with handles bends the same way as the plugin's", () => {
+    // The twin of the Brush Library's cubic: same curve,
+    // same value at pressure 0.5.
+    const bent = [
+      { x: 0, y: 0, out: { dx: 0.6, dy: 0.1 } },
+      { x: 1, y: 1, in: { dx: -0.1, dy: -0.6 } },
+    ];
+    expect(applyPressureCurve(0.5, bent)).toBeCloseTo(0.1682, 3);
+    expect(applyPressureCurve(0.25, bent)).toBeCloseTo(0.0588, 3);
+  });
+  it("isValidCurvePoints accepts a rising run and rejects the rest", () => {
+    expect(isValidCurvePoints([{ x: 0, y: 0 }, { x: 1, y: 1 }])).toBe(true);
+    expect(isValidCurvePoints([{ x: 0, y: 0 }])).toBe(false);
+    expect(isValidCurvePoints([{ x: 0, y: 0 }, { x: 0.5, y: 0.5 }, { x: 0.4, y: 0.6 }, { x: 1, y: 1 }])).toBe(false);
+    expect(isValidCurvePoints([{ x: 0, y: 0 }, { x: 1, y: 2 }])).toBe(false);
+    expect(isValidCurvePoints("no")).toBe(false);
+  });
+  it("isValidCurvePoints accepts handles and rejects a bad one", () => {
+    expect(isValidCurvePoints([
+      { x: 0, y: 0, out: { dx: 0.5, dy: 0 } },
+      { x: 1, y: 1, in: { dx: -0.5, dy: 0 } },
+    ])).toBe(true);
+    expect(isValidCurvePoints([
+      { x: 0, y: 0, out: { dx: NaN, dy: 0 } },
+      { x: 1, y: 1 },
+    ])).toBe(false);
+    expect(isValidCurvePoints([
+      { x: 0, y: 0, out: { dx: 2, dy: 0 } },
+      { x: 1, y: 1 },
+    ])).toBe(false);
   });
   it("strokePressuresVary needs a real spread, not jitter", () => {
     expect(strokePressuresVary({})).toBe(false);
@@ -751,8 +791,8 @@ describe("colour data patches", () => {
     );
   });
   it("refuses any other key, a bad hex, or a non-colour card", () => {
-    expect(colourDataPatch(stroke(1), { width: 5 })).toBeNull();
-    expect(colourDataPatch(stroke(1), { color: "#FF0000", width: 5 })).toBeNull();
+    expect(colourDataPatch(stroke(1), { marker: true })).toBeNull();
+    expect(colourDataPatch(stroke(1), { color: "#FF0000", marker: true })).toBeNull();
     expect(colourDataPatch(stroke(1), { color: "red" })).toBeNull();
     expect(colourDataPatch(stroke(1), { hex: "#FF0000" })).toBeNull();
     expect(colourDataPatch(swatch(2), { color: "#FF0000" })).toBeNull();
@@ -767,7 +807,7 @@ describe("colour data patches", () => {
     const w = swatch(2);
     expect(applyColourDataPatch(w, { hex: "#0000ff" })).toBe(true);
     expect((w.kind as { Swatch: { hex: string } }).Swatch.hex).toBe("#0000FF");
-    expect(applyColourDataPatch(s, { width: 5 })).toBe(false);
+    expect(applyColourDataPatch(s, { marker: true })).toBe(false);
     expect((s.kind as { Stroke: { color: string } }).Stroke.color).toBe("#0000FF");
   });
   it("accepts a gradient alone and with a colour, normalised and sorted by offset", () => {
@@ -793,6 +833,35 @@ describe("colour data patches", () => {
     );
     expect(applyColourDataPatch(s, { gradient: null })).toBe(true);
     expect((s.kind as { Stroke: { gradient?: unknown } }).Stroke.gradient).toBeUndefined();
+  });
+  it("accepts { texture }, { width }, or both on a stroke", () => {
+    expect(colourDataPatch(stroke(1), { texture: "graphite" })).toEqual({ texture: "graphite" });
+    expect(colourDataPatch(stroke(1), { width: 8 })).toEqual({ width: 8 });
+    expect(colourDataPatch(stroke(1), { texture: "chalk", width: 6 })).toEqual({ texture: "chalk", width: 6 });
+    expect(colourDataPatch(stroke(1), { texture: null })).toEqual({ texture: null });
+  });
+  it("refuses any other key, a bad id, a bad width, or a non-stroke card", () => {
+    expect(colourDataPatch(stroke(1), { marker: true })).toBeNull();
+    expect(colourDataPatch(stroke(1), { texture: "graphite", marker: true })).toBeNull();
+    expect(colourDataPatch(stroke(1), { texture: "1bad" })).toBeNull();
+    expect(colourDataPatch(stroke(1), { texture: "a b" })).toBeNull();
+    expect(colourDataPatch(stroke(1), { texture: 4 })).toBeNull();
+    expect(colourDataPatch(stroke(1), { width: 0 })).toBeNull();
+    expect(colourDataPatch(stroke(1), { width: -2 })).toBeNull();
+    expect(colourDataPatch(stroke(1), { width: 65 })).toBeNull();
+    expect(colourDataPatch(stroke(1), { width: NaN })).toBeNull();
+    expect(colourDataPatch(stroke(1), {})).toBeNull();
+    expect(colourDataPatch(stroke(1), null)).toBeNull();
+    expect(colourDataPatch(textCard(3, 0, 0), { texture: "graphite" })).toBeNull();
+  });
+  it("applyColourDataPatch sets texture and width, and null clears the texture", () => {
+    const s = stroke(1);
+    expect(applyColourDataPatch(s, { texture: "graphite", width: 6 })).toBe(true);
+    expect((s.kind as { Stroke: { texture?: string; width: number } }).Stroke.texture).toBe("graphite");
+    expect((s.kind as { Stroke: { texture?: string; width: number } }).Stroke.width).toBe(6);
+    expect(applyColourDataPatch(s, { texture: null })).toBe(true);
+    expect((s.kind as { Stroke: { texture?: string } }).Stroke.texture).toBeUndefined();
+    expect(applyColourDataPatch(s, { marker: true })).toBe(false);
   });
 });
 

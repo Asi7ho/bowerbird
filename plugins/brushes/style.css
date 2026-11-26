@@ -1,0 +1,449 @@
+/* Brush Library panel styles, scoped to .br-* classes and to this
+   plugin's panel. Rows are just a texture preview and a name:
+   no descriptive text, the brush's texture and size are in
+   the title on hover. */
+/* Panel mode: the panel fills the full height of the flush
+   dock, sharing it with any other open panel. The panel
+   body itself scrolls: the brushes, the editor and the
+   textures scroll together in the body, all reachable. */
+.plugin-panel[data-panel="brushes"] {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.plugin-panel[data-panel="brushes"] .plugin-panel-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.br-brushes {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-bottom: 12px;
+}
+
+/* A brush row: the texture sample beside the name, one
+   short line. No borders anywhere on the rows — the
+   selected row is a soft accent tint, and hovering is a
+   faint grey one. Delete is hover-only — a trash can on
+   every row is visual noise — and stays
+   keyboard-reachable: it shows while the row has focus,
+   so tabbing to it reveals it. */
+.br-brush {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  border-radius: 10px;
+  padding: 10px;
+  cursor: pointer;
+}
+
+.br-brush:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.br-brush.br-active {
+  background: rgba(0, 122, 255, 0.08);
+}
+
+.br-preview {
+  flex: none;
+  width: 108px;
+  height: 26px;
+}
+
+.br-preview svg {
+  width: 100%;
+  height: 26px;
+}
+
+.br-brush-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.br-brush .br-icon-btn {
+  opacity: 0;
+}
+
+.br-brush:hover .br-icon-btn,
+.br-brush:focus-within .br-icon-btn {
+  opacity: 1;
+}
+
+.br-brush-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+
+/* Prefixed, so these beat the core .plugin-panel-body
+   button rule on border, radius and padding. */
+.plugin-panel-body .br-icon-btn {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  font-size: 13px;
+  color: var(--grey);
+}
+
+.plugin-panel-body .br-icon-btn:hover:not(:disabled) {
+  background: var(--fill);
+  color: var(--ink);
+}
+
+/* Icons in the buttons: the toolbar's outline style —
+   stroke, no fill, sized to the button. */
+.plugin-panel-body .br-icon-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+
+.plugin-panel-body .br-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* The parameters below a brush: a card under its row, so
+   the open brush reads as one block — the row on top, its
+   draft underneath. */
+.br-expand {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px;
+}
+
+.br-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.br-label {
+  flex: none;
+  width: 64px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--grey);
+}
+
+/* Slider, in app style — the palette panel's treatment:
+   a 4px fill-grey track, a white circular thumb with a
+   hairline border and a soft shadow. No browser default. */
+.br-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  cursor: pointer;
+  height: 20px;
+  background: transparent;
+  outline: none;
+}
+
+.br-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fill);
+}
+
+.br-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-sm);
+}
+
+.br-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fill);
+}
+
+.br-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-sm);
+}
+
+.br-slider:hover::-webkit-slider-thumb,
+.br-slider:hover::-moz-range-thumb {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
+}
+
+.br-value {
+  flex: none;
+  width: 36px;
+  text-align: right;
+  font-size: 13px;
+  color: var(--grey);
+}
+
+/* The pressure graph: a white card with a light grid,
+   an ink curve, and white circular handles with a
+   hairline border — the slider thumb's look. */
+.br-graph-wrap {
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: #fff;
+  padding: 8px;
+}
+
+.br-graph {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.br-graph-frame {
+  fill: #fff;
+  stroke: none;
+}
+
+.br-graph-grid line {
+  stroke: var(--fill);
+  stroke-width: 1;
+}
+
+.br-graph-line {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.br-graph-dot {
+  fill: #fff;
+  stroke: var(--hairline);
+  stroke-width: 1;
+  cursor: grab;
+}
+
+/* The selected point: an accent ring, so the delete
+   badge and the Delete key have a visible target. */
+.br-graph-dot-selected {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+/* A handle's line to its point: a quiet hairline, so the
+   handles read as controls, not part of the curve. */
+.br-graph-handle-line {
+  stroke: var(--hairline);
+  stroke-width: 1;
+}
+
+/* A handle itself: a small white circle with an accent
+   ring, grabbed to bend the curve on that side. */
+.br-graph-handle {
+  fill: #fff;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  cursor: grab;
+}
+
+/* The delete badge on the selected middle point: a white
+   circle with an ink cross, above the point. */
+.br-graph-del-bg {
+  fill: #fff;
+  stroke: var(--hairline);
+  stroke-width: 1;
+}
+
+.br-graph-del-x {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.br-graph:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 12px;
+}
+
+
+
+/* The expansion's live preview: a hairline card, like
+   a brush row, with one large stroke through the draft
+   parameters — big enough to judge the texture before
+   saving it. */
+.br-tex-preview {
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: #fff;
+  padding: 12px;
+}
+
+.br-tex-preview svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* The parameter rows, tight: one line each, barely any
+   space between them, so the expansion reads as one block. */
+.br-expand-params {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.br-expand-name {
+  border: 1px solid var(--separator);
+  border-radius: 9px;
+  background: #fff;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ink);
+}
+
+.br-expand-name:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Save is the primary action: full width on its own
+   line. Cancel and Delete are quiet text underneath it,
+   side by side, not buttons competing for attention. */
+.br-expand-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.br-expand-actions > .br-btn {
+  flex: 1 1 auto;
+  justify-content: center;
+}
+
+.br-expand-actions-row {
+  display: flex;
+  gap: 6px;
+}
+
+.br-expand-actions-row .br-btn-quiet {
+  flex: 1 1 auto;
+}
+
+.plugin-panel-body .br-expand-actions .br-btn-quiet {
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  box-shadow: none;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--grey);
+  cursor: pointer;
+  text-align: center;
+}
+
+.plugin-panel-body .br-expand-actions .br-btn-quiet:hover {
+  background: var(--fill);
+  color: var(--ink);
+}
+
+.br-empty {
+  font-size: 13px;
+  color: var(--grey);
+}
+
+/* Prefixed, so this beats the core .plugin-panel-body
+   button rule (class + element beats a lone class) on
+   border, radius and padding alike. */
+.plugin-panel-body .br-btn {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--separator);
+  border-radius: 9px;
+  background: #fff;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+}
+
+.plugin-panel-body .br-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+
+.plugin-panel-body .br-btn:hover {
+  background: var(--fill);
+}
+
+
+
+/* The Settings reset button: the Settings neutral action —
+   white, separator border, 9px radius — so it reads as a
+   Settings control, not a panel one. */
+.br-settings-btn {
+  border: 1px solid var(--separator);
+  border-radius: 9px;
+  background: #fff;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--ink);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
+.br-settings-btn:hover {
+  background: var(--fill);
+}
+
