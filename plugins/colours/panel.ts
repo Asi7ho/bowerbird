@@ -262,7 +262,7 @@ function setGradient(next: StrokeGradient | null): void {
 function syncSelectedStop(hex: string): void {
   if (!gradient) return;
   const stops = gradient.stops.map((s, i) => (i === selectedStop ? { offset: s.offset, color: hex } : s));
-  setGradient({ angle: gradient.angle, stops });
+  setGradient({ angle: 0, stops });
 }
 
 function setGradientMode(on: boolean): void {
@@ -306,7 +306,7 @@ function addStop(): void {
   }
   const offset = Math.round(at);
   const next = [...gradient.stops, { offset, color: pickedHex() }];
-  setGradient({ angle: gradient.angle, stops: next });
+  setGradient({ angle: 0, stops: next });
   if (gradient) selectedStop = Math.max(0, gradient.stops.findIndex((s) => s.offset === offset));
   renderGradientEditor();
 }
@@ -315,7 +315,7 @@ function removeStop(i: number): void {
   if (!gradient || gradient.stops.length <= 2) return;
   const stops = gradient.stops.filter((_, j) => j !== i);
   selectedStop = Math.min(selectedStop, stops.length - 1);
-  setGradient({ angle: gradient.angle, stops });
+  setGradient({ angle: 0, stops });
   renderGradientEditor();
 }
 
@@ -404,7 +404,8 @@ function updatePicked(): void {
   // at its opacity, matching the preview swatch above it.
   if (gradient && gradientStripEl) {
     paintGradientStrip(gradient.stops);
-    gradientStripEl.title = opacity === 100 ? `${gradient.stops[0].color} to ${gradient.stops[gradient.stops.length - 1].color} gradient` : `${gradient.stops[0].color} to ${gradient.stops[gradient.stops.length - 1].color} gradient at ${opacity}%`;
+    const stripTitle = `${gradient.stops[0].color} to ${gradient.stops[gradient.stops.length - 1].color} gradient`;
+    gradientStripEl.title = opacity === 100 ? stripTitle : `${stripTitle} at ${opacity}%`;
   }
   if (pickedHexEl) pickedHexEl.textContent = hex;
   if (opacityInput && Number(opacityInput.value) !== opacity) opacityInput.value = String(opacity);
@@ -565,65 +566,62 @@ function renderControls(): void {
   // A slider release records the settled colour; the
   // input ticks of the drag do not.
   const settle = (): void => recordColour(pickedHex());
+  // One slider row: build it, append it, hand it back.
+  const channel = (label: string, cls: string, max: number, initial: number, onInput: (v: number) => void): { row: HTMLDivElement; input: HTMLInputElement; value: HTMLSpanElement } => {
+    const row = sliderRow(label, cls, max, initial, onInput, settle);
+    host.appendChild(row.row);
+    return row;
+  };
   if (mode === "hsl") {
-    const hue = sliderRow("Hue", "col-slider-hue", 360, base.h, (v) => setBase({ h: v }), settle);
+    const hue = channel("Hue", "col-slider-hue", 360, base.h, (v) => setBase({ h: v }));
     hueInput = hue.input;
     hueValue = hue.value;
-    host.appendChild(hue.row);
-    const sat = sliderRow("Saturation", "col-slider-sat", 100, base.s, (v) => setBase({ s: v }), settle);
+    const sat = channel("Saturation", "col-slider-sat", 100, base.s, (v) => setBase({ s: v }));
     satInput = sat.input;
     satValue = sat.value;
-    host.appendChild(sat.row);
-    const light = sliderRow("Lightness", "col-slider-light", 100, base.l, (v) => setBase({ l: v }), settle);
+    const light = channel("Lightness", "col-slider-light", 100, base.l, (v) => setBase({ l: v }));
     lightInput = light.input;
     lightValue = light.value;
-    host.appendChild(light.row);
   } else if (mode === "rgb") {
     const rgb = hexToRgb(pickedHex());
-    const red = sliderRow("Red", "col-slider-red", 255, rgb.r, (v) => {
+    const red = channel("Red", "col-slider-red", 255, rgb.r, (v) => {
       const cur = hexToRgb(pickedHex());
       setPickedHex(rgbToHex(v, cur.g, cur.b));
-    }, settle);
+    });
     redInput = red.input;
     redValue = red.value;
-    host.appendChild(red.row);
-    const green = sliderRow("Green", "col-slider-green", 255, rgb.g, (v) => {
+    const green = channel("Green", "col-slider-green", 255, rgb.g, (v) => {
       const cur = hexToRgb(pickedHex());
       setPickedHex(rgbToHex(cur.r, v, cur.b));
-    }, settle);
+    });
     greenInput = green.input;
     greenValue = green.value;
-    host.appendChild(green.row);
-    const blue = sliderRow("Blue", "col-slider-blue", 255, rgb.b, (v) => {
+    const blue = channel("Blue", "col-slider-blue", 255, rgb.b, (v) => {
       const cur = hexToRgb(pickedHex());
       setPickedHex(rgbToHex(cur.r, cur.g, v));
-    }, settle);
+    });
     blueInput = blue.input;
     blueValue = blue.value;
-    host.appendChild(blue.row);
   } else if (mode === "hsv") {
     const hsv = hexToHsv(pickedHex());
-    const hue = sliderRow("Hue", "col-slider-hsv-hue", 360, hsv.h, (v) => {
+    const hue = channel("Hue", "col-slider-hsv-hue", 360, hsv.h, (v) => {
       const cur = hexToHsv(pickedHex());
       setPickedHex(hsvToHex(v, cur.s, cur.v));
-    }, settle);
+    });
     hsvHueInput = hue.input;
     hsvHueValue = hue.value;
-    host.appendChild(hue.row);
-    const sat = sliderRow("Saturation", "col-slider-hsv-sat", 100, hsv.s, (v) => {
+    const sat = channel("Saturation", "col-slider-hsv-sat", 100, hsv.s, (v) => {
       const cur = hexToHsv(pickedHex());
       setPickedHex(hsvToHex(cur.h, v, cur.v));
-    }, settle);
+    });
     hsvSatInput = sat.input;
     hsvSatValue = sat.value;
-    host.appendChild(sat.row);
-    const val = sliderRow("Value", "col-slider-hsv-val", 100, hsv.v, (v) => {
+    const val = channel("Value", "col-slider-hsv-val", 100, hsv.v, (v) => {
       const cur = hexToHsv(pickedHex());
       setPickedHex(hsvToHex(cur.h, cur.s, v));
-    }, settle);
+    });
     hsvValInput = val.input;
     hsvValValue = val.value;
-    host.appendChild(val.row);
   } else {
     const input = document.createElement("input");
     input.type = "text";
@@ -733,7 +731,7 @@ function renderGradientStops(): void {
       const offset = Math.min(100, Math.max(0, stop.offset + step));
       if (offset === stop.offset) return;
       const stops = gradient.stops.map((s, j) => (j === i ? { offset, color: s.color } : s));
-      setGradient({ angle: gradient.angle, stops });
+      setGradient({ angle: 0, stops });
       if (gradient) selectedStop = Math.max(0, gradient.stops.findIndex((s) => s.offset === offset && s.color === stop.color));
       renderGradientStops();
     });
@@ -771,7 +769,7 @@ function renderGradientStops(): void {
         const offset = offsetAt(ev.clientX);
         if (offset === stop.offset) { renderGradientStops(); return; }
         const stops = gradient.stops.map((s, j) => (j === i ? { offset, color: s.color } : s));
-        setGradient({ angle: gradient.angle, stops });
+        setGradient({ angle: 0, stops });
         // setGradient sorts, so the dragged stop may have
         // a new index — follow it, by offset and colour.
         if (gradient) {
@@ -803,6 +801,22 @@ function renderGradientStops(): void {
     }
     strip.appendChild(wrap);
   });
+}
+
+// One colour tile in its wrap: the shared shape for
+// the harmony, recent and palette rows.
+function makeTile(hex: string, extraClass = "", selected = false): { wrap: HTMLDivElement; tile: HTMLButtonElement } {
+  const wrap = document.createElement("div");
+  wrap.className = "col-tile-wrap";
+  const tile = document.createElement("button");
+  tile.type = "button";
+  tile.className = `col-tile${extraClass ? ` ${extraClass}` : ""}${selected ? " selected" : ""}`;
+  tile.style.background = hex;
+  tile.dataset.hex = hex;
+  tile.title = hex;
+  tile.setAttribute("aria-label", hex);
+  wrap.appendChild(tile);
+  return { wrap, tile };
 }
 
 // The harmony type, from a small menu in the
@@ -879,18 +893,9 @@ function renderHarmonies(): void {
     if (d < best) { best = d; pickedIndex = i; }
   });
   colors.forEach((hex, i) => {
-    const wrap = document.createElement("div");
-    wrap.className = "col-tile-wrap";
-    const tile = document.createElement("button");
-    tile.type = "button";
-    tile.className = "col-tile col-harmony-tile" + (i === pickedIndex ? " selected" : "");
-    tile.style.background = hex;
-    tile.dataset.hex = hex;
-    tile.title = hex;
-    tile.setAttribute("aria-label", hex);
+    const { wrap, tile } = makeTile(hex, "col-harmony-tile", i === pickedIndex);
     tile.setAttribute("aria-pressed", String(i === pickedIndex));
     tile.addEventListener("click", () => applyAndRecord(hex));
-    wrap.appendChild(tile);
     list.appendChild(wrap);
   });
 }
@@ -904,17 +909,8 @@ function renderRecent(): void {
   section.style.display = recent.length === 0 ? "none" : "";
   list.innerHTML = "";
   for (const hex of recent) {
-    const wrap = document.createElement("div");
-    wrap.className = "col-tile-wrap";
-    const tile = document.createElement("button");
-    tile.type = "button";
-    tile.className = "col-tile col-recent-tile";
-    tile.style.background = hex;
-    tile.dataset.hex = hex;
-    tile.title = hex;
-    tile.setAttribute("aria-label", hex);
+    const { wrap, tile } = makeTile(hex, "col-recent-tile");
     tile.addEventListener("click", () => applyAndRecord(hex));
-    wrap.appendChild(tile);
     list.appendChild(wrap);
   }
 }
@@ -973,15 +969,7 @@ function renderPalettes(): void {
     const row = document.createElement("div");
     row.className = "col-tiles";
     palette.colors.forEach((hex, j) => {
-      const tileWrap = document.createElement("div");
-      tileWrap.className = "col-tile-wrap";
-      const tile = document.createElement("button");
-      tile.type = "button";
-      tile.className = "col-tile";
-      tile.style.background = hex;
-      tile.dataset.hex = hex;
-      tile.title = hex;
-      tile.setAttribute("aria-label", hex);
+      const { wrap, tile } = makeTile(hex);
       tile.addEventListener("click", () => applyAndRecord(hex));
       attachPlaceDrag(a, tile);
       const x = document.createElement("button");
@@ -991,8 +979,8 @@ function renderPalettes(): void {
       x.title = "Remove colour";
       x.setAttribute("aria-label", `Remove ${hex}`);
       x.addEventListener("click", () => updateStore(removeColour(store, index, j)));
-      tileWrap.append(tile, x);
-      row.appendChild(tileWrap);
+      wrap.appendChild(x);
+      row.appendChild(wrap);
     });
     // The + tile adds the picked colour, at the end of
     // the row, the same size as a tile.
