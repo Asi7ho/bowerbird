@@ -47,15 +47,15 @@ export const BUILTIN_TEXTURES: BuiltinTexture[] = [
   },
   {
     id: "chalk", label: "Chalk", family: "pencil",
-    // Chunky, dry, present: big irregular chunks with
-    // gaps between them. The chunks are big (coarse
-    // grain) and the grain keeps about half the ink, so
-    // a thin stroke still shows as chunks, not dust.
-    // The cut is hard, so the chunks have dark cores.
+    // Dry, dusty, pale: big irregular chunks with gaps,
+    // and the alpha capped so even the darkest chunk
+    // stays light grey — chalk on a board, not charcoal.
+    // The cut is hard, so the stroke breaks into patches.
     filterSvg:
-      grainMask(0.22, 3, 11, 6, -2.5)
+      grainMask(0.22, 3, 11, 4, -1.8)
       + `<feDisplacementMap in="SourceGraphic" in2="noise" scale="7" result="chunky" />`
-      + `<feComposite in="chunky" in2="grain" operator="in" />`,
+      + `<feComposite in="chunky" in2="grain" operator="in" result="broken" />`
+      + `<feComponentTransfer in="broken"><feFuncA type="linear" slope="0.7" intercept="0" /></feComponentTransfer>`,
   },
   {
     id: "grain", label: "Grain", family: "pen",
