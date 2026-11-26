@@ -4296,7 +4296,8 @@ async function main() {
       assert.equal(await page.locator('[id^="tool-plugin-brushes-"]').count(), 0);
       // Clicking Graphite with nothing selected makes it the
       // active brush: draw with it and the stroke carries the
-      // texture, at the preset's width.
+      // texture, at the pen width — picking a brush never
+      // changes it.
       await page.locator(".br-brush-name", { hasText: "Graphite" }).click();
       await page.mouse.move(650, 800);
       await page.mouse.down();
@@ -4306,7 +4307,7 @@ async function main() {
         const found = strokes().filter((it) => it.kind.Stroke.texture === "graphite");
         return found.length >= 1 ? found[found.length - 1] : null;
       });
-      assert.equal(stroke.kind.Stroke.width, 2);
+      assert.equal(stroke.kind.Stroke.width, 3);
       // The card renders through the texture filter.
       assert.equal(await page.evaluate(() => !!document.querySelector('#cards .stroke svg g[filter="url(#texture-graphite)"]')), true);
     });
@@ -4440,7 +4441,7 @@ async function main() {
       assert.ok(pressures.every((v) => v > 0.2 && v < 0.4));
     });
 
-    await check("applying a brush retextures a selected stroke, and undo restores it", async () => {
+    await check("applying a brush retextures a selected stroke and leaves its width alone, and undo restores it", async () => {
       const stroke = strokes().find((it) => it.kind.Stroke.texture === "graphite");
       assert.ok(stroke);
       await page.keyboard.press("v");
@@ -4449,12 +4450,12 @@ async function main() {
       await waitFor("stroke retextured to chalk", () =>
         strokes().find((it) => it.id === stroke.id)?.kind.Stroke.texture === "chalk" ? true : null,
       );
-      assert.equal(strokes().find((it) => it.id === stroke.id).kind.Stroke.width, 6);
+      assert.equal(strokes().find((it) => it.id === stroke.id).kind.Stroke.width, 3);
       await page.keyboard.press("Control+z");
       await waitFor("undo restores the graphite stroke", () =>
         strokes().find((it) => it.id === stroke.id)?.kind.Stroke.texture === "graphite" ? true : null,
       );
-      assert.equal(strokes().find((it) => it.id === stroke.id).kind.Stroke.width, 2);
+      assert.equal(strokes().find((it) => it.id === stroke.id).kind.Stroke.width, 3);
     });
 
     await check("erasing a textured stroke keeps the texture on the pieces", async () => {
@@ -4564,9 +4565,8 @@ async function main() {
         const names = await page.locator(".br-brush-name").allTextContents();
         return names.includes("Test Grain") ? true : null;
       });
-      // It is the selected brush, at Ink's size: size lives
-      // in the toolbar now, so a saved brush keeps its
-      // source brush's size.
+      // It is the selected brush, drawing at the pen width:
+      // a saved brush carries no size.
       assert.equal(await page.locator(".br-brush.br-active .br-brush-name").textContent(), "Test Grain");
       // Opening its parameters again starts from the new
       // brush's custom texture, so tweaking it keeps its values.
@@ -4587,11 +4587,9 @@ async function main() {
     });
 
     await check("the pen size drives shape outlines and arrows", async () => {
-      // The size is the pen's stroke-default width: pick a
-      // brush and its size goes onto the pen, then a new
-      // outline shape and a new arrow both take it. (The
-      // size lives in the toolbar, not the panel, so the
-      // brush's own size is what the pen takes.)
+      // The size is the pen's stroke-default width: picking
+      // a brush leaves it alone, so a new outline shape and
+      // a new arrow both take the pen width, not the brush's.
       // Escape first, so no stroke is selected: applying a
       // brush to a selection retextures it instead of
       // making it the active brush.
@@ -4611,8 +4609,8 @@ async function main() {
         const found = readBoard().items.filter((it) => "Shape" in it.kind && it.kind.Shape.outline);
         return found.length >= 1 ? found[found.length - 1] : null;
       });
-      assert.equal(shape.kind.Shape.width, 6);
-      assert.equal(await page.evaluate(() => document.querySelector('#cards .shape svg [stroke-width="6"]') !== null), true);
+      assert.equal(shape.kind.Shape.width, 3);
+      assert.equal(await page.evaluate(() => document.querySelector('#cards .shape svg [stroke-width="3"]') !== null), true);
       // An arrow takes it too.
       const before = readBoard().items.filter((it) => "Connector" in it.kind).length;
       await page.keyboard.press("a");
@@ -4622,7 +4620,7 @@ async function main() {
       await page.mouse.up();
       await waitFor("arrow saved", () => readBoard().items.filter((it) => "Connector" in it.kind).length > before ? true : null);
       const drawn = readBoard().items.filter((it) => "Connector" in it.kind).pop();
-      assert.equal(drawn.kind.Connector.width, 6);
+      assert.equal(drawn.kind.Connector.width, 3);
     });
 
     await check("undo works from the panel and takes back a deleted brush", async () => {
