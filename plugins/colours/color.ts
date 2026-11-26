@@ -202,10 +202,8 @@ export function hexToHsl(hex: string): { h: number; s: number; l: number } {  co
   return { h, s, l };
 }
 
-// Colour harmonies, copied from the old Palette plugin's
-// palettesFor: same five types, same maths — plugins are
-// self-contained, so the logic is duplicated here, not
-// imported. Each harmony is five colours from a picked
+// Colour harmonies: five types, same maths — plugins are
+// self-contained, so the logic lives here, not imported. Each harmony is five colours from a picked
 // colour, in order:
 //   Monochromatic — same hue, lightness steps, dark to
 //     light. Steps are -24, -12, 0, +12, +24 lightness,
