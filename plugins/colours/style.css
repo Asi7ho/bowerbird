@@ -1,0 +1,845 @@
+/* Color Management panel styles, scoped to .col-* classes and to this
+   plugin's panel. Tiles are just colours: no text on a tile,
+   the hex is in the title on hover, and the placed board
+   swatch shows its hex pill. */
+/* Panel mode: the panel fills the full height of the flush
+   dock, sharing it with any other open panel. The panel
+   body itself scrolls: the wheel is too tall to fix at the
+   top and still leave room for palettes when another panel
+   is open, so wheel, sliders and palettes scroll together
+   in the body, all reachable. */
+.plugin-panel[data-panel="colours"] {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.plugin-panel[data-panel="colours"] .plugin-panel-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.col-picker-section {
+  flex: none;
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--separator);
+}
+
+/* The gradient strip: the whole picked gradient, tall
+   enough to grab and to read — and the control itself,
+   with the stops as markers on it. */
+.col-gradient-strip {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 28px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  margin-bottom: 0;
+  touch-action: none;
+}
+
+/* One positioned wrapper per stop: the disc fills it,
+   and the × on the selected stop hangs off its corner. */
+.col-stop-marker-wrap {
+  position: absolute;
+  top: 50%;
+  width: 16px;
+  height: 16px;
+  transform: translate(-50%, -50%);
+}
+
+/* A gradient stop on the strip: a small disc in the
+   stop's colour. The selected one carries a blue ring,
+   like a selected tile. Prefixed, so this beats the
+   core .plugin-panel-body button rule on border,
+   radius and padding. */
+.plugin-panel-body .col-stop-marker {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25), inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+  cursor: grab;
+  touch-action: none;
+}
+
+.plugin-panel-body .col-stop-marker.selected {
+  outline: 2px solid #007AFF;
+  outline-offset: 1px;
+}
+
+.plugin-panel-body .col-stop-marker:active {
+  cursor: grabbing;
+}
+
+/* The × on the selected stop: a small white disc on
+   the wrapper's corner, its own click target — it
+   never starts a marker drag. Only on the selected
+   stop, and never at two stops. Small (12px) and
+   pushed off the corner, so the disc centre stays
+   free to grab: the × circle's nearest edge is 8px
+   from the marker's centre. */
+.plugin-panel-body .col-stop-marker-x {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 12px;
+  height: 12px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--grey);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
+.plugin-panel-body .col-stop-marker-x svg {
+  width: 8px;
+  height: 8px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.plugin-panel-body .col-stop-marker-x:hover {
+  /* Opaque, not the translucent panel fill the core
+     button hover would put here: the × sits on the
+     coloured strip, and the translucent fill would
+     let the strip show through and swallow the glyph. */
+  background: #efefef;
+  color: var(--ink);
+}
+
+/* The + beside the strip: a small white disc in the
+   editor row, adding a stop at the widest gap. Next
+   to the strip, not on it, so the stop at 100% keeps
+   its centre free to grab. */
+.plugin-panel-body .col-strip-add {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--grey);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+}
+
+.plugin-panel-body .col-strip-add svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.col-wheel-wrap {
+  position: relative;
+  width: 180px;
+  height: 180px;
+  margin: 0 auto 6px;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+/* Hairline border defines the wheel edge on white, where
+   light hues (yellow, light green) would otherwise blend
+   into the panel — the same hairline board cards use. */
+.col-wheel {
+  display: block;
+  border-radius: 50%;
+  border: 1px solid var(--hairline);
+}
+
+.col-marker {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  /* Small-handle shadow, as the board's resize handle:
+     crisp, not the large floating shadow of a card. */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), inset 0 0 0 1px var(--separator);
+  pointer-events: none;
+}
+
+.col-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.col-picked {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-sm);
+  padding: 0;
+}
+
+/* Prefixed, so this beats the core .plugin-panel-body
+   button rule (class + element beats a lone class) on
+   border, radius and padding alike — an unprefixed tile
+   or preview rule loses border and radius to the core
+   9px/separator button, even when its own radius is 12px. */
+.plugin-panel-body .col-picked {
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  box-shadow: var(--shadow-sm);
+  padding: 0;
+}
+
+.col-hex {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+/* The eyedropper, next to the preview swatch: same 48px
+   height as the swatch, same 12px radius, and a solid
+   filled glyph — a thin outline at 20px read as a squiggle
+   and was rejected twice, so the treatment changed, not
+   just the paths. Prefixed, so it beats the core
+   .plugin-panel-body button rule on border, radius and
+   padding, like the preview. */
+.plugin-panel-body .col-picker-btn {
+  flex: none;
+  margin-left: auto;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  background: #fff;
+}
+
+.plugin-panel-body .col-picker-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.plugin-panel-body .col-picker-btn svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The mode control, a segmented row: the Settings
+   segmented treatment — a fill-grey pill, 2px padding,
+   9px radius, the active option a white pill with the
+   segmented shadow. One short row, not a full select. */
+.col-mode-seg {
+  display: flex;
+  gap: 2px;
+  background: var(--fill);
+  border-radius: 9px;
+  padding: 2px;
+  margin-top: 8px;
+  margin-bottom: 4px;
+}
+
+/* Prefixed, so these beat the core .plugin-panel-body
+   button rule on border, radius and padding. */
+.plugin-panel-body .col-mode-seg-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  padding: 4px 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.plugin-panel-body .col-mode-seg-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.plugin-panel-body .col-mode-seg-btn.active {
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+}
+
+/* The fill control: a binary toggle — Solid on the
+   left, Gradient on the right, one switch between
+   them. Deliberately not the segmented treatment:
+   the mode switch above picks one of four editors,
+   this flips one binary choice. The knob slides to
+   the active side and the track takes the accent;
+   the active label is ink, the other grey. */
+.plugin-panel-body .col-fill-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.col-fill-toggle-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--grey);
+}
+
+.col-fill-toggle:not(.on) .col-fill-toggle-label:first-child,
+.col-fill-toggle.on .col-fill-toggle-label:last-child {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.col-fill-toggle-track {
+  flex: none;
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--fill);
+  transition: background 0.15s ease;
+}
+
+.col-fill-toggle.on .col-fill-toggle-track {
+  background: var(--accent);
+}
+
+.col-fill-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.06);
+  transition: transform 0.15s ease;
+}
+
+.col-fill-toggle.on .col-fill-toggle-knob {
+  transform: translateX(20px);
+}
+
+/* The Harmonies head row: the title on the left, the type
+   as a small menu button on the right — one compact
+   control, not a five-tab strip across the panel. */
+.col-harmonies-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.col-harmonies-head .col-section-title {
+  flex: 1 1 auto;
+  margin-bottom: 0;
+}
+
+/* Prefixed, so this beats the core .plugin-panel-body
+   button rule on border, radius and padding. A fill-grey
+   pill like the segmented treatment, showing the current
+   harmony type and a chevron. */
+.plugin-panel-body .col-harmony-btn {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  background: var(--fill);
+  border-radius: 9px;
+  padding: 4px 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.plugin-panel-body .col-harmony-btn:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.col-harmony-chevron {
+  display: flex;
+  align-items: center;
+}
+
+.col-harmony-chevron svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The harmony type menu: a small popover under the head
+   button, in the app's popover style — white, hairline
+   border, 9px radius, soft shadow. The active type is
+   semibold on fill grey. */
+.col-harmony-menu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 10;
+  min-width: 168px;
+  padding: 2px;
+  background: #fff;
+  border: 1px solid var(--hairline);
+  border-radius: 9px;
+  box-shadow: var(--shadow-sm);
+}
+
+.col-harmony-menu.open {
+  display: block;
+}
+
+/* Prefixed, so these beat the core .plugin-panel-body
+   button rule on border, radius and padding. */
+.plugin-panel-body .col-harmony-menu-item {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  border-radius: 7px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.plugin-panel-body .col-harmony-menu-item:hover {
+  background: var(--fill);
+}
+
+.plugin-panel-body .col-harmony-menu-item.active {
+  background: var(--fill);
+  font-weight: 600;
+}
+
+/* A panel section below the picker: harmonies, then
+   recent, then Saved Palettes. Same separator as the
+   picker section, and the same 15px right lane as the
+   palettes list, so a tile row never sits under the
+   scrollbar. */
+.col-section {
+  flex: none;
+  padding-bottom: 4px;
+  padding-right: 15px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--separator);
+}
+
+/* The Harmonies section breathes a little more than
+   the other sections: padding above the head row and
+   below the tiles, so it never feels tight against
+   the picker above or Recent below. */
+.col-section-harmonies {
+  padding-top: 8px;
+  padding-bottom: 8px;
+}
+
+.col-section-title {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+/* The Hex mode field: same text-field style as the
+   palette rename input. */
+.col-hex-input {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--separator);
+  border-radius: 9px;
+  background: #fff;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ink);
+}
+
+.col-hex-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* One line per slider: label, slider, value. The label
+   column is the widest label ("Saturation"), so the
+   sliders line up. */
+.col-slider-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.col-slider-row:last-child {
+  margin-bottom: 0;
+}
+
+.col-slider-label {
+  flex: none;
+  width: 74px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.col-slider-value {
+  flex: none;
+  width: 36px;
+  text-align: right;
+  color: var(--grey);
+}
+
+/* Slider, in app style — not the browser default. Track is
+   the core fill grey, thumb is a white circle with a
+   hairline border and a soft shadow, like the toolbar
+   swatches, search clear button and Settings close button:
+   white circular controls on a quiet background. */
+.col-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  box-sizing: border-box;
+  margin: 0;
+  cursor: pointer;
+  height: 20px;
+  background: transparent;
+  outline: none;
+}
+
+.col-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fill);
+}
+
+.col-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-sm);
+}
+
+.col-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fill);
+}
+
+.col-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-sm);
+}
+
+.col-slider:hover::-webkit-slider-thumb,
+.col-slider:hover::-moz-range-thumb {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
+}
+
+/* The palettes section head: "Saved Palettes" with a +
+   button at the right end. The + is the same icon
+   button as the palette head's chevrons and trash. */
+.col-palettes-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  margin-bottom: 4px;
+  padding-right: 15px;
+}
+
+.col-palettes-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.col-palettes {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  /* 15px on the right is the scrollbar's own lane, not tile
+     space: an overlay scrollbar would otherwise float over
+     the last tile's right edge, and a classic scrollbar
+     would sit hard against it. */
+  padding-right: 15px;
+}
+
+/* Palettes are plain sections, not boxes: the name is
+   plain text, the tiles a row below it. */
+.col-palette {
+  margin-bottom: 10px;
+}
+
+.col-palette-head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.col-palette-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
+.col-rename {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid var(--separator);
+  border-radius: 9px;
+  background: #fff;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--ink);
+}
+
+.col-rename:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Prefixed, so these beat the core .plugin-panel-body
+   button rule on border, radius and padding. Icons are
+   the toolbar's stroke style, at 16px. */
+.plugin-panel-body .col-icon-btn {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--grey);
+}
+
+.plugin-panel-body .col-icon-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.plugin-panel-body .col-icon-btn:hover:not(:disabled) {
+  background: var(--fill);
+  color: var(--ink);
+}
+
+.plugin-panel-body .col-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* The gradient editor: the strip and its controls row,
+   under the Solid/Gradient switch. Empty while the
+   picked state is solid, so no gap shows. The strip
+   takes the width; the + sits beside it, centred. */
+.col-gradient-editor {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.col-gradient-editor:empty {
+  margin-bottom: 0;
+}
+
+/* The selected gradient stop: a blue ring, so the stop
+   the wheel and sliders edit is visible at a glance. */
+.plugin-panel-body .col-tile.selected {
+  outline: 2px solid #007AFF;
+  outline-offset: 1px;
+}
+
+/* Tiles are fixed 32px squares that wrap: a lone colour
+   in a palette is one small tile, never a stretched row.
+   The rows breathe: 8px above and below each row, so a
+   row never sits tight against its head or the next
+   section. */
+.col-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.col-tile-wrap {
+  position: relative;
+  flex: none;
+  width: 32px;
+  height: 32px;
+}
+
+/* Prefixed, so this beats the core .plugin-panel-body
+   button rule on border, radius and padding. */
+.plugin-panel-body .col-tile {
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--hairline);
+  border-radius: 10px;
+  padding: 0;
+}
+
+.col-tile:hover {
+  filter: brightness(0.96);
+}
+
+.col-tile:active {
+  transform: scale(0.97);
+}
+
+/* Prefixed, so this beats the core .plugin-panel-body
+   button rule on border, radius and padding. */
+.plugin-panel-body .col-tile-x {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--hairline);
+  border-radius: 50%;
+  background: #fff;
+  color: var(--grey);
+  opacity: 0;
+  box-shadow: var(--shadow-sm);
+}
+
+.plugin-panel-body .col-tile-x svg {
+  width: 11px;
+  height: 11px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.col-tile-wrap:hover .col-tile-x {
+  opacity: 1;
+}
+
+.plugin-panel-body .col-tile-x:hover {
+  /* Opaque, not the translucent panel fill: the x sits
+     on a coloured tile, and the translucent fill would
+     let a dark tile show through and swallow the glyph. */
+  background: #efefef;
+  color: var(--ink);
+}
+
+/* The + tile adds the picked colour: same size as a
+   tile, dashed outline, at the end of the row. */
+.plugin-panel-body .col-add-tile {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--separator);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--grey);
+}
+
+.plugin-panel-body .col-add-tile svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.plugin-panel-body .col-add-tile:hover {
+  background: var(--fill);
+  color: var(--ink);
+}
+
+/* Drag ghost: a board-size swatch, following the cursor. */
+.col-ghost {
+  position: fixed;
+  z-index: 100;
+  pointer-events: none;
+  width: 120px;
+  height: 120px;
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+}

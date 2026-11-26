@@ -6,8 +6,8 @@
 import { ACCENT, S } from "./board-state";
 import { groupBounds, svgEl2 } from "./board-geometry";
 import {
-  pressureWidth, smoothStrokePath, smoothStrokePressures, smoothStrokeSamples, strokePressuresVary,
-  type Item, type Pt,
+  linearGradientCoords, normaliseGradient, pressureWidth, smoothStrokePath, smoothStrokePressures, smoothStrokeSamples, strokeOpacity, strokePressuresVary,
+  type Item, type Pt, type StrokeGradient,
 } from "../backend/model";
 
 // Fast-path drag previews: a single SVG node updated in place,
@@ -33,10 +33,38 @@ export function dragPreview(id: string, tag: string, toPreview = false): SVGElem
 // tool's base width: the pencil draws thinner than the pen,
 // the highlighter much wider. A marker (highlighter) draws
 // translucent, like the stored stroke.
-export function updateLiveStroke(points: Pt[], pressures: number[], width: number, marker: boolean, pencil = false, color?: string): void {
+export function updateLiveStroke(points: Pt[], pressures: number[], width: number, marker: boolean, pencil = false, color?: string, opacityPct = 100, gradient?: StrokeGradient | null): void {
   const el = dragPreview("live-stroke", "g");
   while (el.firstChild) el.removeChild(el.firstChild);
-  const stroke = color ?? S.api.pen.getColor();
+  const solid = color ?? S.api.pen.getColor();
+  // A gradient preview carries its own def inside the
+  // preview <g>: the committed renderer puts its def
+  // inside the card's own svg, and the preview has no
+  // card — so the def lives here, rebuilt on every move
+  // like the rest of the preview, and cleared with it.
+  // The gradient maps across the points' bounding box at
+  // its angle, exactly like the committed stroke, so the
+  // stroke looks the same while drawing as after release.
+  let paint = solid;
+  const clean = normaliseGradient(gradient);
+  if (clean && points.length >= 2) {
+    const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
+    const coords = linearGradientCoords(clean.angle, {
+      x: Math.min(...xs), y: Math.min(...ys),
+      w: Math.max(1, Math.max(...xs) - Math.min(...xs)),
+      h: Math.max(1, Math.max(...ys) - Math.min(...ys)),
+    });
+    const defs = svgEl2("defs", {});
+    const lg = svgEl2("linearGradient", {
+      id: "live-stroke-grad", gradientUnits: "userSpaceOnUse",
+      x1: String(coords.x1), y1: String(coords.y1),
+      x2: String(coords.x2), y2: String(coords.y2),
+    });
+    for (const s of clean.stops) lg.appendChild(svgEl2("stop", { offset: `${s.offset}%`, "stop-color": s.color }));
+    defs.appendChild(lg);
+    el.appendChild(defs);
+    paint = "url(#live-stroke-grad)";
+  }
   // A pencil stroke shows its graphite texture while it
   // is being drawn, not only once it is committed.
   if (pencil) el.setAttribute("filter", "url(#pencil-texture)");
@@ -55,16 +83,19 @@ export function updateLiveStroke(points: Pt[], pressures: number[], width: numbe
     const s = points[0];
     el.appendChild(svgEl2("rect", { x: String(s.x - 256), y: String(s.y - 256), width: "512", height: "512", fill: "none" }));
   }
-  const opacity = marker ? "0.45" : "1";
+  // The preview paints at the same effective opacity as
+  // the committed stroke (see strokeOpacity), so the
+  // stroke does not change shade on release.
+  const opacity = String(strokeOpacity({ opacity: opacityPct, marker }));
   if (pressures.length === points.length && strokePressuresVary({ pressures })) {
     const pts = smoothStrokeSamples(points);
     const prs = smoothStrokePressures(pressures);
     for (let i = 0; i + 1 < pts.length; i++) {
       const w = pressureWidth(width, (prs[i] + prs[i + 1]) / 2);
-      el.appendChild(svgEl2("line", { x1: String(pts[i].x), y1: String(pts[i].y), x2: String(pts[i + 1].x), y2: String(pts[i + 1].y), stroke, "stroke-width": String(w), "stroke-linecap": "round", opacity }));
+      el.appendChild(svgEl2("line", { x1: String(pts[i].x), y1: String(pts[i].y), x2: String(pts[i + 1].x), y2: String(pts[i + 1].y), stroke: paint, "stroke-width": String(w), "stroke-linecap": "round", opacity }));
     }
   } else {
-    el.appendChild(svgEl2("path", { d: smoothStrokePath(points), fill: "none", stroke, "stroke-width": String(width), "stroke-linecap": "round", "stroke-linejoin": "round", opacity }));
+    el.appendChild(svgEl2("path", { d: smoothStrokePath(points), fill: "none", stroke: paint, "stroke-width": String(width), "stroke-linecap": "round", "stroke-linejoin": "round", opacity }));
   }
 }
 // Remove the live stroke node outright: a drag that ends

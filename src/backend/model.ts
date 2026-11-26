@@ -2,8 +2,8 @@
 // GPUI board so existing board.json files load unchanged.
 // Markdown lives in markdown.ts.
 
-import type { Anchor, ArrangeOptions, Block, Board, Camera, GroupEntry, ImportSource, Item, Kind, Layer, Pt, Segment, ShapeKind, Size } from "bowerbird-plugin-api";
-export type { Anchor, ArrangeOptions, Block, Board, Camera, GroupEntry, ImportSource, Item, Kind, Layer, Pt, Segment, ShapeKind, Size };
+import type { Anchor, ArrangeOptions, Block, Board, Camera, GradientStop, GroupEntry, ImportSource, Item, Kind, Layer, Pt, Segment, ShapeKind, Size, StrokeGradient } from "bowerbird-plugin-api";
+export type { Anchor, ArrangeOptions, Block, Board, Camera, GradientStop, GroupEntry, ImportSource, Item, Kind, Layer, Pt, Segment, ShapeKind, Size, StrokeGradient };
 
 // Shape outline fractions, in % of the shape's box. The single
 // source of truth for a shape's geometry: cards.ts renders the
@@ -437,6 +437,19 @@ export function strokeMaxWidth(stroke: { width: number; pressures?: number[] }):
   }
   return max;
 }
+// A stroke's effective opacity: its own opacity, 0–100
+// (an old board has none, which means 100), multiplied
+// by the marker's 0.45 — a translucent highlighter is
+// fainter still. The renderer and the drag preview share
+// it, so a stroke looks the same while drawing as after
+// release.
+export function strokeOpacity(stroke: { opacity?: number; marker: boolean }): number {
+  const base = stroke.opacity ?? 100;
+  // Rounded to three decimals: 0.3 × 0.45 must paint as
+  // 0.135, not 0.13500000000000001.
+  return Math.round((base / 100) * (stroke.marker ? 0.45 : 1) * 1000) / 1000;
+}
+
 // Whether a stroke's pressures actually vary: a pen held at
 // one pressure draws a uniform stroke, and it renders as a
 // single path like a mouse stroke.
@@ -949,6 +962,140 @@ export function normaliseHex(hex: string): string | null {
   const rgb = parseHex(hex);
   if (!rgb) return null;
   return "#" + rgb.map((c) => c.toString(16).padStart(2, "0").toUpperCase()).join("");
+}
+
+// A linear gradient, validated and normalised: the angle
+// is always 0 — gradients run left to right — and two
+// or more stops, each an offset 0–100 with a normalised
+// hex, stored in offset order. Anything else is not a
+// gradient. Null is not valid here — null means "no
+// gradient", and is handled by the caller. The angle
+// field stays on the model for compatibility, but a
+// stored gradient at any other angle renders at 0.
+export function normaliseGradient(value: unknown): StrokeGradient | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const { angle, stops } = value as { angle?: unknown; stops?: unknown };
+  if (typeof angle !== "number" || !Number.isFinite(angle)) return null;
+  if (!Array.isArray(stops) || stops.length < 2) return null;
+  const clean: GradientStop[] = [];
+  for (const s of stops) {
+    if (!s || typeof s !== "object" || Array.isArray(s)) return null;
+    const { offset, color } = s as { offset?: unknown; color?: unknown };
+    if (typeof offset !== "number" || !Number.isFinite(offset) || offset < 0 || offset > 100) return null;
+    if (typeof color !== "string") return null;
+    const hex = normaliseHex(color);
+    if (!hex) return null;
+    clean.push({ offset, color: hex });
+  }
+  clean.sort((a, b) => a.offset - b.offset);
+  return { angle: 0, stops: clean };
+}
+
+// The userSpaceOnUse endpoints of a linear gradient at
+// `angle` across a box: 0° runs left to right, 90° top to
+// bottom, clockwise. The endpoints are the projections
+// of the box's corners onto the direction, so the
+// gradient spans exactly the box along its angle — a
+// diagonal gradient reaches corner to corner, not edge
+// to edge. Rounded, so two renders of the same gradient
+// produce the same attribute text.
+export function linearGradientCoords(angle: number, box: { x: number; y: number; w: number; h: number }): { x1: number; y1: number; x2: number; y2: number } {
+  const r = (angle * Math.PI) / 180;
+  const dx = Math.cos(r), dy = Math.sin(r);
+  const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
+  let tMin = Infinity, tMax = -Infinity;
+  for (const [x, y] of [[box.x, box.y], [box.x + box.w, box.y], [box.x, box.y + box.h], [box.x + box.w, box.y + box.h]] as const) {
+    const t = (x - cx) * dx + (y - cy) * dy;
+    if (t < tMin) tMin = t;
+    if (t > tMax) tMax = t;
+  }
+  // Rounded, so two renders of the same gradient
+  // produce the same attribute text. A -0 rounds to 0:
+  // cos(90°) is a hair above zero, so a vertical
+  // gradient's x would otherwise come out as -0.
+  const round2 = (v: number): number => {
+    const r = Math.round(v * 100) / 100;
+    return r === 0 ? 0 : r;
+  };
+  return {
+    x1: round2(cx + dx * tMin), y1: round2(cy + dy * tMin),
+    x2: round2(cx + dx * tMax), y2: round2(cy + dy * tMax),
+  };
+}
+
+// A colour data patch: the one `data` edit a plugin may make
+// on a core card. A stroke takes { color?, opacity?, gradient? } — a
+// non-empty subset of the three, each validated: the colour
+// is a normalised hex, the opacity a number 0–100, the
+// gradient a normalised linear gradient — or null, which
+// clears the gradient and leaves the stroke solid. A
+// swatch takes { hex }; anything else is not a colour
+// patch. A patch that leaves a field out leaves that
+// field alone, so recolouring a translucent stroke at
+// opacity 100 has to send opacity: 100 to restore it.
+export function colourDataPatch(item: Item, data: unknown): { color?: string; opacity?: number; gradient?: StrokeGradient | null } | { hex: string } | null {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const keys = Object.keys(data);
+  if ("Stroke" in item.kind) {
+    if (keys.length === 0 || keys.some((k) => k !== "color" && k !== "opacity" && k !== "gradient")) return null;
+    const patch: { color?: string; opacity?: number; gradient?: StrokeGradient | null } = {};
+    if ("color" in data) {
+      const value = (data as { color?: unknown }).color;
+      if (typeof value !== "string") return null;
+      const hex = normaliseHex(value);
+      if (!hex) return null;
+      patch.color = hex;
+    }
+    if ("opacity" in data) {
+      const value = (data as { opacity?: unknown }).opacity;
+      if (typeof value !== "number" || !Number.isFinite(value) || value < 0 || value > 100) return null;
+      patch.opacity = Math.round(value);
+    }
+    if ("gradient" in data) {
+      const value = (data as { gradient?: unknown }).gradient;
+      if (value === null) {
+        patch.gradient = null;
+      } else {
+        const gradient = normaliseGradient(value);
+        if (!gradient) return null;
+        patch.gradient = gradient;
+      }
+    }
+    return patch;
+  }
+  if ("Swatch" in item.kind) {
+    if (keys.length !== 1 || keys[0] !== "hex") return null;
+    const value = (data as { hex?: unknown }).hex;
+    if (typeof value !== "string") return null;
+    const hex = normaliseHex(value);
+    return hex ? { hex } : null;
+  }
+  return null;
+}
+
+// Apply a colour data patch to a core card. False when the
+// patch is not a colour patch for this card, so the caller
+// knows nothing changed.
+export function applyColourDataPatch(item: Item, data: unknown): boolean {
+  const patch = colourDataPatch(item, data);
+  if (!patch) return false;
+  if ("hex" in patch) {
+    if (!("Swatch" in item.kind)) return false;
+    item.kind.Swatch.hex = patch.hex;
+  } else {
+    if (!("Stroke" in item.kind)) return false;
+    if (patch.color !== undefined) item.kind.Stroke.color = patch.color;
+    if (patch.opacity !== undefined) item.kind.Stroke.opacity = patch.opacity;
+    // A null gradient clears the field outright, so the
+    // stroke goes back to solid and the board JSON carries
+    // no leftover gradient — missing means solid, exactly
+    // as on an old board.
+    if (patch.gradient !== undefined) {
+      if (patch.gradient === null) delete item.kind.Stroke.gradient;
+      else item.kind.Stroke.gradient = patch.gradient;
+    }
+  }
+  return true;
 }
 
 // Markdown lives in markdown.ts; re-exported here so existing

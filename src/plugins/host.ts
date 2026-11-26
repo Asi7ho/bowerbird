@@ -3,9 +3,9 @@
 // views and commands live in host-state.ts; this module imports
 // them.
 
-import type { Anchor, ArrangeOptions, Board, BoardController, Camera, Item, Kind, Layer, PluginBridge, PluginBuiltinCardDef, PluginCardDecoratorDef, PluginCardDef, PluginCommandDef, PluginContext, PluginCreateActionDef, PluginHost, PluginManifest, PluginOverlayDef, PluginPanelDef, PluginSettingsSectionDef, PluginShortcutDef, PluginToolDef, PluginViewDef, Pt, SettingsUI, ShellElements, Size } from "bowerbird-plugin-api";
+import type { Anchor, ArrangeOptions, Board, BoardController, Camera, Item, Kind, Layer, PluginBridge, PluginBuiltinCardDef, PluginCardDecoratorDef, PluginCardDef, PluginCommandDef, PluginContext, PluginCreateActionDef, PluginHost, PluginManifest, PluginOverlayDef, PluginPanelDef, PluginSettingsSectionDef, PluginShortcutDef, PluginToolDef, PluginViewDef, Pt, SettingsUI, ShellElements, Size, StrokeGradient } from "bowerbird-plugin-api";
 export type { Anchor, ArrangeOptions, Board, BoardController, Camera, Item, Kind, Layer, PluginBridge, PluginBuiltinCardDef, PluginCardDecoratorDef, PluginCardDef, PluginCommandDef, PluginContext, PluginCreateActionDef, PluginHost, PluginManifest, PluginOverlayDef, PluginPanelDef, PluginSettingsSectionDef, PluginShortcutDef, PluginToolDef, PluginViewDef, Pt, SettingsUI, ShellElements, Size };
-import { anchorPoint, arrangeItems, AUDIO_H, AUDIO_TRANSCRIPT_HIDDEN_H, AUDIO_TRANSCRIPT_SHOWN_H, boardGet, centre, checklistProgress, clippedEnds, domainOf, elide, escapeHtml, fitCamera, itemBounds, itemRotation, parseHex, rectCrossing, rectFromPoints, renderMarkdownHtml, rotatePoint, segmentIntersectsRect, select, setChecklistDone, tileColorFor, tint, toggleTaskLine } from "../backend/model";
+import { anchorPoint, arrangeItems, AUDIO_H, AUDIO_TRANSCRIPT_HIDDEN_H, AUDIO_TRANSCRIPT_SHOWN_H, boardGet, centre, checklistProgress, clippedEnds, colourDataPatch, domainOf, elide, escapeHtml, fitCamera, itemBounds, itemRotation, parseHex, rectCrossing, rectFromPoints, renderMarkdownHtml, rotatePoint, segmentIntersectsRect, select, setChecklistDone, tileColorFor, tint, toggleTaskLine } from "../backend/model";
 import { cardDecorators, cards, commands, CORE_EVENTS, createActions, listeners, loaded, overlays, panels, settingsSections, shell, shortcuts, tools, views } from "./host-state";
 import { applySavedPanelSettings, bindPanelDeps, deactivateMissingActivePanel, deactivatePanelIfActive, ensureResizeHandle, isPanelActive as isPanelActiveKey, registerPanel, setActivePanel, updatePanelDock, wirePanelsToggle } from "./host-panels";
 import { bindViewDeps, getActiveView, refreshActiveView, registerView, renderViewSwitcher, setActiveView } from "./host-views";
@@ -117,7 +117,7 @@ export function boardUngroupSelected(): boolean {
 export function boardDeleteSelected(): boolean {
   return boardController?.deleteSelected() ?? false;
 }
-export function boardPreviewStroke(points: Pt[], pressures: number[], opts?: { width?: number; color?: string; marker?: boolean; pencil?: boolean }): void {
+export function boardPreviewStroke(points: Pt[], pressures: number[], opts?: { width?: number; color?: string; marker?: boolean; pencil?: boolean; opacity?: number; gradient?: StrokeGradient | null }): void {
   boardController?.previewStroke(points, pressures, opts);
 }
 // The live shape preview for a drag tool, in the preview
@@ -191,6 +191,17 @@ function requirePerm(manifest: PluginManifest, perm: string): void {
   const perms = manifest.permissions ?? [];
   if (perms.includes(perm)) return;
   throw new Error(`Plugin ${manifest.id} lacks permission ${perm}`);
+}
+
+// A data patch is allowed when it rewrites the plugin's own
+// card, or when it is a colour-only patch on a stroke or a
+// swatch (see colourDataPatch in model.ts). Anything else on
+// a core card is refused.
+function assertDataPatchAllowed(pluginId: string, id: number, data: unknown): void {
+  const it = host!.getBoard().items.find((i) => i.id === id);
+  if (it && isPluginCard(it) && it.kind.Plugin.plugin === pluginId) return;
+  if (it && colourDataPatch(it, data) !== null) return;
+  throw new Error(`Plugin ${pluginId} cannot edit another plugin's card data`);
 }
 
 // ---------------------------------------------------------------- API builder
@@ -279,7 +290,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
       // The live preview stroke for a drag tool: preview layer
       // only — no board write, no save, no undo step — so a
       // plugin can call it on every pointermove.
-      previewStroke: (points: Pt[], pressures?: number[], opts?: { width?: number; color?: string; marker?: boolean; pencil?: boolean }) =>
+      previewStroke: (points: Pt[], pressures?: number[], opts?: { width?: number; color?: string; marker?: boolean; pencil?: boolean; gradient?: StrokeGradient | null }) =>
         boardPreviewStroke(points, pressures ?? [], opts),
       // The live shape preview for a drag tool: preview layer
       // only — no board write, no save, no undo step — so a
@@ -375,27 +386,18 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
         require("board:write");
         // A plugin may only rewrite its own plugin card data. Core
         // pos/size/group/layer edits are allowed for any card, because
-        // moving a card is not editing its content.
-        if (patch.data !== undefined) {
-          const it = host!.getBoard().items.find((i) => i.id === id);
-          if (!it || !isPluginCard(it) || it.kind.Plugin.plugin !== pluginId) {
-            throw new Error(`Plugin ${pluginId} cannot edit another plugin's card data`);
-          }
-        }
+        // moving a card is not editing its content. A colour patch
+        // is the one data edit allowed on a core card: { color }
+        // on a stroke, { hex } on a swatch.
+        if (patch.data !== undefined) assertDataPatchAllowed(pluginId, id, patch.data);
         const ok = host!.updateItem(id, patch);
         return ok;
       },
       updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }>) => {
         require("board:write");
-        // Same data rule as updateItem, per patch: a plugin
-        // may only rewrite its own plugin card data.
+        // Same data rule as updateItem, per patch.
         for (const patch of patches) {
-          if (patch.data !== undefined) {
-            const it = host!.getBoard().items.find((i) => i.id === patch.id);
-            if (!it || !isPluginCard(it) || it.kind.Plugin.plugin !== pluginId) {
-              throw new Error(`Plugin ${pluginId} cannot edit another plugin's card data`);
-            }
-          }
+          if (patch.data !== undefined) assertDataPatchAllowed(pluginId, patch.id, patch.data);
         }
         return host!.updateItems(patches);
       },
@@ -646,6 +648,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
     },
     view: {
       getCamera: () => ({ ...host!.getCamera() }),
+      screenToWorld: (clientX: number, clientY: number) => host!.screenToWorld(clientX, clientY),
       setCamera: (cam: Camera) => host!.setCamera(cam),
       setCameraSilent: (cam: Camera) => host!.setCameraSilent(cam),
       zoomBy: (factor: number) => host!.zoomBy(factor),
@@ -677,6 +680,10 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
     pen: {
       getColor: () => host!.getPenColor(),
       setColor: (hex: string) => host!.setPenColor(hex),
+      getOpacity: () => host!.getPenOpacity(),
+      setOpacity: (opacity: number) => host!.setPenOpacity(opacity),
+      getGradient: () => host!.getPenGradient(),
+      setGradient: (gradient: StrokeGradient | null) => host!.setPenGradient(gradient),
     },
     ui: {
       toast: (msg: string) => host!.toast(msg),

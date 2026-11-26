@@ -1,0 +1,119 @@
+// Color Management — the colour wheel: hue round the
+// wheel, saturation centre to edge, drawn pixel by
+// pixel in HSL at lightness 50%. A conic gradient
+// would show light pinks for a muted red. The caller
+// owns the picked colour; the wheel only reports picks
+// (hue, saturation) and moves its marker.
+import { hslToRgb } from "./color.js";
+
+export interface WheelHandle {
+  element: HTMLElement;
+  setMarker: (h: number, s: number) => void;
+}
+
+// The wheel pixels, cached by canvas size: the wheel
+// never depends on state, so they are identical
+// every time.
+let wheelPixels: { size: number; data: ImageData } | null = null;
+
+export function createWheel(onPick: (h: number, s: number) => void, onSettle?: () => void): WheelHandle {
+  const wrap = document.createElement("div");
+  wrap.className = "col-wheel-wrap";
+  const canvas = document.createElement("canvas");
+  canvas.className = "col-wheel";
+  const cssSize = 180;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(cssSize * dpr);
+  canvas.height = Math.round(cssSize * dpr);
+  canvas.style.width = `${cssSize}px`;
+  canvas.style.height = `${cssSize}px`;
+  canvas.setAttribute("aria-label", "Color wheel: hue round the wheel, saturation from centre to edge");
+  wrap.appendChild(canvas);
+  const marker = document.createElement("div");
+  marker.className = "col-marker";
+  wrap.appendChild(marker);
+
+  const drawWheel = (): void => {
+    const size = canvas.width;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    if (wheelPixels && wheelPixels.size === size) {
+      ctx.putImageData(wheelPixels.data, 0, 0);
+      return;
+    }
+    const img = ctx.createImageData(size, size);
+    const centre = size / 2;
+    for (let y = 0; y < size; y++) {
+      for (let x = 0; x < size; x++) {
+        const dx = x - centre, dy = y - centre;
+        const r = Math.hypot(dx, dy) / centre;
+        const i = (y * size + x) * 4;
+        if (r > 1) { img.data[i + 3] = 0; continue; }
+        const h = (Math.atan2(dy, dx) * 180 / Math.PI + 90 + 360) % 360;
+        const s = r * 100;
+        const { r: rr, g: gg, b: bb } = hslToRgb(h, s, 50);
+        img.data[i] = Math.round(rr * 255);
+        img.data[i + 1] = Math.round(gg * 255);
+        img.data[i + 2] = Math.round(bb * 255);
+        img.data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    wheelPixels = { size, data: img };
+  };
+
+  const pickFromWheel = (clientX: number, clientY: number): void => {
+    const rect = canvas.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = clientX - cx, dy = clientY - cy;
+    const radius = rect.width / 2;
+    const r = Math.min(1, Math.hypot(dx, dy) / radius);
+    onPick((Math.atan2(dy, dx) * 180 / Math.PI + 90 + 360) % 360, r * 100);
+  };
+
+  const setMarker = (h: number, s: number): void => {
+    const rect = canvas.getBoundingClientRect();
+    const radius = rect.width / 2;
+    const angle = (h - 90) * Math.PI / 180;
+    const r = (s / 100) * radius;
+    marker.style.left = `${radius + r * Math.cos(angle)}px`;
+    marker.style.top = `${radius + r * Math.sin(angle)}px`;
+  };
+
+  wrap.addEventListener("pointerdown", (e: PointerEvent) => {
+    pickFromWheel(e.clientX, e.clientY);
+    // Pointermove fires faster than a full panel update
+    // costs: coalesce to one pick per animation frame.
+    let raf = 0;
+    let latestX = e.clientX;
+    let latestY = e.clientY;
+    const onMove = (me: PointerEvent): void => {
+      latestX = me.clientX;
+      latestY = me.clientY;
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        pickFromWheel(latestX, latestY);
+      });
+    };
+    // A drag ending outside the window fires pointercancel,
+    // not pointerup: without it the listeners linger. The
+    // release is also the settle point.
+    const onUp = (): void => {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+      window.removeEventListener("blur", onUp);
+      onSettle?.();
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    window.addEventListener("blur", onUp);
+  });
+
+  drawWheel();
+  return { element: wrap, setMarker };
+}

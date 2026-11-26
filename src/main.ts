@@ -25,10 +25,10 @@ import { S } from "./ui/board-state";
 import { measureNoteCardHeight } from "./ui/text-measure";
 import { showRecoveryOffer } from "./ui/recovery-dialog";
 import {
-  Board, Camera, Item, Layer, Pt, ShapeKind, Size,
-  boardGet, centre, clampZoom, createLayer, defaultLayer, deleteLayer, elementPoint, elementSize,
+  Board, Camera, Item, Layer, Pt, ShapeKind, Size, StrokeGradient,
+  applyColourDataPatch, boardGet, centre, clampZoom, createLayer, defaultLayer, deleteLayer, elementPoint, elementSize,
   getBoardExtension, healDuplicateIds, healLayers, hitTest, isItemLocked, isItemVisible, itemLayerId, itemsCentre,
-  lassoSelect, layerById, marquee, moveLayer, moveSelection, removeBoardExtension, renameLayer,
+  lassoSelect, layerById, marquee, moveLayer, moveSelection, normaliseGradient, removeBoardExtension, renameLayer,
   resizeItem, screenToWorld, select, setBoardExtension, setItemLayer, setLayerLocked,
   setLayerVisible, strokesWithin, zoomCamera,
 } from "./backend/model";
@@ -71,6 +71,8 @@ const C: BootContext = {
   currentBuildId: "dev",
   boardGeneration: 0,
   penColor: PALETTE[0],
+  penOpacity: 100,
+  penGradient: null,
   shapeOutline: false,
   selected: [],
   toastTimer: null,
@@ -252,15 +254,16 @@ function zoomCentre(factor: number): void {
   const s = boardSize();
   zoomAt({ x: s.x / 2, y: s.y / 2 }, factor);
 }
-// Apply one item patch: position, size, group, layer, and — for
-// plugin cards only — data. Shared by updateItem and
-// updateItems.
+// Apply one item patch: position, size, group, layer, and data —
+// for plugin cards only, plus a colour patch on a stroke or a
+// swatch. Shared by updateItem and updateItems.
 function applyPatch(it: Item, patch: { pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }): void {
   if (patch.pos) it.pos = patch.pos;
   if (patch.size) it.size = patch.size;
   if (patch.group !== undefined) it.group = patch.group;
   if (patch.layer !== undefined) it.layer = patch.layer;
   if (patch.data !== undefined && "Plugin" in it.kind) it.kind.Plugin.data = patch.data;
+  else if (patch.data !== undefined) applyColourDataPatch(it, patch.data);
 }
 // Render one card as HTML, or null when it has none.
 // plain renders at the origin (for embedding in a panel
@@ -818,7 +821,41 @@ async function init(): Promise<void> {
       emitPluginEvent("pen");
       return true;
     },
+    // The pen's opacity, 0–100: session state like the
+    // colour, clamped and rounded to a whole percent. A
+    // change fires the same "pen" event, so a listening
+    // plugin can follow it without polling.
+    getPenOpacity: () => C.penOpacity,
+    setPenOpacity: (opacity: number) => {
+      if (!Number.isFinite(opacity)) return false;
+      C.penOpacity = Math.min(100, Math.max(0, Math.round(opacity)));
+      emitPluginEvent("pen");
+      return true;
+    },
+    // The pen's gradient, null for a solid stroke: session
+    // state like the colour. Null clears it; anything else
+    // must validate, or the pen keeps its old gradient. A
+    // change fires the same "pen" event, so a listening
+    // plugin can follow it without polling — the event
+    // carries no payload, like the colour and opacity
+    // setters: listeners re-read the pen. Setting a
+    // gradient also moves the pen colour to its first
+    // stop, so the colour stays the solid fallback.
+    getPenGradient: () => C.penGradient,
+    setPenGradient: (gradient: StrokeGradient | null) => {
+      if (gradient === null) {
+        C.penGradient = null;
+      } else {
+        const clean = normaliseGradient(gradient);
+        if (!clean) return false;
+        C.penGradient = clean;
+        C.penColor = clean.stops[0].color;
+      }
+      emitPluginEvent("pen");
+      return true;
+    },
     getCamera: () => C.board.camera,
+    screenToWorld: (clientX, clientY) => toWorld(boardPoint(clientX, clientY)),
     setCamera: (cam) => {
       if (!applyCamera(cam)) return;
       C.undoStore.save(); boardRender();

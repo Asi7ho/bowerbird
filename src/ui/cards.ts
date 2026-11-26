@@ -4,7 +4,7 @@
 // plugin uses.
 
 import type { PluginContext, PluginManifest } from "../plugins/host";
-import { isInlineVideo, pressureWidth, smoothStrokePressures, smoothStrokeSamples, strokeMaxWidth, strokePressuresVary, type Item } from "../backend/model";
+import { isInlineVideo, linearGradientCoords, normaliseGradient, pressureWidth, smoothStrokePressures, smoothStrokeSamples, strokeMaxWidth, strokeOpacity, strokePressuresVary, type Item, type StrokeGradient } from "../backend/model";
 import { strokePath } from "./board-geometry";
 
 export const manifest: PluginManifest = {
@@ -19,7 +19,7 @@ export const manifest: PluginManifest = {
 
 type TextData = { text: string; bold: boolean; size: number; color: string; bg?: string };
 type ShapeData = { shape: string; fill: string; outline?: boolean };
-type StrokeData = { points: { x: number; y: number }[]; color: string; width: number; marker: boolean; pressures?: number[]; pencil?: boolean };
+type StrokeData = { points: { x: number; y: number }[]; color: string; width: number; marker: boolean; pressures?: number[]; pencil?: boolean; opacity?: number; gradient?: StrokeGradient | null };
 type ImageData = { path: string };
 type UrlCardData = { url: string; title: string | null; description: string | null; image?: string | null; icon?: string | null; embed?: boolean };
 type PdfCardData = { path: string; size_bytes: number };
@@ -258,7 +258,28 @@ export function activate(api: PluginContext): void {
       const vh = Math.max(1, maxY - minY) + pad * 2;
       const local = pts.map((p) => ({ x: p.x - minX + pad, y: p.y - minY + pad }));
       const color = safeColor(st.color, "#1A1A1A");
-      const marker = st.marker ? ` opacity="0.45"` : "";
+      // A gradient stroke paints through an SVG
+      // <linearGradient> mapped across the stroke's own
+      // bounding box at its angle, in userSpaceOnUse — so
+      // the gradient follows the stroke's box, not the
+      // card's. The id is unique per stroke, and the def
+      // lives inside this card's own svg, so two cards
+      // never share one. A missing or invalid gradient is
+      // a solid stroke, exactly as on an old board.
+      const gradient = normaliseGradient(st.gradient);
+      const paint = gradient ? `url(#grad-${c.id})` : color;
+      let defs = "";
+      if (gradient) {
+        const coords = linearGradientCoords(gradient.angle, { x: pad, y: pad, w: Math.max(1, maxX - minX), h: Math.max(1, maxY - minY) });
+        const stops = gradient.stops.map((s) => `<stop offset="${s.offset}%" stop-color="${s.color}" />`).join("");
+        defs = `<defs><linearGradient id="grad-${c.id}" gradientUnits="userSpaceOnUse" x1="${coords.x1}" y1="${coords.y1}" x2="${coords.x2}" y2="${coords.y2}">${stops}</linearGradient></defs>`;
+      }
+      // The stroke's own opacity multiplies with the
+      // marker's 0.45 (see strokeOpacity): a 50% marker
+      // paints at 0.225, a 50% pen at 0.5. Fully opaque
+      // paint carries no attribute, exactly as before.
+      const op = strokeOpacity(st);
+      const marker = op !== 1 ? ` opacity="${String(op)}"` : "";
       let inner = "";
       if (st.pencil) inner += `<g filter="url(#pencil-texture)">`;
       if (st.pressures && strokePressuresVary(st)) {
@@ -266,14 +287,14 @@ export function activate(api: PluginContext): void {
         const sprs = smoothStrokePressures(st.pressures);
         for (let i = 0; i + 1 < spts.length; i++) {
           const w = pressureWidth(st.width, (sprs[i] + sprs[i + 1]) / 2);
-          inner += `<line x1="${spts[i].x}" y1="${spts[i].y}" x2="${spts[i + 1].x}" y2="${spts[i + 1].y}" stroke="${color}" stroke-width="${w}" stroke-linecap="round"${marker} />`;
+          inner += `<line x1="${spts[i].x}" y1="${spts[i].y}" x2="${spts[i + 1].x}" y2="${spts[i + 1].y}" stroke="${paint}" stroke-width="${w}" stroke-linecap="round"${marker} />`;
         }
       } else {
         const d = strokePath(item, local, color, st.width);
-        inner += `<path d="${d}" fill="none" stroke="${color}" stroke-width="${st.width}" stroke-linecap="round" stroke-linejoin="round"${marker} />`;
+        inner += `<path d="${d}" fill="none" stroke="${paint}" stroke-width="${st.width}" stroke-linecap="round" stroke-linejoin="round"${marker} />`;
       }
       if (st.pencil) inner += `</g>`;
-      return `<div class="${c.cls} stroke" data-id="${c.id}" style="${c.style}background:transparent;border:none"><svg viewBox="0 0 ${vw} ${vh}" style="position:absolute;left:${-pad}px;top:${-pad}px;width:calc(100% + ${pad * 2}px);height:calc(100% + ${pad * 2}px);overflow:visible" aria-hidden="true">${inner}</svg></div>`;
+      return `<div class="${c.cls} stroke" data-id="${c.id}" style="${c.style}background:transparent;border:none"><svg viewBox="0 0 ${vw} ${vh}" style="position:absolute;left:${-pad}px;top:${-pad}px;width:calc(100% + ${pad * 2}px);height:calc(100% + ${pad * 2}px);overflow:visible" aria-hidden="true">${defs}${inner}</svg></div>`;
     },
   });
 

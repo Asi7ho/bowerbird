@@ -232,7 +232,22 @@ export async function activate(api) {
   // palette id belonging only to the palette).
   let installCollisionThrew = false;
   try { await api.plugins.install({ id: "command-palette", name: "Fake palette", description: "", permissions: [], mainCode: "export function activate() {}", styleCode: "" }); } catch { installCollisionThrew = true; }
-  window.__apiTest = { id, before, after, isFrameFrame, isFrameText, actionOk, dblOk, actionMiss, dblMiss, actionSeen, dblSeen, toolDef: toolDef ? { id: toolDef.id, title: toolDef.title, pluginId: toolDef.pluginId } : null, toolMiss, shortcutOk, shortcutMiss, shortcutSeen, cmdCount: counts.cmd, actionCount: counts.action, shortcutCount: counts.shortcut, routeThrew, installCollisionThrew };
+  // Colour data patches: a colour patch on a stroke is
+  // allowed, anything else on a core card throws. Recolour
+  // the first stroke on the board, then put its colour
+  // back, so the board is unchanged when activate ends.
+  const firstStroke = api.board.getItems().find((it) => "Stroke" in it.kind);
+  const firstStrokeColor = firstStroke ? firstStroke.kind.Stroke.color : null;
+  const recolourOk = firstStroke ? api.board.updateItem(firstStroke.id, { data: { color: "#ff0000" } }) : false;
+  const recoloured = firstStroke ? api.board.getItem(firstStroke.id).kind.Stroke.color : null;
+  if (firstStroke && firstStrokeColor) api.board.updateItem(firstStroke.id, { data: { color: firstStrokeColor } });
+  let badPatchThrew = false;
+  try { api.board.updateItem(firstStroke.id, { data: { width: 9 } }); } catch { badPatchThrew = true; }
+  let badHexThrew = false;
+  try { api.board.updateItem(firstStroke.id, { data: { color: "red" } }); } catch { badHexThrew = true; }
+  let textPatchThrew = false;
+  try { api.board.updateItem(id, { data: { color: "#FF0000" } }); } catch { textPatchThrew = true; }
+  window.__apiTest = { id, before, after, isFrameFrame, isFrameText, actionOk, dblOk, actionMiss, dblMiss, actionSeen, dblSeen, toolDef: toolDef ? { id: toolDef.id, title: toolDef.title, pluginId: toolDef.pluginId } : null, toolMiss, shortcutOk, shortcutMiss, shortcutSeen, cmdCount: counts.cmd, actionCount: counts.action, shortcutCount: counts.shortcut, routeThrew, installCollisionThrew, recolourOk, recoloured, badPatchThrew, badHexThrew, textPatchThrew };
 }
 export function deactivate() {}
 `;
@@ -443,6 +458,32 @@ async function main() {
   const readBoard = () => JSON.parse(fs.readFileSync(boardPath, "utf8"));
   const strokes = () => readBoard().items.filter((it) => "Stroke" in it.kind);
   const textCards = () => readBoard().items.filter((it) => "Text" in it.kind);
+  // The colours checks pick red and blue on the sliders and
+  // read the picked hex back: integer sliders quantise, so
+  // the hex is one step off #E63946 / #007AFF, and the later
+  // checks use the hex that was actually picked.
+  let pickedRed = "";
+  let pickedBlue = "";
+  // The gradient swatch and strip paint from a canvas
+  // image (a CSS gradient stripes — see gradientPixels):
+  // read an element's painted pixels back through a
+  // canvas to assert what it shows.
+  const hexRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const closeRgb = (a, b, tol = 2) => a.slice(0, 3).every((v, i) => Math.abs(v - b[i]) <= tol);
+  const gradientPixelsAt = async (selector, fx) => page.locator(selector).evaluate(async (el, fx) => {
+    const bg = el.style.backgroundImage;
+    if (!bg.startsWith('url("data:image/png')) return null;
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = bg.slice(5, -2); });
+    const c = document.createElement("canvas");
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0);
+    const x = Math.min(c.width - 1, Math.floor(c.width * fx));
+    const d = ctx.getImageData(x, Math.floor(c.height / 2), 1, 1).data;
+    return [d[0], d[1], d[2], d[3]];
+  }, fx);
 
   const results = [];
   let app;
@@ -1063,6 +1104,14 @@ async function main() {
       // Installing over a bundled plugin's id is rejected.
       assert.equal(before.installCollisionThrew, true);
       assert.equal(before.cmdCount, 1);
+      // Colour data patches: a colour patch recolours a
+      // stroke; a non-colour patch, a bad hex, and a colour
+      // patch on a text card all throw.
+      assert.equal(before.recolourOk, true);
+      assert.equal(before.recoloured, "#FF0000");
+      assert.equal(before.badPatchThrew, true);
+      assert.equal(before.badHexThrew, true);
+      assert.equal(before.textPatchThrew, true);
       await page.keyboard.press("Control+k");
       await page.locator(".cmd-palette").waitFor({ state: "visible", timeout: READY_TIMEOUT_MS });
       await page.keyboard.type("API test command");
@@ -3525,6 +3574,673 @@ async function main() {
           BOWERBIRD_PLUGINS_DIR: pluginsDir,
         },
       });
+
+    await check("Color Management creates a palette and it survives a reload", async () => {
+      // Bundled, opt-in: enable it, then reload so it activates.
+      assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("colours", true)), true);
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
+      // First run seeds one palette from the pen colour.
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      assert.deepEqual(await page.locator(".col-palette-name").allTextContents(), ["Palette 1"]);
+      // A new palette starts from the picked colour, so set
+      // the sliders to a red first: hue 355, saturation 78,
+      // lightness 56. The picked hex is read back, not
+      // assumed — integer sliders quantise, so it is one
+      // step off #E63946.
+      await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
+      await page.locator(".col-slider-hue").fill("355");
+      await page.locator(".col-slider-sat").fill("78");
+      await page.locator(".col-slider-light").fill("56");
+      pickedRed = (await page.locator(".col-hex").textContent()) ?? "";
+      assert.ok(/^#[0-9A-F]{6}$/.test(pickedRed));
+      await page.locator('.col-palettes-head [aria-label="New palette"]').click();
+      await waitFor("second palette", async () => (await page.locator(".col-palette-name").count()) === 2 ? true : null);
+      await waitFor("colour in the new palette", async () =>
+        (await page.locator(".col-palette").nth(1).locator(".col-tile").count()) === 1 ? true : null,
+      );
+      // The + tile adds a second colour: pick blue, add it.
+      await page.locator(".col-slider-hue").fill("211");
+      await page.locator(".col-slider-sat").fill("100");
+      await page.locator(".col-slider-light").fill("50");
+      pickedBlue = (await page.locator(".col-hex").textContent()) ?? "";
+      assert.ok(/^#[0-9A-F]{6}$/.test(pickedBlue));
+      await page.locator(".col-palette").nth(1).locator(".col-add-tile").click();
+      await waitFor("second colour in the new palette", async () =>
+        (await page.locator(".col-palette").nth(1).locator(".col-tile").count()) === 2 ? true : null,
+      );
+      // The save is debounced: wait it out, then reload and
+      // prove the palette is still there.
+      await new Promise((r) => setTimeout(r, 600));
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      assert.deepEqual(await page.locator(".col-palette-name").allTextContents(), ["Palette 1", "Palette 2"]);
+      const hexes = await page.locator(".col-palette").nth(1).locator(".col-tile")
+        .evaluateAll((els) => els.map((el) => el.dataset.hex));
+      assert.deepEqual(hexes, [pickedRed, pickedBlue]);
+    });
+
+    await check("a lone colour in a palette stays a fixed-size tile", async () => {
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // Palette 1 holds one colour, the seeded pen colour.
+      const tile = page.locator(".col-palette").first().locator(".col-tile").first();
+      const box = await tile.boundingBox();
+      assert.ok(box);
+      assert.equal(box.width, 32);
+      assert.equal(box.height, 32);
+      // The row is far wider than the tile: the tile did
+      // not stretch to fill it.
+      const row = await page.locator(".col-palette").first().locator(".col-tiles").boundingBox();
+      assert.ok(row && row.width > 120);
+    });
+
+    await check("clicking a colour sets the pen, and recolours a selected stroke", async () => {
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // Click the red tile with nothing selected: the pen
+      // takes the colour. Draw a stroke to prove it.
+      await page.locator(".col-palette").nth(1).locator(".col-tile").first().click();
+      await page.keyboard.press("p");
+      await page.mouse.move(300, 800);
+      await page.mouse.down();
+      await page.mouse.move(500, 800, { steps: 20 });
+      await page.mouse.up();
+      const stroke = await waitFor("red stroke in board.json", () => {
+        const found = strokes().filter((it) => it.kind.Stroke.color === pickedRed);
+        return found.length >= 1 ? found[found.length - 1] : null;
+      });
+      // Select it — it is the topmost card on its own line —
+      // then pick blue on the sliders and click the picked
+      // colour: the stroke itself changes, and one undo
+      // puts it back.
+      await page.keyboard.press("v");
+      await page.mouse.click(400, 800);
+      await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
+      await page.locator(".col-slider-hue").fill("211");
+      await page.locator(".col-slider-sat").fill("100");
+      await page.locator(".col-slider-light").fill("50");
+      pickedBlue = (await page.locator(".col-hex").textContent()) ?? "";
+      assert.ok(/^#[0-9A-F]{6}$/.test(pickedBlue));
+      await page.locator(".col-picked").click();
+      await waitFor("stroke recoloured blue", () =>
+        strokes().find((it) => it.id === stroke.id)?.kind.Stroke.color === pickedBlue ? true : null,
+      );
+      await page.keyboard.press("Control+z");
+      await waitFor("undo restores the red stroke", () =>
+        strokes().find((it) => it.id === stroke.id)?.kind.Stroke.color === pickedRed ? true : null,
+      );
+    });
+
+    await check("recolouring a locked layer is refused", async () => {
+      const stroke = strokes().find((it) => it.kind.Stroke.color === pickedRed);
+      assert.ok(stroke);
+      try {
+        await page.evaluate(() => window.__ciLayers.setLocked("default", true));
+        await page.keyboard.press("v");
+        await page.mouse.click(400, 800);
+        await page.locator(".col-palette").nth(1).locator(".col-tile").first().click();
+        // The toast is the refusal: it shows for 4s, so
+        // assert it while it is up.
+        await waitFor("locked-layer toast", async () => {
+          const toast = (await page.locator("#toast").textContent()) ?? "";
+          return toast === "Layer is locked" ? true : null;
+        });
+        assert.equal(strokes().find((it) => it.id === stroke.id).kind.Stroke.color, pickedRed);
+      } finally {
+        await page.evaluate(() => window.__ciLayers.setLocked("default", false)).catch(() => undefined);
+      }
+    });
+
+    await check("placing a colour tile drops a swatch, and the library survives disable and re-enable", async () => {
+      const tile = page.locator(".col-palette").nth(1).locator(".col-tile").first();
+      const box = await tile.boundingBox();
+      assert.ok(box);
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(700, 500, { steps: 10 });
+      await page.mouse.up();
+      const swatch = await waitFor("swatch in board.json", () => {
+        const found = readBoard().items.filter((it) => "Swatch" in it.kind && it.kind.Swatch.hex === pickedRed);
+        return found.length >= 1 ? found[found.length - 1] : null;
+      });
+      assert.equal(swatch.kind.Swatch.hex, pickedRed);
+      // Disable the plugin: the panel goes away, the board
+      // keeps its colours. setPluginEnabled returns the new
+      // state, so disabling returns false.
+      assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("colours", false)), false);
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
+      assert.equal(await page.locator('.plugin-tab[aria-label="Color Management"]').count(), 0);
+      assert.ok(readBoard().items.some((it) => it.id === swatch.id));
+      // Re-enable: the palettes are still there.
+      assert.equal(await page.evaluate(() => window.bowerbird.setPluginEnabled("colours", true)), true);
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      assert.deepEqual(await page.locator(".col-palette-name").allTextContents(), ["Palette 1", "Palette 2"]);
+    });
+
+    await check("switching the picker mode keeps the picked colour", async () => {
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // Pick a red in HSL, read it back, then switch modes:
+      // the picked colour must not move.
+      await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
+      await page.locator(".col-slider-hue").fill("355");
+      await page.locator(".col-slider-sat").fill("78");
+      await page.locator(".col-slider-light").fill("56");
+      const picked = (await page.locator(".col-hex").textContent()) ?? "";
+      assert.ok(/^#[0-9A-F]{6}$/.test(picked));
+      await page.locator('.col-mode-seg-btn[data-mode="rgb"]').click();
+      assert.equal(await page.locator(".col-hex").textContent(), picked);
+      // The RGB sliders show the same colour, channel by
+      // channel: the hex is parsed in the test, not the panel.
+      const r = parseInt(picked.slice(1, 3), 16);
+      const g = parseInt(picked.slice(3, 5), 16);
+      const b = parseInt(picked.slice(5, 7), 16);
+      assert.equal(await page.locator(".col-slider-red").inputValue(), String(r));
+      assert.equal(await page.locator(".col-slider-green").inputValue(), String(g));
+      assert.equal(await page.locator(".col-slider-blue").inputValue(), String(b));
+      // Moving a channel changes the picked colour.
+      await page.locator(".col-slider-red").fill("0");
+      const moved = (await page.locator(".col-hex").textContent()) ?? "";
+      assert.notEqual(moved, picked);
+      // HSV and Hex show the same colour too.
+      await page.locator('.col-mode-seg-btn[data-mode="hsv"]').click();
+      assert.equal(await page.locator(".col-hex").textContent(), moved);
+      await page.locator('.col-mode-seg-btn[data-mode="hex"]').click();
+      assert.equal(await page.locator(".col-hex-input").inputValue(), moved);
+      // A bad hex is ignored; a good one applies.
+      await page.locator(".col-hex-input").fill("notacolor");
+      await page.keyboard.press("Enter");
+      assert.equal(await page.locator(".col-hex").textContent(), moved);
+      await page.locator(".col-hex-input").fill("#00FF00");
+      await page.keyboard.press("Enter");
+      assert.equal(await page.locator(".col-hex").textContent(), "#00FF00");
+      // The mode survives a reload: leave it on RGB, reload,
+      // and the segmented control still says RGB.
+      await page.locator('.col-mode-seg-btn[data-mode="rgb"]').click();
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      assert.ok(await page.locator('.col-mode-seg-btn[data-mode="rgb"]').evaluate((el) => el.classList.contains("active")));
+      // Leave HSL selected, so later checks find the HSL
+      // sliders where they expect them.
+      await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
+    });
+
+    await check("harmonies show five colours for the picked colour and a harmony click applies", async () => {
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // Pick the red on the HSL sliders: Analogous is the
+      // default harmony, so the middle tile is the picked
+      // colour itself.
+      await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
+      await page.locator(".col-slider-hue").fill("355");
+      await page.locator(".col-slider-sat").fill("78");
+      await page.locator(".col-slider-light").fill("56");
+      const picked = (await page.locator(".col-hex").textContent()) ?? "";
+      assert.ok(/^#[0-9A-F]{6}$/.test(picked));
+      assert.equal(await page.locator(".col-harmony-tile").count(), 5);
+      const hexes = await page.locator(".col-harmony-tile")
+        .evaluateAll((els) => els.map((el) => el.dataset.hex));
+      assert.equal(new Set(hexes).size, 5);
+      assert.equal(hexes[2], picked);
+      // The picked colour's tile carries the ring.
+      const marked = await page.locator(".col-harmony-tile.selected")
+        .evaluateAll((els) => els.map((el) => el.dataset.hex));
+      assert.deepEqual(marked, [picked]);
+      // A harmony click applies: select the red stroke,
+      // click the first harmony tile, and the stroke takes
+      // its colour. One undo puts it back.
+      const stroke = strokes().find((it) => it.kind.Stroke.color === pickedRed);
+      assert.ok(stroke);
+      await page.keyboard.press("v");
+      await page.mouse.click(400, 800);
+      await page.locator(".col-harmony-tile").first().click();
+      await waitFor("stroke recoloured by harmony", () =>
+        strokes().find((it) => it.id === stroke.id)?.kind.Stroke.color === hexes[0] ? true : null,
+      );
+      await page.keyboard.press("Control+z");
+      await waitFor("undo restores the red stroke", () =>
+        strokes().find((it) => it.id === stroke.id)?.kind.Stroke.color === pickedRed ? true : null,
+      );
+    });
+
+    await check("the harmony type selector switches the shown set", async () => {
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
+      await page.locator(".col-slider-hue").fill("355");
+      await page.locator(".col-slider-sat").fill("78");
+      await page.locator(".col-slider-light").fill("56");
+      const picked = (await page.locator(".col-hex").textContent()) ?? "";
+      const analogous = await page.locator(".col-harmony-tile")
+        .evaluateAll((els) => els.map((el) => el.dataset.hex));
+      assert.equal(analogous[2], picked);
+      await page.locator(".col-harmony-btn").click();
+      await page.locator('.col-harmony-menu-item[data-harmony="Triadic"]').click();
+      const triadic = await page.locator(".col-harmony-tile")
+        .evaluateAll((els) => els.map((el) => el.dataset.hex));
+      assert.notDeepEqual(triadic, analogous);
+      // Every harmony starts at the picked colour.
+      assert.equal(triadic[0], picked);
+      assert.equal(await page.locator(".col-harmony-btn").textContent(), "Triadic");
+      // Back to Analogous, so later checks find the default.
+      await page.locator(".col-harmony-btn").click();
+      await page.locator('.col-harmony-menu-item[data-harmony="Analogous"]').click();
+      assert.equal(await page.locator(".col-harmony-btn").textContent(), "Analogous");
+    });
+
+    await check("recent colours record on apply and a recent click restores the colour", async () => {
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // Settling the sliders records: pick blue, and it is
+      // the most recent colour before anything is applied.
+      await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
+      await page.locator(".col-slider-hue").fill("211");
+      await page.locator(".col-slider-sat").fill("100");
+      await page.locator(".col-slider-light").fill("50");
+      const blue = (await page.locator(".col-hex").textContent()) ?? "";
+      assert.ok(/^#[0-9A-F]{6}$/.test(blue));
+      assert.notEqual(blue, pickedRed);
+      let recents = await page.locator(".col-recent-tile")
+        .evaluateAll((els) => els.map((el) => el.dataset.hex));
+      assert.equal(recents[0], blue);
+      // Applying puts the colour first: the picked blue,
+      // then the red palette tile.
+      await page.locator(".col-picked").click();
+      await page.locator(".col-palette").nth(1).locator(".col-tile").first().click();
+      recents = await page.locator(".col-recent-tile")
+        .evaluateAll((els) => els.map((el) => el.dataset.hex));
+      assert.equal(recents[0], pickedRed);
+      assert.equal(recents[1], blue);
+      // No duplicates, and the list survives a reload.
+      assert.equal(new Set(recents).size, recents.length);
+      await new Promise((r) => setTimeout(r, 600));
+      await page.reload();
+      await page.waitForSelector("#board", { timeout: READY_TIMEOUT_MS });
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      recents = await page.locator(".col-recent-tile")
+        .evaluateAll((els) => els.map((el) => el.dataset.hex));
+      assert.equal(recents[0], pickedRed);
+      assert.equal(recents[1], blue);
+      // A recent click restores the colour: select the red
+      // stroke, click the blue recent tile, and the stroke
+      // turns blue. One undo puts it back.
+      const stroke = strokes().find((it) => it.kind.Stroke.color === pickedRed);
+      assert.ok(stroke);
+      await page.keyboard.press("v");
+      await page.mouse.click(400, 800);
+      await page.locator(".col-recent-tile").nth(1).click();
+      await waitFor("stroke recoloured from recent", () =>
+        strokes().find((it) => it.id === stroke.id)?.kind.Stroke.color === blue ? true : null,
+      );
+      await page.keyboard.press("Control+z");
+      await waitFor("undo restores the red stroke", () =>
+        strokes().find((it) => it.id === stroke.id)?.kind.Stroke.color === pickedRed ? true : null,
+      );
+    });
+
+    await check("opacity slider draws a translucent stroke, previewed mid-drag", async () => {
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // The pen first: filling a slider leaves the focus
+      // on it, and a focused slider swallows the "p" key
+      // (it stops the keydown propagating), so the tool
+      // would stay on select and no stroke would draw.
+      await page.keyboard.press("p");
+      // Pick the red on the HSL sliders, then halve the
+      // opacity: the preview swatch shows the picked
+      // colour at 50%.
+      await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
+      await page.locator(".col-slider-hue").fill("355");
+      await page.locator(".col-slider-sat").fill("78");
+      await page.locator(".col-slider-light").fill("56");
+      await page.locator(".col-slider-opacity").fill("50");
+      assert.equal(await page.locator(".col-slider-opacity").inputValue(), "50");
+      const bg = await page.locator(".col-picked").evaluate((el) => el.style.background);
+      assert.ok(bg.includes("0.5"), `picked swatch should show 50% opacity, got ${bg}`);
+      // The sliders only pick: the pen takes the picked
+      // state on a click-apply, so click the preview with
+      // nothing selected — the pen becomes red at 50%.
+      await page.locator(".col-picked").click();
+      // Draw on a fresh line, and read the live preview
+      // while the pen is still down: it paints at the same
+      // 0.5 the stroke will carry after release.
+      await page.mouse.move(300, 650);
+      await page.mouse.down();
+      await page.mouse.move(350, 650, { steps: 10 });
+      await waitFor("live preview at 50% opacity", async () => {
+        const op = await page.evaluate(() => {
+          const live = document.querySelector("#live-stroke");
+          const el = live?.querySelector("path, line");
+          return el?.getAttribute("opacity") ?? null;
+        });
+        return op === "0.5" ? true : null;
+      });
+      await page.mouse.move(500, 650, { steps: 10 });
+      await page.mouse.up();
+      const stroke = await waitFor("translucent stroke in board.json", () => {
+        const found = strokes().filter((it) => it.kind.Stroke.color === pickedRed && it.kind.Stroke.opacity === 50);
+        return found.length >= 1 ? found[found.length - 1] : null;
+      });
+      // The committed stroke renders at the same opacity
+      // the preview showed mid-drag.
+      const rendered = await page.evaluate((id) => {
+        const el = document.querySelector(`#cards .card.stroke[data-id="${id}"] path`);
+        return el?.getAttribute("opacity") ?? null;
+      }, stroke.id);
+      assert.equal(rendered, "0.5");
+    });
+
+    await check("applying a colour and opacity recolours a stroke in one undo step", async () => {
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // The translucent red stroke from the last check, on
+      // its own line: select it, pick blue at 30% opacity,
+      // and click the picked colour.
+      const before = strokes().find((it) => it.kind.Stroke.opacity === 50);
+      assert.ok(before);
+      await page.keyboard.press("v");
+      await page.mouse.click(400, 650);
+      await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
+      await page.locator(".col-slider-hue").fill("211");
+      await page.locator(".col-slider-sat").fill("100");
+      await page.locator(".col-slider-light").fill("50");
+      await page.locator(".col-slider-opacity").fill("30");
+      const picked = (await page.locator(".col-hex").textContent()) ?? "";
+      assert.ok(/^#[0-9A-F]{6}$/.test(picked));
+      await page.locator(".col-picked").click();
+      await waitFor("stroke recoloured blue at 30%", () => {
+        const it = strokes().find((s) => s.id === before.id);
+        return it?.kind.Stroke.color === picked && it.kind.Stroke.opacity === 30 ? true : null;
+      });
+      await page.keyboard.press("Control+z");
+      await waitFor("undo restores colour and opacity together", () => {
+        const it = strokes().find((s) => s.id === before.id);
+        return it?.kind.Stroke.color === pickedRed && it.kind.Stroke.opacity === 50 ? true : null;
+      });
+    });
+
+    await check("recolouring with opacity on a locked layer is refused", async () => {
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      const stroke = strokes().find((it) => it.kind.Stroke.opacity === 50);
+      assert.ok(stroke);
+      try {
+        await page.evaluate(() => window.__ciLayers.setLocked("default", true));
+        await page.keyboard.press("v");
+        await page.mouse.click(400, 650);
+        // Opacity 80, on the red tile: the refusal leaves
+        // both the colour and the opacity untouched.
+        await page.locator(".col-slider-opacity").fill("80");
+        await page.locator(".col-palette").nth(1).locator(".col-tile").first().click();
+        await waitFor("locked-layer toast", async () => {
+          const toast = (await page.locator("#toast").textContent()) ?? "";
+          return toast === "Layer is locked" ? true : null;
+        });
+        const after = strokes().find((it) => it.id === stroke.id);
+        assert.equal(after.kind.Stroke.color, pickedRed);
+        assert.equal(after.kind.Stroke.opacity, 50);
+      } finally {
+        await page.evaluate(() => window.__ciLayers.setLocked("default", false)).catch(() => undefined);
+        // Leave the pen at full opacity, so later checks
+        // draw the strokes they expect. Best-effort: a
+        // missing slider must not mask the check's result.
+        await page.locator(".col-slider-opacity").fill("100").catch(() => undefined);
+      }
+    });
+
+    // The fill control is a toggle, not two buttons:
+    // set the mode only when it differs, so a check
+    // never flips it by accident.
+    const setFillMode = async (on) => {
+      const isOn = await page.locator(".col-fill-toggle").evaluate((el) => el.getAttribute("aria-checked") === "true");
+      if (isOn !== on) await page.locator(".col-fill-toggle").click();
+    };
+    await check("gradient editor draws a gradient stroke, preview included", async () => {
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // The pen first: filling a slider leaves the focus
+      // on it, and a focused slider swallows the "p" key,
+      // so the tool would stay on select and no stroke
+      // would draw.
+      await page.keyboard.press("p");
+      // Pick the red on the HSL sliders, then turn the
+      // gradient on: it runs from the picked colour to a
+      // deep shade of it, at 0° (left to right). There
+      // is no angle control: the angle is always 0.
+      await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
+      await page.locator(".col-slider-hue").fill("355");
+      await page.locator(".col-slider-sat").fill("78");
+      await page.locator(".col-slider-light").fill("56");
+      pickedRed = (await page.locator(".col-hex").textContent()) ?? "";
+      assert.ok(/^#[0-9A-F]{6}$/.test(pickedRed));
+      await setFillMode(true);
+      assert.equal(await page.locator(".col-slider-angle").count(), 0, "no angle control in the gradient editor");
+      // The strip shows the picked gradient, and the
+      // preview swatch shows it too: both paint from a
+      // canvas image, so read their end pixels — the
+      // first is the picked red, the last its deep shade.
+      const stripFirst = await gradientPixelsAt(".col-gradient-strip", 0);
+      const stripLast = await gradientPixelsAt(".col-gradient-strip", 1);
+      assert.ok(stripFirst && stripLast, "gradient strip should paint a canvas image");
+      assert.ok(closeRgb(stripFirst, hexRgb(pickedRed)), `strip should start at the picked red, got ${stripFirst}`);
+      assert.ok(closeRgb(stripLast, hexRgb("#520A10")), `strip should end at the deep shade, got ${stripLast}`);
+      const swatchFirst = await gradientPixelsAt(".col-picked", 0);
+      const swatchLast = await gradientPixelsAt(".col-picked", 1);
+      assert.ok(swatchFirst && swatchLast, "picked swatch should paint a canvas image");
+      assert.ok(closeRgb(swatchFirst, hexRgb(pickedRed)), `swatch should start at the picked red, got ${swatchFirst}`);
+      assert.ok(closeRgb(swatchLast, hexRgb("#520A10")), `swatch should end at the deep shade, got ${swatchLast}`);
+      // The hex beside the swatch still shows the
+      // selected stop: its hex is the picked red. (The
+      // style serialises rgba(…, 1) as rgb(…), so the
+      // hex, not the background string, is the assertion.)
+      const swatchHex = await page.locator(".col-picked").evaluate((el) => el.dataset.hex);
+      assert.equal(swatchHex, pickedRed);
+      // Click the preview with nothing selected: the pen
+      // takes the gradient. The previous check leaves the
+      // translucent stroke selected, so clear the selection
+      // first — clicking the Harmonies title moves the
+      // focus off the lightness slider (a focused slider
+      // swallows Escape), and Escape then clears the
+      // selection. Without this, the click below would
+      // apply the gradient to that stroke instead of
+      // setting the pen. The title is a plain span, so
+      // the click has no side effect — unlike the fill
+      // toggle, which would flip the gradient off.
+      await page.locator(".col-harmonies-head .col-section-title").click();
+      await page.keyboard.press("Escape");
+      await page.locator(".col-picked").click();
+      // Draw on a fresh line, from x=150 so the stroke's
+      // middle sits clear of the shape card that covers
+      // its right half at this zoom, and read the live
+      // preview while the pen is still down: it carries
+      // its own gradient def, and the stroke paints
+      // through it, exactly as the committed stroke will.
+      await page.mouse.move(150, 550);
+      await page.mouse.down();
+      await page.mouse.move(200, 550, { steps: 10 });
+      await waitFor("live preview with a gradient", async () => {
+        const preview = await page.evaluate(() => {
+          const live = document.querySelector("#live-stroke");
+          const lg = live?.querySelector("linearGradient");
+          const el = live?.querySelector("path, line");
+          return lg && el?.getAttribute("stroke") === "url(#live-stroke-grad)"
+            ? { id: lg.id, x1: lg.getAttribute("x1"), x2: lg.getAttribute("x2") }
+            : null;
+        });
+        return preview ? true : null;
+      });
+      await page.mouse.move(500, 550, { steps: 10 });
+      await page.mouse.up();
+      const stroke = await waitFor("gradient stroke in board.json", () => {
+        const found = strokes().filter((it) => it.kind.Stroke.gradient);
+        return found.length >= 1 ? found[found.length - 1] : null;
+      });
+      assert.equal(stroke.kind.Stroke.color, pickedRed);
+      assert.deepEqual(stroke.kind.Stroke.gradient, {
+        angle: 0,
+        stops: [{ offset: 0, color: pickedRed }, { offset: 100, color: "#520A10" }],
+      });
+      // The committed stroke renders through its own
+      // linearGradient, mapped across its bounding box.
+      const rendered = await page.evaluate((id) => {
+        const svg = document.querySelector(`#cards .card.stroke[data-id="${id}"] svg`);
+        const lg = svg?.querySelector("linearGradient");
+        if (!lg) return null;
+        const path = svg?.querySelector("path, line");
+        return {
+          id: lg.id,
+          stroke: path?.getAttribute("stroke") ?? null,
+          stops: [...lg.querySelectorAll("stop")].map((s) => ({ offset: s.getAttribute("offset"), color: s.getAttribute("stop-color") })),
+        };
+      }, stroke.id);
+      assert.ok(rendered);
+      assert.equal(rendered.id, `grad-${stroke.id}`);
+      assert.equal(rendered.stroke, `url(#grad-${stroke.id})`);
+      assert.deepEqual(rendered.stops, [{ offset: "0%", color: pickedRed }, { offset: "100%", color: "#520A10" }]);
+    });
+
+    await check("applying a gradient recolours a selected stroke in one undo step", async () => {
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // The gradient stroke from the last check, on its
+      // own line: select it, then edit its second stop
+      // (the deep shade) to blue on the sliders — clicking the stop
+      // selects it, and the picked colour targets it. The
+      // click lands on the stroke's left half, clear of
+      // the shape card covering its right half.
+      const before = strokes().find((it) => it.kind.Stroke.gradient);
+      assert.ok(before);
+      await page.keyboard.press("v");
+      await page.mouse.click(325, 550);
+      await waitFor("gradient stroke selected", async () => {
+        const sel = await page.evaluate((id) => {
+          const el = document.querySelector(`#cards .card.stroke.selected[data-id="${id}"]`);
+          return el ? true : null;
+        }, before.id);
+        return sel;
+      });
+      await page.locator(".col-gradient-strip .col-stop-marker").nth(1).click();
+      await page.locator('.col-mode-seg-btn[data-mode="hsl"]').click();
+      await page.locator(".col-slider-hue").fill("211");
+      await page.locator(".col-slider-sat").fill("100");
+      await page.locator(".col-slider-light").fill("50");
+      const pickedBlue = (await page.locator(".col-hex").textContent()) ?? "";
+      assert.ok(/^#[0-9A-F]{6}$/.test(pickedBlue));
+      await page.locator(".col-picked").click();
+      await waitFor("stroke gradient recoloured blue", () => {
+        const it = strokes().find((s) => s.id === before.id);
+        return it?.kind.Stroke.gradient?.stops[1]?.color === pickedBlue ? true : null;
+      });
+      // The first stop — and the solid fallback colour —
+      // did not move.
+      const applied = strokes().find((s) => s.id === before.id);
+      assert.equal(applied.kind.Stroke.gradient.stops[0].color, pickedRed);
+      assert.equal(applied.kind.Stroke.color, pickedRed);
+      await page.keyboard.press("Control+z");
+      await waitFor("undo restores the gradient together", () => {
+        const it = strokes().find((s) => s.id === before.id);
+        return it?.kind.Stroke.gradient?.stops[1]?.color === "#520A10" ? true : null;
+      });
+    });
+
+    await check("gradient stops move, add and remove on the strip", async () => {
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // The gradient is on from the last check, two
+      // stops: red at 0, blue at 100. The + adds a stop
+      // in the picked colour at the widest gap — the
+      // middle, 50% — and selects it.
+      const markers = page.locator(".col-gradient-strip .col-stop-marker");
+      assert.equal(await markers.count(), 2);
+      await page.locator('button[aria-label="Add gradient stop"]').click();
+      assert.equal(await markers.count(), 3);
+      assert.equal(await markers.nth(1).getAttribute("data-offset"), "50");
+      // Drag the middle marker to 25%: a real pointer
+      // drag, from the marker's centre to the point a
+      // quarter along the strip.
+      const markerBox = await markers.nth(1).boundingBox();
+      assert.ok(markerBox);
+      const stripBox = await page.locator(".col-gradient-strip").boundingBox();
+      assert.ok(stripBox);
+      await page.mouse.move(markerBox.x + markerBox.width / 2, markerBox.y + markerBox.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(stripBox.x + stripBox.width * 0.25, markerBox.y + markerBox.height / 2, { steps: 10 });
+      await page.mouse.up();
+      assert.equal(await markers.nth(1).getAttribute("data-offset"), "25");
+      // The strip repaints with the moved stop: the
+      // pixels a quarter along it are the middle stop's
+      // colour, the picked blue.
+      const atQuarter = await gradientPixelsAt(".col-gradient-strip", 0.25);
+      assert.ok(atQuarter, "gradient strip should paint a canvas image");
+      assert.ok(closeRgb(atQuarter, hexRgb(pickedBlue), 3), `strip should show the moved stop at 25%, got ${atQuarter}`);
+      // The × removes the selected stop; the gradient is
+      // back to two stops, red at 0 and blue at 100.
+      await page.locator('button[aria-label="Remove stop 2"]').click();
+      assert.equal(await markers.count(), 2);
+      assert.equal(await markers.nth(0).getAttribute("data-offset"), "0");
+      assert.equal(await markers.nth(1).getAttribute("data-offset"), "100");
+    });
+
+    await check("turning the gradient off returns the stroke to solid", async () => {
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      const before = strokes().find((it) => it.kind.Stroke.gradient);
+      assert.ok(before);
+      await page.keyboard.press("v");
+      await page.mouse.click(325, 550);
+      await waitFor("gradient stroke selected", async () => {
+        const sel = await page.evaluate((id) => {
+          const el = document.querySelector(`#cards .card.stroke.selected[data-id="${id}"]`);
+          return el ? true : null;
+        }, before.id);
+        return sel;
+      });
+      // The picked colour is still the blue from the last
+      // check: turning the gradient off and applying it
+      // leaves a solid blue stroke.
+      await setFillMode(false);
+      const picked = (await page.locator(".col-hex").textContent()) ?? "";
+      assert.ok(/^#[0-9A-F]{6}$/.test(picked));
+      await page.locator(".col-picked").click();
+      await waitFor("stroke solid again", () => {
+        const it = strokes().find((s) => s.id === before.id);
+        return it && !it.kind.Stroke.gradient && it.kind.Stroke.color === picked ? true : null;
+      });
+    });
+    await check("the colour panel heights, solid and gradient", async () => {
+      await page.locator('.plugin-tab[aria-label="Color Management"]').click();
+      await page.locator(".col-palette").first().waitFor({ timeout: READY_TIMEOUT_MS });
+      // Solid first: an earlier check may have left the
+      // gradient on, and the solid measurement must be
+      // taken in solid mode.
+      await setFillMode(false);
+      await page.locator(".col-gradient-strip").waitFor({ state: "detached", timeout: READY_TIMEOUT_MS }).catch(() => undefined);
+      const measure = async () => page.locator('.plugin-panel[data-panel="colours"] .plugin-panel-body')
+        .evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }));
+      const s = await measure();
+      await setFillMode(true);
+      await page.locator(".col-gradient-strip").waitFor({ timeout: READY_TIMEOUT_MS });
+      const g = await measure();
+      // Scrolling is accepted: the wheel is back at its
+      // full size, so the panel may be taller than the
+      // body. The heights are the check's output, not a
+      // fit assertion — if they move, the numbers here say
+      // by how much.
+      console.log(`colour panel heights: solid ${s.scroll}/${s.client}, gradient ${g.scroll}/${g.client}`);
+      assert.ok(s.scroll > 0 && g.scroll > 0, "panel should render in both modes");
+      await setFillMode(false);
+    });
 
     await check("a version restores from the Boards panel history", async () => {
       // Enable the Boards plugin (bundled, opt-in) and open its panel.

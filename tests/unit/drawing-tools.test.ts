@@ -86,6 +86,38 @@ describe("buildStrokeItem", () => {
       Stroke: { points: [{ x: 0, y: 0 }, { x: 10, y: 0 }], color: "#1A1A1A", width: 2, marker: false, pressures: [0.5, 0.8], pencil: true },
     });
   });
+  it("stores a non-100 opacity, and stores nothing at 100", () => {
+    const faint = buildStrokeItem(
+      [{ x: 0, y: 0 }, { x: 10, y: 0 }],
+      [], "#E63946", 3, false, false, 50,
+    );
+    expect(faint?.kind).toEqual({
+      Stroke: { points: [{ x: 0, y: 0 }, { x: 10, y: 0 }], color: "#E63946", width: 3, marker: false, opacity: 50 },
+    });
+    const full = buildStrokeItem(
+      [{ x: 0, y: 0 }, { x: 10, y: 0 }],
+      [], "#E63946", 3, false, false, 100,
+    );
+    expect(full?.kind).toEqual({
+      Stroke: { points: [{ x: 0, y: 0 }, { x: 10, y: 0 }], color: "#E63946", width: 3, marker: false },
+    });
+    expect("opacity" in (full?.kind as { Stroke: object }).Stroke).toBe(false);
+  });
+  it("stores a gradient, and stores nothing for a null one", () => {
+    const gradient = { angle: 90, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#0000FF" }] };
+    const item = buildStrokeItem(
+      [{ x: 0, y: 0 }, { x: 10, y: 0 }],
+      [], "#FF0000", 3, false, false, 100, gradient,
+    );
+    expect(item?.kind).toEqual({
+      Stroke: { points: [{ x: 0, y: 0 }, { x: 10, y: 0 }], color: "#FF0000", width: 3, marker: false, gradient },
+    });
+    const solid = buildStrokeItem(
+      [{ x: 0, y: 0 }, { x: 10, y: 0 }],
+      [], "#FF0000", 3, false, false, 100, null,
+    );
+    expect("gradient" in (solid?.kind as { Stroke: object }).Stroke).toBe(false);
+  });
 });
 
 describe("shapeBox and buildShapeItem", () => {
@@ -183,5 +215,26 @@ describe("eraserSplitItems", () => {
     expect(pieces[1].kind).toEqual({
       Stroke: { points: [{ x: 70, y: 0 }, { x: 80, y: 0 }, { x: 90, y: 0 }, { x: 100, y: 0 }], pressures: [0.8, 0.7, 0.6, 0.5], color: "#1A1A1A", width: 2, marker: false, pencil: true },
     });
+  });
+  it("keeps the stroke's opacity in both pieces", () => {
+    const pieces = eraserSplitItems(
+      { points: line(11), color: "#1A1A1A", width: 3, marker: false, opacity: 50 },
+      { x: 50, y: 0 }, ERASER_RADIUS,
+    );
+    expect(pieces).toHaveLength(2);
+    for (const piece of pieces) {
+      expect((piece.kind as { Stroke: { opacity?: number } }).Stroke.opacity).toBe(50);
+    }
+  });
+  it("keeps the stroke's gradient in both pieces", () => {
+    const gradient = { angle: 90, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#0000FF" }] };
+    const pieces = eraserSplitItems(
+      { points: line(11), color: "#FF0000", width: 3, marker: false, gradient },
+      { x: 50, y: 0 }, ERASER_RADIUS,
+    );
+    expect(pieces).toHaveLength(2);
+    for (const piece of pieces) {
+      expect((piece.kind as { Stroke: { gradient?: unknown } }).Stroke.gradient).toEqual(gradient);
+    }
   });
 });

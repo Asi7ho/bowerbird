@@ -20,6 +20,23 @@ export type Anchor = { Point: Pt } | { Item: number };
 
 export type ShapeKind = "rect" | "ellipse" | "triangle" | "diamond" | "hexagon" | "star" | "arrow";
 
+// One stop of a linear stroke gradient: where along the
+// gradient it sits (0–100) and its colour, a normalised
+// hex. Stops are stored in offset order.
+export interface GradientStop {
+  offset: number;
+  color: string;
+}
+
+// A linear gradient across a stroke: the angle in degrees
+// — 0 is left to right, 90 top to bottom, clockwise —
+// and two or more stops. Null (or missing) on a stroke
+// means solid: the stroke draws in its `color`.
+export interface StrokeGradient {
+  angle: number;
+  stops: GradientStop[];
+}
+
 export type Kind =
   | { Text: { text: string; bold: boolean; size: number; color: string; bg?: string } }
   | { Shape: { shape: ShapeKind; fill: string; outline?: boolean } }
@@ -38,7 +55,7 @@ export type Kind =
   | { Audio: { path: string; title?: string; transcript?: string } }
   | { Video: { source: string; remote: boolean; size_bytes: number; poster?: string; duration?: number } }
   | { Model3D: { path: string; size_bytes: number } }
-  | { Stroke: { points: Pt[]; color: string; width: number; marker: boolean; pressures?: number[]; pencil?: boolean } }
+  | { Stroke: { points: Pt[]; color: string; width: number; marker: boolean; pressures?: number[]; pencil?: boolean; opacity?: number; gradient?: StrokeGradient | null } }
   | { Connector: { from: Anchor; to: Anchor; color: string } }
   // Plugin cards (see PLUGIN_API.md): namespaced so the core never
   // has to know a plugin's data shape. `data` is always JSON. If
@@ -294,12 +311,19 @@ export interface PluginPointerEvent {
 // How a drag tool's live preview stroke looks. All fields
 // are optional: width defaults to 3, color to the pen
 // colour, marker to false (opaque), pencil to false (no
-// graphite texture).
+// graphite texture), opacity to 100 (fully opaque) —
+// a caller that wants the pen's opacity passes
+// api.pen.getOpacity() itself. A gradient, when given,
+// paints the preview exactly like the committed stroke;
+// a caller that wants the pen's gradient passes
+// api.pen.getGradient() itself. Null clears it.
 export interface PluginPreviewStrokeOptions {
   width?: number;
   color?: string;
   marker?: boolean;
   pencil?: boolean;
+  opacity?: number;
+  gradient?: StrokeGradient | null;
 }
 
 // How a drag tool's live shape preview looks. All fields
@@ -456,6 +480,10 @@ export interface PluginHost {
   // cards — adds them all here, so undoing it takes one undo,
   // not one per card. addItem saves after every item.
   addItems: (items: Array<{ kind: Kind; pos: Pt; size: Size }>) => number[];
+  // data rewrites the plugin's own card — except a colour
+  // patch: { color } on a stroke, { hex } on a swatch.
+  // Anything else on a core card throws. One undo step;
+  // false when the card is missing or its layer is locked.
   updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }) => boolean;
   updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }>) => boolean;
   moveItem: (id: number, toIndex: number) => boolean;
@@ -563,7 +591,12 @@ export interface PluginHost {
   getSelectMode: () => "select" | "lasso";
   getPenColor: () => string;
   setPenColor: (hex: string) => boolean;
+  getPenOpacity: () => number;
+  setPenOpacity: (opacity: number) => boolean;
+  getPenGradient: () => StrokeGradient | null;
+  setPenGradient: (gradient: StrokeGradient | null) => boolean;
   getCamera: () => Camera;
+  screenToWorld: (clientX: number, clientY: number) => Pt;
   setCamera: (cam: Camera) => void;
   // Set the camera without saving or rendering, for a live
   // pan or zoom drag: the drag applies the camera on every
@@ -823,6 +856,10 @@ export interface PluginContext {
     // the new connector's id, or null when either card does
     // not exist.
     connect: (fromId: number, toId: number, options?: { color?: string }) => number | null;
+    // data rewrites the plugin's own card — except a colour
+    // patch: { color } on a stroke, { hex } on a swatch.
+    // Anything else on a core card throws. One undo step;
+    // false when the card is missing or its layer is locked.
     updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }) => boolean;
     updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }>) => boolean;
     moveItem: (id: number, toIndex: number) => boolean;
@@ -978,6 +1015,10 @@ export interface PluginContext {
   };
   view: {
     getCamera: () => Camera;
+    // A window point (clientX/Y) as a board point: the
+    // board sits below the title bar, so raw client
+    // coordinates land low without this.
+    screenToWorld: (clientX: number, clientY: number) => Pt;
     setCamera: (cam: Camera) => void;
     // Set the camera without saving or rendering, for a live
     // pan or zoom drag: the drag applies the camera on every
@@ -1043,9 +1084,25 @@ export interface PluginContext {
   // "pen" plugin event, so a listening plugin can follow
   // it without polling. Pen colour is session state, not
   // saved in board JSON.
+  // The pen's opacity, 0–100, is the same kind of state:
+  // the next stroke draws at it, and changing it fires
+  // the same "pen" event. It is session state too, not
+  // saved in board JSON — a stroke stores its own opacity
+  // when it is drawn.
+  // The pen's gradient, null for a solid stroke: the next
+  // stroke draws with it, and changing it fires the same
+  // "pen" event. Session state too, not saved in board
+  // JSON — a stroke stores its own gradient when it is
+  // drawn. Setting a gradient also moves the pen colour
+  // to the gradient's first stop, so the colour stays the
+  // solid fallback for a gradient-unaware renderer.
   pen: {
     getColor: () => string;
     setColor: (hex: string) => boolean;
+    getOpacity: () => number;
+    setOpacity: (opacity: number) => boolean;
+    getGradient: () => StrokeGradient | null;
+    setGradient: (gradient: StrokeGradient | null) => boolean;
   };
   ui: {
     toast: (msg: string) => void;

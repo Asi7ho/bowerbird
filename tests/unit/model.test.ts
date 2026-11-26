@@ -4,10 +4,12 @@
 import { describe, expect, it } from "vitest";
 import {
   anchorPoint,
+  applyColourDataPatch,
   arrangeItems,
   checklistProgress,
   clampZoom,
   clippedEnds,
+  colourDataPatch,
   domainOf,
   escapeHtml,
   estimateTextHeight,
@@ -22,6 +24,8 @@ import {
   lassoSelect,
   marquee,
   moveSelection,
+  linearGradientCoords,
+  normaliseGradient,
   normaliseHex,
   parseHex,
   parseInline,
@@ -44,6 +48,7 @@ import {
   smoothStrokeSamples,
   splitStrokeByEraser,
   strokeMaxWidth,
+  strokeOpacity,
   strokePressuresVary,
   strokesWithin,
   toggleTaskLine,
@@ -100,6 +105,15 @@ describe("stylus pressure", () => {
     expect(strokeMaxWidth({ width: 3 })).toBe(3);
     expect(strokeMaxWidth({ width: 3, pressures: [] })).toBe(3);
     expect(strokeMaxWidth({ width: 3, pressures: [0.1, 0.5, 1] })).toBe(6);
+  });
+  it("strokeOpacity is 1 without an opacity, and multiplies with the marker's 0.45", () => {
+    expect(strokeOpacity({ marker: false })).toBe(1);
+    expect(strokeOpacity({ marker: true })).toBe(0.45);
+    expect(strokeOpacity({ opacity: 50, marker: false })).toBe(0.5);
+    expect(strokeOpacity({ opacity: 50, marker: true })).toBe(0.225);
+    expect(strokeOpacity({ opacity: 100, marker: false })).toBe(1);
+    expect(strokeOpacity({ opacity: 30, marker: true })).toBe(0.135);
+    expect(strokeOpacity({ opacity: 0, marker: false })).toBe(0);
   });
   it("strokePressuresVary needs a real spread, not jitter", () => {
     expect(strokePressuresVary({})).toBe(false);
@@ -690,5 +704,117 @@ describe("geometry helpers", () => {
     expect(parseInline("a `code` b")).toEqual([{ text: "a " }, { text: "code", code: true }, { text: " b" }]);
     expect(parseInline("2*3*4")).toEqual([{ text: "2*3*4" }]);
     expect(parseInline("a *b* c")).toEqual([{ text: "a " }, { text: "b", italic: true }, { text: " c" }]);
+  });
+});
+
+describe("colour data patches", () => {
+  function stroke(id: number): Item {
+    return {
+      id, pos: { x: 0, y: 0 }, size: { w: 100, h: 20 }, group: null,
+      kind: { Stroke: { points: [{ x: 0, y: 0 }], color: "#1A1A1A", width: 3, marker: false } },
+    };
+  }
+  function swatch(id: number): Item {
+    return {
+      id, pos: { x: 0, y: 0 }, size: { w: 120, h: 120 }, group: null,
+      kind: { Swatch: { hex: "#1A1A1A" } },
+    };
+  }
+  it("accepts { color } on a stroke and { hex } on a swatch, normalised", () => {
+    expect(colourDataPatch(stroke(1), { color: "#f00" })).toEqual({ color: "#FF0000" });
+    expect(colourDataPatch(swatch(2), { hex: "#00ff00" })).toEqual({ hex: "#00FF00" });
+  });
+  it("accepts { opacity } and { color, opacity } on a stroke, normalised and rounded", () => {
+    expect(colourDataPatch(stroke(1), { opacity: 50 })).toEqual({ opacity: 50 });
+    expect(colourDataPatch(stroke(1), { color: "#f00", opacity: 50.6 })).toEqual({ color: "#FF0000", opacity: 51 });
+    expect(colourDataPatch(stroke(1), { opacity: 0 })).toEqual({ opacity: 0 });
+    expect(colourDataPatch(stroke(1), { opacity: 100 })).toEqual({ opacity: 100 });
+  });
+  it("refuses a bad opacity, an empty patch, or opacity on a swatch", () => {
+    expect(colourDataPatch(stroke(1), { opacity: 150 })).toBeNull();
+    expect(colourDataPatch(stroke(1), { opacity: -1 })).toBeNull();
+    expect(colourDataPatch(stroke(1), { opacity: "50" })).toBeNull();
+    expect(colourDataPatch(stroke(1), { opacity: Number.NaN })).toBeNull();
+    expect(colourDataPatch(stroke(1), { color: "#FF0000", opacity: 150 })).toBeNull();
+    expect(colourDataPatch(stroke(1), {})).toBeNull();
+    expect(colourDataPatch(swatch(2), { opacity: 50 })).toBeNull();
+    expect(colourDataPatch(textCard(3, 0, 0), { opacity: 50 })).toBeNull();
+  });
+  it("applyColourDataPatch applies opacity alone and with a colour, leaving the other field alone", () => {
+    const s = stroke(1);
+    expect(applyColourDataPatch(s, { opacity: 50 })).toBe(true);
+    expect((s.kind as { Stroke: { color: string; opacity?: number } }).Stroke.opacity).toBe(50);
+    expect((s.kind as { Stroke: { color: string } }).Stroke.color).toBe("#1A1A1A");
+    expect(applyColourDataPatch(s, { color: "#0000ff", opacity: 100 })).toBe(true);
+    expect((s.kind as { Stroke: { color: string; opacity?: number } }).Stroke).toEqual(
+      expect.objectContaining({ color: "#0000FF", opacity: 100 }),
+    );
+  });
+  it("refuses any other key, a bad hex, or a non-colour card", () => {
+    expect(colourDataPatch(stroke(1), { width: 5 })).toBeNull();
+    expect(colourDataPatch(stroke(1), { color: "#FF0000", width: 5 })).toBeNull();
+    expect(colourDataPatch(stroke(1), { color: "red" })).toBeNull();
+    expect(colourDataPatch(stroke(1), { hex: "#FF0000" })).toBeNull();
+    expect(colourDataPatch(swatch(2), { color: "#FF0000" })).toBeNull();
+    expect(colourDataPatch(textCard(3, 0, 0), { color: "#FF0000" })).toBeNull();
+    expect(colourDataPatch(stroke(1), null)).toBeNull();
+    expect(colourDataPatch(stroke(1), ["#FF0000"])).toBeNull();
+  });
+  it("applyColourDataPatch recolours the card and leaves the rest alone", () => {
+    const s = stroke(1);
+    expect(applyColourDataPatch(s, { color: "#0000ff" })).toBe(true);
+    expect((s.kind as { Stroke: { color: string } }).Stroke.color).toBe("#0000FF");
+    const w = swatch(2);
+    expect(applyColourDataPatch(w, { hex: "#0000ff" })).toBe(true);
+    expect((w.kind as { Swatch: { hex: string } }).Swatch.hex).toBe("#0000FF");
+    expect(applyColourDataPatch(s, { width: 5 })).toBe(false);
+    expect((s.kind as { Stroke: { color: string } }).Stroke.color).toBe("#0000FF");
+  });
+  it("accepts a gradient alone and with a colour, normalised and sorted by offset", () => {
+    expect(colourDataPatch(stroke(1), { gradient: { angle: 90, stops: [{ offset: 100, color: "#00ff00" }, { offset: 0, color: "#f00" }] } }))
+      .toEqual({ gradient: { angle: 0, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#00FF00" }] } });
+    expect(colourDataPatch(stroke(1), { color: "#f00", gradient: { angle: 0, stops: [{ offset: 0, color: "#f00" }, { offset: 100, color: "#00f" }] } }))
+      .toEqual({ color: "#FF0000", gradient: { angle: 0, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#0000FF" }] } });
+    expect(colourDataPatch(stroke(1), { gradient: null })).toEqual({ gradient: null });
+  });
+  it("refuses a bad gradient: too few stops, a bad offset, a bad colour, a bad angle", () => {
+    expect(colourDataPatch(stroke(1), { gradient: { angle: 0, stops: [{ offset: 0, color: "#FF0000" }] } })).toBeNull();
+    expect(colourDataPatch(stroke(1), { gradient: { angle: 0, stops: [{ offset: -1, color: "#FF0000" }, { offset: 100, color: "#00FF00" }] } })).toBeNull();
+    expect(colourDataPatch(stroke(1), { gradient: { angle: 0, stops: [{ offset: 0, color: "red" }, { offset: 100, color: "#00FF00" }] } })).toBeNull();
+    expect(colourDataPatch(stroke(1), { gradient: { angle: "90", stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#00FF00" }] } })).toBeNull();
+    expect(colourDataPatch(stroke(1), { gradient: { angle: 0, stops: "no" } })).toBeNull();
+    expect(colourDataPatch(swatch(2), { gradient: { angle: 0, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#00FF00" }] } })).toBeNull();
+  });
+  it("applyColourDataPatch sets the gradient and clears it back to solid with null", () => {
+    const s = stroke(1);
+    expect(applyColourDataPatch(s, { gradient: { angle: 45, stops: [{ offset: 0, color: "#f00" }, { offset: 100, color: "#00f" }] } })).toBe(true);
+    expect((s.kind as { Stroke: { gradient?: unknown } }).Stroke.gradient).toEqual(
+      { angle: 0, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#0000FF" }] },
+    );
+    expect(applyColourDataPatch(s, { gradient: null })).toBe(true);
+    expect((s.kind as { Stroke: { gradient?: unknown } }).Stroke.gradient).toBeUndefined();
+  });
+});
+
+describe("gradients", () => {
+  it("normaliseGradient sets the angle to 0, normalises colours and sorts the stops", () => {
+    expect(normaliseGradient({ angle: 450, stops: [{ offset: 100, color: "#00f" }, { offset: 0, color: "#f00" }] }))
+      .toEqual({ angle: 0, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#0000FF" }] });
+    expect(normaliseGradient({ angle: -90, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#00FF00" }] })?.angle).toBe(0);
+    expect(normaliseGradient({ angle: 90, stops: [{ offset: 0, color: "#FF0000" }, { offset: 100, color: "#00FF00" }] })?.angle).toBe(0);
+    expect(normaliseGradient(null)).toBeNull();
+    expect(normaliseGradient({ angle: 0, stops: [] })).toBeNull();
+  });
+  it("linearGradientCoords spans the box along the angle", () => {
+    const box = { x: 0, y: 0, w: 100, h: 40 };
+    expect(linearGradientCoords(0, box)).toEqual({ x1: 0, y1: 20, x2: 100, y2: 20 });
+    expect(linearGradientCoords(90, box)).toEqual({ x1: 50, y1: 0, x2: 50, y2: 40 });
+    expect(linearGradientCoords(180, box)).toEqual({ x1: 100, y1: 20, x2: 0, y2: 20 });
+    // A diagonal reaches corner to corner, not edge to edge.
+    const d = linearGradientCoords(45, box);
+    expect(d.x1).toBeCloseTo(15, 0);
+    expect(d.y1).toBeCloseTo(-15, 0);
+    expect(d.x2).toBeCloseTo(85, 0);
+    expect(d.y2).toBeCloseTo(55, 0);
   });
 });
