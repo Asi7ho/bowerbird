@@ -918,8 +918,13 @@ function renderHarmonies(): void {
   const found = harmoniesFor(base.h, base.s, base.l).find((h) => h.name === harmony);
   const colors = found ? found.colors : [];
   const picked = pickedHex();
-  let pickedIndex = 0;
-  let best = Infinity;
+  // The tile the set is built around — middle for
+  // Analogous and Monochromatic, first for the rest —
+  // wins a tie, so a grey's five identical tiles still
+  // ring the middle one instead of the first.
+  const home = harmony === "Analogous" || harmony === "Monochromatic" ? 2 : 0;
+  let pickedIndex = home;
+  let best = home < colors.length ? colourDistance(colors[home], picked) : Infinity;
   colors.forEach((hex, i) => {
     const d = colourDistance(hex, picked);
     if (d < best) { best = d; pickedIndex = i; }
