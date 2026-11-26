@@ -52,6 +52,13 @@ let gradient: StrokeGradient | null = null;
 // on: clicking a stop selects it, and the picked colour
 // targets that stop.
 let selectedStop = 0;
+// The gradient that was on before solid, with the picked
+// colour at the switch: switching back restores it when
+// the colour has not moved since, so the round trip
+// gives the gradient back instead of a fresh one built
+// from the colour the right stop had.
+let lastGradient: StrokeGradient | null = null;
+let lastGradientBase: typeof base | null = null;
 // While the wheel is being dragged: the preview swatch
 // shows the picked hue and saturation at lightness 50%,
 // so a dark pick still reads while it moves. The wheel
@@ -152,6 +159,8 @@ export function clearPanel(): void {
   opacity = 100;
   gradient = null;
   selectedStop = 0;
+  lastGradient = null;
+  lastGradientBase = null;
   recent = [];
   modeSegButtons = {};
   harmonyMenuItems = {};
@@ -287,13 +296,29 @@ function syncSelectedStop(hex: string): void {
 function setGradientMode(on: boolean): void {
   if (on === (gradient !== null)) return;
   if (on) {
-    // A new gradient runs from the picked colour to a
-    // deep shade of it, left to right: a rich fade,
-    // never a wash-out to white.
-    const hex = pickedHex();
-    setGradient({ angle: 0, stops: [{ offset: 0, color: hex }, { offset: 100, color: deepShadeHex(hex) }] });
-    selectedStop = 0;
+    // Back to the gradient that was on before solid,
+    // when the picked colour has not moved since — the
+    // round trip gives the gradient back, not a fresh
+    // one built from the colour the right stop had.
+    const restore = lastGradient;
+    const restoreBase = lastGradientBase;
+    lastGradient = null;
+    lastGradientBase = null;
+    if (restore && restoreBase && base.h === restoreBase.h && base.s === restoreBase.s && base.l === restoreBase.l) {
+      base = hexToHsl(restore.stops[0].color);
+      selectedStop = 0;
+      setGradient(restore);
+    } else {
+      // A new gradient runs from the picked colour to a
+      // deep shade of it, left to right: a rich fade,
+      // never a wash-out to white.
+      const hex = pickedHex();
+      setGradient({ angle: 0, stops: [{ offset: 0, color: hex }, { offset: 100, color: deepShadeHex(hex) }] });
+      selectedStop = 0;
+    }
   } else {
+    lastGradient = gradient;
+    lastGradientBase = { ...base };
     setGradient(null);
     selectedStop = 0;
   }
