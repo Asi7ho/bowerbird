@@ -596,6 +596,7 @@ export interface PluginHost {
   getPenGradient: () => StrokeGradient | null;
   setPenGradient: (gradient: StrokeGradient | null) => boolean;
   getCamera: () => Camera;
+  screenToWorld: (clientX: number, clientY: number) => Pt;
   setCamera: (cam: Camera) => void;
   // Set the camera without saving or rendering, for a live
   // pan or zoom drag: the drag applies the camera on every
@@ -1014,6 +1015,10 @@ export interface PluginContext {
   };
   view: {
     getCamera: () => Camera;
+    // A window point (clientX/Y) as a board point: the
+    // board sits below the title bar, so raw client
+    // coordinates land low without this.
+    screenToWorld: (clientX: number, clientY: number) => Pt;
     setCamera: (cam: Camera) => void;
     // Set the camera without saving or rendering, for a live
     // pan or zoom drag: the drag applies the camera on every

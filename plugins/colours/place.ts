@@ -4,26 +4,7 @@
 // so only the drag places. A placed swatch is an
 // ordinary board item, not a plugin card, so it
 // survives disabling the plugin.
-//
-// Board geometry lives in #board now, below the title bar:
-// its client size is the visible board, and its top edge is
-// the board's origin in client coordinates. Drop points go
-// through it, never window size or raw client coordinates,
-// or a swatch lands 48px low.
 import type { PluginContext, Pt } from "bowerbird-plugin-api";
-
-function boardGeometry(): { w: number; h: number; left: number; top: number } {
-  const el = document.getElementById("board");
-  if (!el) return { w: window.innerWidth, h: window.innerHeight, left: 0, top: 0 };
-  const r = el.getBoundingClientRect();
-  return { w: el.clientWidth, h: el.clientHeight, left: r.left, top: r.top };
-}
-
-function dropWorld(api: PluginContext, clientX: number, clientY: number): Pt {
-  const cam = api.view.getCamera();
-  const b = boardGeometry();
-  return { x: (clientX - b.left) / cam.zoom + cam.x, y: (clientY - b.top) / cam.zoom + cam.y };
-}
 
 function placeAt(api: PluginContext | null, hex: string, point: Pt): void {
   if (!api) return;
@@ -71,7 +52,7 @@ export function attachPlaceDrag(api: PluginContext, el: HTMLElement): void {
       const target = document.elementFromPoint(me.clientX, me.clientY);
       if (!target) return;
       if (target.closest && (target.closest(".plugin-panel") || target.closest("#toolbar") || target.closest("#title-bar") || target.closest("#settings-backdrop") || target.closest("#view-switcher") || target.closest(".plugin-tabs"))) return;
-      placeAt(api, hex, dropWorld(api, me.clientX, me.clientY));
+      placeAt(api, hex, api.view.screenToWorld(me.clientX, me.clientY));
     };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("mouseup", onUp);

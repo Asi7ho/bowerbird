@@ -855,6 +855,7 @@ async function init(): Promise<void> {
       return true;
     },
     getCamera: () => C.board.camera,
+    screenToWorld: (clientX, clientY) => toWorld(boardPoint(clientX, clientY)),
     setCamera: (cam) => {
       if (!applyCamera(cam)) return;
       C.undoStore.save(); boardRender();

@@ -648,6 +648,7 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
     },
     view: {
       getCamera: () => ({ ...host!.getCamera() }),
+      screenToWorld: (clientX: number, clientY: number) => host!.screenToWorld(clientX, clientY),
       setCamera: (cam: Camera) => host!.setCamera(cam),
       setCameraSilent: (cam: Camera) => host!.setCameraSilent(cam),
       zoomBy: (factor: number) => host!.zoomBy(factor),
