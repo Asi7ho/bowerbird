@@ -377,36 +377,26 @@ function textureLabel(id: string | null): string {
   return store.textures.find((t) => t.id === id)?.name ?? id;
 }
 
-// A brush row's preview: a stroke sample beside the
-// name, so the texture reads at a glance in one short
-// row. The sample is the brush's size, floored so a thin
-// brush still reads and capped so a wide one fits. A
-// highlighter-family brush previews translucent, like it draws.
-// The sample renders zoomed 2x (a 54x13 viewBox in the
-// 108x26 box): the stroke stays the same thickness on
-// screen, but the filter's grain and wobble — fixed in
-// user units by the texture — read twice as large, so a
-// fine texture like Graphite stops looking like plain Ink.
-// Every row samples the same straight stroke, so the
-// only difference between rows is the texture: a wavy
-// sample would compare shapes, not textures. A textured
-// sample wraps the path in a group with a spacer rect
-// the size of the viewBox: the shared filter's region is
-// a fraction of the filtered element's box, and a straight
-// path's own box has no height, so without the spacer the
-// region would collapse. The spacer makes the region span
-// the whole sample, like the 512 spacer does for drawn strokes.
+// A brush row's preview: one stroke at the size the
+// brush draws, at the scale it draws at — a truthful
+// miniature of the drawn stroke. A highlighter-family
+// brush previews translucent, like it draws. The sample
+// wraps the path in a group with a spacer rect the size
+// of the viewBox, so the shared filter's region spans
+// the whole sample (a straight path's own box has no
+// height). The viewBox is 30 tall so Spray's scatter
+// band fits whole.
 function previewSvg(preset: BrushPreset): string {
   // A wash at 0.45 read as a faded grey smear next
   // to Ink; 0.65 stays translucent but reads as a mark.
   const opacity = preset.family === "highlighter" ? ` opacity="0.65"` : "";
-  const w = Math.min(Math.max(preset.size, 4), 10) / 2;
-  const d = "M2 6.5 L 52 6.5";
+  const w = preset.size;
+  const d = "M10 15 L 98 15";
   const stroke = `<path d="${d}" fill="none" stroke="#1A1A1A" stroke-width="${w}" stroke-linecap="round"${opacity} />`;
   if (!preset.texture) {
-    return `<svg viewBox="0 0 54 13" aria-hidden="true">${stroke}</svg>`;
+    return `<svg viewBox="0 0 108 30" aria-hidden="true">${stroke}</svg>`;
   }
-  return `<svg viewBox="0 0 54 13" aria-hidden="true"><g filter="url(#texture-${preset.texture})"><rect x="0" y="0" width="54" height="13" fill="none" />${stroke}</g></svg>`;
+  return `<svg viewBox="0 0 108 30" aria-hidden="true"><g filter="url(#texture-${preset.texture})"><rect x="0" y="0" width="108" height="30" fill="none" />${stroke}</g></svg>`;
 }
 
 function renderBrushes(): void {
