@@ -53,15 +53,6 @@ export function deepShadeHex(hex: string): string {
   return hslToHex(h, s, Math.max(5, Math.min(18, l - 30)));
 }
 
-// The same hue and saturation at lightness 50%: the
-// readable version of a picked colour, for the preview
-// while the wheel is being dragged — a dark pick barely
-// reads in the swatch, so the drag shows this instead.
-export function brightHex(hex: string): string {
-  const { h, s } = hexToHsl(hex);
-  return hslToHex(h, s, 50);
-}
-
 // A gradient as pixels, dithered with random noise —
 // Skia's ordered dither reads as vertical stripes.
 // Seeded from the stops, so repaints show the same

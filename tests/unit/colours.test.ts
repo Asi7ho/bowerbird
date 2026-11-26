@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import type { PluginContext } from "bowerbird-plugin-api";
 import { applyColour } from "../../plugins/colours/apply";
-import { brightHex, deepShadeHex, gradientPixels, hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, isNearDuplicate, colourDistance, normaliseHex, rgbToHex, HARMONY_NAMES, harmoniesFor } from "../../plugins/colours/color";
+import { deepShadeHex, gradientPixels, hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, isNearDuplicate, colourDistance, normaliseHex, rgbToHex, HARMONY_NAMES, harmoniesFor } from "../../plugins/colours/color";
 import {
   addColour,
   createPalette,
@@ -72,21 +72,6 @@ describe("deepShadeHex", () => {
     // to #0D0D0D, so both stops are the same colour.
     expect(deepShadeHex("#000000")).toBe("#0D0D0D");
     expect(deepShadeHex("#000000")).toBe(hslToHex(0, 0, 5));
-  });
-});
-
-describe("brightHex", () => {
-  it("keeps hue and saturation and lands at lightness 50%", () => {
-    // A dark red reads as vivid red while dragging.
-    const input = hexToHsl("#2D0609");
-    const out = hexToHsl(brightHex("#2D0609"));
-    expect(out.h).toBeCloseTo(input.h, 0);
-    expect(out.s).toBeCloseTo(input.s, 0);
-    expect(out.l).toBeCloseTo(50, 0);
-    // A pick already at 50% is unchanged.
-    expect(brightHex(hslToHex(200, 80, 50))).toBe(hslToHex(200, 80, 50));
-    // A light pick comes down to 50%, not to black.
-    expect(hexToHsl(brightHex("#F5C542")).l).toBeCloseTo(50, 0);
   });
 });
 
