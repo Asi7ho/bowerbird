@@ -16,7 +16,7 @@ import { activateBrush, applyBrush, applyBrushDefaults } from "./apply.js";
 import { copyCurve, curveSegmentControls, LINEAR_CURVE, type CurvePoint } from "./curve.js";
 import {
   createPreset, createTexture, deletePreset, emptyStore,
-  nextPresetName, seededStore, syncPresetSizes,
+  nextPresetName, seededStore,
   type BrushPreset, type BrushStore,
 } from "./store.js";
 import { BUILTIN_TEXTURES, textureFilterSvg, type TextureParams } from "./textures.js";

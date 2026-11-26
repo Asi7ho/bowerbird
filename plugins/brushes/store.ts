@@ -203,26 +203,3 @@ export function updatePreset(store: BrushStore, index: number, patch: Partial<Br
   presets[index] = next;
   return { ...store, presets };
 }
-
-// The stored sizes follow a width set elsewhere — the
-// toolbar's size control: each family's active preset
-// takes its kind's width when it differs, so the panel
-// and the toolbar never disagree. A family with no width
-// or no active preset is untouched. Returns the same
-// store when nothing changed.
-export function syncPresetSizes(
-  store: BrushStore,
-  activeIds: Partial<Record<TextureFamily, string>>,
-  widths: Partial<Record<TextureFamily, number>>,
-): BrushStore {
-  let next = store;
-  for (const family of Object.keys(widths) as TextureFamily[]) {
-    const width = widths[family];
-    const id = activeIds[family];
-    if (typeof width !== "number" || !id) continue;
-    const index = next.presets.findIndex((p) => p.id === id && p.family === family);
-    if (index < 0 || next.presets[index].size === clampSize(width)) continue;
-    next = updatePreset(next, index, { size: clampSize(width) });
-  }
-  return next;
-}
