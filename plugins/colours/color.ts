@@ -15,23 +15,34 @@ export function isHex(hex: string): boolean {
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 const wrapHue = (h: number): number => ((h % 360) + 360) % 360;
 
-// Lightness clamps to 5–95%: never pure black or white.
-export function hslToHex(h: number, s: number, l: number): string {
+// One hue sector: which channels carry c and x.
+function hueSector(h: number, c: number, x: number): [number, number, number] {
+  if (h < 60) return [c, x, 0];
+  if (h < 120) return [x, c, 0];
+  if (h < 180) return [0, c, x];
+  if (h < 240) return [0, x, c];
+  if (h < 300) return [x, 0, c];
+  return [c, 0, x];
+}
+
+const toHexByte = (v: number): string => Math.round(clamp(v, 0, 255)).toString(16).padStart(2, "0").toUpperCase();
+
+// HSL as 0–1 RGB, for the wheel as well as hex.
+export function hslToRgb(h: number, s: number, l: number): { r: number; g: number; b: number } {
   h = wrapHue(h);
   s = clamp(s, 0, 100) / 100;
   l = clamp(l, 5, 95) / 100;
   const c = (1 - Math.abs(2 * l - 1)) * s;
   const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
   const m = l - c / 2;
-  let r = 0, g = 0, b = 0;
-  if (h < 60) { r = c; g = x; }
-  else if (h < 120) { r = x; g = c; }
-  else if (h < 180) { g = c; b = x; }
-  else if (h < 240) { g = x; b = c; }
-  else if (h < 300) { r = x; b = c; }
-  else { r = c; b = x; }
-  const toHex = (v: number): string => Math.round((v + m) * 255).toString(16).padStart(2, "0").toUpperCase();
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+  const [r, g, b] = hueSector(h, c, x);
+  return { r: r + m, g: g + m, b: b + m };
+}
+
+// Lightness clamps to 5–95%: never pure black or white.
+export function hslToHex(h: number, s: number, l: number): string {
+  const { r, g, b } = hslToRgb(h, s, l);
+  return `#${toHexByte(r * 255)}${toHexByte(g * 255)}${toHexByte(b * 255)}`;
 }
 
 // The default second stop: the picked colour 30 below,
@@ -112,9 +123,8 @@ export function gradientPixels(
   return out;
 }
 
-// RGB as 0–255 integers. No clamp here — the 5–95%
-// lightness clamp lives in hslToHex only.
-export function hexToRgb(hex: string): { r: number; g: number; b: number } {
+// Hex as 0–255 channel ints, shared by the hex readers.
+function hexChannels(hex: string): { r: number; g: number; b: number } {
   return {
     r: parseInt(hex.slice(1, 3), 16),
     g: parseInt(hex.slice(3, 5), 16),
@@ -122,16 +132,22 @@ export function hexToRgb(hex: string): { r: number; g: number; b: number } {
   };
 }
 
+// RGB as 0–255 integers. No clamp here — the 5–95%
+// lightness clamp lives in hslToHex only.
+export function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  return hexChannels(hex);
+}
+
 export function rgbToHex(r: number, g: number, b: number): string {
-  const toHex = (v: number): string => Math.round(clamp(v, 0, 255)).toString(16).padStart(2, "0").toUpperCase();
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+  return `#${toHexByte(r)}${toHexByte(g)}${toHexByte(b)}`;
 }
 
 // HSV, h 0–360 and s/v 0–100: the third picker mode.
 export function hexToHsv(hex: string): { h: number; s: number; v: number } {
-  const r = parseInt(hex.slice(1, 3), 16) / 255;
-  const g = parseInt(hex.slice(3, 5), 16) / 255;
-  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const { r: r0, g: g0, b: b0 } = hexChannels(hex);
+  const r = r0 / 255;
+  const g = g0 / 255;
+  const b = b0 / 255;
   const max = Math.max(r, g, b), min = Math.min(r, g, b);
   const d = max - min;
   const v = max * 100;
@@ -152,20 +168,14 @@ export function hsvToHex(h: number, s: number, v: number): string {
   const c = v * s;
   const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
   const m = v - c;
-  let r = 0, g = 0, b = 0;
-  if (h < 60) { r = c; g = x; }
-  else if (h < 120) { r = x; g = c; }
-  else if (h < 180) { g = c; b = x; }
-  else if (h < 240) { g = x; b = c; }
-  else if (h < 300) { r = x; b = c; }
-  else { r = c; b = x; }
-  const toHex = (val: number): string => Math.round((val + m) * 255).toString(16).padStart(2, "0").toUpperCase();
-  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+  const [r, g, b] = hueSector(h, c, x);
+  return `#${toHexByte((r + m) * 255)}${toHexByte((g + m) * 255)}${toHexByte((b + m) * 255)}`;
 }
 
-export function hexToHsl(hex: string): { h: number; s: number; l: number } {  const r = parseInt(hex.slice(1, 3), 16) / 255;
-  const g = parseInt(hex.slice(3, 5), 16) / 255;
-  const b = parseInt(hex.slice(5, 7), 16) / 255;
+export function hexToHsl(hex: string): { h: number; s: number; l: number } {  const { r: r0, g: g0, b: b0 } = hexChannels(hex);
+  const r = r0 / 255;
+  const g = g0 / 255;
+  const b = b0 / 255;
   const max = Math.max(r, g, b), min = Math.min(r, g, b);
   const l = (max + min) / 2 * 100;
   if (max === min) return { h: 0, s: 0, l };

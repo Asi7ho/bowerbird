@@ -4,6 +4,8 @@
 // would show light pinks for a muted red. The caller
 // owns the picked colour; the wheel only reports picks
 // (hue, saturation) and moves its marker.
+import { hslToRgb } from "./color.js";
+
 export interface WheelHandle {
   element: HTMLElement;
   setMarker: (h: number, s: number) => void;
@@ -49,21 +51,10 @@ export function createWheel(onPick: (h: number, s: number) => void, onSettle?: (
         if (r > 1) { img.data[i + 3] = 0; continue; }
         const h = (Math.atan2(dy, dx) * 180 / Math.PI + 90 + 360) % 360;
         const s = r * 100;
-        // HSL at lightness 50%, converted inline (same
-        // maths as hslToHex, without the hex step).
-        const c = (1 - Math.abs(2 * 0.5 - 1)) * (s / 100);
-        const xx = c * (1 - Math.abs(((h / 60) % 2) - 1));
-        const m = 0.5 - c / 2;
-        let rr = 0, gg = 0, bb = 0;
-        if (h < 60) { rr = c; gg = xx; }
-        else if (h < 120) { rr = xx; gg = c; }
-        else if (h < 180) { gg = c; bb = xx; }
-        else if (h < 240) { gg = xx; bb = c; }
-        else if (h < 300) { rr = xx; bb = c; }
-        else { rr = c; bb = xx; }
-        img.data[i] = Math.round((rr + m) * 255);
-        img.data[i + 1] = Math.round((gg + m) * 255);
-        img.data[i + 2] = Math.round((bb + m) * 255);
+        const { r: rr, g: gg, b: bb } = hslToRgb(h, s, 50);
+        img.data[i] = Math.round(rr * 255);
+        img.data[i + 1] = Math.round(gg * 255);
+        img.data[i + 2] = Math.round(bb * 255);
         img.data[i + 3] = 255;
       }
     }
