@@ -8,6 +8,7 @@
 // palettes and recents, apply.ts, place.ts, panel.ts —
 // and main.ts, which wires them together.
 import type { PluginContext } from "bowerbird-plugin-api";
+import { normaliseHex } from "./color.js";
 import { clearPanel, initPanel, parsePickerMode, renderPanel } from "./panel.js";
 import { emptyStore, parseRecent, parseStored } from "./store.js";
 
@@ -37,10 +38,8 @@ export async function activate(api: PluginContext): Promise<void> {
     }
   } catch { /* a failed load seeds fresh below */ }
   if (seeded && apiRef.pen) {
-    const pen = apiRef.pen.getColor();
-    if (/^#[0-9a-fA-F]{6}$/.test(pen)) {
-      store = { palettes: [{ name: "Palette 1", colors: [pen.toUpperCase()] }] };
-    }
+    const pen = normaliseHex(apiRef.pen.getColor());
+    if (pen) store = { palettes: [{ name: "Palette 1", colors: [pen] }] };
   }
   initPanel(apiRef, store, pickerMode, recent);
   apiRef.ui.registerPanel({
