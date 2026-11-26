@@ -1,8 +1,7 @@
-// Color Management — the palette store. Pure data, no DOM and
-// no API, so it is unit-tested on its own. A palette is a
-// name and a list of hex colours; the store is the list of
-// palettes. Every function returns a new store and leaves
-// its input alone.
+// Color Management — the palette store. Pure data, no
+// DOM and no API, so it is unit-tested on its own.
+// Every function returns a new store and leaves its
+// input alone.
 import { isNearDuplicate, normaliseHex } from "./color.js";
 
 export interface Palette {
@@ -19,9 +18,8 @@ export function emptyStore(): ColourStore {
 }
 
 // The shape read back from plugin storage: the palettes
-// array itself. Anything else is a fresh store, never a
-// crash. Colours are normalised on the way in, so old
-// mixed-case hexes come out uniform.
+// array itself. Anything else is a fresh store, never
+// a crash.
 export function parseStored(value: unknown): ColourStore | null {
   if (!Array.isArray(value)) return null;
   const palettes: Palette[] = [];
@@ -100,19 +98,13 @@ export function removeColour(store: ColourStore, paletteIndex: number, colourInd
   return { palettes };
 }
 
-// Recent colours: the last colours applied or settled on,
-// most recent first, at most ten, no duplicates. They live
-// under their own storage key ("recent"), so the palettes
-// shape above never changes — changing it would wipe
-// stored palettes. Pure data, like the store: the panel
-// owns the list, these functions only shape it.
+// Recent colours: the last colours applied or settled
+// on, most recent first, at most ten, no duplicates.
+// They live under their own storage key ("recent").
 export const MAX_RECENT = 10;
 
 // The shape read back from plugin storage: the recent
-// list itself. Anything else is an empty list, never a
-// crash. Colours are normalised and near-duplicates
-// collapsed on the way in, so a list stored before the
-// near-duplicate rule still reads as distinct colours.
+// list itself. Anything else is an empty list.
 export function parseRecent(value: unknown): string[] | null {
   if (!Array.isArray(value)) return null;
   const recent: string[] = [];
@@ -125,10 +117,9 @@ export function parseRecent(value: unknown): string[] | null {
   return recent.slice(0, MAX_RECENT);
 }
 
-// Record a colour as the most recent: to the front, any
-// older copy — exact or near-duplicate — removed, capped
-// at ten. A bad hex leaves the list alone, and the input
-// is never mutated.
+// Record a colour as the most recent: to the front,
+// any older copy removed, capped at ten. A bad hex
+// leaves the list alone.
 export function recordRecent(recent: string[], hex: string): string[] {
   const colour = normaliseHex(hex);
   if (!colour) return recent;

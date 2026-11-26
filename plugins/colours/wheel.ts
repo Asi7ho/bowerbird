@@ -1,19 +1,17 @@
-// Color Management — the colour wheel. Hue round the wheel,
-// saturation centre to edge, drawn on a canvas at
-// lightness 50%, pixel by pixel in HSL, like the old
-// Palette panel's wheel: a conic-gradient with a white
-// overlay would show light pinks where the picked colour
-// is a muted red, which is wrong for a colour tool. The
-// caller owns the picked colour; the wheel only reports
-// picks (hue, saturation) and moves its marker.
+// Color Management — the colour wheel: hue round the
+// wheel, saturation centre to edge, drawn pixel by
+// pixel in HSL at lightness 50%. A conic gradient
+// would show light pinks for a muted red. The caller
+// owns the picked colour; the wheel only reports picks
+// (hue, saturation) and moves its marker.
 export interface WheelHandle {
   element: HTMLElement;
   setMarker: (h: number, s: number) => void;
 }
 
-// The wheel pixels, cached by canvas size: the wheel is
-// drawn at fixed lightness 50% and never depends on
-// state, so the pixels are identical every time.
+// The wheel pixels, cached by canvas size: the wheel
+// never depends on state, so they are identical
+// every time.
 let wheelPixels: { size: number; data: ImageData } | null = null;
 
 export function createWheel(onPick: (h: number, s: number) => void, onSettle?: () => void, onPickStart?: () => void): WheelHandle {
@@ -98,8 +96,7 @@ export function createWheel(onPick: (h: number, s: number) => void, onSettle?: (
     onPickStart?.();
     pickFromWheel(e.clientX, e.clientY);
     // Pointermove fires faster than a full panel update
-    // costs, and each one reads layout twice: coalesce
-    // to one pick per animation frame.
+    // costs: coalesce to one pick per animation frame.
     let raf = 0;
     let latestX = e.clientX;
     let latestY = e.clientY;
@@ -113,10 +110,8 @@ export function createWheel(onPick: (h: number, s: number) => void, onSettle?: (
       });
     };
     // A drag ending outside the window fires pointercancel,
-    // not pointerup: without it the listeners linger and the
-    // next drag adds a second pair. The release is also the
-    // settle point: the picked colour is recorded there,
-    // not on the pointermove ticks of the drag.
+    // not pointerup: without it the listeners linger. The
+    // release is also the settle point.
     const onUp = (): void => {
       if (raf) { cancelAnimationFrame(raf); raf = 0; }
       window.removeEventListener("pointermove", onMove);

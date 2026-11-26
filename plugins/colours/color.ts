@@ -1,11 +1,6 @@
-// Color Management — hex colours, plus the HSL maths the
-// wheel and sliders need. The plugin cannot import the
-// core's colour helpers (public API only), so the ones it
-// needs live here: normalise "#f00" and "#FF0000" to the
-// same "#FF0000", and convert between hex and HSL. The
-// HSL maths matches the old Palette plugin's (same
-// conversion, same 5–95% lightness clamp), so a colour
-// picked here is the same colour there.
+// Color Management — hex colours and the HSL maths the
+// wheel and sliders need. The plugin uses the public API
+// only, so the helpers it needs live here.
 export function normaliseHex(hex: string): string | null {
   let h = hex.trim().replace(/^#/, "");
   if (h.length === 3) h = h.split("").map((c) => c + c).join("");
@@ -20,9 +15,7 @@ export function isHex(hex: string): boolean {
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 const wrapHue = (h: number): number => ((h % 360) + 360) % 360;
 
-// Lightness is clamped to 5–95%, so a picked colour is
-// never pure black or pure white — the same clamp the
-// old Palette plugin applies to its harmony palettes.
+// Lightness clamps to 5–95%: never pure black or white.
 export function hslToHex(h: number, s: number, l: number): string {
   h = wrapHue(h);
   s = clamp(s, 0, 100) / 100;
@@ -41,12 +34,9 @@ export function hslToHex(h: number, s: number, l: number): string {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-// The default second stop for a new gradient: a deep
-// shade of the picked colour — same hue and saturation,
-// lightness 30 below the pick but never above 18, so a
-// light pick still fades to a deep shade, and never
-// below 5, the darkest hslToHex renders. A black pick
-// has no darker shade, so its gradient is flat by nature.
+// The default second stop: the picked colour 30 below,
+// capped at 18 and floored at 5 — a deep shade, never
+// a wash-out to white. A black pick stays flat.
 export function deepShadeHex(hex: string): string {
   const { h, s, l } = hexToHsl(hex);
   return hslToHex(h, s, Math.max(5, Math.min(18, l - 30)));
@@ -61,17 +51,10 @@ export function brightHex(hex: string): string {
   return hslToHex(h, s, 50);
 }
 
-// A gradient as pixels, with random-noise dithering.
-// The CSS linear-gradient the swatch and strip used to
-// paint reads as vertical stripes: Skia's ordered
-// dither has a regular pattern the eye groups into
-// bands, worst in the dark half of a gradient. Random
-// noise has no regular structure, so the same ramp
-// reads smooth at any size. Pure data, no DOM: the
-// panel paints the pixels onto a canvas. The noise is
-// seeded from the stops, so the same gradient paints
-// the same grain on every repaint instead of shimmering
-// while the wheel is dragged.
+// A gradient as pixels, dithered with random noise —
+// Skia's ordered dither reads as vertical stripes.
+// Seeded from the stops, so repaints show the same
+// grain instead of shimmering.
 export interface GradientStop {
   offset: number;
   color: string;
@@ -86,17 +69,13 @@ export function gradientPixels(
   const w = Math.max(0, Math.floor(width));
   const h = Math.max(0, Math.floor(height));
   if (w === 0 || h === 0 || stops.length === 0) return new Uint8ClampedArray(new ArrayBuffer(0));
-  // An explicit ArrayBuffer (not ArrayBufferLike), so the
-  // pixels go straight into ImageData without a cast.
+  // Explicit ArrayBuffer, so ImageData takes it without a cast.
   const out = new Uint8ClampedArray(new ArrayBuffer(w * h * 4));
   const sorted = [...stops]
     .map((s) => ({ offset: s.offset, ...hexToRgb(s.color) }))
     .sort((a, b) => a.offset - b.offset);
   const alpha = Math.round((clamp(opacity, 0, 100) / 100) * 255);
-  // A small seeded PRNG (mulberry32): the grain is
-  // stable for a given gradient, and differs between
-  // gradients so two identical ramps don't share a
-  // visible pattern.
+  // Seeded PRNG (mulberry32): stable grain per gradient.
   let seed = 0;
   const key = JSON.stringify([sorted, opacity]);
   for (let i = 0; i < key.length; i++) seed = (Math.imul(seed, 31) + key.charCodeAt(i)) | 0;
@@ -133,8 +112,7 @@ export function gradientPixels(
   return out;
 }
 
-// RGB, as 0–255 integers: the mode the picker offers
-// alongside HSL. Pure maths, no clamp — the 5–95%
+// RGB as 0–255 integers. No clamp here — the 5–95%
 // lightness clamp lives in hslToHex only.
 export function hexToRgb(hex: string): { r: number; g: number; b: number } {
   return {
@@ -149,9 +127,7 @@ export function rgbToHex(r: number, g: number, b: number): string {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
-// HSV, as h 0–360 and s/v 0–100: the third picker mode.
-// The wheel draws in HSL, so HSV is a view of the same
-// colour, converted through hex like RGB.
+// HSV, h 0–360 and s/v 0–100: the third picker mode.
 export function hexToHsv(hex: string): { h: number; s: number; v: number } {
   const r = parseInt(hex.slice(1, 3), 16) / 255;
   const g = parseInt(hex.slice(3, 5), 16) / 255;
@@ -202,29 +178,18 @@ export function hexToHsl(hex: string): { h: number; s: number; l: number } {  co
   return { h, s, l };
 }
 
-// Colour harmonies: five types, same maths — plugins are
-// self-contained, so the logic lives here, not imported. Each harmony is five colours from a picked
-// colour, in order:
-//   Monochromatic — same hue, lightness steps, dark to
-//     light. Steps are -24, -12, 0, +12, +24 lightness,
-//     shifted as a whole to fit 5–95% so no two steps
-//     collapse to the same colour at the extremes.
-//   Analogous — hues -30, -15, 0, +15, +30, same
-//     saturation and lightness: colours next to each
-//     other on the wheel.
-//   Complementary — opposite colours, then tints and
-//     a shade to fill five: base, opposite, base light,
+// Colour harmonies: five types, five colours each, from
+// a picked colour. Saturation never changes inside a
+// harmony; only hue and lightness do. Lightness clamps
+// to 5–95%, so no swatch is pure black or white.
+//   Monochromatic — same hue, lightness -24/-12/0/
+//     +12/+24, shifted to fit 5–95%.
+//   Analogous — hues -30/-15/0/+15/+30.
+//   Complementary — base, opposite, base light,
 //     opposite light, base dark.
-//   Split complementary — base, opposite +30, opposite
-//     -30 (that is, +150 and +210), then tints of the
-//     first two: base light, +150 light.
-//   Triadic — base, +120, +240, then tints of the first
-//     two: base light, +120 light.
-// Saturation never changes inside a harmony; only hue
-// (by harmony) and lightness (by tint, shade, or the
-// monochromatic steps) do, so a harmony stays harmonious
-// instead of drifting muddy. Lightness is clamped to
-// 5–95% so a swatch is never pure black or pure white.
+//   Split complementary — base, +150, +210, base
+//     light, +150 light.
+//   Triadic — base, +120, +240, base light, +120 light.
 export const HARMONY_NAMES = ["Monochromatic", "Analogous", "Complementary", "Split complementary", "Triadic"] as const;
 export type HarmonyName = (typeof HARMONY_NAMES)[number];
 
@@ -249,11 +214,8 @@ export function harmoniesFor(h: number, s: number, l: number): Harmony[] {
   ];
 }
 
-// Two colours are near-duplicates when they read as the
-// same colour on a tile: a redmean-weighted RGB distance
-// under 15 — about one just-noticeable step at tile size.
-// #007BFF and #007AFF score 2; a visibly different blue
-// like #0A5CFF scores 67.
+// Near-duplicates read as the same colour on a tile:
+// redmean-weighted RGB distance under 15.
 export function colourDistance(a: string, b: string): number {
   const ca = hexToRgb(a);
   const cb = hexToRgb(b);

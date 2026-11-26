@@ -1,19 +1,12 @@
 // Color Management — bundled Bowerbird plugin (see PLUGIN_API.md).
 //
-// Named colour palettes, harmonies of the picked colour,
-// and recent colours, saved in plugin storage. Click a
-// colour to apply it — to the selected strokes and swatches,
-// or to the pen when nothing colourable is selected. Drag
-// a colour onto the board to place a swatch. Palettes live
-// in storage, so disabling the plugin loses nothing: the
-// board keeps its colours, the pen keeps its colour.
-//
-// The plugin is six files, like a first-party plugin:
-// color.ts owns the hex maths and the harmonies, store.ts
-// the palettes, the recents and their persistence shapes,
-// apply.ts applying a colour, place.ts placing swatches
-// on the board, panel.ts the library panel. main.ts is
-// the entry point that wires them together.
+// Named palettes, harmonies and recent colours, saved
+// in plugin storage. Click a colour to apply it, drag
+// one onto the board to place a swatch. Disabling the
+// plugin loses nothing: the board keeps its colours.
+// Six files — color.ts maths and harmonies, store.ts
+// palettes and recents, apply.ts, place.ts, panel.ts —
+// and main.ts, which wires them together.
 import type { PluginContext } from "bowerbird-plugin-api";
 import { clearPanel, initPanel, parsePickerMode, renderPanel } from "./panel.js";
 import { emptyStore, parseRecent, parseStored } from "./store.js";
@@ -23,8 +16,8 @@ let apiRef: PluginContext | null = null;
 export async function activate(api: PluginContext): Promise<void> {
   apiRef = api;
   // First run seeds one palette from the pen colour; a
-  // stored empty list stays empty, so palettes a user
-  // deleted are never resurrected by a restart.
+  // stored empty list stays empty, so deleted palettes
+  // are never resurrected by a restart.
   let store = emptyStore();
   let seeded = false;
   let pickerMode = parsePickerMode(undefined);

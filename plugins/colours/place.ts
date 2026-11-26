@@ -1,10 +1,9 @@
-// Color Management — placing swatches on the board. Drag a
-// colour tile to place a 120x120 swatch at the drop point,
-// centred there, the same interaction as Visual Library.
-// (A click applies the colour instead, so only the drag
-// places.) A placed swatch is an ordinary board item of
-// kind Swatch, not a plugin card, so it survives disabling
-// the plugin.
+// Color Management — placing swatches on the board.
+// Drag a colour tile to place a 120x120 swatch at the
+// drop point, centred there. A click applies instead,
+// so only the drag places. A placed swatch is an
+// ordinary board item, not a plugin card, so it
+// survives disabling the plugin.
 //
 // Board geometry lives in #board now, below the title bar:
 // its client size is the visible board, and its top edge is
@@ -32,9 +31,8 @@ function placeAt(api: PluginContext | null, hex: string, point: Pt): void {
 }
 
 export function attachPlaceDrag(api: PluginContext, el: HTMLElement): void {
-  // The colour is read from the element at drop time, not
-  // captured when the handler is attached, so updating a
-  // tile's colour never needs its handlers re-attached.
+  // The colour is read from the element at drop time,
+  // not when the handler is attached.
   el.addEventListener("mousedown", (e) => {
     if (e.button !== 0 || !el.dataset.hex) return;
     const hex = el.dataset.hex;

@@ -1,21 +1,16 @@
-// Color Management — applying a colour. Clicking a colour
-// recolours the selected strokes and swatches, in one undo
-// step; with nothing colourable selected it sets the pen
-// for the next stroke instead. The picked state is a
-// colour, an opacity and a gradient (null for solid): a
-// stroke takes all three, a swatch takes the colour only,
-// and the pen takes all three. The colour sent with a
-// gradient is the gradient's first stop, so the stroke
-// keeps a solid fallback for a gradient-unaware
-// renderer. A locked layer refuses the recolour: the core
-// returns false and the panel says so.
+// Color Management — applying a colour. Clicking a
+// colour recolours the selected strokes and swatches
+// in one undo step; with nothing colourable selected
+// it sets the pen instead. The picked state is a
+// colour, an opacity and a gradient (null for solid);
+// the colour sent with a gradient is its first stop,
+// the solid fallback. A locked layer refuses: the
+// core returns false and the panel says so.
 import type { Item, PluginContext, StrokeGradient } from "bowerbird-plugin-api";
 
 export function applyColour(api: PluginContext, hex: string, opacity?: number, gradient?: StrokeGradient | null): void {
   // The colour sent with a gradient is the gradient's
-  // first stop, whatever hex the caller passed: the
-  // stroke's colour is the solid fallback, so it must
-  // match the gradient, not the tile that was clicked.
+  // first stop, whatever hex the caller passed.
   const color = gradient && gradient.stops.length > 0 ? gradient.stops[0].color : hex;
   const items = api.board.getItems();
   const targets = api.board.getSelected()

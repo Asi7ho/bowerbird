@@ -1,9 +1,7 @@
 // Color Management — the panel: a wheel and sliders pick
 // the colour, named palettes hold it. Click a tile to
-// apply its colour (selected strokes and swatches, or the
-// pen); drag a tile to place a swatch on the board. The
-// picked colour is the colour new palettes and added
-// colours come from.
+// apply it (selected strokes and swatches, or the pen);
+// drag a tile to place a swatch on the board.
 import type { PluginContext, StrokeGradient } from "bowerbird-plugin-api";
 import { applyColour } from "./apply.js";
 import { HARMONY_NAMES, brightHex, colourDistance, deepShadeHex, gradientPixels, harmoniesFor, hexToHsl, hexToHsv, hexToRgb, hslToHex, hsvToHex, isHex, normaliseHex, rgbToHex, type HarmonyName } from "./color.js";
@@ -21,9 +19,8 @@ import {
 } from "./store.js";
 import { createWheel, type WheelHandle } from "./wheel.js";
 
-// The EyeDropper API is not in TypeScript's DOM library, so
-// it is declared here, minimally: a constructor whose open()
-// resolves with the picked colour as sRGBHex.
+// EyeDropper is not in TypeScript's DOM library, so it
+// is declared here, minimally.
 interface EyeDropperResult {
   sRGBHex: string;
 }
@@ -40,23 +37,18 @@ let store: ColourStore = emptyStore();
 // all write the same three numbers, so they never drift.
 let base = hexToHsl("#007AFF");
 // The picked opacity, 0–100%: the other half of the
-// picked state. It moves with the opacity slider and the
-// pen, and rides along on every click-apply.
+// picked state, riding along on every click-apply.
 let opacity = 100;
 // The picked gradient, null for a solid stroke: the
-// third part of the picked state. It moves with the
-// gradient editor and the pen, and rides along on every
-// click-apply, like the opacity.
+// third part of the picked state, riding along on
+// every click-apply like the opacity.
 let gradient: StrokeGradient | null = null;
-// The stop the wheel and sliders edit when a gradient is
-// on: clicking a stop selects it, and the picked colour
-// targets that stop.
+// The stop the wheel and sliders edit when a gradient
+// is on: clicking a stop selects it.
 let selectedStop = 0;
-// The gradient that was on before solid, with the picked
-// colour at the switch: switching back restores it when
-// the colour has not moved since, so the round trip
-// gives the gradient back instead of a fresh one built
-// from the colour the right stop had.
+// The gradient that was on before solid, with the
+// picked colour at the switch — switching back restores
+// it when the colour has not moved since.
 let lastGradient: StrokeGradient | null = null;
 let lastGradientBase: typeof base | null = null;
 // While the wheel is being dragged: the preview swatch
@@ -68,13 +60,12 @@ let wheelDragging = false;
 // The harmony type: Analogous first, so the middle tile
 // of the shown set is the picked colour itself.
 let harmony: HarmonyName = "Analogous";
-// The recent colours, most recent first: recorded when a
-// colour is applied or the picked colour settles, never
-// on an intermediate drag tick.
+// The recent colours, most recent first: recorded when
+// a colour is applied or the picked colour settles.
 let recent: string[] = [];
 // The tweak mode: HSL, RGB, HSV or Hex — different
-// editors for the same picked colour, never separate
-// state. Persisted, so the panel reopens as left.
+// editors for the same picked colour. Persisted, so
+// the panel reopens as left.
 export type PickerMode = "hsl" | "rgb" | "hsv" | "hex";
 
 export function parsePickerMode(value: unknown): PickerMode {
@@ -126,10 +117,9 @@ let opacityInput: HTMLInputElement | null = null;
 let opacityValue: HTMLSpanElement | null = null;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 
-// The native colour-input fallback, if one is open: its
-// input listener must be removed when it closes, and a
-// cancelled dialog fires no change event, so a stale one
-// is removed when the picker opens again.
+// The native colour-input fallback, if one is open: a
+// cancelled dialog fires no change event, so a stale
+// one is removed when the picker opens again.
 let eyeDropperFallback: HTMLInputElement | null = null;
 let eyeDropperFallbackOnInput: (() => void) | null = null;
 
@@ -207,10 +197,8 @@ export function clearPanel(): void {
 
 function scheduleSave(): void {
   if (!api || !api.storage) return;
-  // Debounced: every palette edit used to rewrite the
-  // whole plugin-storage file at once, which is a full IPC
-  // call plus a synchronous disk write per edit. Recents
-  // ride the same timer, under their own key.
+  // Debounced: palette edits used to rewrite the whole
+  // plugin-storage file at once, per edit.
   if (saveTimer !== null) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
     saveTimer = null;
@@ -229,17 +217,11 @@ function recordColour(hex: string): void {
   renderRecent();
 }
 
-// Apply a colour, and record it: every tile click, the
-// preview click, an eyedropper pick and a hex commit all
-// go through here, so the recent list holds exactly the
-// colours that were applied. The picked opacity rides
-// along: a click applies the tile's colour at the picked
-// opacity, never at the stroke's old one. With a gradient
-// on, the tile's colour sets the selected stop — the
-// picked colour targets that stop — and the whole picked
-// state (colour, opacity, gradient) is applied: a plain
-// colour tile still carries the gradient, because the
-// picked state is one thing.
+// Apply a colour and record it. Every tile click, the
+// preview click, an eyedropper pick and a hex commit go
+// through here, so Recent holds exactly the colours
+// that were applied. Opacity and gradient ride along:
+// a plain colour tile still carries the gradient.
 function applyAndRecord(hex: string): void {
   if (!api) return;
   if (gradient) {
@@ -256,12 +238,9 @@ function applyAndRecord(hex: string): void {
     }
   }
   // Solid: the null gradient rides along too, so a
-  // gradient stroke applied in solid mode goes back to
-  // solid instead of keeping its old gradient. The
-  // click also becomes the picked colour, so the panel
-  // follows it — the wheel, the preview, the hex and
-  // the harmony ring all move to the clicked tile,
-  // like the gradient path above already does.
+  // gradient stroke applied in solid mode goes solid.
+  // The click also becomes the picked colour, so the
+  // panel follows it.
   applyColour(api, hex, opacity, null);
   const normalised = normaliseHex(hex);
   if (normalised) {
@@ -272,9 +251,8 @@ function applyAndRecord(hex: string): void {
 }
 
 // Write a gradient to the pen and re-read it, so the
-// panel's state is exactly the pen's — the core forces
-// the angle to 0 and sorts the stops. Setting a
-// gradient also moves the pen colour to its first stop.
+// panel's state is exactly the pen's. The core forces
+// the angle to 0 and sorts the stops.
 function setGradient(next: StrokeGradient | null): void {
   if (!api || !api.pen) return;
   if (api.pen.setGradient(next)) {
@@ -296,10 +274,8 @@ function syncSelectedStop(hex: string): void {
 function setGradientMode(on: boolean): void {
   if (on === (gradient !== null)) return;
   if (on) {
-    // Back to the gradient that was on before solid,
-    // when the picked colour has not moved since — the
-    // round trip gives the gradient back, not a fresh
-    // one built from the colour the right stop had.
+    // Back to the gradient from before solid, when the
+    // picked colour has not moved since.
     const restore = lastGradient;
     const restoreBase = lastGradientBase;
     lastGradient = null;
@@ -310,8 +286,7 @@ function setGradientMode(on: boolean): void {
       setGradient(restore);
     } else {
       // A new gradient runs from the picked colour to a
-      // deep shade of it, left to right: a rich fade,
-      // never a wash-out to white.
+      // deep shade of it, left to right.
       const hex = pickedHex();
       setGradient({ angle: 0, stops: [{ offset: 0, color: hex }, { offset: 100, color: deepShadeHex(hex) }] });
       selectedStop = 0;
@@ -328,8 +303,7 @@ function setGradientMode(on: boolean): void {
 function addStop(): void {
   if (!gradient) return;
   // The new stop sits in the middle of the widest gap,
-  // in the picked colour, so the gradient gains a stop
-  // where it has the most room.
+  // in the picked colour.
   const stops = [...gradient.stops].sort((a, b) => a.offset - b.offset);
   let gap = 0, at = 50;
   for (let i = 0; i + 1 < stops.length; i++) {
@@ -363,9 +337,8 @@ function pickedHex(): string {
 }
 
 // The swatch and strip paint their gradient from a
-// canvas, not a CSS gradient: the CSS one stripes (see
-// gradientPixels). One cached image per gradient and
-// size, so a repaint on every picked tick reuses it.
+// canvas, not a CSS gradient: the CSS one stripes.
+// One cached image per gradient and size.
 let gradientCanvas: HTMLCanvasElement | null = null;
 let gradientImageKey = "";
 let gradientImageUrl = "";
@@ -398,9 +371,8 @@ function paintGradientOn(el: HTMLElement, stops: { offset: number; color: string
   el.style.backgroundRepeat = "no-repeat";
 }
 
-// Paint the strip from a set of stops: the whole
-// gradient at its opacity. A marker drag paints with
-// the dragged offsets live and commits on release.
+// Paint the strip from a set of stops. A marker drag
+// paints with the dragged offsets live.
 function paintGradientStrip(stops: { offset: number; color: string }[]): void {
   const strip = gradientStripEl;
   if (!strip || !gradient) return;
@@ -408,12 +380,8 @@ function paintGradientStrip(stops: { offset: number; color: string }[]): void {
 }
 
 // Refresh every control that shows the picked colour:
-// the preview, its hex, the wheel marker, the current
-// mode's controls, and the harmony set, which is made
-// from the picked colour and follows it live. With a
-// gradient on, the preview shows the gradient, and the
-// strip markers follow the wheel — the selected stop's
-// marker is the colour being edited.
+// the preview, its hex, the wheel marker, the mode's
+// controls, and the harmony set, which follows live.
 function updatePicked(): void {
   const hex = pickedHex();
   if (pickedSwatch) {
@@ -526,8 +494,7 @@ async function pickWithEyeDropper(): Promise<void> {
       return;
     } catch (e) {
       // AbortError is Esc / cancel: nothing to do. Any
-      // other failure falls through to the native input,
-      // which still picks a colour, just with its dialog.
+      // other failure falls through to the native input.
       if (typeof e === "object" && e !== null && "name" in e && e.name === "AbortError") return;
     }
   }
@@ -571,10 +538,8 @@ function iconButton(label: string, title: string, svg: string): HTMLButtonElemen
 }
 
 // One slider row: label, slider and value on a single
-// line, in the old Palette panel's slider style. The
-// change event is the release: a colour is recorded
-// there, when the picked colour settles, never on the
-// input ticks of a drag.
+// line. The change event is the release, so a colour
+// is recorded when it settles, never on drag ticks.
 function sliderRow(label: string, cls: string, max: number, initial: number, onInput: (v: number) => void, onSettle?: () => void): { row: HTMLDivElement; input: HTMLInputElement; value: HTMLSpanElement } {
   const row = document.createElement("div");
   row.className = "col-slider-row";
@@ -603,9 +568,8 @@ function sliderRow(label: string, cls: string, max: number, initial: number, onI
 }
 
 // The tweak controls for the current mode, rebuilt on
-// every mode switch: one mode's controls exist at a time,
-// so a selector never matches a stale row. Every mode
-// edits the same picked colour, through hex.
+// every mode switch: one mode's controls exist at a
+// time, so a selector never matches a stale row.
 function renderControls(): void {
   const host = controlsEl;
   if (!host) return;
@@ -685,9 +649,9 @@ function renderControls(): void {
     input.setAttribute("aria-label", "Hex colour");
     input.addEventListener("keydown", (e) => e.stopPropagation());
     const commit = (): void => {
-      // A bad hex is ignored, not applied: the field
-      // falls back to the last good colour. A good hex
-      // is a commit, so it is recorded like any apply.
+      // A bad hex is ignored: the field falls back to
+      // the last good colour. A good hex is recorded
+      // like any apply.
       if (normaliseHex(input.value)) {
         setPickedHex(input.value);
         recordColour(pickedHex());
@@ -707,10 +671,7 @@ function renderControls(): void {
 // The gradient editor: the strip IS the control, with
 // the stops as markers on it — rebuilt when the
 // gradient turns on or off or a stop is added or
-// removed, never on a colour tick, so a marker drag
-// never rebuilds the strip under the pointer. The
-// markers alone rebuild on a colour tick (see
-// renderGradientStops).
+// removed, never on a colour tick.
 function renderGradientEditor(): void {
   const on = gradient !== null;
   if (gradToggleBtn) {
@@ -723,19 +684,15 @@ function renderGradientEditor(): void {
   gradientStripEl = null;
   draggingStop = null;
   if (!on || !gradient) return;
-  // The strip first: the whole gradient, tall enough to
-  // grab, with the stops as markers on it — click a
-  // marker to edit that stop, drag it to move its offset.
+  // The strip first: the whole gradient, tall enough
+  // to grab, with the stops as markers on it.
   gradientStripEl = document.createElement("div");
   gradientStripEl.className = "col-gradient-strip";
   gradientStripEl.setAttribute("aria-label", "Picked gradient");
   host.appendChild(gradientStripEl);
   renderGradientStops();
-  // The + beside the strip, not on it: a sibling in
-  // the editor row, so the stop at 100% keeps its
-  // centre free to grab. It lives here, not in
-  // renderGradientStops, so a picked tick rebuilding
-  // the markers never rebuilds it.
+  // The + beside the strip, not on it, so the stop at
+  // 100% keeps its centre free to grab.
   const add = document.createElement("button");
   add.type = "button";
   add.className = "col-strip-add";
@@ -744,22 +701,16 @@ function renderGradientEditor(): void {
   add.setAttribute("aria-label", "Add gradient stop");
   add.addEventListener("click", () => addStop());
   host.appendChild(add);
-  // The strip's background is set in updatePicked, which
-  // ran before the strip existed when the gradient was
-  // just turned on: refresh it here, or the strip stays
-  // blank until the next picked tick.
+  // The strip's background is set in updatePicked,
+  // which ran before the strip existed: refresh it
+  // here, or the strip stays blank.
   updatePicked();
 }
 
 // The stops as markers on the strip, one per stop at
-// its offset. Clicking a marker selects it — the wheel
-// and sliders then edit that stop's colour — and
-// dragging it along the strip moves its offset, the
-// strip repainting live and the gradient committing on
-// release. Arrow keys nudge the focused marker. Rebuilt
-// on every picked colour tick, so the selected stop's
-// marker follows the wheel; a marker mid-drag never is
-// either.
+// its offset. Clicking selects it; dragging moves its
+// offset; arrow keys nudge it. Rebuilt on every picked
+// colour tick, never mid-drag.
 function renderGradientStops(): void {
   if (draggingStop !== null) return;
   const strip = gradientStripEl;
@@ -768,8 +719,7 @@ function renderGradientStops(): void {
   gradient.stops.forEach((stop, i) => {
     // One positioned wrapper per stop: the disc fills
     // it, and the × on the selected stop hangs off its
-    // corner as its own click target, so it never
-    // starts a marker drag.
+    // corner as its own click target.
     const wrap = document.createElement("div");
     wrap.className = "col-stop-marker-wrap";
     wrap.style.left = `${stop.offset}%`;
@@ -838,9 +788,8 @@ function renderGradientStops(): void {
         if (offset === stop.offset) { renderGradientStops(); return; }
         const stops = gradient.stops.map((s, j) => (j === i ? { offset, color: s.color } : s));
         setGradient({ angle: gradient.angle, stops });
-        // setGradient sorts, so the dragged stop may
-        // have a new index — follow it, by offset and
-        // colour, falling back to offset alone.
+        // setGradient sorts, so the dragged stop may have
+        // a new index — follow it, by offset and colour.
         if (gradient) {
           const at = gradient.stops.findIndex((s) => s.offset === offset && s.color === stop.color);
           selectedStop = at >= 0 ? at : Math.max(0, gradient.stops.findIndex((s) => s.offset === offset));
@@ -854,10 +803,9 @@ function renderGradientStops(): void {
       marker.addEventListener("pointercancel", cancel);
     });
     wrap.appendChild(marker);
-    // The × on the selected stop only, never at two
-    // stops: its own button on the wrapper's corner,
-    // so clicking it removes the stop without
-    // selecting or dragging the marker.
+    // The × on the selected stop only: its own button
+    // on the wrapper's corner, so clicking it removes
+    // the stop without selecting or dragging it.
     if (i === selectedStop && gradient && gradient.stops.length > 2) {
       const x = document.createElement("button");
       x.type = "button";
@@ -873,11 +821,9 @@ function renderGradientStops(): void {
   });
 }
 
-// The harmony type: Analogous first, so the middle tile
-// of the shown set is the picked colour itself. Picked
-// from a small menu in the Harmonies head row, not a
-// five-tab strip across the panel: five short names
-// squeezed into the width read as crammed.
+// The harmony type, from a small menu in the
+// Harmonies head row: five tabs across the panel
+// read as crammed.
 function setHarmony(value: HarmonyName): void {
   if (harmony === value) return;
   harmony = value;
@@ -900,8 +846,7 @@ function closeHarmonyMenu(): void {
 
 function onHarmonyMenuOutside(e: PointerEvent): void {
   // Outside the button and the menu: the menu closes,
-  // like any flyout. A click on the button itself is
-  // inside, so the button's own click toggles it.
+  // like any flyout.
   const target = e.target as Node | null;
   if (target && harmonyMenuEl?.contains(target)) return;
   if (target && harmonyBtn?.contains(target)) return;
@@ -928,14 +873,11 @@ function toggleHarmonyMenu(): void {
   document.addEventListener("keydown", onHarmonyMenuKey, true);
 }
 
-// The harmony set for the picked colour: five tiles for
-// the selected harmony type, remade whenever the picked
-// colour moves. Clicking one applies it like any tile.
-// The tile holding the picked colour — middle for
-// Analogous and Monochromatic, first for the rest —
-// carries a blue ring, so the picked colour's place in
-// the set is visible at a glance. Nearest match, not
-// exact: a shifted Monochromatic set has no exact hit.
+// The harmony set for the picked colour: five tiles
+// for the selected type, remade whenever the picked
+// colour moves. The tile holding the picked colour
+// carries a blue ring. Nearest match, not exact: a
+// shifted Monochromatic set has no exact hit.
 function renderHarmonies(): void {
   const list = harmonyEl;
   if (!list) return;
@@ -943,10 +885,8 @@ function renderHarmonies(): void {
   const found = harmoniesFor(base.h, base.s, base.l).find((h) => h.name === harmony);
   const colors = found ? found.colors : [];
   const picked = pickedHex();
-  // The tile the set is built around — middle for
-  // Analogous and Monochromatic, first for the rest —
-  // wins a tie, so a grey's five identical tiles still
-  // ring the middle one instead of the first.
+  // The set's home tile wins a tie, so a grey's five
+  // identical tiles still ring the middle one.
   const home = harmony === "Analogous" || harmony === "Monochromatic" ? 2 : 0;
   let pickedIndex = home;
   let best = home < colors.length ? colourDistance(colors[home], picked) : Infinity;
@@ -972,8 +912,7 @@ function renderHarmonies(): void {
 }
 
 // The recent colours, most recent first. The section
-// hides itself while there is nothing to show, so a
-// fresh install shows no empty row.
+// hides itself while there is nothing to show.
 function renderRecent(): void {
   const section = recentSectionEl;
   const list = recentEl;
@@ -1095,10 +1034,8 @@ export function renderPanel(container: HTMLElement): void {
   // A wheel release records the settled colour; the
   // pointermove ticks of the drag do not.
   wheel = createWheel(
-    // The wheel is drawn at lightness 50% and has no
-    // lightness dimension: a pick lands at 50%, the
-    // colour the wheel shows, instead of keeping a
-    // near-black lightness from the pen default.
+    // The wheel has no lightness dimension: a pick lands
+    // at 50%, the colour the wheel shows.
     (h, s) => setBase({ h, s, l: 50 }),
     () => { wheelDragging = false; updatePicked(); recordColour(pickedHex()); },
     () => { wheelDragging = true; updatePicked(); },
@@ -1125,11 +1062,8 @@ export function renderPanel(container: HTMLElement): void {
   pickerBtn.addEventListener("click", () => void pickWithEyeDropper());
   previewRow.appendChild(pickerBtn);
   pickerSection.appendChild(previewRow);
-  // The tweak controls, a segmented row: HSL, RGB, HSV or
-  // Hex — one picked colour, four editors. They sit with
-  // the wheel and preview: picking a colour is the first
-  // thing, and the wheel, the preview and these sliders
-  // are one control surface.
+  // The tweak controls, a segmented row: HSL, RGB, HSV
+  // or Hex — one picked colour, four editors.
   const modeSeg = document.createElement("div");
   modeSeg.className = "col-mode-seg";
   modeSeg.setAttribute("role", "group");
@@ -1160,14 +1094,10 @@ export function renderPanel(container: HTMLElement): void {
   controlsEl = document.createElement("div");
   controlsEl.className = "col-controls";
   pickerSection.appendChild(controlsEl);
-  // The picked opacity sits with the tweak controls, right
-  // after the mode's sliders: it is a property of the
-  // colour being picked, not of the fill. One slider, in
-  // the same style, that never rebuilds on a mode switch.
-  // It moves the picked state and the pen on every tick,
-  // like the wheel moves the colour; it never recolours
-  // selected strokes by itself — the picked state only
-  // lands on a click-apply.
+  // Opacity sits with the tweak controls, right after
+  // the mode's sliders: it is a property of the colour
+  // being picked. It moves the pen on every tick, but
+  // never recolours selected strokes by itself.
   const opacityRow = sliderRow("Opacity", "col-slider-opacity", 100, opacity, (v) => {
     opacity = v;
     a.pen.setOpacity(v);
@@ -1177,13 +1107,9 @@ export function renderPanel(container: HTMLElement): void {
   opacityValue = opacityRow.value;
   pickerSection.appendChild(opacityRow.row);
   // The fill control follows the opacity row directly:
-  // no hairline, no section of its own. It is a binary
-  // toggle, not a second segmented row — Solid on the
-  // left, Gradient on the right, one switch between
-  // them, the knob sliding to the active side. The
-  // gradient editor follows from it. Turning the
-  // gradient off clears it, and the picked state is
-  // solid again.
+  // a binary toggle, not a second segmented row — Solid
+  // on the left, Gradient on the right. The gradient
+  // editor follows from it.
   gradToggleBtn = document.createElement("button");
   gradToggleBtn.type = "button";
   gradToggleBtn.className = "col-fill-toggle";
@@ -1213,8 +1139,7 @@ export function renderPanel(container: HTMLElement): void {
   container.appendChild(pickerSection);
   renderControls();
   // Harmonies of the picked colour: the type is a small
-  // menu in the head row, showing the current type, with
-  // five tiles below it.
+  // menu in the head row, with five tiles below it.
   const harmoniesSection = document.createElement("div");
   harmoniesSection.className = "col-section col-section-harmonies";
   const harmoniesHead = document.createElement("div");
@@ -1277,9 +1202,8 @@ export function renderPanel(container: HTMLElement): void {
   recentSectionEl.appendChild(recentEl);
   container.appendChild(recentSectionEl);
   renderRecent();
-  // The palettes head their own section: "Saved Palettes"
-  // with a + button at the right end, instead of a
-  // separate button under the list.
+  // "Saved Palettes" with a + button at the right end,
+  // instead of a separate button under the list.
   const palettesHead = document.createElement("div");
   palettesHead.className = "col-palettes-head";
   const palettesTitle = document.createElement("span");
@@ -1287,9 +1211,7 @@ export function renderPanel(container: HTMLElement): void {
   palettesTitle.textContent = "Saved Palettes";
   palettesHead.appendChild(palettesTitle);
   const newBtn = iconButton("New palette", "New palette", ICON_PLUS);
-  // A new palette starts from the picked colour: the
-  // picked colour already follows the pen on open, so a
-  // separate "from pen" action would add nothing.
+  // A new palette starts from the picked colour.
   newBtn.addEventListener("click", () => updateStore(createPalette(store, [pickedHex()]).store));
   palettesHead.appendChild(newBtn);
   container.appendChild(palettesHead);
