@@ -881,9 +881,13 @@ async function init(): Promise<void> {
         });
       }
       strokeDefaults[kind] = next;
+      // The pen changed: listeners (the toolbar, a brush
+      // panel) re-read it, like the colour setters below.
+      emitPluginEvent("pen");
     },
     clearStrokeDefaults: (kind) => {
       strokeDefaults[kind] = {};
+      emitPluginEvent("pen");
     },
     getCamera: () => C.board.camera,
     screenToWorld: (clientX, clientY) => toWorld(boardPoint(clientX, clientY)),
