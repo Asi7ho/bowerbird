@@ -54,9 +54,9 @@ let gradient: StrokeGradient | null = null;
 let selectedStop = 0;
 // While the wheel is being dragged: the preview swatch
 // shows the picked hue and saturation at lightness 50%,
-// so a dark pick still reads while it moves. The picked
-// lightness itself never changes — this is preview-only,
-// and the swatch returns to the true colour on release.
+// so a dark pick still reads while it moves. The wheel
+// pick itself lands at 50% too, so the preview and the
+// stored colour agree on release.
 let wheelDragging = false;
 // The harmony type: Analogous first, so the middle tile
 // of the shown set is the picked colour itself.
@@ -1065,7 +1065,11 @@ export function renderPanel(container: HTMLElement): void {
   // A wheel release records the settled colour; the
   // pointermove ticks of the drag do not.
   wheel = createWheel(
-    (h, s) => setBase({ h, s }),
+    // The wheel is drawn at lightness 50% and has no
+    // lightness dimension: a pick lands at 50%, the
+    // colour the wheel shows, instead of keeping a
+    // near-black lightness from the pen default.
+    (h, s) => setBase({ h, s, l: 50 }),
     () => { wheelDragging = false; updatePicked(); recordColour(pickedHex()); },
     () => { wheelDragging = true; updatePicked(); },
   );
