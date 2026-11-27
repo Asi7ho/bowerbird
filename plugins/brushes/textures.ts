@@ -128,27 +128,28 @@ export const BUILTIN_TEXTURES: BuiltinTexture[] = [
   },
   {
     id: "spray", label: "Spray", family: "pen",
-    // A spray can, not a line with dust: the dots are big
-    // enough to see individually (coarse grain, ~5px) and
-    // sparse enough that white shows between them — small
-    // dense dots (0.3) averaged into a dark mass that read
-    // as a thick ink line. Dots only — no solid core under
-    // the scatter: a core read as a straight line with dust
-    // on it. The halo band is a blur pushed back up by a
-    // transfer, not a dilate: feMorphology left a faint wash
-    // over the whole filter region in the app. The dots are
-    // cut hard from the band — no second blur after the cut,
+    // Dots only, no solid core under the scatter: a core
+    // read as a straight line with dust on it. The band
+    // is a blur pushed back up by a transfer, not a
+    // dilate: feMorphology left a faint wash over the
+    // whole filter region in the app. The dots are cut
+    // hard from the band — no second blur after the cut,
     // or each dot's edge goes soft and the scatter reads
-    // as a blurry smear. The band itself fades at its
-    // edge the way a real spray does, so the dots thin
-    // out toward the edge instead of stopping dead. The
-    // grain cut is a near-step (slope 100): a gentle cut
-    // left every dot a soft skirt and the noise bumps just
-    // under the cut as faint grey specks — ~50 ghost dots
-    // per stroke, more faint grey than dot ink — so the
-    // stroke read as a dusty band, not dots on white.
+    // as a blurry smear. The band fades at its edge the
+    // way a real spray does, so the dots thin out toward
+    // the edge instead of stopping dead.
+    // The dots come from folded noise (type="turbulence"):
+    // its zero-crossing ridges wall each peak's cell off,
+    // so the islands stay separate round dots at any cut.
+    // fractalNoise instead joins neighbouring peaks into
+    // worms and commas as the cut drops, and blurring the
+    // grain to round them either merges the dots or kills
+    // them. The cut is a near-step (slope 100): a gentle
+    // cut left soft skirts and faint grey ghost specks
+    // between the dots.
     filterSvg:
-      grainMask(0.18, 2, 9, 100, -68)
+      `<feTurbulence type="turbulence" baseFrequency="0.15" numOctaves="2" seed="9" result="noise" />`
+      + `<feComponentTransfer in="noise" result="grain"><feFuncA type="linear" slope="100" intercept="-38" /></feComponentTransfer>`
       + `<feGaussianBlur in="SourceGraphic" stdDeviation="8" result="wide" />`
       + `<feComponentTransfer in="wide" result="fat"><feFuncA type="linear" slope="8" intercept="-0.2" /></feComponentTransfer>`
       + `<feComposite in="fat" in2="grain" operator="in" result="dots" />`,
