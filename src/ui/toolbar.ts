@@ -4,7 +4,7 @@
 
 import type { PluginContext, PluginManifest } from "../plugins/host";
 import { placeNoteBar } from "./overlay-placement";
-import { CONNECTOR_TOOL_ID, drawKindOf, drawToolId, isDrawToolId, isShapeToolId, shapeKindOf, shapeToolId, type DrawKind } from "./drawing-tools";
+import { CONNECTOR_TOOL_ID, builtinStrokeWidth, drawKindOf, drawToolId, isDrawToolId, isShapeToolId, shapeKindOf, shapeToolId, type DrawKind } from "./drawing-tools";
 
 export const manifest: PluginManifest = {
   apiVersion: "2",
@@ -103,6 +103,7 @@ export function activate(api: PluginContext): void {
     // the picker would stay hidden behind it.
     pickerOpen = "draw";
     colorBarOpen = false;
+    sizeBarOpen = false;
     const cur = api.ui.getTool();
     const isDraw = isDrawToolId(cur);
     api.ui.setTool(isDraw ? cur : drawToolId((drawBtn.dataset.draw as DrawKind | undefined) ?? "pen"));
@@ -131,14 +132,40 @@ export function activate(api: PluginContext): void {
   palette.style.display = "none";
   toolbar.appendChild(palette);
 
+  // The pen controls — colour and size — live in a
+  // segment of their own, below the tools and above the
+  // zoom, so the bar reads tools | colour + size | zoom.
+  // The divider above it separates it from the tools;
+  // div1 below separates it from the zoom.
+  const penDiv = document.createElement("div");
+  penDiv.className = "divider";
+  toolbar.appendChild(penDiv);
+
+  const penSeg = document.createElement("div");
+  penSeg.className = "seg";
+  penSeg.id = "pen-controls";
+  toolbar.appendChild(penSeg);
+
   // The colour in use, as a swatch in the toolbar.
   // Clicking it opens the colour bar to change colours.
-  // It lives at the end of the tools, after the shape
-  // button, so the tool buttons stay together.
+  // It lives in the pen-controls segment with the size
+  // button, so the pen controls sit together.
   const colorSwatch = toolButton("tool-colour", "Colour — change the pen colour", "Colour", "", () => {
     colorBarOpen = !colorBarOpen;
+    sizeBarOpen = false;
     update();
-  }, toolsSeg, { className: "colour-swatch", type: "button" });
+  }, penSeg, { className: "colour-swatch", type: "button" });
+
+  // The stroke width in use, as a line sample in the
+  // toolbar. Clicking it opens the size flyout to change
+  // it, like the colour swatch opens the colour bar. It
+  // sits beside the swatch in the pen-controls segment,
+  // and stays visible whatever tool is active.
+  const sizeBtn = toolButton("tool-size", "Size — change the stroke width", "Size", '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 12h16" /></svg>', () => {
+    sizeBarOpen = !sizeBarOpen;
+    colorBarOpen = false;
+    update();
+  }, penSeg, { className: "size-button", type: "button" });
 
   const shapePicker = document.createElement("div");
   shapePicker.className = "palette";
@@ -153,6 +180,16 @@ export function activate(api: PluginContext): void {
   drawPicker.id = "draw-picker";
   drawPicker.style.display = "none";
   toolbar.appendChild(drawPicker);
+
+  // The size flyout: a slider for the stroke width of
+  // the active draw tool, beside the size button. It
+  // opens only on the size button, like the colour bar
+  // opens only on the colour swatch.
+  const sizePicker = document.createElement("div");
+  sizePicker.className = "palette";
+  sizePicker.id = "size-picker";
+  sizePicker.style.display = "none";
+  toolbar.appendChild(sizePicker);
 
   // The select picker: plain select and lasso, beside the
   // select button (the first tool, so the default top of
@@ -230,6 +267,14 @@ export function activate(api: PluginContext): void {
   // clicked again or a colour is picked. While it is open
   // the pickers hide, so only one flyout shows.
   let colorBarOpen = false;
+  // Whether the size flyout is open. The same rule as the
+  // colour bar: it opens only on the size button, and
+  // while it is open the pickers hide.
+  let sizeBarOpen = false;
+  // The size flyout's slider and value, built lazily on
+  // first show, like the pickers' buttons.
+  let sizeSlider: HTMLInputElement | null = null;
+  let sizeValue: HTMLElement | null = null;
   // Which tool's flyout is open, or null when none is. A
   // flyout only appears on a tool button click or a tool
   // shortcut, and disappears once a tool is picked from it
@@ -246,6 +291,7 @@ export function activate(api: PluginContext): void {
     const tool = api.ui.getTool();
     if (tool !== lastTool) {
       colorBarOpen = false;
+      sizeBarOpen = false;
       lastTool = tool;
     }
     const selected = api.board.getSelected();
@@ -255,6 +301,12 @@ export function activate(api: PluginContext): void {
     const cam = api.view.getCamera();
     const zoom = cam.zoom;
     const outline = api.shapes.getOutline();
+    // The stroke width in use: the pen's width from its
+    // stroke defaults, or its built-in when no plugin set
+    // one. The button always shows it, whatever the tool
+    // — the pen, the shapes and the arrows all draw at
+    // this width, so it never has nothing to show.
+    const strokeWidth = api.pen.getStrokeDefaults("pen").width ?? builtinStrokeWidth("pen");
     // The note's position is in the key, so the colours
     // bar follows it when it is moved, not only when the
     // selection or the camera changes. The camera's pan
@@ -269,7 +321,7 @@ export function activate(api: PluginContext): void {
     // between select and lasso leaves the tool as "select",
     // so without it the button and picker would not refresh.
     const mode = api.ui.getSelectMode();
-    const key = `${tool}|${mode}|${pickerOpen ?? ""}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}|${cam.x},${cam.y}|${colorBarOpen}|${outline}|${notePos ? `${notePos.x},${notePos.y}` : ""}`;
+    const key = `${tool}|${mode}|${pickerOpen ?? ""}|${selected.join(",")}|${penColor}|${noteBg ?? ""}|${zoom}|${cam.x},${cam.y}|${colorBarOpen}|${sizeBarOpen}|${outline}|${notePos ? `${notePos.x},${notePos.y}` : ""}|${strokeWidth}`;
     if (key === lastKey) return;
     lastKey = key;
 
@@ -293,7 +345,7 @@ export function activate(api: PluginContext): void {
     // Select picker: shown when the select tool is active,
     // the colour bar is not open, and its flyout was opened
     // by the select button or the V shortcut.
-    const showSelect = isSelect && !colorBarOpen && pickerOpen === "select";
+    const showSelect = isSelect && !colorBarOpen && !sizeBarOpen && pickerOpen === "select";
     selectPicker.style.display = showSelect ? "flex" : "none";
     // The flyout anchors to its button: the toolbar grows
     // with plugin tools, so a fixed top slides under the
@@ -335,7 +387,7 @@ export function activate(api: PluginContext): void {
     // Draw picker: shown when a draw tool is active, the
     // colour bar is not open, and its flyout was opened by
     // the draw button or the P shortcut.
-    const showDraw = isDraw && !colorBarOpen && pickerOpen === "draw";
+    const showDraw = isDraw && !colorBarOpen && !sizeBarOpen && pickerOpen === "draw";
     drawPicker.style.display = showDraw ? "flex" : "none";
     if (showDraw) drawPicker.style.top = `${drawBtn.offsetTop}px`;
     if (showDraw && drawPicker.childElementCount === 0) {
@@ -359,6 +411,17 @@ export function activate(api: PluginContext): void {
     // The colour swatch shows the pen colour in use.
     colorSwatch.style.setProperty("--swatch-color", penColor);
     colorSwatch.classList.toggle("active", colorBarOpen);
+
+    // The size button shows the stroke width in use, as
+    // a line sample. It stays in the toolbar whatever the
+    // tool — hiding it when the pen was not active made
+    // it jump in and out as tools changed.
+    if (sizeBtn.dataset.width !== String(strokeWidth)) {
+      sizeBtn.dataset.width = String(strokeWidth);
+      sizeBtn.style.setProperty("--size-width", String(Math.min(strokeWidth, 8)));
+      sizeBtn.title = `Size ${strokeWidth} — change the stroke width`;
+      sizeBtn.setAttribute("aria-label", `Size ${strokeWidth}`);
+    }
 
     const isShape = isShapeToolId(tool);
     setActive(shapeBtn, isShape);
@@ -384,7 +447,7 @@ export function activate(api: PluginContext): void {
     // Two columns — filled on the left, outline on the
     // right — and no switch: picking a shape sets the fill
     // mode from its column.
-    const showShape = isShape && !colorBarOpen && pickerOpen === "shape";
+    const showShape = isShape && !colorBarOpen && !sizeBarOpen && pickerOpen === "shape";
     shapePicker.style.display = showShape ? "flex" : "none";
     if (showShape) shapePicker.style.top = `${shapeBtn.offsetTop}px`;
     if (showShape && shapePicker.childElementCount === 0) {
@@ -482,6 +545,10 @@ export function activate(api: PluginContext): void {
     // colour swatch opened it. Picking a colour sets the
     // pen colour and closes the bar.
     palette.style.display = colorBarOpen ? "flex" : "none";
+    // The bar sits beside the swatch, like the size
+    // flyout sits beside the size button: the swatch
+    // moved into its own segment, so the bar follows it.
+    if (colorBarOpen) palette.style.top = `${colorSwatch.offsetTop}px`;
     if (colorBarOpen && palette.childElementCount === 0) {
       for (const hex of PALETTE) {
         // The sync loop below marks the active swatch, so
@@ -510,6 +577,49 @@ export function activate(api: PluginContext): void {
         sw.classList.toggle("active", active);
         sw.setAttribute("aria-pressed", String(active));
       }
+    }
+
+    // Size flyout: shown when the size button opened
+    // it. The slider sets the width live, and the value
+    // follows it.
+    const showSize = sizeBarOpen;
+    sizePicker.style.display = showSize ? "flex" : "none";
+    if (showSize) sizePicker.style.top = `${sizeBtn.offsetTop}px`;
+    if (showSize && sizePicker.childElementCount === 0) {
+      const row = document.createElement("div");
+      row.className = "size-row";
+      const lab = document.createElement("span");
+      lab.className = "size-label";
+      lab.textContent = "Size";
+      row.appendChild(lab);
+      const input = document.createElement("input");
+      input.type = "range";
+      input.className = "size-slider";
+      input.min = "1";
+      input.max = "32";
+      input.step = "1";
+      input.setAttribute("aria-label", "Size");
+      // A drag on the slider must stay on the slider:
+      // without this the press reaches the board, and
+      // the board pans instead of the size changing.
+      input.addEventListener("pointerdown", (e) => e.stopPropagation());
+      input.addEventListener("input", () => {
+        // The slider always sets the pen's width: the pen,
+        // the shapes and the arrows all read it.
+        const cur = api.pen.getStrokeDefaults("pen");
+        api.pen.setStrokeDefaults("pen", { ...cur, width: Number(input.value) });
+      });
+      row.appendChild(input);
+      sizeSlider = input;
+      const val = document.createElement("span");
+      val.className = "size-value";
+      row.appendChild(val);
+      sizeValue = val;
+      sizePicker.appendChild(row);
+    }
+    if (showSize && sizeSlider && sizeValue) {
+      sizeSlider.value = String(strokeWidth);
+      sizeValue.textContent = String(strokeWidth);
     }
 
     delBtn.classList.toggle("dim", selected.length === 0);
@@ -543,7 +653,7 @@ export function activate(api: PluginContext): void {
   document.addEventListener("pointerdown", (e) => {
     if (pickerOpen === null) return;
     const t = e.target as Node;
-    if (selectBtn.contains(t) || drawBtn.contains(t) || shapeBtn.contains(t) || selectPicker.contains(t) || drawPicker.contains(t) || shapePicker.contains(t)) return;
+    if (selectBtn.contains(t) || drawBtn.contains(t) || shapeBtn.contains(t) || sizeBtn.contains(t) || selectPicker.contains(t) || drawPicker.contains(t) || shapePicker.contains(t) || sizePicker.contains(t)) return;
     pickerOpen = null;
     update();
   });

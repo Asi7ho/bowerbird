@@ -64,6 +64,46 @@ function updateEraserRing(clientX: number, clientY: number, show: boolean): void
   ring.style.top = `${clientY - d / 2}px`;
 }
 
+// The pen's preview: a short sample of the stroke the pen
+// will lay down — the active brush's texture at the pen's
+// size, in the pen's colour — following the pointer like
+// the eraser ring. A body-level div, not part of the board
+// SVG, so renderSvgOnly() never wipes it, and the texture
+// is the board's own filter def, referenced by id. It
+// rebuilds only when the pen changes (texture, size,
+// colour, zoom); moving the pointer just moves the div,
+// so the preview never lags a frame behind the mouse.
+function ensurePenPreview(): HTMLDivElement {
+  if (!S.penPreview) {
+    S.penPreview = document.createElement("div");
+    S.penPreview.id = "pen-preview";
+    document.body.appendChild(S.penPreview);
+  }
+  return S.penPreview;
+}
+function updatePenPreview(clientX: number, clientY: number, show: boolean): void {
+  const el = ensurePenPreview();
+  if (!show) { el.style.display = "none"; return; }
+  const zoom = S.api.view.getCamera().zoom;
+  const d = S.api.pen.getStrokeDefaults("pen");
+  const width = (typeof d.width === "number" ? d.width : 3) * zoom;
+  const color = S.api.pen.getColor();
+  const h = Math.max(16, width + 10);
+  const key = `${d.texture ?? ""}|${width}|${d.marker === true}|${color}|${zoom}`;
+  if (key !== S.penPreviewKey) {
+    S.penPreviewKey = key;
+    const mid = h / 2;
+    const filter = d.texture ? ` filter="url(#texture-${d.texture})"` : "";
+    const opacity = d.marker === true ? ` opacity="0.45"` : "";
+    el.innerHTML = `<svg width="48" height="${h}" viewBox="0 0 48 ${h}" aria-hidden="true"><path d="M4 ${mid} Q 16 ${mid - 4} 24 ${mid} T 44 ${mid}" fill="none" stroke="${color}" stroke-width="${width}" stroke-linecap="round"${filter}${opacity} /></svg>`;
+  }
+  el.style.display = "block";
+  el.style.width = "48px";
+  el.style.height = `${h}px`;
+  el.style.left = `${clientX - 24}px`;
+  el.style.top = `${clientY - h / 2}px`;
+}
+
 // ---------------------------------------------------------------- editing
 
 // Whether an item's layer is locked: a locked layer does
@@ -732,11 +772,12 @@ export function attachWindowListeners(): void {
           const selected = S.api.board.getSelected();
           if (S.api.ui.isSettingsOpen() || S.editingId !== null) {
             S.boardEl.style.cursor = "default";
+          } else if (S.tool === ERASER_TOOL_ID || S.tool === PEN_TOOL_ID) {
+            // The ring / preview is the cursor while
+            // erasing or drawing with the pen: no crosshair.
+            S.boardEl.style.cursor = "none";
           } else if (S.tool.startsWith("plugin:") || (S.tool === "select" && S.lassoMode)) {
             S.boardEl.style.cursor = "crosshair";
-          } else if (S.tool === ERASER_TOOL_ID) {
-            // The ring is the cursor while erasing.
-            S.boardEl.style.cursor = "none";
           } else if (S.spaceDown) {
             S.boardEl.style.cursor = "grab";
           } else if (selected.length === 1 && rotateHit(selected[0], w)) {
@@ -754,12 +795,18 @@ export function attachWindowListeners(): void {
       // through the rAF above: it is the cursor, so it must
       // not lag a frame. It shows only over the board itself,
       // never over the toolbar, panels, title bar or settings.
+      // The pen preview follows the same rule.
       const overBoard = !(e.target as HTMLElement).closest("#toolbar, #settings-backdrop, #plugin-panels, #title-bar, #plugin-overlays, #plugin-view, input, textarea, select");
       const showRing = S.tool === ERASER_TOOL_ID && overBoard && !S.api.ui.isSettingsOpen() && S.editingId === null && S.api.view.getView() === "board";
       updateEraserRing(e.clientX, e.clientY, showRing);
+      const showPen = S.tool === PEN_TOOL_ID && overBoard && !S.api.ui.isSettingsOpen() && S.editingId === null && S.api.view.getView() === "board";
+      updatePenPreview(e.clientX, e.clientY, showPen);
       return;
     }
     S.boardEl.style.cursor = S.drag.kind === "resize" ? "nwse-resize" : S.drag.kind === "rotate" ? "grabbing" : S.drag.kind === "pan" ? "grabbing" : S.drag.kind === "move" ? "move" : (S.drag.kind === "plugin" && S.drag.fullId === ERASER_TOOL_ID) ? "none" : "default";
+    // While dragging, the live stroke is the feedback, so
+    // the pen preview hides; the eraser ring stays, as before.
+    updatePenPreview(e.clientX, e.clientY, false);
     if (S.drag.kind === "plugin") {
       const fullId = S.drag.fullId;
       const pt = S.api.ui.getToolDef(fullId);
@@ -974,8 +1021,8 @@ export function attachWindowListeners(): void {
 
   // The ring must not freeze at the edge when the pointer
   // leaves the window mid-erase.
-  document.addEventListener("mouseleave", () => updateEraserRing(0, 0, false));
-  document.addEventListener("pointerleave", () => updateEraserRing(0, 0, false));
+  document.addEventListener("mouseleave", () => { updateEraserRing(0, 0, false); updatePenPreview(0, 0, false); });
+  document.addEventListener("pointerleave", () => { updateEraserRing(0, 0, false); updatePenPreview(0, 0, false); });
 
   window.addEventListener("wheel", (e: WheelEvent) => {
     // A wheel over a plugin panel or a plugin view must scroll

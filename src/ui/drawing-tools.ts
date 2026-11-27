@@ -33,6 +33,15 @@ export const ERASER_RADIUS = 12;
 const PLUGIN_PREFIX = "plugin:core-draw:";
 export type DrawKind = "pen" | "eraser";
 const DRAW_KINDS: DrawKind[] = ["pen", "eraser"];
+// The built-in stroke width of a stroke tool, used
+// when no plugin set a width for it: pen 3, pencil 2,
+// highlighter 12. One place, so the toolbar's size
+// control and the tools agree on the fallback. Only
+// the pen is a tool now; the other widths are the
+// fallbacks the Brush Library's presets use.
+export function builtinStrokeWidth(kind: "pen" | "pencil" | "highlighter"): number {
+  return kind === "highlighter" ? 12 : kind === "pencil" ? 2 : 3;
+}
 export function drawToolId(kind: DrawKind): string {
   return `${PLUGIN_PREFIX}${kind}`;
 }
@@ -197,7 +206,7 @@ export function activate(api: PluginContext): void {
   // strokes so they keep their texture through erasing
   // and reloads — no new stroke sets it.
   const registerStrokeTool = (): void => {
-    const builtinWidth = 3;
+    const builtinWidth = builtinStrokeWidth("pen");
     const builtinMarker = false;
     const pencil = false;
     let points: Pt[] = [];

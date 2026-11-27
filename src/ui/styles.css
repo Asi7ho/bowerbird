@@ -1453,7 +1453,6 @@ body.platform-linux #title-bar button.win-close:hover {
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 16px;
   box-shadow: var(--shadow-md);
-  -webkit-app-region: drag;
 }
 
 #toolbar .seg {
@@ -1485,7 +1484,6 @@ body.platform-linux #title-bar button.win-close:hover {
   justify-content: center;
   cursor: pointer;
   color: var(--ink);
-  -webkit-app-region: no-drag;
   transition: background 0.15s ease, color 0.15s ease;
 }
 
@@ -1576,7 +1574,6 @@ body.platform-linux #title-bar button.win-close:hover {
   border-radius: 50%;
   border: 1px solid rgba(0, 0, 0, 0.12);
   cursor: pointer;
-  -webkit-app-region: no-drag;
   padding: 0;
   appearance: none;
   -webkit-appearance: none;
@@ -1699,6 +1696,101 @@ body.platform-linux #title-bar button.win-close:hover {
   background: var(--swatch-color, #1A1A1A);
   border: 1px solid rgba(0, 0, 0, 0.12);
   box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.35);
+}
+
+/* The size button in the toolbar: the stroke width in
+   use, as a line sample. Clicking it opens the size
+   flyout. It is a toolbar button in size, a sample in
+   look, like the colour swatch beside it. The line's
+   thickness follows the width, capped so a wide stroke
+   still reads as a line in the button. */
+#toolbar button.size-button {
+  width: 100%;
+  height: 40px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#toolbar button.size-button svg {
+  stroke-width: var(--size-width, 3);
+}
+
+/* The size flyout: the same floating .palette surface
+   as the colour bar, with a slider row — a label, the
+   app-style slider and the value. */
+
+#toolbar .size-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#toolbar .size-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--grey);
+}
+
+#toolbar .size-value {
+  font-size: 13px;
+  color: var(--grey);
+  min-width: 2ch;
+  text-align: right;
+}
+
+/* Slider, in app style — the palette panel's treatment:
+   a 4px fill-grey track, a white circular thumb with a
+   hairline border and a soft shadow. No browser default. */
+#toolbar .size-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 120px;
+  box-sizing: border-box;
+  margin: 0;
+  cursor: pointer;
+  height: 20px;
+  background: transparent;
+  outline: none;
+}
+
+#toolbar .size-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fill);
+}
+
+#toolbar .size-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-sm);
+}
+
+#toolbar .size-slider::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--fill);
+}
+
+#toolbar .size-slider::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--hairline);
+  box-shadow: var(--shadow-sm);
+}
+
+#toolbar .size-slider:hover::-webkit-slider-thumb,
+#toolbar .size-slider:hover::-moz-range-thumb {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
 }
 
 #toolbar .palette .shape-option.active {
@@ -2446,6 +2538,17 @@ body.platform-linux #title-bar button.win-close:hover {
   border: 1.5px solid rgba(255, 255, 255, 0.95);
   box-shadow: 0 0 0 1.5px rgba(29, 29, 31, 0.55);
   border-radius: 50%;
+}
+
+/* The pen's preview: a short sample of the stroke it will
+   lay down, at the cursor while the pen tool is active. The
+   size and position are set from the code (the pen's width,
+   scaled by the zoom). */
+#pen-preview {
+  position: fixed;
+  display: none;
+  pointer-events: none;
+  z-index: 60;
 }
 
 /* Search box, now in the title bar: centred in the bar, a

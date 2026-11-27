@@ -129,6 +129,12 @@ interface BoardState {
   // It is a body-level div, not part of the board SVG, so
   // renderSvgOnly() never wipes it mid-drag.
   eraserRing: HTMLDivElement | null;
+  // The pen's preview: a sample of the stroke it will lay
+  // down, at the cursor. Same body-level div as the ring.
+  penPreview: HTMLDivElement | null;
+  // What the preview last rendered, so it rebuilds only
+  // when the pen's texture, size or colour changes.
+  penPreviewKey: string;
   listenersAttached: boolean;
   lastAnnouncedSelection: string;
 }
@@ -166,6 +172,8 @@ export const S: BoardState = {
   cursorRaf: 0,
   pendingCursor: null,
   eraserRing: null,
+  penPreview: null,
+  penPreviewKey: "",
   listenersAttached: false,
   lastAnnouncedSelection: "",
 };

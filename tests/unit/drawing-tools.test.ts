@@ -11,6 +11,7 @@ import {
   buildConnectorItem,
   buildShapeItem,
   buildStrokeItem,
+  builtinStrokeWidth,
   drawKindOf,
   drawToolId,
   eraserSplitItems,
@@ -42,6 +43,11 @@ describe("tool ids", () => {
     expect(drawKindOf("plugin:core-draw:connector")).toBe(null);
     expect(drawKindOf("pen")).toBe(null);
     expect(drawKindOf("select")).toBe(null);
+  });
+  it("knows each stroke tool's built-in width", () => {
+    expect(builtinStrokeWidth("pen")).toBe(3);
+    expect(builtinStrokeWidth("pencil")).toBe(2);
+    expect(builtinStrokeWidth("highlighter")).toBe(12);
   });
   it("tells draw tools from shape tools", () => {
     expect(isDrawToolId("plugin:core-draw:pen")).toBe(true);
