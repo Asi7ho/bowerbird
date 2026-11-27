@@ -141,9 +141,14 @@ export const BUILTIN_TEXTURES: BuiltinTexture[] = [
     // or each dot's edge goes soft and the scatter reads
     // as a blurry smear. The band itself fades at its
     // edge the way a real spray does, so the dots thin
-    // out toward the edge instead of stopping dead.
+    // out toward the edge instead of stopping dead. The
+    // grain cut is a near-step (slope 100): a gentle cut
+    // left every dot a soft skirt and the noise bumps just
+    // under the cut as faint grey specks — ~50 ghost dots
+    // per stroke, more faint grey than dot ink — so the
+    // stroke read as a dusty band, not dots on white.
     filterSvg:
-      grainMask(0.18, 2, 9, 8, -4.9)
+      grainMask(0.18, 2, 9, 100, -68)
       + `<feGaussianBlur in="SourceGraphic" stdDeviation="8" result="wide" />`
       + `<feComponentTransfer in="wide" result="fat"><feFuncA type="linear" slope="8" intercept="-0.2" /></feComponentTransfer>`
       + `<feComposite in="fat" in2="grain" operator="in" result="dots" />`,
