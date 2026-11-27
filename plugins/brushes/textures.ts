@@ -127,21 +127,22 @@ export const BUILTIN_TEXTURES: BuiltinTexture[] = [
   },
   {
     id: "spray", label: "Spray", family: "pen",
-    // A spray can, not a line with dust: the dots are
-    // big enough to see (coarse grain) and dense enough
-    // to read as a scatter reaching well beyond the line.
-    // Dots only — no solid core under the scatter: a core
-    // read as a straight line with dust on it. The halo
-    // band is a blur pushed back up by a transfer, not a
-    // dilate: feMorphology left a faint wash over the
-    // whole filter region in the app. The dots are cut
-    // hard from the band — no second blur after the cut,
+    // A spray can, not a line with dust: the dots are big
+    // enough to see individually (coarse grain, ~5px) and
+    // sparse enough that white shows between them — small
+    // dense dots (0.3) averaged into a dark mass that read
+    // as a thick ink line. Dots only — no solid core under
+    // the scatter: a core read as a straight line with dust
+    // on it. The halo band is a blur pushed back up by a
+    // transfer, not a dilate: feMorphology left a faint wash
+    // over the whole filter region in the app. The dots are
+    // cut hard from the band — no second blur after the cut,
     // or each dot's edge goes soft and the scatter reads
     // as a blurry smear. The band itself fades at its
     // edge the way a real spray does, so the dots thin
     // out toward the edge instead of stopping dead.
     filterSvg:
-      grainMask(0.3, 2, 9, 8, -4.5)
+      grainMask(0.18, 2, 9, 8, -4.9)
       + `<feGaussianBlur in="SourceGraphic" stdDeviation="8" result="wide" />`
       + `<feComponentTransfer in="wide" result="fat"><feFuncA type="linear" slope="8" intercept="-0.2" /></feComponentTransfer>`
       + `<feComposite in="fat" in2="grain" operator="in" result="dots" />`,
