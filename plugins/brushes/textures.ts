@@ -111,18 +111,19 @@ export const BUILTIN_TEXTURES: BuiltinTexture[] = [
   },
   {
     id: "watercolour", label: "Watercolour", family: "highlighter",
-    // A wash with pigment pools, not a blur blob: slow
-    // displacement for a wobbly edge, and the same low
-    // turbulence shaped into an alpha mask, so the wash
-    // holds darker and lighter pools. The mask spans
-    // most of the alpha range, so the pools read; a
-    // narrow mask left the wash one flat pale grey.
-    // The displacement is small, so the edge stays
-    // defined — a big wobble on a thin wash left no
-    // edge at all. No blur anywhere.
+    // A wash with pigment pools, not a grey smear: slow
+    // displacement for a visibly wobbly edge, and the same
+    // low turbulence shaped into a wide alpha mask, so the
+    // wash holds clearly darker and lighter pools — a
+    // narrow mask (0.8/0.2) left the pools only ~10 grey
+    // levels apart and the wash read as one flat pale
+    // smear, breaking up at small sizes. The mask floor
+    // stays above zero over the usual noise range, so the
+    // wash stays continuous; rare low spots dry out the
+    // way a real wash does. No blur anywhere.
     filterSvg:
-      grainMask(0.08, 3, 17, 0.8, 0.2)
-      + `<feDisplacementMap in="SourceGraphic" in2="noise" scale="3" result="blotchy" />`
+      grainMask(0.06, 2, 17, 1.6, 0.0)
+      + `<feDisplacementMap in="SourceGraphic" in2="noise" scale="4" result="blotchy" />`
       + `<feComposite in="blotchy" in2="grain" operator="in" />`,
   },
   {
