@@ -89,6 +89,17 @@ describe("plugin drag transitions", () => {
     expect(moves).toEqual([mid]);
   });
 
+  it("ignores a move with no button down, leaving the drag where it was", () => {
+    const moves: Pt[] = [];
+    const def = toolDef({ onPointerMove: (world) => moves.push(world) });
+    const state = beginPluginDrag(def, fullId, down, pointerEvent());
+    const kept = movePluginDrag(def, state, mid, pointerEvent({ buttons: 0 }));
+    expect(moves).toEqual([]);
+    expect(kept).toEqual(state);
+    movePluginDrag(def, state, mid, pointerEvent());
+    expect(moves).toEqual([mid]);
+  });
+
   it("cancels at the drag's last point, not at a fresh position", () => {
     const cancelled: Array<{ world: Pt; ev: PluginPointerEvent }> = [];
     const def = toolDef({ onPointerCancel: (world, ev) => cancelled.push({ world, ev }) });

@@ -47,6 +47,18 @@ export function getCardDecorations(item: Item): { left: string; right: string } 
 }
 
 export const tools = new Map<string, PluginToolDef & { pluginId: string; fullId: string }>();
+// Stroke textures: a plugin registers an SVG filter for
+// its brush strokes; the board renderer wraps the filter
+// in `<filter id="texture-<id>">` beside the pencil
+// filter. Keyed by texture id, which is global — two
+// plugins cannot hold the same id.
+export interface RegisteredTexture {
+  id: string;
+  label: string;
+  filterSvg: string;
+  pluginId: string;
+}
+export const textures = new Map<string, RegisteredTexture>();
 export const panels = new Map<string, PluginPanelDef & { pluginId: string; el: HTMLElement; body: HTMLElement; tab: HTMLElement; hidden: boolean }>();
 export const views = new Map<string, PluginViewDef & { pluginId: string }>();
 export const commands = new Map<string, PluginCommandDef & { pluginId: string }>();

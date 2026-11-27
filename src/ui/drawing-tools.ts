@@ -4,14 +4,14 @@
 // brush would. It activates before the toolbar.
 
 import type { Anchor, Kind, PluginContext, PluginManifest, Pt, ShapeKind, Size, StrokeGradient } from "bowerbird-plugin-api";
-import { rectFromPoints, splitStrokeByEraser, strokeMaxWidth } from "../backend/model";
+import { applyPressureCurve, rectFromPoints, splitStrokeByEraser, strokeMaxWidth } from "../backend/model";
 
 export const manifest: PluginManifest = {
   apiVersion: "2",
   id: "core-draw",
   name: "Drawing tools",
   version: "1.0.0",
-  description: "Pen, pencil, highlighter, eraser, arrow and shapes.",
+  description: "Pen, eraser, arrow and shapes.",
   main: "drawing-tools.js",
   permissions: ["board:read", "board:write", "pen"],
   // The toolbar buttons and the P/A/R/X shortcuts all route
@@ -31,8 +31,8 @@ export const ERASER_RADIUS = 12;
 // "plugin:<pluginId>:<toolId>". The board and the toolbar
 // compare against these, never against the bare kinds.
 const PLUGIN_PREFIX = "plugin:core-draw:";
-export type DrawKind = "pen" | "pencil" | "highlighter" | "eraser";
-const DRAW_KINDS: DrawKind[] = ["pen", "pencil", "highlighter", "eraser"];
+export type DrawKind = "pen" | "eraser";
+const DRAW_KINDS: DrawKind[] = ["pen", "eraser"];
 export function drawToolId(kind: DrawKind): string {
   return `${PLUGIN_PREFIX}${kind}`;
 }
@@ -71,8 +71,6 @@ export function shapeKindOf(tool: string): string | null {
 // toolbar) shows the same mark as the toolbar's own.
 const ICONS = {
   pen: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 19.5 5.6 15 16.2 4.4a2.12 2.12 0 0 1 3 3L8.6 18l-4.1 1.5Z" fill="none"/><path d="M14.5 6.5l3 3" /></svg>',
-  pencil: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>',
-  highlighter: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 11-6 6v3h9l3-3" /><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4Z" /></svg>',
   eraser: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" /><path d="M22 21H7" /><path d="m5 11 9 9" /></svg>',
   connector: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 20 4" /><path d="M14 4h6v6" /></svg>',
 };
@@ -95,13 +93,13 @@ export interface PlacedItem {
 // A gradient is stored as given — the pen hands over a
 // validated one — and a null gradient is stored as
 // nothing, like an opacity of 100: missing means solid.
-export function buildStrokeItem(points: Pt[], pressures: number[], color: string, width: number, marker: boolean, pencil: boolean, opacity?: number, gradient?: StrokeGradient | null): PlacedItem | null {
+export function buildStrokeItem(points: Pt[], pressures: number[], color: string, width: number, marker: boolean, pencil: boolean, opacity?: number, gradient?: StrokeGradient | null, texture?: string): PlacedItem | null {
   if (points.length < 2) return null;
   const xs = points.map((p) => p.x), ys = points.map((p) => p.y);
   const pos = { x: Math.min(...xs), y: Math.min(...ys) };
   const size = { w: Math.max(1, Math.max(...xs) - pos.x), h: Math.max(1, Math.max(...ys) - pos.y) };
   return {
-    kind: { Stroke: { points, color, width, marker, ...(pressures.length > 0 ? { pressures } : {}), ...(pencil ? { pencil: true } : {}), ...(opacity !== undefined && opacity !== 100 ? { opacity } : {}), ...(gradient ? { gradient } : {}) } },
+    kind: { Stroke: { points, color, width, marker, ...(pressures.length > 0 ? { pressures } : {}), ...(pencil ? { pencil: true } : {}), ...(opacity !== undefined && opacity !== 100 ? { opacity } : {}), ...(gradient ? { gradient } : {}), ...(texture ? { texture } : {}) } },
     pos,
     size,
   };
@@ -120,12 +118,13 @@ export function shapeBox(start: Pt, current: Pt): { x0: number; y0: number; w: n
 
 // A finished shape: the shape in its drag box, filled in
 // the pen colour, or outlined. A drag smaller than 10x10
-// is a click, not a shape, and places nothing.
-export function buildShapeItem(shape: ShapeKind, start: Pt, current: Pt, fill: string, outline: boolean): PlacedItem | null {
+// is a click, not a shape, and places nothing. An outlined
+// shape carries its outline width, from the toolbar size.
+export function buildShapeItem(shape: ShapeKind, start: Pt, current: Pt, fill: string, outline: boolean, width = 4): PlacedItem | null {
   const box = shapeBox(start, current);
   if (box.w < 10 || box.h < 10) return null;
   return {
-    kind: { Shape: { shape, fill, ...(outline ? { outline: true } : {}) } },
+    kind: { Shape: { shape, fill, ...(outline ? { outline: true, width } : {}) } },
     pos: { x: box.x0, y: box.y0 },
     size: { w: box.w, h: box.h },
   };
@@ -135,13 +134,14 @@ export function buildShapeItem(shape: ShapeKind, start: Pt, current: Pt, fill: s
 // A card-to-itself connector would be a 1x1 item that can
 // never be selected or deleted, so it places nothing —
 // as does a line under 4 world units from a point anchor.
-export function buildConnectorItem(from: Anchor, to: Anchor, a: Pt | null, b: Pt, color: string): PlacedItem | null {
+// The line carries its width, from the toolbar size.
+export function buildConnectorItem(from: Anchor, to: Anchor, a: Pt | null, b: Pt, color: string, width = 2): PlacedItem | null {
   const degenerate = a !== null && "Point" in to && Math.hypot(a.x - to.Point.x, a.y - to.Point.y) < 4;
   const selfConnector = "Item" in from && "Item" in to && from.Item === to.Item;
   if (degenerate || selfConnector) return null;
   const aPt = a ?? { x: 0, y: 0 };
   const { pos, size } = rectFromPoints(aPt, b);
-  return { kind: { Connector: { from, to, color } }, pos, size };
+  return { kind: { Connector: { from, to, color, width } }, pos, size };
 }
 
 // A stroke's fields, as the eraser reads them off the
@@ -155,6 +155,7 @@ export interface StrokeProps {
   pencil?: boolean;
   opacity?: number;
   gradient?: StrokeGradient | null;
+  texture?: string;
 }
 
 // The pieces of a stroke that survive an eraser pass at
@@ -169,7 +170,7 @@ export function eraserSplitItems(stroke: StrokeProps, at: Pt, radius: number): P
     const pos = { x: Math.min(...xs), y: Math.min(...ys) };
     const size = { w: Math.max(1, Math.max(...xs) - pos.x), h: Math.max(1, Math.max(...ys) - pos.y) };
     return {
-      kind: { Stroke: { points: run.points, color: stroke.color, width: stroke.width, marker: stroke.marker, ...(run.pressures && run.pressures.length > 0 ? { pressures: run.pressures } : {}), ...(stroke.pencil ? { pencil: true } : {}), ...(stroke.opacity !== undefined && stroke.opacity !== 100 ? { opacity: stroke.opacity } : {}), ...(stroke.gradient ? { gradient: stroke.gradient } : {}) } },
+      kind: { Stroke: { points: run.points, color: stroke.color, width: stroke.width, marker: stroke.marker, ...(run.pressures && run.pressures.length > 0 ? { pressures: run.pressures } : {}), ...(stroke.pencil ? { pencil: true } : {}), ...(stroke.opacity !== undefined && stroke.opacity !== 100 ? { opacity: stroke.opacity } : {}), ...(stroke.gradient ? { gradient: stroke.gradient } : {}), ...(stroke.texture ? { texture: stroke.texture } : {}) } },
       pos,
       size,
     };
@@ -185,39 +186,54 @@ export function activate(api: PluginContext): void {
   // while dragging; only the commit is dropped.
   const defaultLayerLocked = (): boolean =>
     api.board.getLayers().find((l) => l.id === "default")?.locked ?? false;
-  // One stroke tool per kind. The pencil is a graphite
-  // texture, not just a thinner pen — the flag travels with
-  // the stroke so it keeps its texture through erasing and
-  // reloads. The highlighter records no pressure.
-  const registerStrokeTool = (kind: "pen" | "pencil" | "highlighter"): void => {
-    const width = kind === "highlighter" ? 12 : kind === "pencil" ? 2 : 3;
-    const marker = kind === "highlighter";
-    const pencil = kind === "pencil";
+  // One stroke tool: the pen. Pencil, highlighter and
+  // every other style live in the Brush Library, which
+  // configures this tool through the pen's stroke
+  // defaults instead of adding tools of its own. The
+  // width, texture, marker and pressure curve come from
+  // those defaults when a brush set them; unset fields
+  // use the built-ins below, so the pen draws plain ink
+  // with the plugin off. The pencil flag travels with old
+  // strokes so they keep their texture through erasing
+  // and reloads — no new stroke sets it.
+  const registerStrokeTool = (): void => {
+    const builtinWidth = 3;
+    const builtinMarker = false;
+    const pencil = false;
     let points: Pt[] = [];
     let pressures: number[] = [];
+    let width = builtinWidth;
+    let marker = builtinMarker;
+    let texture: string | undefined;
+    let curve: Array<{ x: number; y: number }> | null = null;
     api.ui.registerTool({
-      id: kind,
-      title: kind === "pen" ? "Pen" : kind === "pencil" ? "Pencil" : "Highlighter",
-      icon: ICONS[kind],
+      id: "pen",
+      title: "Pen",
+      icon: ICONS.pen,
       onPointerDown: (world, ev) => {
+        const defaults = api.pen.getStrokeDefaults("pen");
+        width = defaults.width ?? builtinWidth;
+        marker = defaults.marker ?? builtinMarker;
+        texture = defaults.texture ?? undefined;
+        curve = defaults.curve ?? null;
         points = [world];
         // A stylus records its pressure per point, so the
         // stroke can thicken and thin with the press; a
         // mouse or finger records none, and draws a uniform
-        // stroke.
-        pressures = ev.pointerType === "pen" && !marker ? [ev.pressure] : [];
+        // stroke. A set curve bends the pressure first.
+        pressures = ev.pointerType === "pen" && !marker ? [applyPressureCurve(ev.pressure, curve)] : [];
       },
       onPointerMove: (world, ev) => {
         const last = points[points.length - 1];
         if (!last) return;
         if (Math.hypot(world.x - last.x, world.y - last.y) > 2 / api.view.getCamera().zoom) {
           points.push(world);
-          if (ev.pointerType === "pen" && !marker) pressures.push(ev.pressure);
-          api.board.previewStroke(points, pressures, { width, marker, pencil, opacity: api.pen.getOpacity(), gradient: api.pen.getGradient() });
+          if (ev.pointerType === "pen" && !marker) pressures.push(applyPressureCurve(ev.pressure, curve));
+          api.board.previewStroke(points, pressures, { width, marker, pencil, texture, opacity: api.pen.getOpacity(), gradient: api.pen.getGradient() });
         }
       },
       onPointerUp: () => {
-        const item = buildStrokeItem(points, pressures, api.pen.getColor(), width, marker, pencil, api.pen.getOpacity(), api.pen.getGradient());
+        const item = buildStrokeItem(points, pressures, api.pen.getColor(), width, marker, pencil, api.pen.getOpacity(), api.pen.getGradient(), texture);
         points = [];
         pressures = [];
         if (item && !defaultLayerLocked()) api.board.addItem(item.kind, item.pos, item.size);
@@ -228,9 +244,7 @@ export function activate(api: PluginContext): void {
       },
     });
   };
-  registerStrokeTool("pen");
-  registerStrokeTool("pencil");
-  registerStrokeTool("highlighter");
+  registerStrokeTool();
 
   // The eraser: only the ink under it goes, and a stroke it
   // passes through breaks into the pieces either side. The
@@ -285,7 +299,9 @@ export function activate(api: PluginContext): void {
 
   // The connector: a line from the press anchor to the
   // release anchor; the preview is a live stroke between them.
+  // Its width is the toolbar size, read when the drag starts.
   let from: Anchor | null = null;
+  let connectorWidth = 2;
   api.ui.registerTool({
     id: "connector",
     title: "Arrow",
@@ -295,11 +311,12 @@ export function activate(api: PluginContext): void {
       const hitItem = hit !== null ? api.board.getItem(hit) : undefined;
       const anchorable = hitItem && !("Stroke" in hitItem.kind) && !("Connector" in hitItem.kind);
       from = hitItem && anchorable ? { Item: hitItem.id } : { Point: world };
+      connectorWidth = api.pen.getStrokeDefaults("pen").width ?? 2;
     },
     onPointerMove: (world) => {
       if (!from) return;
       const a = api.geometry.anchorPoint(from);
-      if (a) api.board.previewStroke([a, world], [], { width: 2 });
+      if (a) api.board.previewStroke([a, world], [], { width: connectorWidth });
     },
     onPointerUp: (world) => {
       if (!from) return;
@@ -313,7 +330,7 @@ export function activate(api: PluginContext): void {
       // toAnchor is an Item exactly when toItem exists, so
       // its centre comes from toItem — no second lookup.
       const bPt = "Point" in toAnchor ? toAnchor.Point : (toItem ? api.geometry.centre(toItem) : { x: 0, y: 0 });
-      const item = buildConnectorItem(f, toAnchor, a, bPt, api.pen.getColor());
+      const item = buildConnectorItem(f, toAnchor, a, bPt, api.pen.getColor(), connectorWidth);
       if (item && !defaultLayerLocked()) api.board.addItem(item.kind, item.pos, item.size);
     },
     onPointerCancel: () => {
@@ -324,9 +341,11 @@ export function activate(api: PluginContext): void {
   // One tool per shape kind, from the shape table: the
   // table is the single source for the flyout, the button
   // icon and the drag preview, so adding a shape means one
-  // row there, not edits here.
+  // row there, not edits here. An outlined shape's width
+  // is the toolbar size, read when the drag starts.
   for (const meta of api.shapes.list()) {
     let start: Pt | null = null;
+    let shapeWidth = 4;
     const kind = meta.kind as ShapeKind;
     api.ui.registerTool({
       id: meta.kind,
@@ -334,17 +353,18 @@ export function activate(api: PluginContext): void {
       icon: `<svg viewBox="0 0 24 24" aria-hidden="true">${meta.svg}</svg>`,
       onPointerDown: (world) => {
         start = world;
+        shapeWidth = api.pen.getStrokeDefaults("pen").width ?? 4;
       },
       onPointerMove: (world) => {
         if (!start) return;
         const box = shapeBox(start, world);
-        api.board.previewShape(meta.kind, box.x0, box.y0, box.w, box.h, { color: api.pen.getColor(), outline: api.shapes.getOutline() });
+        api.board.previewShape(meta.kind, box.x0, box.y0, box.w, box.h, { color: api.pen.getColor(), outline: api.shapes.getOutline(), width: shapeWidth });
       },
       onPointerUp: (world) => {
         if (!start) return;
         const s = start;
         start = null;
-        const item = buildShapeItem(kind, s, world, api.pen.getColor(), api.shapes.getOutline());
+        const item = buildShapeItem(kind, s, world, api.pen.getColor(), api.shapes.getOutline(), shapeWidth);
         if (item && !defaultLayerLocked()) api.board.addItem(item.kind, item.pos, item.size);
       },
       onPointerCancel: () => {

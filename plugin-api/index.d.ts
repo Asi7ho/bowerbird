@@ -39,7 +39,7 @@ export interface StrokeGradient {
 
 export type Kind =
   | { Text: { text: string; bold: boolean; size: number; color: string; bg?: string } }
-  | { Shape: { shape: ShapeKind; fill: string; outline?: boolean } }
+  | { Shape: { shape: ShapeKind; fill: string; outline?: boolean; width?: number } }
   | { Image: { path: string } }
   | { UrlCard: { url: string; title: string | null; description: string | null; image?: string | null; icon?: string | null; embed?: boolean } }
   | { PdfCard: { path: string; size_bytes: number } }
@@ -55,8 +55,11 @@ export type Kind =
   | { Audio: { path: string; title?: string; transcript?: string } }
   | { Video: { source: string; remote: boolean; size_bytes: number; poster?: string; duration?: number } }
   | { Model3D: { path: string; size_bytes: number } }
-  | { Stroke: { points: Pt[]; color: string; width: number; marker: boolean; pressures?: number[]; pencil?: boolean; opacity?: number; gradient?: StrokeGradient | null } }
-  | { Connector: { from: Anchor; to: Anchor; color: string } }
+  // `texture` is a registered texture id (api.brushes):
+  // the stroke renders through that filter while it is
+  // registered, plain when it is not. Absent is plain.
+  | { Stroke: { points: Pt[]; color: string; width: number; marker: boolean; pressures?: number[]; pencil?: boolean; opacity?: number; gradient?: StrokeGradient | null; texture?: string } }
+  | { Connector: { from: Anchor; to: Anchor; color: string; width?: number } }
   // Plugin cards (see PLUGIN_API.md): namespaced so the core never
   // has to know a plugin's data shape. `data` is always JSON. If
   // the plugin is missing or disabled, the core renders a
@@ -295,6 +298,38 @@ export interface PluginToolDef {
   onPointerCancel?: (world: Pt, ev: PluginPointerEvent) => void;
 }
 
+// A pressure curve handle: an offset from its point,
+// not an absolute position, so dragging the point
+// carries its handles with it.
+export interface CurveHandle {
+  dx: number;
+  dy: number;
+}
+
+// A pressure curve point: input pressure x and output
+// pressure y, both 0..1, x rising. The out handle shapes
+// the segment to the next point, the in handle the one
+// from the previous point; a missing handle sits a third
+// of the way along the chord, the straight line.
+export interface CurvePoint {
+  x: number;
+  y: number;
+  out?: CurveHandle;
+  in?: CurveHandle;
+}
+
+// What a core draw tool draws next: its width, texture,
+// marker and pressure curve. All fields optional: an
+// omitted one uses the tool's built-in. A null texture is
+// plain ink; a null curve is the straight diagonal. The
+// curve is control points, x and y in 0..1, x rising.
+export interface StrokeDefaults {
+  width?: number;
+  texture?: string | null;
+  marker?: boolean;
+  curve?: CurvePoint[] | null;
+}
+
 // The pointer behind a drag callback: `pressure` is 0..1
 // (0 for a mouse), `tiltX`/`tiltY` are stylus tilt in
 // degrees, `buttons` is the pressed-buttons bitmask.
@@ -316,7 +351,9 @@ export interface PluginPointerEvent {
 // api.pen.getOpacity() itself. A gradient, when given,
 // paints the preview exactly like the committed stroke;
 // a caller that wants the pen's gradient passes
-// api.pen.getGradient() itself. Null clears it.
+// api.pen.getGradient() itself. Null clears it. A texture,
+// when given, filters the preview exactly like the
+// committed stroke.
 export interface PluginPreviewStrokeOptions {
   width?: number;
   color?: string;
@@ -324,6 +361,7 @@ export interface PluginPreviewStrokeOptions {
   pencil?: boolean;
   opacity?: number;
   gradient?: StrokeGradient | null;
+  texture?: string;
 }
 
 // How a drag tool's live shape preview looks. All fields
@@ -333,6 +371,9 @@ export interface PluginPreviewStrokeOptions {
 export interface PluginPreviewShapeOptions {
   color?: string;
   outline?: boolean;
+  // The outline's width, in world units: the toolbar
+  // size when the shape tool reads it, 4 when unset.
+  width?: number;
 }
 
 // A creation action: an alternative to typing when the user
@@ -481,9 +522,10 @@ export interface PluginHost {
   // not one per card. addItem saves after every item.
   addItems: (items: Array<{ kind: Kind; pos: Pt; size: Size }>) => number[];
   // data rewrites the plugin's own card — except a colour
-  // patch: { color } on a stroke, { hex } on a swatch.
-  // Anything else on a core card throws. One undo step;
-  // false when the card is missing or its layer is locked.
+  // patch: { color?, opacity?, gradient?, texture?, width? }
+  // on a stroke, { hex } on a swatch. Anything else on a
+  // core card throws. One undo step; false when the card is
+  // missing or its layer is locked.
   updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }) => boolean;
   updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }>) => boolean;
   moveItem: (id: number, toIndex: number) => boolean;
@@ -595,6 +637,13 @@ export interface PluginHost {
   setPenOpacity: (opacity: number) => boolean;
   getPenGradient: () => StrokeGradient | null;
   setPenGradient: (gradient: StrokeGradient | null) => boolean;
+  // The next stroke a core draw tool draws (see
+  // StrokeDefaults): read at drag start, so a panel edit
+  // applies to the next drag. Unset fields use the tool's
+  // built-ins; clearing restores them.
+  getStrokeDefaults: (kind: "pen" | "pencil" | "highlighter") => StrokeDefaults;
+  setStrokeDefaults: (kind: "pen" | "pencil" | "highlighter", defaults: StrokeDefaults) => void;
+  clearStrokeDefaults: (kind: "pen" | "pencil" | "highlighter") => void;
   getCamera: () => Camera;
   screenToWorld: (clientX: number, clientY: number) => Pt;
   setCamera: (cam: Camera) => void;
@@ -857,9 +906,10 @@ export interface PluginContext {
     // not exist.
     connect: (fromId: number, toId: number, options?: { color?: string }) => number | null;
     // data rewrites the plugin's own card — except a colour
-    // patch: { color } on a stroke, { hex } on a swatch.
-    // Anything else on a core card throws. One undo step;
-    // false when the card is missing or its layer is locked.
+    // patch: { color?, opacity?, gradient?, texture?, width? }
+    // on a stroke, { hex } on a swatch. Anything else on a
+    // core card throws. One undo step; false when the card is
+    // missing or its layer is locked.
     updateItem: (id: number, patch: { pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }) => boolean;
     updateItems: (patches: Array<{ id: number; pos?: Pt; size?: Size; group?: number | null; layer?: string; data?: unknown }>) => boolean;
     moveItem: (id: number, toIndex: number) => boolean;
@@ -1103,6 +1153,29 @@ export interface PluginContext {
     setOpacity: (opacity: number) => boolean;
     getGradient: () => StrokeGradient | null;
     setGradient: (gradient: StrokeGradient | null) => boolean;
+    // The next stroke a core draw tool draws: its width,
+    // texture, marker and pressure curve. Setting them is a
+    // tool setting, like the pen colour — no permission, and
+    // the last write wins. A call replaces the kind's
+    // defaults whole: an omitted field uses the tool's
+    // built-in (pen 3, pencil 2, highlighter 12 and marker;
+    // a linear curve; no texture). Clearing restores the
+    // built-ins, so disabling the plugin that set them
+    // leaves the plain core tools.
+    getStrokeDefaults: (kind: "pen" | "pencil" | "highlighter") => StrokeDefaults;
+    setStrokeDefaults: (kind: "pen" | "pencil" | "highlighter", defaults: StrokeDefaults) => void;
+    clearStrokeDefaults: (kind: "pen" | "pencil" | "highlighter") => void;
+  };
+  // Stroke textures: an SVG filter a brush stroke renders
+  // through. Registering needs board:write — the same
+  // permission as the strokes it textures — and the id is
+  // global: two plugins cannot hold the same one. The host
+  // drops a plugin's textures when it deactivates, so a
+  // stroke whose texture is gone renders plain. Listing
+  // needs no permission.
+  brushes: {
+    registerTexture: (def: { id: string; label: string; filterSvg: string }) => void;
+    listTextures: () => Array<{ id: string; label: string; filterSvg: string; pluginId: string }>;
   };
   ui: {
     toast: (msg: string) => void;

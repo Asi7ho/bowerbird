@@ -3,10 +3,10 @@
 // views and commands live in host-state.ts; this module imports
 // them.
 
-import type { Anchor, ArrangeOptions, Board, BoardController, Camera, Item, Kind, Layer, PluginBridge, PluginBuiltinCardDef, PluginCardDecoratorDef, PluginCardDef, PluginCommandDef, PluginContext, PluginCreateActionDef, PluginHost, PluginManifest, PluginOverlayDef, PluginPanelDef, PluginSettingsSectionDef, PluginShortcutDef, PluginToolDef, PluginViewDef, Pt, SettingsUI, ShellElements, Size, StrokeGradient } from "bowerbird-plugin-api";
-export type { Anchor, ArrangeOptions, Board, BoardController, Camera, Item, Kind, Layer, PluginBridge, PluginBuiltinCardDef, PluginCardDecoratorDef, PluginCardDef, PluginCommandDef, PluginContext, PluginCreateActionDef, PluginHost, PluginManifest, PluginOverlayDef, PluginPanelDef, PluginSettingsSectionDef, PluginShortcutDef, PluginToolDef, PluginViewDef, Pt, SettingsUI, ShellElements, Size };
-import { anchorPoint, arrangeItems, AUDIO_H, AUDIO_TRANSCRIPT_HIDDEN_H, AUDIO_TRANSCRIPT_SHOWN_H, boardGet, centre, checklistProgress, clippedEnds, colourDataPatch, domainOf, elide, escapeHtml, fitCamera, itemBounds, itemRotation, parseHex, rectCrossing, rectFromPoints, renderMarkdownHtml, rotatePoint, segmentIntersectsRect, select, setChecklistDone, tileColorFor, tint, toggleTaskLine } from "../backend/model";
-import { cardDecorators, cards, commands, CORE_EVENTS, createActions, listeners, loaded, overlays, panels, settingsSections, shell, shortcuts, tools, views } from "./host-state";
+import type { Anchor, ArrangeOptions, Board, BoardController, Camera, Item, Kind, Layer, PluginBridge, PluginBuiltinCardDef, PluginCardDecoratorDef, PluginCardDef, PluginCommandDef, PluginContext, PluginCreateActionDef, PluginHost, PluginManifest, PluginOverlayDef, PluginPanelDef, PluginSettingsSectionDef, PluginShortcutDef, PluginToolDef, PluginViewDef, Pt, SettingsUI, ShellElements, Size, StrokeDefaults, StrokeGradient } from "bowerbird-plugin-api";
+export type { Anchor, ArrangeOptions, Board, BoardController, Camera, Item, Kind, Layer, PluginBridge, PluginBuiltinCardDef, PluginCardDecoratorDef, PluginCardDef, PluginCommandDef, PluginContext, PluginCreateActionDef, PluginHost, PluginManifest, PluginOverlayDef, PluginPanelDef, PluginSettingsSectionDef, PluginShortcutDef, PluginToolDef, PluginViewDef, Pt, SettingsUI, ShellElements, Size, StrokeDefaults };
+import { anchorPoint, arrangeItems, AUDIO_H, AUDIO_TRANSCRIPT_HIDDEN_H, AUDIO_TRANSCRIPT_SHOWN_H, boardGet, centre, checklistProgress, clippedEnds, colourDataPatch, domainOf, elide, escapeHtml, fitCamera, isTextureId, itemBounds, itemRotation, parseHex, rectCrossing, rectFromPoints, renderMarkdownHtml, rotatePoint, segmentIntersectsRect, select, setChecklistDone, tileColorFor, tint, toggleTaskLine } from "../backend/model";
+import { cardDecorators, cards, commands, CORE_EVENTS, createActions, listeners, loaded, overlays, panels, settingsSections, shell, shortcuts, textures, tools, views, type RegisteredTexture } from "./host-state";
 import { applySavedPanelSettings, bindPanelDeps, deactivateMissingActivePanel, deactivatePanelIfActive, ensureResizeHandle, isPanelActive as isPanelActiveKey, registerPanel, setActivePanel, updatePanelDock, wirePanelsToggle } from "./host-panels";
 import { bindViewDeps, getActiveView, refreshActiveView, registerView, renderViewSwitcher, setActiveView } from "./host-views";
 import { bindCardDeps, domId, getCardRenderer, handlePluginCardAction, handlePluginCardDoubleClick, isPluginCard, listPluginCommands, getPluginTool, registerBuiltinCard, runPluginCommand, syncPluginToolButtons } from "./host-cards";
@@ -117,13 +117,13 @@ export function boardUngroupSelected(): boolean {
 export function boardDeleteSelected(): boolean {
   return boardController?.deleteSelected() ?? false;
 }
-export function boardPreviewStroke(points: Pt[], pressures: number[], opts?: { width?: number; color?: string; marker?: boolean; pencil?: boolean; opacity?: number; gradient?: StrokeGradient | null }): void {
+export function boardPreviewStroke(points: Pt[], pressures: number[], opts?: { width?: number; color?: string; marker?: boolean; pencil?: boolean; opacity?: number; gradient?: StrokeGradient | null; texture?: string }): void {
   boardController?.previewStroke(points, pressures, opts);
 }
 // The live shape preview for a drag tool, in the preview
 // layer above the cards. The core clears it when the drag
 // ends, so it never lands in board JSON.
-export function boardPreviewShape(shape: string, x0: number, y0: number, w: number, h: number, opts?: { color?: string; outline?: boolean }): void {
+export function boardPreviewShape(shape: string, x0: number, y0: number, w: number, h: number, opts?: { color?: string; outline?: boolean; width?: number }): void {
   boardController?.previewShape(shape, x0, y0, w, h, opts);
 }
 
@@ -194,9 +194,10 @@ function requirePerm(manifest: PluginManifest, perm: string): void {
 }
 
 // A data patch is allowed when it rewrites the plugin's own
-// card, or when it is a colour-only patch on a stroke or a
-// swatch (see colourDataPatch in model.ts). Anything else on
-// a core card is refused.
+// card, or when it is a colour patch on a stroke or a swatch
+// (see colourDataPatch in model.ts): { color?, opacity?,
+// gradient?, texture?, width? } on a stroke, { hex } on a
+// swatch. Anything else on a core card is refused.
 function assertDataPatchAllowed(pluginId: string, id: number, data: unknown): void {
   const it = host!.getBoard().items.find((i) => i.id === id);
   if (it && isPluginCard(it) && it.kind.Plugin.plugin === pluginId) return;
@@ -290,12 +291,12 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
       // The live preview stroke for a drag tool: preview layer
       // only — no board write, no save, no undo step — so a
       // plugin can call it on every pointermove.
-      previewStroke: (points: Pt[], pressures?: number[], opts?: { width?: number; color?: string; marker?: boolean; pencil?: boolean; gradient?: StrokeGradient | null }) =>
+      previewStroke: (points: Pt[], pressures?: number[], opts?: { width?: number; color?: string; marker?: boolean; pencil?: boolean; opacity?: number; gradient?: StrokeGradient | null; texture?: string }) =>
         boardPreviewStroke(points, pressures ?? [], opts),
       // The live shape preview for a drag tool: preview layer
       // only — no board write, no save, no undo step — so a
       // shape tool can call it on every pointermove.
-      previewShape: (shape: string, x0: number, y0: number, w: number, h: number, opts?: { color?: string; outline?: boolean }) =>
+      previewShape: (shape: string, x0: number, y0: number, w: number, h: number, opts?: { color?: string; outline?: boolean; width?: number }) =>
         boardPreviewShape(shape, x0, y0, w, h, opts),
       hitTest: (world: Pt) => host!.hitTest(world),
       marqueeSelect: (a: Pt, b: Pt) => host!.marqueeSelect(a, b),
@@ -387,8 +388,9 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
         // A plugin may only rewrite its own plugin card data. Core
         // pos/size/group/layer edits are allowed for any card, because
         // moving a card is not editing its content. A colour patch
-        // is the one data edit allowed on a core card: { color }
-        // on a stroke, { hex } on a swatch.
+        // is the one data edit allowed on a core card:
+        // { color?, opacity?, gradient?, texture?, width? } on a
+        // stroke, { hex } on a swatch.
         if (patch.data !== undefined) assertDataPatchAllowed(pluginId, id, patch.data);
         const ok = host!.updateItem(id, patch);
         return ok;
@@ -684,6 +686,22 @@ function createContext(manifest: PluginManifest, opts?: { trial?: boolean; first
       setOpacity: (opacity: number) => host!.setPenOpacity(opacity),
       getGradient: () => host!.getPenGradient(),
       setGradient: (gradient: StrokeGradient | null) => host!.setPenGradient(gradient),
+      getStrokeDefaults: (kind) => host!.getStrokeDefaults(kind),
+      setStrokeDefaults: (kind, defaults) => host!.setStrokeDefaults(kind, defaults),
+      clearStrokeDefaults: (kind) => host!.clearStrokeDefaults(kind),
+    },
+    // Stroke textures: a plugin registers an SVG filter
+    // its brush strokes render through, and lists the
+    // registered ones. Registering needs board:write — the
+    // same permission as the strokes it textures. The host
+    // drops a plugin's textures when it deactivates, so a
+    // stroke whose texture is gone renders plain.
+    brushes: {
+      registerTexture: (def: { id: string; label: string; filterSvg: string }) => {
+        require("board:write");
+        registerTexture(pluginId, def);
+      },
+      listTextures: () => listTextures(),
     },
     ui: {
       toast: (msg: string) => host!.toast(msg),
@@ -1123,6 +1141,27 @@ function registerCommand(pluginId: string, def: PluginCommandDef): void {
   commands.set(`${pluginId}:${def.id}`, { ...def, pluginId });
 }
 
+// A stroke texture: a plugin registers an SVG filter its
+// brush strokes render through. The id is global — the
+// filter lands as #texture-<id> in the board SVG, so two
+// plugins cannot hold the same id. Re-registering an id
+// the same plugin holds replaces it; the board renderer
+// rebuilds the filter defs on the next render.
+function registerTexture(pluginId: string, def: { id: string; label: string; filterSvg: string }): void {
+  if (!isTextureId(def.id)) throw new Error(`Plugin ${pluginId} texture id ${String(def.id)} is not a valid texture id`);
+  if (typeof def.label !== "string" || !def.label.trim()) throw new Error(`Plugin ${pluginId} texture ${def.id} needs a label`);
+  if (typeof def.filterSvg !== "string" || !def.filterSvg.trim()) throw new Error(`Plugin ${pluginId} texture ${def.id} needs filter SVG`);
+  const existing = textures.get(def.id);
+  if (existing && existing.pluginId !== pluginId) throw new Error(`Texture ${def.id} is already registered by ${existing.pluginId}`);
+  textures.set(def.id, { id: def.id, label: def.label, filterSvg: def.filterSvg, pluginId });
+}
+
+// Every registered texture, in registration order, for
+// the board renderer and the stroke renderer.
+export function listTextures(): Array<RegisteredTexture> {
+  return Array.from(textures.values());
+}
+
 function registerOverlay(pluginId: string, def: PluginOverlayDef): void {
   if (!host) return;
   // An overlay container covers the board area but takes no
@@ -1265,6 +1304,9 @@ function unregisterPlugin(pluginId: string): void {
   }
   deletePrefixed(createActions, pluginId);
   deletePrefixed(commands, pluginId);
+  for (const [id, t] of Array.from(textures.entries())) {
+    if (t.pluginId === pluginId) textures.delete(id);
+  }
   for (const [key, o] of Array.from(overlays.entries())) {
     if (o.pluginId === pluginId) {
       overlays.delete(key);

@@ -154,31 +154,87 @@ export function renderSvgOnly(): void {
 // be recreated each time and the turbulence would be
 // re-compiled. A tiny warm-up rect uses the filter at
 // startup, so the first pencil stroke does not pay the
-// first-use compile cost and lag.
-function ensurePencilFilter(): void {
+// first-use compile cost and lag. Registered brush
+// textures get one filter each beside it, from the
+// registry; a texture whose plugin deactivated is
+// pruned, so a stale def never outlives its plugin.
+function ensureStrokeFilters(): void {
   const svg = S.worldEl.ownerSVGElement;
-  if (!svg || svg.querySelector("#pencil-texture")) return;
-  const defs = svgEl2("defs", {});
-  const filter = svgEl2("filter", { id: "pencil-texture", x: "-5%", y: "-5%", width: "110%", height: "110%" });
-  filter.appendChild(svgEl2("feTurbulence", { type: "fractalNoise", baseFrequency: "0.9", numOctaves: "2", seed: "7", result: "noise" }));
-  filter.appendChild(svgEl2("feDisplacementMap", { in: "SourceGraphic", in2: "noise", scale: "2.5" }));
-  defs.appendChild(filter);
-  svg.appendChild(defs);
-  // Warm-up: a 1px rect the filter paints once, so the
-  // turbulence is compiled before the first pencil
-  // stroke. Nearly transparent, so it reads as nothing.
-  const warm = svgEl2("rect", { x: "0", y: "0", width: "1", height: "1", fill: "#1A1A1A", opacity: "0.01", filter: "url(#pencil-texture)" });
-  svg.appendChild(warm);
+  if (!svg) return;
+  let defs: SVGElement | null = svg.querySelector("defs");
+  if (!defs) {
+    defs = svgEl2("defs", {});
+    svg.appendChild(defs);
+  }
+  if (!svg.querySelector("#pencil-texture")) {
+    const filter = svgEl2("filter", { id: "pencil-texture", x: "-5%", y: "-5%", width: "110%", height: "110%" });
+    filter.appendChild(svgEl2("feTurbulence", { type: "fractalNoise", baseFrequency: "0.9", numOctaves: "2", seed: "7", result: "noise" }));
+    filter.appendChild(svgEl2("feDisplacementMap", { in: "SourceGraphic", in2: "noise", scale: "2.5" }));
+    defs.appendChild(filter);
+    // Warm-up: a 1px rect the filter paints once, so the
+    // turbulence is compiled before the first pencil
+    // stroke. Nearly transparent, so it reads as nothing.
+    const warm = svgEl2("rect", { x: "0", y: "0", width: "1", height: "1", fill: "#1A1A1A", opacity: "0.01", filter: "url(#pencil-texture)" });
+    svg.appendChild(warm);
+  }
+  const textures = S.api.brushes.listTextures();
+  for (const t of textures) {
+    if (svg.querySelector(`#texture-${t.id}`)) continue;
+    const filter = buildTextureFilter(t.id, t.filterSvg);
+    if (filter) defs.appendChild(filter);
+  }
+  for (const el of Array.from(svg.querySelectorAll("filter[id^='texture-']"))) {
+    if (!textures.some((t) => `texture-${t.id}` === el.id)) el.remove();
+  }
+}
+
+// The filter primitives a texture may use: the
+// parametric feTurbulence family only. Anything else in
+// the markup (a script, an image, a foreign object) is
+// dropped, so a texture cannot load or run anything.
+const TEXTURE_PRIMITIVES = new Set([
+  "feTurbulence", "feDisplacementMap", "feGaussianBlur", "feColorMatrix",
+  "feComposite", "feBlend", "feFlood", "feOffset", "feMerge", "feMergeNode",
+  "feComponentTransfer", "feFuncR", "feFuncG", "feFuncB", "feFuncA",
+]);
+
+// Strip handler and link attributes from a filter node
+// and its children: markup parsed from a string carries
+// them, and a filter primitive has no use for either.
+function cleanFilterNode(node: Element): void {
+  for (const attr of Array.from(node.attributes)) {
+    const name = attr.name.toLowerCase();
+    if (name.startsWith("on") || name === "href" || name.endsWith(":href")) node.removeAttribute(attr.name);
+  }
+  for (const child of Array.from(node.children)) cleanFilterNode(child);
+}
+
+function buildTextureFilter(id: string, filterSvg: string): SVGElement | null {
+  // Wide region: displacement and blur reach past the
+  // stroke's own box, and a thin stroke's box is thin.
+  const filter = svgEl2("filter", { id: `texture-${id}`, x: "-20%", y: "-20%", width: "140%", height: "140%" });
+  const doc = new DOMParser().parseFromString(`<svg xmlns="http://www.w3.org/2000/svg">${filterSvg}</svg>`, "image/svg+xml");
+  const root = doc.documentElement;
+  if (!root || root.querySelector("parsererror")) return null;
+  let added = false;
+  for (const child of Array.from(root.children)) {
+    if (!TEXTURE_PRIMITIVES.has(child.tagName)) continue;
+    const node = document.importNode(child, true) as Element;
+    cleanFilterNode(node);
+    filter.appendChild(node);
+    added = true;
+  }
+  return added ? filter : null;
 }
 
 // Connectors are the only thing left in the board SVG:
 // strokes are cards now, so they stack, drag and select
-// with the cards. The pencil filter is still ensured
-// here, because the stroke cards reference it by id
-// (url(#pencil-texture)) and this runs before the card
-// loop on every render.
+// with the cards. The stroke filters are still ensured
+// here, because the stroke cards reference them by id
+// (url(#pencil-texture), url(#texture-<id>)) and this
+// runs before the card loop on every render.
 function renderConnectors(board: Board): void {
-  ensurePencilFilter();
+  ensureStrokeFilters();
   const items = board.items;
   const selected = S.api.board.getSelected();
   const v = visibleRect();
@@ -191,7 +247,12 @@ function renderConnectors(board: Board): void {
       if (!ends) continue;
       const [a, b] = ends;
       const sel = selected.includes(item.id);
-      S.worldEl.appendChild(svgEl2("line", { x1: String(a.x), y1: String(a.y), x2: String(b.x), y2: String(b.y), stroke: sel ? ACCENT : item.kind.Connector.color, "stroke-width": sel ? "3" : "2" }));
+      // The line's own width, 2 before widths existed;
+      // a selected line is at least 3, so it still reads
+      // as selected when its width is thinner than that.
+      const w = item.kind.Connector.width ?? 2;
+      const sw = sel ? Math.max(3, w) : w;
+      S.worldEl.appendChild(svgEl2("line", { x1: String(a.x), y1: String(a.y), x2: String(b.x), y2: String(b.y), stroke: sel ? ACCENT : item.kind.Connector.color, "stroke-width": String(sw) }));
       const dx = b.x - a.x, dy = b.y - a.y;
       const len = Math.max(1, Math.hypot(dx, dy));
       const ux = dx / len, uy = dy / len;
@@ -199,7 +260,7 @@ function renderConnectors(board: Board): void {
       const c1 = Math.cos(spread), s1 = Math.sin(spread), c2 = Math.cos(-spread), s2 = Math.sin(-spread);
       const p1 = { x: b.x - head * (ux * c1 - uy * s1), y: b.y - head * (ux * s1 + uy * c1) };
       const p2 = { x: b.x - head * (ux * c2 - uy * s2), y: b.y - head * (ux * s2 + uy * c2) };
-      S.worldEl.appendChild(svgEl2("polyline", { points: `${p1.x},${p1.y} ${b.x},${b.y} ${p2.x},${p2.y}`, fill: "none", stroke: sel ? ACCENT : item.kind.Connector.color, "stroke-width": sel ? "3" : "2" }));
+      S.worldEl.appendChild(svgEl2("polyline", { points: `${p1.x},${p1.y} ${b.x},${b.y} ${p2.x},${p2.y}`, fill: "none", stroke: sel ? ACCENT : item.kind.Connector.color, "stroke-width": String(sw) }));
     }
   }
   // Live stroke, connector preview and marquee are fast-path SVG

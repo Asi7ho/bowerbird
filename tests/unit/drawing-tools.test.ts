@@ -32,8 +32,12 @@ describe("tool ids", () => {
     expect(CONNECTOR_TOOL_ID).toBe("plugin:core-draw:connector");
   });
   it("reads the draw kind back off a tool id", () => {
-    expect(drawKindOf("plugin:core-draw:pencil")).toBe("pencil");
-    expect(drawKindOf("plugin:core-draw:highlighter")).toBe("highlighter");
+    expect(drawKindOf("plugin:core-draw:pen")).toBe("pen");
+    expect(drawKindOf("plugin:core-draw:eraser")).toBe("eraser");
+    // Pencil and highlighter are gone: the ids no longer
+    // belong to a tool, so they read back as nothing.
+    expect(drawKindOf("plugin:core-draw:pencil")).toBe(null);
+    expect(drawKindOf("plugin:core-draw:highlighter")).toBe(null);
     expect(drawKindOf("plugin:core-draw:rect")).toBe(null);
     expect(drawKindOf("plugin:core-draw:connector")).toBe(null);
     expect(drawKindOf("pen")).toBe(null);
@@ -118,6 +122,15 @@ describe("buildStrokeItem", () => {
     );
     expect("gradient" in (solid?.kind as { Stroke: object }).Stroke).toBe(false);
   });
+  it("carries a brush texture, beside the pencil flag", () => {
+    const item = buildStrokeItem(
+      [{ x: 0, y: 0 }, { x: 10, y: 0 }],
+      [], "#1A1A1A", 2, false, true, 100, null, "graphite",
+    );
+    expect(item?.kind).toEqual({
+      Stroke: { points: [{ x: 0, y: 0 }, { x: 10, y: 0 }], color: "#1A1A1A", width: 2, marker: false, pencil: true, texture: "graphite" },
+    });
+  });
 });
 
 describe("shapeBox and buildShapeItem", () => {
@@ -139,20 +152,24 @@ describe("shapeBox and buildShapeItem", () => {
     });
   });
   it("builds an outlined shape from the same drag, reversed", () => {
-    const item = buildShapeItem("triangle", { x: 50, y: 40 }, { x: 10, y: 10 }, "#2E86AB", true);
+    const item = buildShapeItem("triangle", { x: 50, y: 40 }, { x: 10, y: 10 }, "#2E86AB", true, 9);
     expect(item).toEqual({
-      kind: { Shape: { shape: "triangle", fill: "#2E86AB", outline: true } },
+      kind: { Shape: { shape: "triangle", fill: "#2E86AB", outline: true, width: 9 } },
       pos: { x: 10, y: 10 },
       size: { w: 40, h: 30 },
     });
+  });
+  it("an outlined shape without a width keeps the 4px default", () => {
+    const item = buildShapeItem("rect", { x: 10, y: 10 }, { x: 50, y: 40 }, "#1A1A1A", true);
+    expect(item?.kind).toEqual({ Shape: { shape: "rect", fill: "#1A1A1A", outline: true, width: 4 } });
   });
 });
 
 describe("buildConnectorItem", () => {
   it("builds a point-to-point connector in the pen colour", () => {
-    const item = buildConnectorItem({ Point: { x: 0, y: 0 } }, { Point: { x: 100, y: 0 } }, { x: 0, y: 0 }, { x: 100, y: 0 }, "#1A1A1A");
+    const item = buildConnectorItem({ Point: { x: 0, y: 0 } }, { Point: { x: 100, y: 0 } }, { x: 0, y: 0 }, { x: 100, y: 0 }, "#1A1A1A", 9);
     expect(item).toEqual({
-      kind: { Connector: { from: { Point: { x: 0, y: 0 } }, to: { Point: { x: 100, y: 0 } }, color: "#1A1A1A" } },
+      kind: { Connector: { from: { Point: { x: 0, y: 0 } }, to: { Point: { x: 100, y: 0 } }, color: "#1A1A1A", width: 9 } },
       pos: { x: 0, y: 0 },
       size: { w: 100, h: 1 },
     });
@@ -236,5 +253,13 @@ describe("eraserSplitItems", () => {
     for (const piece of pieces) {
       expect((piece.kind as { Stroke: { gradient?: unknown } }).Stroke.gradient).toEqual(gradient);
     }
+  });
+  it("keeps the texture on the pieces", () => {
+    const pieces = eraserSplitItems(
+      { points: line(11), color: "#1A1A1A", width: 2, marker: false, texture: "graphite" },
+      { x: 50, y: 0 }, ERASER_RADIUS,
+    );
+    expect(pieces).toHaveLength(2);
+    expect(pieces.map((p) => "Stroke" in p.kind ? p.kind.Stroke.texture : null)).toEqual(["graphite", "graphite"]);
   });
 });

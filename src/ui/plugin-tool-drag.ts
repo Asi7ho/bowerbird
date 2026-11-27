@@ -70,7 +70,13 @@ export function beginPluginDrag(def: PluginToolDef, fullId: string, world: Pt, e
 
 // Route a move to the tool and advance the drag's last
 // point, so a later cancel reports where the drag ended.
+// A move with no button down is not a drag continuation:
+// a synthetic move (a capture resetting the tracked
+// pointer, a lost pointerup) would otherwise append a
+// point where the pointer never drew, kinking the stroke
+// at the release. It leaves the drag where it was.
 export function movePluginDrag(def: PluginToolDef, state: PluginDragState, world: Pt, ev: PluginPointerEvent): PluginDragState {
+  if (ev.buttons === 0) return state;
   def.onPointerMove?.(world, ev);
   return { ...state, last: world };
 }

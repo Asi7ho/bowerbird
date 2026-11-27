@@ -25,8 +25,6 @@ const ICONS = {
   select: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5 19 12l-7.5 1.4L8.6 20.5 6 3.5Z" /></svg>',
   lasso: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 3.5a5.5 5.5 0 1 1-5.5 5.5c0-1.9 1.3-3.2 3.1-3.2 1.9 0 3.2 1.3 3.2 3.2s-1.3 3.2-3.2 3.2-3.1-1.3-3.1-3.1" fill="none"/><path d="M9 14.5 5.5 20.5" /></svg>',
   pen: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 19.5 5.6 15 16.2 4.4a2.12 2.12 0 0 1 3 3L8.6 18l-4.1 1.5Z" fill="none"/><path d="M14.5 6.5l3 3" /></svg>',
-  pencil: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>',
-  highlighter: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 11-6 6v3h9l3-3" /><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4Z" /></svg>',
   eraser: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21" /><path d="M22 21H7" /><path d="m5 11 9 9" /></svg>',
   connector: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20 20 4" /><path d="M14 4h6v6" /></svg>',
   zoomOut: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg>',
@@ -90,14 +88,14 @@ export function activate(api: PluginContext): void {
     { id: "lasso", label: "Lasso (V)", icon: ICONS.lasso },
   ] as const;
   const selectBtn = toolButton("tool-select", "Select (V)", "Select", ICONS.select, () => { pickerOpen = "select"; api.ui.setTool("select"); });
-  // One draw button for pencil, pen and eraser, like the
+  // One draw button for pen and eraser, like the
   // shape button: it shows the draw tool last chosen, and
   // the flyout beside the toolbar chooses between them.
   // Its icon and title follow the current draw tool.
+  // Pencil, highlighter and every other style live in
+  // the Brush Library, which configures the pen.
   const DRAW_TOOLS = [
-    { id: "pencil", label: "Pencil", icon: ICONS.pencil, key: "" },
     { id: "pen", label: "Pen (P)", icon: ICONS.pen, key: "P" },
-    { id: "highlighter", label: "Highlighter", icon: ICONS.highlighter, key: "" },
     { id: "eraser", label: "Eraser (X)", icon: ICONS.eraser, key: "X" },
   ] as const;
   const drawBtn = toolButton("tool-draw", "Pen (P)", "Pen", ICONS.pen, () => {
@@ -148,7 +146,7 @@ export function activate(api: PluginContext): void {
   shapePicker.style.display = "none";
   toolbar.appendChild(shapePicker);
 
-  // The draw picker: pencil, pen and eraser, beside the
+  // The draw picker: pen and eraser, beside the
   // draw button. It shows when a draw tool is active.
   const drawPicker = document.createElement("div");
   drawPicker.className = "palette";
@@ -216,7 +214,7 @@ export function activate(api: PluginContext): void {
   // The first selected text note, or null when none is
   // selected. The note-colours bar shows only then, and
   // sits next to this note.
-  // The buttons store the short kind (pencil, triangle) in
+  // The buttons store the short kind (pen, triangle) in
   // their datasets; the tool itself is the plugin's full id.
   function selectedNote(): { id: number; bg: string } | null {
     const selected = api.board.getSelected();
@@ -297,6 +295,10 @@ export function activate(api: PluginContext): void {
     // by the select button or the V shortcut.
     const showSelect = isSelect && !colorBarOpen && pickerOpen === "select";
     selectPicker.style.display = showSelect ? "flex" : "none";
+    // The flyout anchors to its button: the toolbar grows
+    // with plugin tools, so a fixed top slides under the
+    // title bar when the toolbar overflows the window.
+    if (showSelect) selectPicker.style.top = `${selectBtn.offsetTop}px`;
     if (showSelect && selectPicker.childElementCount === 0) {
       for (const m of SELECT_MODES) {
         const b = document.createElement("button");
@@ -335,6 +337,7 @@ export function activate(api: PluginContext): void {
     // the draw button or the P shortcut.
     const showDraw = isDraw && !colorBarOpen && pickerOpen === "draw";
     drawPicker.style.display = showDraw ? "flex" : "none";
+    if (showDraw) drawPicker.style.top = `${drawBtn.offsetTop}px`;
     if (showDraw && drawPicker.childElementCount === 0) {
       for (const d of DRAW_TOOLS) {
         const b = document.createElement("button");
@@ -383,6 +386,7 @@ export function activate(api: PluginContext): void {
     // mode from its column.
     const showShape = isShape && !colorBarOpen && pickerOpen === "shape";
     shapePicker.style.display = showShape ? "flex" : "none";
+    if (showShape) shapePicker.style.top = `${shapeBtn.offsetTop}px`;
     if (showShape && shapePicker.childElementCount === 0) {
       for (const mode of [{ id: "filled", outline: false }, { id: "outline", outline: true }]) {
         const column = document.createElement("div");
