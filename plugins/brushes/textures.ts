@@ -35,14 +35,16 @@ function grainMask(freq: number, octaves: number, seed: number, slope: number, i
 export const BUILTIN_TEXTURES: BuiltinTexture[] = [
   {
     id: "graphite", label: "Graphite", family: "pencil",
-    // Fine grain, slight wobble: a pencil line. The
-    // grain cuts hard (steep slope, same midpoint), so
-    // the speckle is dark dots on white, not a pale
-    // grey wash — a gentle slope left every pixel
-    // half-inked and the line read as blurry.
+    // Coarse grain, visible wobble: a pencil line. The
+    // grain is coarse on purpose (features ~2px), so the
+    // speckle reads at small sizes — a fine grain (0.9)
+    // averaged out to a plain grey line and the row read
+    // as Ink. The cut is hard (steep slope, same
+    // midpoint), so the speckle is dark dots with clear
+    // gaps, not a pale grey wash.
     filterSvg:
-      grainMask(0.9, 2, 7, 8, -3.5)
-      + `<feDisplacementMap in="SourceGraphic" in2="noise" scale="2.5" result="wobbly" />`
+      grainMask(0.45, 2, 7, 8, -3.5)
+      + `<feDisplacementMap in="SourceGraphic" in2="noise" scale="4" result="wobbly" />`
       + `<feComposite in="wobbly" in2="grain" operator="in" />`,
   },
   {
